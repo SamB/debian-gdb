@@ -1,25 +1,26 @@
 /* Target-machine dependent code for Zilog Z8000, for GDB.
    Copyright (C) 1992, 1993, 1994 Free Software Foundation, Inc.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
 
 /*
- Contributed by Steve Chamberlain
-                sac@cygnus.com
+   Contributed by Steve Chamberlain
+   sac@cygnus.com
  */
 
 #include "defs.h"
@@ -31,13 +32,18 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "dis-asm.h"
 #include "gdbcore.h"
 
+#include "value.h" /* For read_register() */
+
+
+static int read_memory_pointer (CORE_ADDR x);
+
 /* Return the saved PC from this frame.
 
    If the frame has a memory copy of SRP_REGNUM, use that.  If not,
    just use the register SRP_REGNUM itself.  */
 
 CORE_ADDR
-frame_saved_pc (frame)
+z8k_frame_saved_pc (frame)
      struct frame_info *frame;
 {
   return read_memory_pointer (frame->frame + (BIG ? 4 : 2));
@@ -79,10 +85,11 @@ skip_adjust (pc, size)
   return pc;
 }
 
-int
+static CORE_ADDR examine_frame PARAMS ((CORE_ADDR, CORE_ADDR * regs, CORE_ADDR));
+static CORE_ADDR
 examine_frame (pc, regs, sp)
      CORE_ADDR pc;
-     struct frame_saved_regs *regs;
+     CORE_ADDR *regs;
      CORE_ADDR sp;
 {
   int w = read_memory_short (pc);
@@ -90,20 +97,20 @@ examine_frame (pc, regs, sp)
   int regno;
 
   for (regno = 0; regno < NUM_REGS; regno++)
-    regs->regs[regno] = 0;
+    regs[regno] = 0;
 
   while (IS_PUSHW (w) || IS_PUSHL (w))
     {
       /* work out which register is being pushed to where */
       if (IS_PUSHL (w))
 	{
-	  regs->regs[w & 0xf] = offset;
-	  regs->regs[(w & 0xf) + 1] = offset + 2;
+	  regs[w & 0xf] = offset;
+	  regs[(w & 0xf) + 1] = offset + 2;
 	  offset += 4;
 	}
       else
 	{
-	  regs->regs[w & 0xf] = offset;
+	  regs[w & 0xf] = offset;
 	  offset += 2;
 	}
       pc += 2;
@@ -118,18 +125,18 @@ examine_frame (pc, regs, sp)
   else if (IS_SUB_SP (w))
     {
       /* Subtracting a value from the sp, so were in a function
-       which needs stack space for locals, but has no fp.  We fake up
-       the values as if we had an fp */
-      regs->regs[FP_REGNUM] = sp;
+         which needs stack space for locals, but has no fp.  We fake up
+         the values as if we had an fp */
+      regs[FP_REGNUM] = sp;
     }
   else
     {
       /* This one didn't have an fp, we'll fake it up */
-      regs->regs[SP_REGNUM] = sp;
+      regs[SP_REGNUM] = sp;
     }
   /* stack pointer contains address of next frame */
-  /*  regs->regs[fp_regnum()] = fp;*/
-  regs->regs[SP_REGNUM] = sp;
+  /*  regs[fp_regnum()] = fp; */
+  regs[SP_REGNUM] = sp;
   return pc;
 }
 
@@ -137,27 +144,26 @@ CORE_ADDR
 z8k_skip_prologue (start_pc)
      CORE_ADDR start_pc;
 {
-  struct frame_saved_regs dummy;
+  CORE_ADDR dummy[NUM_REGS];
 
-  return examine_frame (start_pc, &dummy, 0);
+  return examine_frame (start_pc, dummy, 0);
 }
 
 CORE_ADDR
-addr_bits_remove (x)
-     CORE_ADDR x;
+z8k_addr_bits_remove (addr)
+     CORE_ADDR addr;
 {
-  return x & PTR_MASK;
+  return (addr & PTR_MASK);
 }
 
-int
-read_memory_pointer (x)
-     CORE_ADDR x;
+static int
+read_memory_pointer (CORE_ADDR x)
 {
   return read_memory_integer (ADDR_BITS_REMOVE (x), BIG ? 4 : 2);
 }
 
 CORE_ADDR
-frame_chain (thisframe)
+z8k_frame_chain (thisframe)
      struct frame_info *thisframe;
 {
   if (thisframe->prev == 0)
@@ -171,6 +177,7 @@ frame_chain (thisframe)
   return 0;
 }
 
+void
 init_frame_pc ()
 {
   abort ();
@@ -183,19 +190,17 @@ init_frame_pc ()
    the address we return for it IS the sp for the next frame.  */
 
 void
-get_frame_saved_regs (frame_info, frame_saved_regs)
+z8k_frame_init_saved_regs (frame_info)
      struct frame_info *frame_info;
-     struct frame_saved_regs *frame_saved_regs;
-
 {
   CORE_ADDR pc;
   int w;
 
-  memset (frame_saved_regs, '\0', sizeof (*frame_saved_regs));
+  frame_saved_regs_zalloc (frame_info);
   pc = get_pc_function_start (frame_info->pc);
 
-/* wander down the instruction stream */
-  examine_frame (pc, frame_saved_regs, frame_info->frame);
+  /* wander down the instruction stream */
+  examine_frame (pc, frame_info->saved_regs, frame_info->frame);
 
 }
 
@@ -219,7 +224,7 @@ gdb_print_insn_z8k (memaddr, info)
 /* Fetch the instruction at ADDR, returning 0 if ADDR is beyond LIM or
    is not the address of a valid instruction, the address of the next
    instruction beyond ADDR otherwise.  *PWORD1 receives the first word
-   of the instruction.*/
+   of the instruction. */
 
 CORE_ADDR
 NEXT_PROLOGUE_INSN (addr, lim, pword1)
@@ -238,6 +243,7 @@ NEXT_PROLOGUE_INSN (addr, lim, pword1)
   return 0;
 }
 
+#if 0
 /* Put here the code to store, into a struct frame_saved_regs,
    the addresses of the saved registers of frame described by FRAME_INFO.
    This includes special registers such as pc and fp saved in special
@@ -289,15 +295,17 @@ frame_find_saved_regs (fip, fsrp)
   fsrp->regs[FP_REGNUM] = fip->frame;
 
 }
+#endif
 
 int
-saved_pc_after_call ()
+z8k_saved_pc_after_call (struct frame_info *frame)
 {
-  return addr_bits_remove 
+  return ADDR_BITS_REMOVE
     (read_memory_integer (read_register (SP_REGNUM), PTR_SIZE));
 }
 
 
+void
 extract_return_value (type, regbuf, valbuf)
      struct type *type;
      char *regbuf;
@@ -325,7 +333,7 @@ write_return_value (type, valbuf)
   int len;
 
   for (len = 0; len < TYPE_LENGTH (type); len += 2)
-    write_register_bytes (REGISTER_BYTE (len / 2  + 2), valbuf + len, 2);
+    write_register_bytes (REGISTER_BYTE (len / 2 + 2), valbuf + len, 2);
 }
 
 void
@@ -338,7 +346,7 @@ store_struct_return (addr, sp)
 
 
 void
-print_register_hook (regno)
+z8k_print_register_hook (regno)
      int regno;
 {
   if ((regno & 1) == 0 && regno < 16)
@@ -373,7 +381,8 @@ print_register_hook (regno)
       printf_unfiltered ("\n");
       for (i = 0; i < 10; i += 2)
 	{
-	  printf_unfiltered ("(sp+%d=%04x)", i, read_memory_short (rval + i));
+	  printf_unfiltered ("(sp+%d=%04x)", i,
+			     (unsigned int)read_memory_short (rval + i));
 	}
     }
 
@@ -404,6 +413,11 @@ z8k_set_pointer_size (newsize)
 	{
 	  BIG = 0;
 	}
+      /* FIXME: This code should be using the GDBARCH framework to
+         handle changed type sizes.  If this problem is ever fixed
+         (the direct reference to _initialize_gdbtypes() below
+         eliminated) then Makefile.in should be updated so that
+         z8k-tdep.c is again compiled with -Werror. */
       _initialize_gdbtypes ();
     }
 }

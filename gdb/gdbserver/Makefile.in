@@ -37,6 +37,7 @@ man7dir = $(mandir)/man7
 man8dir = $(mandir)/man8
 man9dir = $(mandir)/man9
 infodir = $(prefix)/info
+htmldir = $(prefix)/html
 includedir = $(prefix)/include
 
 SHELL = /bin/sh
@@ -159,12 +160,19 @@ installcheck:
 check:
 info dvi:
 install-info:
+html:
+install-html:
 clean-info:
 
 gdbserver: $(OBS) ${ADD_DEPS} ${CDEPS}
 	rm -f gdbserver
 	${CC-LD} $(GLOBAL_CFLAGS) $(LDFLAGS) -o gdbserver $(OBS) \
-	  $(GDBSERVER_LIBS)
+	  $(GDBSERVER_LIBS) $(XM_CLIBS)
+
+gdbreplay: gdbreplay.o
+	rm -f gdbreplay
+	${CC-LD} $(GLOBAL_CFLAGS) $(LDFLAGS) -o gdbreplay gdbreplay.o \
+	  $(XM_CLIBS)
 
 config.status:
 	@echo "You must configure gdbserver.  Look at the README file for details."

@@ -3,21 +3,22 @@
 
    Contributed by Geoffrey Noer <noer@cygnus.com>
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
 
 /* The mn10200 is little endian.  */
 #define TARGET_BYTE_ORDER LITTLE_ENDIAN
@@ -86,17 +87,15 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #define DECR_PC_AFTER_BREAK 0
 
 /* Stacks grow the normal way.  */
-#define INNER_THAN <
+#define INNER_THAN(lhs,rhs) ((lhs) < (rhs))
 
 #define SAVED_PC_AFTER_CALL(frame) \
-  (read_memory_integer (read_register (SP_REGNUM), REGISTER_SIZE) & 0xffff)
+  (read_memory_integer (read_register (SP_REGNUM), REGISTER_SIZE) & 0xffffff)
 
-#ifdef __STDC__
 struct frame_info;
 struct frame_saved_regs;
 struct type;
 struct value;
-#endif
 
 #define EXTRA_FRAME_INFO struct frame_saved_regs fsr; int status; int stack_size;
 
@@ -105,7 +104,7 @@ extern void mn10200_init_extra_frame_info PARAMS ((struct frame_info *));
 #define INIT_FRAME_PC(x,y)
 
 extern void mn10200_frame_find_saved_regs PARAMS ((struct frame_info *,
-						   struct frame_saved_regs *));
+						struct frame_saved_regs *));
 #define FRAME_FIND_SAVED_REGS(fi, regaddr) regaddr = fi->fsr
 
 extern CORE_ADDR mn10200_frame_chain PARAMS ((struct frame_info *));
@@ -113,7 +112,7 @@ extern CORE_ADDR mn10200_frame_chain PARAMS ((struct frame_info *));
 #define FRAME_CHAIN_VALID(FP, FI)	generic_frame_chain_valid (FP, FI)
 
 extern CORE_ADDR mn10200_find_callers_reg PARAMS ((struct frame_info *, int));
-extern CORE_ADDR mn10200_frame_saved_pc   PARAMS ((struct frame_info *));
+extern CORE_ADDR mn10200_frame_saved_pc PARAMS ((struct frame_info *));
 #define FRAME_SAVED_PC(FI) (mn10200_frame_saved_pc (FI))
 
 /* Extract from an array REGBUF containing the (raw) register state
@@ -162,22 +161,24 @@ extern CORE_ADDR mn10200_frame_saved_pc   PARAMS ((struct frame_info *));
       } \
   }
 
+
+extern CORE_ADDR mn10200_store_struct_return (CORE_ADDR addr, CORE_ADDR sp);
 #define STORE_STRUCT_RETURN(STRUCT_ADDR, SP) \
   (SP) = mn10200_store_struct_return (STRUCT_ADDR, SP)
 
 extern CORE_ADDR mn10200_skip_prologue PARAMS ((CORE_ADDR));
-#define SKIP_PROLOGUE(pc) pc = mn10200_skip_prologue (pc)
+#define SKIP_PROLOGUE(pc) (mn10200_skip_prologue (pc))
 
 #define FRAME_ARGS_SKIP 0
 
 #define FRAME_ARGS_ADDRESS(fi) ((fi)->frame)
 #define FRAME_LOCALS_ADDRESS(fi) ((fi)->frame)
-#define FRAME_NUM_ARGS(val, fi) ((val) = -1)
+#define FRAME_NUM_ARGS(fi) (-1)
 
 extern void mn10200_pop_frame PARAMS ((struct frame_info *));
 #define POP_FRAME mn10200_pop_frame (get_current_frame ())
 
-#define USE_GENERIC_DUMMY_FRAMES
+#define USE_GENERIC_DUMMY_FRAMES 1
 #define CALL_DUMMY                   {0}
 #define CALL_DUMMY_START_OFFSET      (0)
 #define CALL_DUMMY_BREAKPOINT_OFFSET (0)
@@ -191,22 +192,23 @@ extern CORE_ADDR mn10200_push_return_address PARAMS ((CORE_ADDR, CORE_ADDR));
 #define PUSH_DUMMY_FRAME	generic_push_dummy_frame ()
 
 extern CORE_ADDR
-mn10200_push_arguments PARAMS ((int, struct value **, CORE_ADDR,
-			     unsigned char, CORE_ADDR));
+  mn10200_push_arguments PARAMS ((int, struct value **, CORE_ADDR,
+				  unsigned char, CORE_ADDR));
 #define PUSH_ARGUMENTS(NARGS, ARGS, SP, STRUCT_RETURN, STRUCT_ADDR) \
-  (SP) = mn10200_push_arguments (NARGS, ARGS, SP, STRUCT_RETURN, STRUCT_ADDR)
+  (mn10200_push_arguments (NARGS, ARGS, SP, STRUCT_RETURN, STRUCT_ADDR))
 
-#define PC_IN_CALL_DUMMY(PC, SP, FP) generic_pc_in_call_dummy (PC, SP)
+#define PC_IN_CALL_DUMMY(PC, SP, FP) generic_pc_in_call_dummy (PC, SP, FP)
 
 #define REG_STRUCT_HAS_ADDR(gcc_p,TYPE) \
   	(TYPE_LENGTH (TYPE) > 8)
 
-#define USE_STRUCT_CONVENTION(GCC_P, TYPE) \
-  	(TYPE_NFIELDS (TYPE) > 1 || TYPE_LENGTH (TYPE) > 8)
+extern use_struct_convention_fn mn10200_use_struct_convention;
+#define USE_STRUCT_CONVENTION(GCC_P, TYPE) mn10200_use_struct_convention (GCC_P, TYPE)
 
 /* Override the default get_saved_register function with
    one that takes account of generic CALL_DUMMY frames.  */
-#define GET_SAVED_REGISTER
+#define GET_SAVED_REGISTER(raw_buffer, optimized, addrp, frame, regnum, lval) \
+      generic_get_saved_register (raw_buffer, optimized, addrp, frame, regnum, lval)
 
 /* Define this for Wingdb */
 #define TARGET_MN10200

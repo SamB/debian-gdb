@@ -36,7 +36,7 @@ extern char **dupargv PARAMS ((char **));
    across different systems, sometimes as "char *" and sometimes as
    "const char *" */
 
-#if defined(__GNU_LIBRARY__ ) || defined (__linux__)
+#if defined (__GNU_LIBRARY__ ) || defined (__linux__) || defined (__FreeBSD__) || defined (__OpenBSD__) || defined (__CYGWIN__) || defined (__CYGWIN32__)
 extern char *basename PARAMS ((const char *));
 #else
 extern char *basename ();
@@ -50,6 +50,11 @@ extern char *concat PARAMS ((const char *, ...));
 /* Check whether two file descriptors refer to the same file.  */
 
 extern int fdmatch PARAMS ((int fd1, int fd2));
+
+/* Get the working directory.  The result is cached, so don't call
+   chdir() between calls to getpwd().  */
+
+extern char * getpwd PARAMS ((void));
 
 /* Get the amount of time the process has run, in microseconds.  */
 
@@ -111,8 +116,7 @@ extern int xatexit PARAMS ((void (*fn) (void)));
 #ifndef __GNUC__
 extern void xexit PARAMS ((int status));
 #else
-typedef void libiberty_voidfn PARAMS ((int status));
-__volatile__ libiberty_voidfn xexit;
+void xexit PARAMS ((int status)) __attribute__ ((noreturn));
 #endif
 
 /* Set the program name used by xmalloc.  */
@@ -129,16 +133,22 @@ extern void xmalloc_set_program_name PARAMS ((const char *));
 #endif
 extern PTR xmalloc PARAMS ((size_t));
 
-/* Reallocate memory without fail.  This works like xmalloc.
-
-   FIXME: We do not declare the parameter types for the same reason as
-   xmalloc.  */
+/* Reallocate memory without fail.  This works like xmalloc.  */
 
 extern PTR xrealloc PARAMS ((PTR, size_t));
+
+/* Allocate memory without fail and set it to zero.  This works like
+   xmalloc.  */
+
+extern PTR xcalloc PARAMS ((size_t, size_t));
 
 /* Copy a string into a memory buffer without fail.  */
 
 extern char *xstrdup PARAMS ((const char *));
+
+/* Copy an existing memory buffer to a new memory buffer without fail.  */
+
+extern PTR xmemdup PARAMS ((const PTR, size_t, size_t));
 
 /* hex character manipulation routines */
 

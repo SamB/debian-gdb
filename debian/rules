@@ -18,75 +18,74 @@ ARCH=$(shell dpkg --print-architecture)
 p=gdb
 
 # --- patch handling
-
-patch_dir = debian
-debian_patches = 
-ifeq ($(ARCH),i386)
-  debian_patches += i386-threads
-endif
-
-patched-%: $(patch_dir)/%.patch
-	patch -p1 < $< 2>&1 | tee $@ 
-	echo "$* patch applied." >> $@
-
-apply-patches: patched-stamp
-
-patched-stamp: $(foreach p,$(debian_patches),patched-$(p))
-	touch patched-stamp
-
-reverse-patches:
-	for stamp in patched-*; do \
-	  case "$$stamp" in patched-stamp|patched-\*) continue; esac; \
-	  patch=`echo $$stamp | sed -e 's/patched-//'`; \
-	  echo "trying to revert patch $$patch ..."; \
-	  if patch -p1 -R -E < $(patch_dir)/$$patch.patch; then \
-	    echo "reverted $$patch patch."; \
-	    rm -f $$stamp; \
-	  else \
-	    echo "error in reverting $$patch patch."; \
-	    exit 1; \
-	  fi; \
-	done
-	rm -f patched-stamp
-
+#
+#patch_dir = debian
+#debian_patches = 
+#ifeq ($(ARCH),i386)
+#  debian_patches += i386-threads
+#endif
+#
+#patched-%: $(patch_dir)/%.patch
+#	patch -p1 < $< 2>&1 | tee $@ 
+#	echo "$* patch applied." >> $@
+#
+#apply-patches: patched-stamp
+#
+#patched-stamp: $(foreach p,$(debian_patches),patched-$(p))
+#	touch patched-stamp
+#
+#reverse-patches:
+#	for stamp in patched-*; do \
+#	  case "$$stamp" in patched-stamp|patched-\*) continue; esac; \
+#	  patch=`echo $$stamp | sed -e 's/patched-//'`; \
+#	  echo "trying to revert patch $$patch ..."; \
+#	  if patch -p1 -R -E < $(patch_dir)/$$patch.patch; then \
+#	    echo "reverted $$patch patch."; \
+#	    rm -f $$stamp; \
+#	  else \
+#	    echo "error in reverting $$patch patch."; \
+#	    exit 1; \
+#	  fi; \
+#	done
+#	rm -f patched-stamp
+#
 # --- end patch handling
 
-build: patched-stamp
+config: config-stamp
+config-stamp:
+	env INSTALL="$(install)" ./configure --prefix=/usr -v --enable-shared
+	touch config-stamp
+
+build: config ##patched-stamp
 	$(checkdir)
 # Regenerate the configure scripts, so they contain our libtools brokenness
 # workarounds
-	for am in `find . -type f -name 'Makefile.am'` ; do \
-	  (cd `dirname $$am` ; \
-	   if [ -e configure.in ] ; then \
-	     echo "Recreating configure scripts in $$am" ; \
-	     libtoolize --force --copy --automake ; \
-	     automake --cygnus ; \
-	     aclocal ; \
-	     autoconf ; \
-	   fi ) ; \
-	done
+	##for am in `find . -type f -name 'Makefile.am'` ; do \
+	##  (cd `dirname $$am` ; \
+	##   if [ -e configure.in ] ; then \
+	##     echo "Recreating configure scripts in $$am" ; \
+	##     libtoolize --force --copy --automake ; \
+	##     automake --cygnus ; \
+	##     aclocal ; \
+	##     autoconf ; \
+	##   fi ) ; \
+	##done
 # Builds the binary package.
-	env INSTALL="$(install)" ./configure --prefix=/usr -v --enable-shared `dpkg --print-architecture`-linux
-# Gross hack
-ifeq ($(ARCH),sparc)
-	make CC="$(CC)" CFLAGS="$(CFLAGS) -D_SYS_PTRACE_H -DPTRACE_ATTACH=16 -DPTRACE_DETACH=17" CXXFLAGS="$(CXXFLAGS)" \
-            LDFLAGS="$(LDFLAGS)" all info
-else
+	### env INSTALL="$(install)" ./configure --prefix=/usr -v --enable-shared
 	make CC="$(CC)" CFLAGS="$(CFLAGS)" CXXFLAGS="$(CXXFLAGS)" \
             LDFLAGS="$(LDFLAGS)" all info
-endif
 	cd gdb/doc && make refcard.dvi refcard.ps 
 	touch build
 
-clean: reverse-patches
+clean: ##reverse-patches
 # Undoes the effect of `make -f debian.rules build'.
 	$(checkdir)
 	-make distclean
 	-make -C gdb/gdbserver distclean
 	-find . -name \*.info\* -print | xargs rm -f
 	-find . -name \*.tab.c -print | xargs rm -f
-	-rm -f gdb/xm.h gdb/tm.h gdb/nm.h readline/sysdep.h libiberty/alloca-conf.h config.log gdb/doc/GDBvn.texi
-	rm -f build
+	-rm -f gdb/xm.h gdb/tm.h gdb/nm.h readline/sysdep.h config.log gdb/doc/GDBvn.texi
+	rm -f build config-stamp
 	rm -rf debian/tmp debian/*~ debian/*.bak debian/files* debian/substvars gdb/doc/refcard.{ps,dvi}
 
 binary: checkroot build binary-indep binary-arch
@@ -133,17 +132,20 @@ binary-arch: checkroot build
 	$(install) -m 644 debian/objC2.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
 	$(install) -m 644 debian/4.17.gnat.diff.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
 	$(install) -m 644 debian/gdb-4.17-4.17.0.4.diff.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
-	for patch in none $(debian_patches); do \
+	$(install) -m 644 debian/gdb-4.17.0.4-4.17.0.8.diff.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
+	cd debian/tmp/usr/doc/$(p)/applied-patches/ && \
+	for patch in * none; do \
 		case "$$patch" in none) continue; esac; \
-		$(install) -m 644 $(patch_dir)/$$patch.patch debian/tmp/usr/doc/$(p)/applied-patches; \
-		gzip -9f debian/tmp/usr/doc/$(p)/applied-patches/$$patch.patch; \
+		uudecode $$patch; \
+		rm $$patch; \
 	done
-	#install -m 644 debian/gnat.diff debian/tmp/usr/doc/$(p)/gnat.diff
 	$(install) -m 755 debian/postinst debian/tmp/DEBIAN/postinst
 	$(install) -m 755 debian/prerm debian/tmp/DEBIAN/prerm
 	-gzip -9f debian/tmp/usr/info/*
 	-gzip -9 debian/tmp/usr/man/man*/*
 	-gzip -9 debian/tmp/usr/doc/$(p)/changelog*
+	-rm -f debian/tmp/usr/bin/[^g]*
+	-rm -rf debian/tmp/usr/share
 	dpkg-shlibdeps gdb/gdb
 	dpkg-gencontrol
 	chown -R root.root debian/tmp

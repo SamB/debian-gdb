@@ -1,6 +1,8 @@
 /* Simulator header for m32r.
 
-Copyright (C) 1996, 1997, 1998 Free Software Foundation, Inc.
+THIS FILE IS MACHINE GENERATED WITH CGEN.
+
+Copyright (C) 1996, 1997, 1998, 1999 Free Software Foundation, Inc.
 
 This file is part of the GNU Simulators.
 
@@ -25,35 +27,21 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #define TARGET_BIG_ENDIAN 1
 
-/* Shorthand macro for fetching registers.  */
-#define CPU(x) (CPU_CGEN_HW (current_cpu)->x)
-
-/* Enum declaration for mode types.  */
-typedef enum mode_type {
-  MODE_VM, MODE_BI, MODE_QI, MODE_HI,
-  MODE_SI, MODE_DI, MODE_UBI, MODE_UQI,
-  MODE_UHI, MODE_USI, MODE_UDI, MODE_SF,
-  MODE_DF, MODE_XF, MODE_TF, MODE_MAX
-} MODE_TYPE;
-
-#define MAX_MODES ((int) MODE_MAX)
-
-/* Return name of instruction numbered INSN.  */
-#define INSN_NAME(insn) (m32r_cgen_insn_table_entries[insn].name)
-
 /* Enum declaration for model types.  */
 typedef enum model_type {
-  MODEL_M32R_D, MODEL_TEST, MODEL_MAX
+  MODEL_M32R_D, MODEL_TEST
+ , MODEL_MAX
 } MODEL_TYPE;
 
 #define MAX_MODELS ((int) MODEL_MAX)
 
 /* Enum declaration for unit types.  */
 typedef enum unit_type {
-  UNIT_NONE, UNIT_M32R_D_U_STORE, UNIT_M32R_D_U_LOAD, UNIT_M32R_D_U_EXEC,
-  UNIT_TEST_U_EXEC, UNIT_MAX
+  UNIT_NONE, UNIT_M32R_D_U_STORE, UNIT_M32R_D_U_LOAD, UNIT_M32R_D_U_CTI
+ , UNIT_M32R_D_U_MAC, UNIT_M32R_D_U_CMP, UNIT_M32R_D_U_EXEC, UNIT_TEST_U_EXEC
+ , UNIT_MAX
 } UNIT_TYPE;
 
-#define MAX_UNITS (1)
+#define MAX_UNITS (2)
 
 #endif /* M32R_ARCH_H */

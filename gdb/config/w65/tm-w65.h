@@ -1,21 +1,22 @@
 /* Parameters for execution on a WDC 65816 machine.
    Copyright (C) 1995 Free Software Foundation, Inc.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
 
 /* Contributed by Steve Chamberlain sac@cygnus.com */
 
@@ -55,34 +56,26 @@ extern CORE_ADDR w65_skip_prologue ();
 
 /* Stack grows downward.  */
 
-#define INNER_THAN <
+#define INNER_THAN(lhs,rhs) ((lhs) < (rhs))
 
 /* Illegal instruction - used by the simulator for breakpoint
    detection */
 
-#define BREAKPOINT {0xcb} /* WAI */
+#define BREAKPOINT {0xcb}	/* WAI */
 
 /* If your kernel resets the pc after the trap happens you may need to
    define this before including this file.  */
 #define DECR_PC_AFTER_BREAK 0
 
-/* Nonzero if instruction at PC is a return instruction.  */
-
-#define ABOUT_TO_RETURN(pc) \
-  (read_memory_integer(pc,1) == RTL || read_memory_integer(pc,1) == RTS)
-
-#define RTL 0x6b
-#define RTS 0x60
-
 /* Return 1 if P points to an invalid floating point value.  */
 
-#define INVALID_FLOAT(p, len) 0   /* Just a first guess; not checked */
+#define INVALID_FLOAT(p, len) 0	/* Just a first guess; not checked */
 
 /* Say how long registers are.  */
-/*#define REGISTER_TYPE  int*/
+/*#define REGISTER_TYPE  int */
 
 /* Say how much memory is needed to store a copy of the register set */
-#define REGISTER_BYTES    (NUM_REGS*4) 
+#define REGISTER_BYTES    (NUM_REGS*4)
 
 /* Index within `registers' of the first byte of the space for
    register N.  */
@@ -167,8 +160,8 @@ extern CORE_ADDR w65_skip_prologue ();
    by FI does not have a frame on the stack associated with it.  If it
    does not, FRAMELESS is set to 1, else 0.  */
 
-#define FRAMELESS_FUNCTION_INVOCATION(FI, FRAMELESS) \
-  (FRAMELESS) = frameless_look_for_prologue(FI)
+#define FRAMELESS_FUNCTION_INVOCATION(FI) \
+  (frameless_look_for_prologue (FI))
 
 #define FRAME_CHAIN(FRAME)       w65_frame_chain(FRAME)
 #define FRAME_SAVED_PC(FRAME)    (w65_frame_saved_pc(FRAME))
@@ -180,7 +173,7 @@ extern CORE_ADDR w65_skip_prologue ();
 
 /* We can't tell how many args there are */
 
-#define FRAME_NUM_ARGS(val,fi) (val = -1)
+#define FRAME_NUM_ARGS(fi) (-1)
 
 /* Return number of bytes at start of arglist that are not really args.  */
 
@@ -195,11 +188,10 @@ extern CORE_ADDR w65_skip_prologue ();
 #define FRAME_FIND_SAVED_REGS(frame_info, frame_saved_regs)	    \
    frame_find_saved_regs(frame_info, &(frame_saved_regs))
 
-#define NAMES_HAVE_UNDERSCORE
-
 typedef unsigned short INSN_WORD;
 
-#define ADDR_BITS_REMOVE(addr) ((addr) & 0xffffff)
+extern CORE_ADDR w65_addr_bits_remove PARAMS ((CORE_ADDR));
+#define ADDR_BITS_REMOVE(addr) w65_addr_bits_remove (addr)
 
 #define CALL_DUMMY_LENGTH 10
 

@@ -15,7 +15,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
 
 /*
    Contributed by Steve Chamberlain
@@ -42,10 +43,10 @@ w65_frame_saved_pc (frame)
 }
 
 CORE_ADDR
-addr_bits_remove (x)
-     CORE_ADDR x;
+w65_addr_bits_remove (addr)
+     CORE_ADDR addr;
 {
-  return x;
+  return ((addr) & 0xffffff);
 }
 
 read_memory_pointer (x)
@@ -159,7 +160,7 @@ gb (x)
   return read_memory_integer (x, 1) & 0xff;
 }
 
-extern CORE_ADDR 
+extern CORE_ADDR
 w65_skip_prologue (pc)
      CORE_ADDR pc;
 {

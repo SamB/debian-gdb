@@ -1,23 +1,24 @@
 /* Parse expressions for GDB.
-   Copyright (C) 1986, 1989, 1990, 1991, 1994, 1997 Free Software Foundation, Inc.
+   Copyright (C) 1986, 89, 90, 91, 94, 98, 1999 Free Software Foundation, Inc.
    Modified from expread.y by the Department of Computer Science at the
    State University of New York at Buffalo, 1991.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
 
 /* Parse an expression from text in a string,
    and return the result as a  struct expression  pointer.
@@ -27,8 +28,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
    What is important here is that it can be built up sequentially
    during the process of parsing; the lower levels of the tree always
    come first in the result.  */
-   
-/* Modified for GNAT by P. N. Hilfinger */
+
+#include <ctype.h>
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -40,8 +41,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "command.h"
 #include "language.h"
 #include "parser-defs.h"
-#include "ada-lang.h"
-
+#include "gdbcmd.h"
+#include "symfile.h"		/* for overlay functions */
 
 /* Global variables declared in parser-defs.h (and commented there).  */
 struct expression *expout;
@@ -57,6 +58,10 @@ char *namecopy;
 int paren_depth;
 int comma_terminates;
 
+static int expressiondebug = 0;
+
+extern int hp_som_som_object_present;
+
 static void
 free_funcalls PARAMS ((void));
 
@@ -66,11 +71,7 @@ prefixify_expression PARAMS ((struct expression *));
 static void
 prefixify_subexp PARAMS ((struct expression *, struct expression *, int, int));
 
-static void 
-free_name_strings PARAMS ((void));
-
-void
-add_name_string_cleanup PARAMS ((char*));
+void _initialize_parse PARAMS ((void));
 
 /* Data structure for saving values of arglist_len for function calls whose
    arguments contain other function calls.  */
@@ -83,44 +84,50 @@ struct funcall
 
 static struct funcall *funcall_chain;
 
-/* List of strings. */
-
-struct name_list {
-  struct name_list* next;
-  char* name;
-};
-
-/* List of strings added by write_exp_elt_name. */
-static struct name_list *temp_name_list;
-
 /* Assign machine-independent names to certain registers 
    (unless overridden by the REGISTER_NAMES table) */
 
-#ifdef NO_STD_REGS
 unsigned num_std_regs = 0;
-struct std_regs std_regs[1];
-#else
-struct std_regs std_regs[] = {
+struct std_regs *std_regs;
 
-#ifdef PC_REGNUM
-	{ "pc", PC_REGNUM },
-#endif
-#ifdef FP_REGNUM
-	{ "fp", FP_REGNUM },
-#endif
-#ifdef SP_REGNUM
-	{ "sp", SP_REGNUM },
-#endif
-#ifdef PS_REGNUM
-	{ "ps", PS_REGNUM },
+/* The generic method for targets to specify how their registers are
+   named.  The mapping can be derived from three sources:
+   REGISTER_NAME; std_regs; or a target specific alias hook. */
+
+int
+target_map_name_to_register (str, len)
+     char *str;
+     int len;
+{
+  int i;
+
+  /* First try target specific aliases. We try these first because on some 
+     systems standard names can be context dependent (eg. $pc on a 
+     multiprocessor can be could be any of several PCs).  */
+#ifdef REGISTER_NAME_ALIAS_HOOK
+  i = REGISTER_NAME_ALIAS_HOOK (str, len);
+  if (i >= 0)
+    return i;
 #endif
 
-};
+  /* Search architectural register name space. */
+  for (i = 0; i < NUM_REGS; i++)
+    if (REGISTER_NAME (i) && len == strlen (REGISTER_NAME (i))
+	&& STREQN (str, REGISTER_NAME (i), len))
+      {
+	return i;
+      }
 
-unsigned num_std_regs = (sizeof std_regs / sizeof std_regs[0]);
+  /* Try standard aliases */
+  for (i = 0; i < num_std_regs; i++)
+    if (std_regs[i].name && len == strlen (std_regs[i].name)
+	&& STREQN (str, std_regs[i].name, len))
+      {
+	return std_regs[i].regnum;
+      }
 
-#endif
-
+  return -1;
+}
 
 /* Begin counting arguments for a function call,
    saving the data about any containing call.  */
@@ -147,7 +154,7 @@ end_arglist ()
   register struct funcall *call = funcall_chain;
   funcall_chain = call->next;
   arglist_len = call->arglist_len;
-  free ((PTR)call);
+  free ((PTR) call);
   return val;
 }
 
@@ -162,13 +169,10 @@ free_funcalls ()
   for (call = funcall_chain; call; call = next)
     {
       next = call->next;
-      free ((PTR)call);
+      free ((PTR) call);
     }
 }
 
-
-
-
 /* This page contains the functions for adding data to the  struct expression
    being constructed.  */
 
@@ -391,13 +395,20 @@ write_exp_msymbol (msymbol, text_symbol_type, data_symbol_type)
      struct type *text_symbol_type;
      struct type *data_symbol_type;
 {
+  CORE_ADDR addr;
+
   write_exp_elt_opcode (OP_LONG);
   write_exp_elt_type (lookup_pointer_type (builtin_type_void));
-  write_exp_elt_longcst ((LONGEST) SYMBOL_VALUE_ADDRESS (msymbol));
+
+  addr = SYMBOL_VALUE_ADDRESS (msymbol);
+  if (overlay_debugging)
+    addr = symbol_overlayed_address (addr, SYMBOL_BFD_SECTION (msymbol));
+  write_exp_elt_longcst ((LONGEST) addr);
+
   write_exp_elt_opcode (OP_LONG);
 
   write_exp_elt_opcode (UNOP_MEMVAL);
-  switch (msymbol -> type)
+  switch (msymbol->type)
     {
     case mst_text:
     case mst_file_text:
@@ -418,77 +429,29 @@ write_exp_msymbol (msymbol, text_symbol_type, data_symbol_type)
     }
   write_exp_elt_opcode (UNOP_MEMVAL);
 }
-
-/* Add the appropriate element to append a pointer to a copy of the 
-   contents of S to the end of the expression.  Add new string to the
-   list of strings `name_string_list.'   These strings are all
-   released after parsing and before expression evaluation. */
-
-extern void write_exp_elt_name (expelt)
-     const char* expelt;
-{
-  union exp_element tmp;
-
-  tmp.name = strsave (expelt);
-  add_name_string_cleanup (tmp.name);
-
-  write_exp_elt (tmp);
-}
-
-/* Add S to the list of strings that will eventually have to be 
-   released after parsing and must also be released on error. */
-void
-add_name_string_cleanup (s)
-     char* s;
-{
-  struct name_list* elt = 
-    (struct name_list*) xmalloc (sizeof (struct name_list));
-
-  elt -> name = s;
-  elt -> next = temp_name_list;
-  temp_name_list = elt;
-}
-
-/* Free temp_name_list. */
-
-static void 
-free_name_strings (void)
-{
-  while (temp_name_list != NULL)
-    {
-      struct name_list* next = temp_name_list -> next;
-      free (temp_name_list->name);
-      free (temp_name_list);
-      temp_name_list = next;
-    }
-  temp_name_list = NULL;
-}
-
-
-
 
 /* Recognize tokens that start with '$'.  These include:
 
-	$regname	A native register name or a "standard
-			register name".
+   $regname     A native register name or a "standard
+   register name".
 
-	$variable	A convenience variable with a name chosen
-			by the user.
+   $variable    A convenience variable with a name chosen
+   by the user.
 
-	$digits		Value history with index <digits>, starting
-			from the first value which has index 1.
+   $digits              Value history with index <digits>, starting
+   from the first value which has index 1.
 
-	$$digits	Value history with index <digits> relative
-			to the last value.  I.E. $$0 is the last
-			value, $$1 is the one previous to that, $$2
-			is the one previous to $$1, etc.
+   $$digits     Value history with index <digits> relative
+   to the last value.  I.E. $$0 is the last
+   value, $$1 is the one previous to that, $$2
+   is the one previous to $$1, etc.
 
-	$ | $0 | $$0	The last value in the value history.
+   $ | $0 | $$0 The last value in the value history.
 
-	$$		An abbreviation for the second to the last
-			value in the value history, I.E. $$1
+   $$           An abbreviation for the second to the last
+   value in the value history, I.E. $$1
 
-   */
+ */
 
 void
 write_dollar_variable (str)
@@ -496,6 +459,9 @@ write_dollar_variable (str)
 {
   /* Handle the tokens $digits; also $ (short for $0) and $$ (short for $$1)
      and $$digits (equivalent to $<-digits> if you could type that). */
+
+  struct symbol *sym = NULL;
+  struct minimal_symbol *msym = NULL;
 
   int negate = 0;
   int i = 1;
@@ -509,7 +475,7 @@ write_dollar_variable (str)
   if (i == str.length)
     {
       /* Just dollars (one or two) */
-      i = - negate;
+      i = -negate;
       goto handle_last;
     }
   /* Is the rest of the token digits?  */
@@ -520,44 +486,306 @@ write_dollar_variable (str)
     {
       i = atoi (str.ptr + 1 + negate);
       if (negate)
-	i = - i;
+	i = -i;
       goto handle_last;
     }
-  
+
   /* Handle tokens that refer to machine registers:
      $ followed by a register name.  */
-  for (i = 0; i < NUM_REGS; i++)
-    if (reg_names[i] && str.length - 1 == strlen (reg_names[i])
-	&& STREQN (str.ptr + 1, reg_names[i], str.length - 1))
-      {
-	goto handle_register;
-      }
-  for (i = 0; i < num_std_regs; i++)
-    if (std_regs[i].name && str.length - 1 == strlen (std_regs[i].name)
-	&& STREQN (str.ptr + 1, std_regs[i].name, str.length - 1))
-      {
-	i = std_regs[i].regnum;
-	goto handle_register;
-      }
+  i = target_map_name_to_register (str.ptr + 1, str.length - 1);
+  if (i >= 0)
+    goto handle_register;
+
+  /* On HP-UX, certain system routines (millicode) have names beginning
+     with $ or $$, e.g. $$dyncall, which handles inter-space procedure
+     calls on PA-RISC. Check for those, first. */
+
+  sym = lookup_symbol (copy_name (str), (struct block *) NULL,
+		       VAR_NAMESPACE, (int *) NULL, (struct symtab **) NULL);
+  if (sym)
+    {
+      write_exp_elt_opcode (OP_VAR_VALUE);
+      write_exp_elt_block (block_found);	/* set by lookup_symbol */
+      write_exp_elt_sym (sym);
+      write_exp_elt_opcode (OP_VAR_VALUE);
+      return;
+    }
+  msym = lookup_minimal_symbol (copy_name (str), NULL, NULL);
+  if (msym)
+    {
+      write_exp_msymbol (msym,
+			 lookup_function_type (builtin_type_int),
+			 builtin_type_int);
+      return;
+    }
 
   /* Any other names starting in $ are debugger internal variables.  */
 
   write_exp_elt_opcode (OP_INTERNALVAR);
   write_exp_elt_intern (lookup_internalvar (copy_name (str) + 1));
-  write_exp_elt_opcode (OP_INTERNALVAR); 
+  write_exp_elt_opcode (OP_INTERNALVAR);
   return;
- handle_last:
+handle_last:
   write_exp_elt_opcode (OP_LAST);
   write_exp_elt_longcst ((LONGEST) i);
   write_exp_elt_opcode (OP_LAST);
   return;
- handle_register:
+handle_register:
   write_exp_elt_opcode (OP_REGISTER);
   write_exp_elt_longcst (i);
-  write_exp_elt_opcode (OP_REGISTER); 
+  write_exp_elt_opcode (OP_REGISTER);
   return;
 }
+
+
+/* Parse a string that is possibly a namespace / nested class
+   specification, i.e., something of the form A::B::C::x.  Input
+   (NAME) is the entire string; LEN is the current valid length; the
+   output is a string, TOKEN, which points to the largest recognized
+   prefix which is a series of namespaces or classes.  CLASS_PREFIX is
+   another output, which records whether a nested class spec was
+   recognized (= 1) or a fully qualified variable name was found (=
+   0).  ARGPTR is side-effected (if non-NULL) to point to beyond the
+   string recognized and consumed by this routine.
+
+   The return value is a pointer to the symbol for the base class or
+   variable if found, or NULL if not found.  Callers must check this
+   first -- if NULL, the outputs may not be correct. 
+
+   This function is used c-exp.y.  This is used specifically to get
+   around HP aCC (and possibly other compilers), which insists on
+   generating names with embedded colons for namespace or nested class
+   members.
+
+   (Argument LEN is currently unused. 1997-08-27)
+
+   Callers must free memory allocated for the output string TOKEN.  */
+
+static const char coloncolon[2] =
+{':', ':'};
+
+struct symbol *
+parse_nested_classes_for_hpacc (name, len, token, class_prefix, argptr)
+     char *name;
+     int len;
+     char **token;
+     int *class_prefix;
+     char **argptr;
+{
+  /* Comment below comes from decode_line_1 which has very similar
+     code, which is called for "break" command parsing. */
+
+  /* We have what looks like a class or namespace
+     scope specification (A::B), possibly with many
+     levels of namespaces or classes (A::B::C::D).
+
+     Some versions of the HP ANSI C++ compiler (as also possibly
+     other compilers) generate class/function/member names with
+     embedded double-colons if they are inside namespaces. To
+     handle this, we loop a few times, considering larger and
+     larger prefixes of the string as though they were single
+     symbols.  So, if the initially supplied string is
+     A::B::C::D::foo, we have to look up "A", then "A::B",
+     then "A::B::C", then "A::B::C::D", and finally
+     "A::B::C::D::foo" as single, monolithic symbols, because
+     A, B, C or D may be namespaces.
+
+     Note that namespaces can nest only inside other
+     namespaces, and not inside classes.  So we need only
+     consider *prefixes* of the string; there is no need to look up
+     "B::C" separately as a symbol in the previous example. */
+
+  register char *p;
+  char *start, *end;
+  char *prefix = NULL;
+  char *tmp;
+  struct symbol *sym_class = NULL;
+  struct symbol *sym_var = NULL;
+  struct type *t;
+  int prefix_len = 0;
+  int done = 0;
+  char *q;
+
+  /* Check for HP-compiled executable -- in other cases
+     return NULL, and caller must default to standard GDB
+     behaviour. */
+
+  if (!hp_som_som_object_present)
+    return (struct symbol *) NULL;
+
+  p = name;
+
+  /* Skip over whitespace and possible global "::" */
+  while (*p && (*p == ' ' || *p == '\t'))
+    p++;
+  if (p[0] == ':' && p[1] == ':')
+    p += 2;
+  while (*p && (*p == ' ' || *p == '\t'))
+    p++;
+
+  while (1)
+    {
+      /* Get to the end of the next namespace or class spec. */
+      /* If we're looking at some non-token, fail immediately */
+      start = p;
+      if (!(isalpha (*p) || *p == '$' || *p == '_'))
+	return (struct symbol *) NULL;
+      p++;
+      while (*p && (isalnum (*p) || *p == '$' || *p == '_'))
+	p++;
+
+      if (*p == '<')
+	{
+	  /* If we have the start of a template specification,
+	     scan right ahead to its end */
+	  q = find_template_name_end (p);
+	  if (q)
+	    p = q;
+	}
+
+      end = p;
+
+      /* Skip over "::" and whitespace for next time around */
+      while (*p && (*p == ' ' || *p == '\t'))
+	p++;
+      if (p[0] == ':' && p[1] == ':')
+	p += 2;
+      while (*p && (*p == ' ' || *p == '\t'))
+	p++;
+
+      /* Done with tokens? */
+      if (!*p || !(isalpha (*p) || *p == '$' || *p == '_'))
+	done = 1;
+
+      tmp = (char *) alloca (prefix_len + end - start + 3);
+      if (prefix)
+	{
+	  memcpy (tmp, prefix, prefix_len);
+	  memcpy (tmp + prefix_len, coloncolon, 2);
+	  memcpy (tmp + prefix_len + 2, start, end - start);
+	  tmp[prefix_len + 2 + end - start] = '\000';
+	}
+      else
+	{
+	  memcpy (tmp, start, end - start);
+	  tmp[end - start] = '\000';
+	}
+
+      prefix = tmp;
+      prefix_len = strlen (prefix);
+
+      /* See if the prefix we have now is something we know about */
+
+      if (!done)
+	{
+	  /* More tokens to process, so this must be a class/namespace */
+	  sym_class = lookup_symbol (prefix, 0, STRUCT_NAMESPACE,
+				     0, (struct symtab **) NULL);
+	}
+      else
+	{
+	  /* No more tokens, so try as a variable first */
+	  sym_var = lookup_symbol (prefix, 0, VAR_NAMESPACE,
+				   0, (struct symtab **) NULL);
+	  /* If failed, try as class/namespace */
+	  if (!sym_var)
+	    sym_class = lookup_symbol (prefix, 0, STRUCT_NAMESPACE,
+				       0, (struct symtab **) NULL);
+	}
+
+      if (sym_var ||
+	  (sym_class &&
+	   (t = check_typedef (SYMBOL_TYPE (sym_class)),
+	    (TYPE_CODE (t) == TYPE_CODE_STRUCT
+	     || TYPE_CODE (t) == TYPE_CODE_UNION))))
+	{
+	  /* We found a valid token */
+	  *token = (char *) xmalloc (prefix_len + 1);
+	  memcpy (*token, prefix, prefix_len);
+	  (*token)[prefix_len] = '\000';
+	  break;
+	}
+
+      /* No variable or class/namespace found, no more tokens */
+      if (done)
+	return (struct symbol *) NULL;
+    }
+
+  /* Out of loop, so we must have found a valid token */
+  if (sym_var)
+    *class_prefix = 0;
+  else
+    *class_prefix = 1;
+
+  if (argptr)
+    *argptr = done ? p : end;
+
+  return sym_var ? sym_var : sym_class;		/* found */
+}
+
+char *
+find_template_name_end (p)
+     char *p;
+{
+  int depth = 1;
+  int just_seen_right = 0;
+  int just_seen_colon = 0;
+  int just_seen_space = 0;
+
+  if (!p || (*p != '<'))
+    return 0;
+
+  while (*++p)
+    {
+      switch (*p)
+	{
+	case '\'':
+	case '\"':
+	case '{':
+	case '}':
+	  /* In future, may want to allow these?? */
+	  return 0;
+	case '<':
+	  depth++;		/* start nested template */
+	  if (just_seen_colon || just_seen_right || just_seen_space)
+	    return 0;		/* but not after : or :: or > or space */
+	  break;
+	case '>':
+	  if (just_seen_colon || just_seen_right)
+	    return 0;		/* end a (nested?) template */
+	  just_seen_right = 1;	/* but not after : or :: */
+	  if (--depth == 0)	/* also disallow >>, insist on > > */
+	    return ++p;		/* if outermost ended, return */
+	  break;
+	case ':':
+	  if (just_seen_space || (just_seen_colon > 1))
+	    return 0;		/* nested class spec coming up */
+	  just_seen_colon++;	/* we allow :: but not :::: */
+	  break;
+	case ' ':
+	  break;
+	default:
+	  if (!((*p >= 'a' && *p <= 'z') ||	/* allow token chars */
+		(*p >= 'A' && *p <= 'Z') ||
+		(*p >= '0' && *p <= '9') ||
+		(*p == '_') || (*p == ',') ||	/* commas for template args */
+		(*p == '&') || (*p == '*') ||	/* pointer and ref types */
+		(*p == '(') || (*p == ')') ||	/* function types */
+		(*p == '[') || (*p == ']')))	/* array types */
+	    return 0;
+	}
+      if (*p != ' ')
+	just_seen_space = 0;
+      if (*p != ':')
+	just_seen_colon = 0;
+      if (*p != '>')
+	just_seen_right = 0;
+    }
+  return 0;
+}
 
+
+
 /* Return a null-terminated temporary copy of the name
    of a string token.  */
 
@@ -578,7 +806,7 @@ prefixify_expression (expr)
      register struct expression *expr;
 {
   register int len =
-    sizeof (struct expression) + EXP_ELEM_TO_BYTES (expr->nelts);
+  sizeof (struct expression) + EXP_ELEM_TO_BYTES (expr->nelts);
   register struct expression *temp;
   register int inpos = expr->nelts, outpos = 0;
 
@@ -618,7 +846,6 @@ length_of_subexp (expr, endpos)
     case OP_LONG:
     case OP_DOUBLE:
     case OP_VAR_VALUE:
-    case OP_UNRESOLVED_VALUE:
       oplen = 4;
       break;
 
@@ -631,9 +858,9 @@ length_of_subexp (expr, endpos)
       break;
 
     case OP_COMPLEX:
-      oplen = 1; 
+      oplen = 1;
       args = 2;
-      break; 
+      break;
 
     case OP_FUNCALL:
     case OP_F77_UNDETERMINED_ARGLIST:
@@ -641,29 +868,14 @@ length_of_subexp (expr, endpos)
       args = 1 + longest_to_int (expr->elts[endpos - 2].longconst);
       break;
 
-    case OP_MSGCALL:	/* Objective C message (method) call */
-      oplen = 4;
-      args = 1 + longest_to_int (expr->elts[endpos - 2].longconst);
-      break;
-
-    case OP_ATTRIBUTE:
-      oplen = 4;
-      args = 1 + longest_to_int (expr->elts[endpos - 3].longconst);
-      break;
-
-    case UNOP_MBR:
-      oplen = 3;
-      args = 1;
-      break;
-
     case UNOP_MAX:
     case UNOP_MIN:
       oplen = 3;
       break;
 
-   case BINOP_VAL:
-   case UNOP_CAST:
-   case UNOP_MEMVAL:
+    case BINOP_VAL:
+    case UNOP_CAST:
+    case UNOP_MEMVAL:
       oplen = 3;
       args = 1;
       break;
@@ -687,8 +899,6 @@ length_of_subexp (expr, endpos)
       /* fall through */
     case OP_M2_STRING:
     case OP_STRING:
-    case OP_NSSTRING:	/* Objective C Foundation Class NSString constant */
-    case OP_SELECTOR:	/* Objective C "@selector" pseudo-op */
     case OP_NAME:
     case OP_EXPRSTRING:
       oplen = longest_to_int (expr->elts[endpos - 2].longconst);
@@ -705,26 +915,22 @@ length_of_subexp (expr, endpos)
       oplen = 4;
       args = longest_to_int (expr->elts[endpos - 2].longconst);
       args -= longest_to_int (expr->elts[endpos - 3].longconst);
-      if (args == 0)
-	args = 1;
       args += 1;
       break;
 
     case TERNOP_COND:
     case TERNOP_SLICE:
     case TERNOP_SLICE_COUNT:
-    case TERNOP_MBR:
       args = 3;
       break;
 
       /* Modula-2 */
-   case MULTI_SUBSCRIPT:
+    case MULTI_SUBSCRIPT:
       oplen = 3;
-      args = 1 + longest_to_int (expr->elts[endpos- 2].longconst);
+      args = 1 + longest_to_int (expr->elts[endpos - 2].longconst);
       break;
 
     case BINOP_ASSIGN_MODIFY:
-    case BINOP_MBR:
       oplen = 3;
       args = 2;
       break;
@@ -780,7 +986,6 @@ prefixify_subexp (inexpr, outexpr, inend, outbeg)
     case OP_LONG:
     case OP_DOUBLE:
     case OP_VAR_VALUE:
-    case OP_UNRESOLVED_VALUE:
       oplen = 4;
       break;
 
@@ -793,24 +998,14 @@ prefixify_subexp (inexpr, outexpr, inend, outbeg)
       break;
 
     case OP_COMPLEX:
-      oplen = 1; 
-      args = 2; 
-      break; 
+      oplen = 1;
+      args = 2;
+      break;
 
     case OP_FUNCALL:
     case OP_F77_UNDETERMINED_ARGLIST:
       oplen = 3;
       args = 1 + longest_to_int (inexpr->elts[inend - 2].longconst);
-      break;
-
-    case OP_MSGCALL:	/* Objective C message (method) call */
-      oplen = 4;
-      args = 1 + longest_to_int (inexpr->elts[inend - 2].longconst);
-      break;
-
-    case OP_ATTRIBUTE:
-      oplen = 4;
-      args = 1 + longest_to_int (inexpr->elts[inend - 3].longconst);
       break;
 
     case UNOP_MIN:
@@ -820,7 +1015,6 @@ prefixify_subexp (inexpr, outexpr, inend, outbeg)
 
     case UNOP_CAST:
     case UNOP_MEMVAL:
-    case UNOP_MBR:
       oplen = 3;
       args = 1;
       break;
@@ -833,8 +1027,8 @@ prefixify_subexp (inexpr, outexpr, inend, outbeg)
     case UNOP_ODD:
     case UNOP_ORD:
     case UNOP_TRUNC:
-      oplen=1;
-      args=1;
+      oplen = 1;
+      args = 1;
       break;
 
     case STRUCTOP_STRUCT:
@@ -844,8 +1038,6 @@ prefixify_subexp (inexpr, outexpr, inend, outbeg)
       /* fall through */
     case OP_M2_STRING:
     case OP_STRING:
-    case OP_NSSTRING:	/* Objective C Foundation Class NSString constant */
-    case OP_SELECTOR:	/* Objective C "@selector" pseudo-op */
     case OP_NAME:
     case OP_EXPRSTRING:
       oplen = longest_to_int (inexpr->elts[inend - 2].longconst);
@@ -860,14 +1052,11 @@ prefixify_subexp (inexpr, outexpr, inend, outbeg)
 
     case OP_ARRAY:
       oplen = 4;
-      args = longest_to_int (inexpr->elts[inend - 2].longconst) + 1;
+      args = longest_to_int (inexpr->elts[inend - 2].longconst);
       args -= longest_to_int (inexpr->elts[inend - 3].longconst);
-      /* A null array contains one dummy element to give the type. */
-      if (args == 0)
-	args = 1;
+      args += 1;
       break;
 
-    case TERNOP_MBR:
     case TERNOP_COND:
     case TERNOP_SLICE:
     case TERNOP_SLICE_COUNT:
@@ -875,13 +1064,12 @@ prefixify_subexp (inexpr, outexpr, inend, outbeg)
       break;
 
     case BINOP_ASSIGN_MODIFY:
-    case BINOP_MBR:
       oplen = 3;
       args = 2;
       break;
 
       /* Modula-2 */
-   case MULTI_SUBSCRIPT:
+    case MULTI_SUBSCRIPT:
       oplen = 3;
       args = 1 + longest_to_int (inexpr->elts[inend - 2].longconst);
       break;
@@ -956,10 +1144,8 @@ parse_exp_1 (stringptr, block, comma)
   if (lexptr == 0 || *lexptr == 0)
     error_no_arg ("expression to compute");
 
-  old_chain = make_cleanup (free_funcalls, 0);
-  funcall_chain = NULL;
-  make_cleanup (free_name_strings, NULL);
-  temp_name_list = NULL;
+  old_chain = make_cleanup ((make_cleanup_func) free_funcalls, 0);
+  funcall_chain = 0;
 
   expression_context_block = block ? block : get_selected_block ();
 
@@ -969,32 +1155,34 @@ parse_exp_1 (stringptr, block, comma)
   expout = (struct expression *)
     xmalloc (sizeof (struct expression) + EXP_ELEM_TO_BYTES (expout_size));
   expout->language_defn = current_language;
-  make_cleanup (free_current_contents, &expout);
+  make_cleanup ((make_cleanup_func) free_current_contents, &expout);
 
   if (current_language->la_parser ())
     current_language->la_error (NULL);
 
-  /* Record the actual number of expression elements. */
+  discard_cleanups (old_chain);
+
+  /* Record the actual number of expression elements, and then
+     reallocate the expression memory so that we free up any
+     excess elements. */
 
   expout->nelts = expout_ptr;
+  expout = (struct expression *)
+    xrealloc ((char *) expout,
+	      sizeof (struct expression) + EXP_ELEM_TO_BYTES (expout_ptr));;
 
   /* Convert expression from postfix form as generated by yacc
      parser, to a prefix form. */
 
-  DUMP_EXPRESSION (expout, gdb_stdout, "before conversion to prefix form");
+  if (expressiondebug)
+    dump_prefix_expression (expout, gdb_stdlog,
+			    "before conversion to prefix form");
+
   prefixify_expression (expout);
-  if (current_language->la_language == language_ada)
-      ada_resolve (&expout);
-  DUMP_EXPRESSION (expout, gdb_stdout, "after conversion to prefix form");
 
-  free_name_strings ();
-  discard_cleanups (old_chain);
-
-  /* Reallocate the expression memory so that we free up any excess 
-     elements. */
-  expout = (struct expression *)
-    xrealloc ((char *) expout,
-	      sizeof (struct expression) + EXP_ELEM_TO_BYTES (expout->nelts));;
+  if (expressiondebug)
+    dump_postfix_expression (expout, gdb_stdlog,
+			     "after conversion to prefix form");
 
   *stringptr = lexptr;
   return expout;
@@ -1017,7 +1205,7 @@ parse_expression (string)
 /* Stuff for maintaining a stack of types.  Currently just used by C, but
    probably useful for any language which declares its types "backwards".  */
 
-void 
+void
 push_type (tp)
      enum type_pieces tp;
 {
@@ -1043,7 +1231,7 @@ push_type_int (n)
   type_stack[type_stack_depth++].int_val = n;
 }
 
-enum type_pieces 
+enum type_pieces
 pop_type ()
 {
   if (type_stack_depth)
@@ -1094,7 +1282,7 @@ follow_types (follow_type)
 	  create_array_type ((struct type *) NULL,
 			     follow_type, range_type);
 	if (array_size < 0)
-	  TYPE_ARRAY_UPPER_BOUND_TYPE(follow_type)
+	  TYPE_ARRAY_UPPER_BOUND_TYPE (follow_type)
 	    = BOUND_CANNOT_BE_DETERMINED;
 	break;
       case tp_function:
@@ -1106,13 +1294,11 @@ follow_types (follow_type)
   return follow_type;
 }
 
-void
-_initialize_parse ()
+static void build_parse PARAMS ((void));
+static void
+build_parse ()
 {
-  type_stack_size = 80;
-  type_stack_depth = 0;
-  type_stack = (union type_stack_elt *)
-    xmalloc (type_stack_size * sizeof (*type_stack));
+  int i;
 
   msym_text_symbol_type =
     init_type (TYPE_CODE_FUNC, 1, 0, "<text variable, no debug info>", NULL);
@@ -1124,4 +1310,79 @@ _initialize_parse ()
     init_type (TYPE_CODE_INT, 1, 0,
 	       "<variable (not text or data), no debug info>",
 	       NULL);
+
+  /* create the std_regs table */
+
+  num_std_regs = 0;
+#ifdef PC_REGNUM
+  if (PC_REGNUM >= 0)
+    num_std_regs++;
+#endif
+#ifdef FP_REGNUM
+  if (FP_REGNUM >= 0)
+    num_std_regs++;
+#endif
+#ifdef SP_REGNUM
+  if (SP_REGNUM >= 0)
+    num_std_regs++;
+#endif
+#ifdef PS_REGNUM
+  if (PS_REGNUM >= 0)
+    num_std_regs++;
+#endif
+  /* create an empty table */
+  std_regs = xmalloc ((num_std_regs + 1) * sizeof *std_regs);
+  i = 0;
+  /* fill it in */
+#ifdef PC_REGNUM
+  std_regs[i].name = "pc";
+  std_regs[i].regnum = PC_REGNUM;
+  i++;
+#endif
+#ifdef FP_REGNUM
+  std_regs[i].name = "fp";
+  std_regs[i].regnum = FP_REGNUM;
+  i++;
+#endif
+#ifdef SP_REGNUM
+  std_regs[i].name = "sp";
+  std_regs[i].regnum = SP_REGNUM;
+  i++;
+#endif
+#ifdef PS_REGNUM
+  std_regs[i].name = "ps";
+  std_regs[i].regnum = PS_REGNUM;
+  i++;
+#endif
+  memset (&std_regs[i], 0, sizeof (std_regs[i]));
+}
+
+void
+_initialize_parse ()
+{
+  type_stack_size = 80;
+  type_stack_depth = 0;
+  type_stack = (union type_stack_elt *)
+    xmalloc (type_stack_size * sizeof (*type_stack));
+
+  build_parse ();
+
+  /* FIXME - For the moment, handle types by swapping them in and out.
+     Should be using the per-architecture data-pointer and a large
+     struct. */
+  register_gdbarch_swap (&msym_text_symbol_type, sizeof (msym_text_symbol_type), NULL);
+  register_gdbarch_swap (&msym_data_symbol_type, sizeof (msym_data_symbol_type), NULL);
+  register_gdbarch_swap (&msym_unknown_symbol_type, sizeof (msym_unknown_symbol_type), NULL);
+
+  register_gdbarch_swap (&num_std_regs, sizeof (std_regs), NULL);
+  register_gdbarch_swap (&std_regs, sizeof (std_regs), NULL);
+  register_gdbarch_swap (NULL, 0, build_parse);
+
+  add_show_from_set (
+	    add_set_cmd ("expressiondebug", class_maintenance, var_zinteger,
+			 (char *) &expressiondebug,
+			 "Set expression debugging.\n\
+When non-zero, the internal representation of expressions will be printed.",
+			 &setlist),
+		      &showlist);
 }

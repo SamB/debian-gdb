@@ -1,3 +1,109 @@
+1999-04-01  Jim Blandy  <jimb@zwingli.cygnus.com>
+
+	* add-log.el, add-log.vi: New files.
+
+Wed Jan 20 01:33:50 1999  Angela Marie Thomas (angela@cygnus.com)
+
+	* comp-tools-verify: Remove some checks that are no longer valid.
+
+1998-12-03  Nick Clifton  <nickc@cygnus.com>
+
+	* targetdoc/fr30.texi: New document.
+	
+Thu Oct  1 21:15:59 1998  Angela Marie Thomas (angela@cygnus.com)
+
+	* comp-tools-fix, cross-tools-fix: Replace /usr/include
+	with ${FIXINCDIR}.
+
+Tue Aug 11 19:22:11 1998  Doug Evans  <devans@canuck.cygnus.com>
+
+	* make-rel-sym-tree (version): Update calculation.
+
+Fri Jun 12 21:34:01 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* configure.texi: Various additions.
+	* Makefile.in (TEXI2HTML, DVIPS): New variables.
+	(standards.ps): New target.
+	(configure.dvi): Copy .tin files in as well.
+	(configure.ps, configure.html): New targets.
+	(clean): Remove configdev.jpg and configbuild.jpg.
+	* configdev.fig: New file.
+	* configdev.ein: New file (EPS version of configdev.fig).
+	* configdev.jin: New file (JPEG version of configdev.fig).
+	* configbuild.fig: New file.
+	* configbuild.ein: New file (EPS version of configbuild.fig).
+	* configbuild.jin: New file (JPEG version of configbuild.fig).
+
+Wed Jun 10 14:41:25 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* configure.texi: New file.
+	* configdev.tin: New file.
+	* configbuild.tin: New file.
+	* Makefile.in (MAKEINFO): Use makeinfo from texinfo directory if
+	it exists.
+	(TEXI2DVI): Likewise for texi2dvi.
+	(INFOFILES): Add configure.info.
+	(DVIFILES): Add configure.dvi.
+	(info): Only build info files if the source files exist.
+	(install-info): Only install info files if they exist.
+	(dvi): Only build DVI files if the sources files exist.
+	(configure.info): New target.
+	(configure.dvi): New target.
+	(clean): Remove configdev and configbuild derived files.
+
+	Remove obsolete documentation.
+	* intro.texi: Remove.
+	* install.texi: Remove.
+	* config-names.texi: Remove.
+	* screen1.eps: Remove.
+	* screen1.obj: Remove.
+	* screen2.eps: Remove.
+	* screen2.obj: Remove.
+	* Makefile.in: Remove references to the above.
+
+Thu May 21 14:34:51 1998  Nick Clifton  <nickc@cygnus.com>
+
+	* targetdoc/arm-interwork.texi: Add note about ignoring linker
+	warning message when using --support-old-code.
+
+Mon May 18 14:27:37 1998  Angela Marie Thomas (angela@cygnus.com)
+
+	* Install.in, comp-tools-fix, comp-tools-verify, cross-tools-fix:
+	Use $GCCvn rather than substitute everywhere.
+
+Thu May 14 14:43:10 1998  Nick Clifton  <nickc@cygnus.com>
+
+	* targetdoc/arm-interwork.texi: Document dlltool support of
+	interworking. 
+
+Thu May  7 16:49:38 1998  Jason Molenda  (crash@bugshack.cygnus.com)
+
+	* Install.in: Remove references to TCL_LIBRARY, TK_LIBRARY,
+	and GDBTK_FILENAME.
+
+Wed Apr  1 17:11:44 1998  Nick Clifton  <nickc@cygnus.com>
+
+	* targetdoc/arm-interwork.texi: Document ARM/thumb interworking. 
+
+Tue Mar 31 15:28:20 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* standards.texi, make-stds.texi: Update to current FSF versions.
+	* Makefile.in (standards.info): Depend upon make-std.texi.
+
+Tue Mar 24 16:13:26 1998  Stu Grossman  <grossman@bhuna.cygnus.co.uk>
+
+	* configure:  Regenerate with autoconf 2.12.1 to fix shell issues
+	for NT native builds. 
+
+Mon Mar  9 16:41:04 1998  Doug Evans  <devans@canuck.cygnus.com>
+
+	* make-rel-sym-tree (binprogs): Add objcopy.
+
+Tue Feb 24 18:11:58 1998  Doug Evans  <devans@canuck.cygnus.com>
+
+	* make-rel-sym-tree: as.new -> as-new, ld.new -> ld-new
+	nm.new -> nm-new.  Make symlinks to crt*.o.
+
 Fri Nov 21 12:54:58 1997  Manfred Hollstein <manfred@s-direktnet.de>
 
 	* Makefile.in: Add --no-split argument to avoid creating files

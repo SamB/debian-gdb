@@ -1,5 +1,4 @@
 /* Common things used by the various *gnu-nat.c files
-
    Copyright (C) 1995, 1996 Free Software Foundation, Inc.
 
    Written by Miles Bader <miles@gnu.ai.mit.edu>
@@ -16,7 +15,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. */
+   Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
 
 #ifndef __GNU_NAT_H__
 #define __GNU_NAT_H__
@@ -34,38 +34,38 @@ struct proc *inf_tid_to_thread (struct inf *inf, int tid);
 /* A proc is either a thread, or the task (there can only be one task proc
    because it always has the same TID, PROC_TID_TASK).  */
 struct proc
-{
-  thread_t port;		/* The task or thread port.  */
-  int tid;			/* The GDB pid (actually a thread id).  */
-  int num;			/* An id number for threads, to print.  */
+  {
+    thread_t port;		/* The task or thread port.  */
+    int tid;			/* The GDB pid (actually a thread id).  */
+    int num;			/* An id number for threads, to print.  */
 
-  mach_port_t saved_exc_port;	/* The task/thread's real exception port.  */
-  mach_port_t exc_port;		/* Our replacement, which for.  */
+    mach_port_t saved_exc_port;	/* The task/thread's real exception port.  */
+    mach_port_t exc_port;	/* Our replacement, which for.  */
 
-  int sc;			/* Desired suspend count.   */
-  int cur_sc;			/* Implemented suspend count.  */
-  int run_sc;			/* Default sc when the program is running. */
-  int pause_sc;			/* Default sc when gdb has control. */
-  int resume_sc;		/* Sc resulting from the last resume. */
-  int detach_sc;		/* SC to leave around when detaching
+    int sc;			/* Desired suspend count.   */
+    int cur_sc;			/* Implemented suspend count.  */
+    int run_sc;			/* Default sc when the program is running. */
+    int pause_sc;		/* Default sc when gdb has control. */
+    int resume_sc;		/* Sc resulting from the last resume. */
+    int detach_sc;		/* SC to leave around when detaching
 				   from program. */
 
-  thread_state_data_t state;	/* Registers, &c. */
-  int state_valid : 1;		/* True if STATE is up to date. */
-  int state_changed : 1;
+    thread_state_data_t state;	/* Registers, &c. */
+    int state_valid:1;		/* True if STATE is up to date. */
+    int state_changed:1;
 
-  int aborted : 1;		/* True if thread_abort has been called.  */
-  int dead : 1;			/* We happen to know it's actually dead. */
+    int aborted:1;		/* True if thread_abort has been called.  */
+    int dead:1;			/* We happen to know it's actually dead. */
 
-  /* Bit mask of registers fetched by gdb.  This is used when we re-fetch
-     STATE after aborting the thread, to detect that gdb may have out-of-date
-     information.  */
-  unsigned long fetched_regs;
+    /* Bit mask of registers fetched by gdb.  This is used when we re-fetch
+       STATE after aborting the thread, to detect that gdb may have out-of-date
+       information.  */
+    unsigned long fetched_regs;
 
-  struct inf *inf;		/* Where we come from.  */
+    struct inf *inf;		/* Where we come from.  */
 
-  struct proc *next;
-};
+    struct proc *next;
+  };
 
 /* The task has a thread entry with this TID.  */
 #define PROC_TID_TASK 	(-1)
@@ -82,13 +82,10 @@ extern thread_state_t proc_get_state (struct proc *proc, int will_modify);
        debug ("{proc %d/%d %p}: " msg, \
 	      __proc_pid (__proc), __proc->tid, __proc , ##args); } while (0)
 
-#if MAINTENANCE_CMDS
 extern int gnu_debug_flag;
+
 #define debug(msg, args...) \
  do { if (gnu_debug_flag) \
-        fprintf (stderr, "%s: " msg "\r\n", __FUNCTION__ , ##args); } while (0)
-#else
-#define debug(msg, args...) (void)0
-#endif
+        fprintf_unfiltered (gdb_stdlog, "%s: " msg "\r\n", __FUNCTION__ , ##args); } while (0)
 
 #endif /* __GNU_NAT_H__ */

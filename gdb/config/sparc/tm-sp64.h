@@ -1,26 +1,100 @@
 /* Target machine sub-parameters for SPARC64, for GDB, the GNU debugger.
    This is included by other tm-*.h files to define SPARC64 cpu-related info.
-   Copyright 1994, 1995, 1996 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1996, 1998 Free Software Foundation, Inc.
    This is (obviously) based on the SPARC Vn (n<9) port.
    Contributed by Doug Evans (dje@cygnus.com).
+   Further modified by Bob Manson (manson@cygnus.com).
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
 
 #define GDB_TARGET_IS_SPARC64
+
+struct value;
+
+/* Eeeew. Ok, we have to assume (for now) that the processor really is
+   in sparc64 mode. While this is the same instruction sequence as
+   on the Sparc, the stack frames are offset by +2047 (and the arguments
+   are 8 bytes instead of 4). */
+/* Instructions are:
+   std  %f10, [ %fp + 0x7a7 ]
+   std  %f8, [ %fp + 0x79f ]
+   std  %f6, [ %fp + 0x797 ]
+   std  %f4, [ %fp + 0x78f ]
+   std  %f2, [ %fp + 0x787 ]
+   std  %f0, [ %fp + 0x77f ]
+   std  %g6, [ %fp + 0x777 ]
+   std  %g4, [ %fp + 0x76f ]
+   std  %g2, [ %fp + 0x767 ]
+   std  %g0, [ %fp + 0x75f ]
+   std  %fp, [ %fp + 0x757 ]
+   std  %i4, [ %fp + 0x74f ]
+   std  %i2, [ %fp + 0x747 ]
+   std  %i0, [ %fp + 0x73f ]
+   nop
+   nop
+   nop
+   nop
+   rd  %tbr, %o0
+   st  %o0, [ %fp + 0x72b ]
+   rd  %tpc, %o0
+   st  %o0, [ %fp + 0x727 ]
+   rd  %psr, %o0
+   st  %o0, [ %fp + 0x723 ]
+   rd  %y, %o0
+   st  %o0, [ %fp + 0x71f ]
+   ldx  [ %sp + 0x8a7 ], %o5
+   ldx  [ %sp + 0x89f ], %o4
+   ldx  [ %sp + 0x897 ], %o3
+   ldx  [ %sp + 0x88f ], %o2
+   ldx  [ %sp + 0x887 ], %o1
+   call  %g0
+   ldx  [ %sp + 0x87f ], %o0
+   nop
+   ta  1
+   nop
+   nop
+ */
+
+#define CALL_DUMMY {		 0x9de3bec0fd3fa7f7LL, 0xf93fa7eff53fa7e7LL,\
+				 0xf13fa7dfed3fa7d7LL, 0xe93fa7cfe53fa7c7LL,\
+				 0xe13fa7bfdd3fa7b7LL, 0xd93fa7afd53fa7a7LL,\
+				 0xd13fa79fcd3fa797LL, 0xc93fa78fc53fa787LL,\
+				 0xc13fa77fcc3fa777LL, 0xc83fa76fc43fa767LL,\
+				 0xc03fa75ffc3fa757LL, 0xf83fa74ff43fa747LL,\
+				 0xf03fa73f01000000LL, 0x0100000001000000LL,\
+				 0x0100000091580000LL, 0xd027a72b93500000LL,\
+				 0xd027a72791480000LL, 0xd027a72391400000LL,\
+				 0xd027a71fda5ba8a7LL, 0xd85ba89fd65ba897LL,\
+				 0xd45ba88fd25ba887LL, 0x9fc02000d05ba87fLL,\
+				 0x0100000091d02001LL, 0x0100000001000000LL }
+
+
+/* 128 is to reserve space to write the %i/%l registers that will be restored
+   when we resume. */
+#define CALL_DUMMY_STACK_ADJUST 128
+
+#define CALL_DUMMY_LENGTH 192
+
+#define CALL_DUMMY_START_OFFSET 148
+
+#define CALL_DUMMY_CALL_OFFSET (CALL_DUMMY_START_OFFSET + (5 * 4))
+
+#define CALL_DUMMY_BREAKPOINT_OFFSET (CALL_DUMMY_START_OFFSET + (8 * 4))
 
 #include "sparc/tm-sparc.h"
 
@@ -81,8 +155,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
    to be actual register numbers as far as the user is concerned
    but do serve to get the desired values when passed to read_register.  */
 
-#if 0 /* defined in tm-sparc.h, replicated for doc purposes */
-#define	G0_REGNUM 0             /* %g0 */
+#if 0				/* defined in tm-sparc.h, replicated for doc purposes */
+#define	G0_REGNUM 0		/* %g0 */
 #define	G1_REGNUM 1		/* %g1 */
 #define O0_REGNUM 8		/* %o0 */
 #define	SP_REGNUM 14		/* Contains address of top of stack, \
@@ -113,38 +187,38 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 /* v9 misc. and priv. regs */
 
-#define C0_REGNUM FP_MAX_REGNUM			/* Start of control registers */
-#define PC_REGNUM (C0_REGNUM + 0)		/* Current PC */
-#define NPC_REGNUM (C0_REGNUM + 1)		/* Next PC */
-#define CCR_REGNUM (C0_REGNUM + 2)		/* Condition Code Register (%xcc,%icc) */
-#define FSR_REGNUM (C0_REGNUM + 3)		/* Floating Point State */
-#define FPRS_REGNUM (C0_REGNUM + 4)		/* Floating Point Registers State */
-#define	Y_REGNUM (C0_REGNUM + 5)		/* Temp register for multiplication, etc.  */
-#define ASI_REGNUM (C0_REGNUM + 6)		/* Alternate Space Identifier */
-#define VER_REGNUM (C0_REGNUM + 7)		/* Version register */
-#define TICK_REGNUM (C0_REGNUM + 8)		/* Tick register */
-#define PIL_REGNUM (C0_REGNUM + 9)		/* Processor Interrupt Level */
-#define PSTATE_REGNUM (C0_REGNUM + 10)		/* Processor State */
-#define TSTATE_REGNUM (C0_REGNUM + 11)		/* Trap State */
-#define TBA_REGNUM (C0_REGNUM + 12)		/* Trap Base Address */
-#define TL_REGNUM (C0_REGNUM + 13)		/* Trap Level */
-#define TT_REGNUM (C0_REGNUM + 14)		/* Trap Type */
-#define TPC_REGNUM (C0_REGNUM + 15)		/* Trap pc */
-#define TNPC_REGNUM (C0_REGNUM + 16)		/* Trap npc */
-#define WSTATE_REGNUM (C0_REGNUM + 17)		/* Window State */
-#define CWP_REGNUM (C0_REGNUM + 18)		/* Current Window Pointer */
+#define C0_REGNUM FP_MAX_REGNUM	/* Start of control registers */
+#define PC_REGNUM (C0_REGNUM + 0)	/* Current PC */
+#define NPC_REGNUM (C0_REGNUM + 1)	/* Next PC */
+#define CCR_REGNUM (C0_REGNUM + 2)	/* Condition Code Register (%xcc,%icc) */
+#define FSR_REGNUM (C0_REGNUM + 3)	/* Floating Point State */
+#define FPRS_REGNUM (C0_REGNUM + 4)	/* Floating Point Registers State */
+#define	Y_REGNUM (C0_REGNUM + 5)	/* Temp register for multiplication, etc.  */
+#define ASI_REGNUM (C0_REGNUM + 6)	/* Alternate Space Identifier */
+#define VER_REGNUM (C0_REGNUM + 7)	/* Version register */
+#define TICK_REGNUM (C0_REGNUM + 8)	/* Tick register */
+#define PIL_REGNUM (C0_REGNUM + 9)	/* Processor Interrupt Level */
+#define PSTATE_REGNUM (C0_REGNUM + 10)	/* Processor State */
+#define TSTATE_REGNUM (C0_REGNUM + 11)	/* Trap State */
+#define TBA_REGNUM (C0_REGNUM + 12)	/* Trap Base Address */
+#define TL_REGNUM (C0_REGNUM + 13)	/* Trap Level */
+#define TT_REGNUM (C0_REGNUM + 14)	/* Trap Type */
+#define TPC_REGNUM (C0_REGNUM + 15)	/* Trap pc */
+#define TNPC_REGNUM (C0_REGNUM + 16)	/* Trap npc */
+#define WSTATE_REGNUM (C0_REGNUM + 17)	/* Window State */
+#define CWP_REGNUM (C0_REGNUM + 18)	/* Current Window Pointer */
 #define CANSAVE_REGNUM (C0_REGNUM + 19)		/* Savable Windows */
 #define CANRESTORE_REGNUM (C0_REGNUM + 20)	/* Restorable Windows */
 #define CLEANWIN_REGNUM (C0_REGNUM + 21)	/* Clean Windows */
 #define OTHERWIN_REGNUM (C0_REGNUM + 22)	/* Other Windows */
 #define ASR_REGNUM(n) (C0_REGNUM+(23-16)+(n))	/* Ancillary State Register
 						   (n = 16...31) */
-#define ICC_REGNUM (C0_REGNUM + 39)		/* 32 bit condition codes */
-#define XCC_REGNUM (C0_REGNUM + 40)		/* 64 bit condition codes */
-#define FCC0_REGNUM (C0_REGNUM + 41)		/* fp cc reg 0 */
-#define FCC1_REGNUM (C0_REGNUM + 42)		/* fp cc reg 1 */
-#define FCC2_REGNUM (C0_REGNUM + 43)		/* fp cc reg 2 */
-#define FCC3_REGNUM (C0_REGNUM + 44)		/* fp cc reg 3 */
+#define ICC_REGNUM (C0_REGNUM + 39)	/* 32 bit condition codes */
+#define XCC_REGNUM (C0_REGNUM + 40)	/* 64 bit condition codes */
+#define FCC0_REGNUM (C0_REGNUM + 41)	/* fp cc reg 0 */
+#define FCC1_REGNUM (C0_REGNUM + 42)	/* fp cc reg 1 */
+#define FCC2_REGNUM (C0_REGNUM + 43)	/* fp cc reg 2 */
+#define FCC3_REGNUM (C0_REGNUM + 44)	/* fp cc reg 3 */
 
 /* Total amount of space needed to store our copies of the machine's
    register state, the array `registers'.
@@ -210,6 +284,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #undef  TARGET_PTR_BIT
 #define TARGET_PTR_BIT 64
 
+/* Longs are 64 bits. */
+#undef TARGET_LONG_BIT
+#define TARGET_LONG_BIT 64
+
+#undef TARGET_LONG_LONG_BIT
+#define TARGET_LONG_LONG_BIT 64
+
 /* Does the specified function use the "struct returning" convention
    or the "value returning" convention?  The "value returning" convention
    almost invariably returns the entire value in registers.  The
@@ -219,12 +300,18 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
    Since this sometimes depends on whether it was compiled with GCC,
    this is also an argument.  This is used in call_function to build a
-   stack, and in value_being_returned to print return values.
+   stack, and in value_being_returned to print return values. 
 
-   On sparc64, all structs are returned via a pointer.  */
+   On Sparc64, we only pass pointers to structs if they're larger then
+   32 bytes. Otherwise they're stored in %o0-%o3 (floating-point
+   values go into %fp0-%fp3).  */
+
 
 #undef  USE_STRUCT_CONVENTION
-#define USE_STRUCT_CONVENTION(gcc_p, type) 1
+#define USE_STRUCT_CONVENTION(gcc_p, type) (TYPE_LENGTH (type) > 32)
+
+#undef REG_STRUCT_HAS_ADDR
+#define REG_STRUCT_HAS_ADDR(gcc_p,type) (TYPE_LENGTH (type) > 32)
 
 /* Store the address of the place in which to copy the structure the
    subroutine will return.  This is called from call_function. */
@@ -239,22 +326,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #undef  FRAME_ARGS_SKIP
 #define FRAME_ARGS_SKIP 136
 
-/* We need two arguments (in general) to the "info frame" command.
-   Note that the definition of this macro implies that there exists a
-   function "setup_arbitrary_frame" in sparc-tdep.c */
-
-#undef  SETUP_ARBITRARY_FRAME		/*FIXME*/
-#undef  FRAME_SPECIFICATION_DYADIC
-#define FRAME_SPECIFICATION_DYADIC
-
-/* To print every pair of float registers as a double, we use this hook.
-   We also print the condition code registers in a readable format
-   (FIXME: can expand this to all control regs).  */
-
-#undef 	PRINT_REGISTER_HOOK
-#define	PRINT_REGISTER_HOOK(regno)	\
-  sparc_print_register_hook (regno)
-
 /* Offsets into jmp_buf.
    FIXME: This was borrowed from the v8 stuff and will probably have to change
    for v9.  */
@@ -281,3 +352,26 @@ extern int
 get_longjmp_target PARAMS ((CORE_ADDR *));
 
 #define GET_LONGJMP_TARGET(ADDR) get_longjmp_target(ADDR)
+
+extern CORE_ADDR sparc64_read_sp ();
+extern CORE_ADDR sparc64_read_fp ();
+extern void sparc64_write_sp PARAMS ((CORE_ADDR));
+extern void sparc64_write_fp PARAMS ((CORE_ADDR));
+
+#define TARGET_READ_SP() (sparc64_read_sp ())
+#define TARGET_READ_FP() (sparc64_read_fp ())
+#define TARGET_WRITE_SP(X) (sparc64_write_sp (X))
+#define TARGET_WRITE_FP(X) (sparc64_write_fp (X))
+
+#undef TM_PRINT_INSN_MACH
+#define TM_PRINT_INSN_MACH bfd_mach_sparc_v9a
+
+CORE_ADDR sp64_push_arguments PARAMS ((int, struct value **, CORE_ADDR, unsigned char, CORE_ADDR));
+#undef PUSH_ARGUMENTS
+#define PUSH_ARGUMENTS(A,B,C,D,E) (sp64_push_arguments ((A), (B), (C), (D), (E)))
+
+#undef EXTRACT_RETURN_VALUE
+#define EXTRACT_RETURN_VALUE(TYPE,REGBUF,VALBUF) \
+  sparc64_extract_return_value(TYPE, REGBUF, VALBUF, 0)
+extern void
+sparc64_extract_return_value PARAMS ((struct type *, char[], char *, int));

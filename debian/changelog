@@ -1,8 +1,40 @@
-gdb (4.17-4.m68k.objc.threads.hwwp.fpu.gnat.3.1) frozen unstable; urgency=low
+gdb (4.18.19990928-1) unstable; urgency=low
 
-  * Fix compilation on sparc
+  * New upstream code.
+    Fixes some problems related to the C++ code:
+     closes: #46125: gdb seg faults calling C++ functions.
+     closes: #46195: gdb is broken for C++
+     closes: #43955: gdb can't resolve virtual methods with new g++
+     closes: #36341: gdb: Gives a parse error when casting an expression
+  * Include patch from David N. Welton <davidw@linuxcare.com>:
+     closes: #45308: gdb: Patch for gdb debian/rules
+  * ACK NMU:
+     closes: #39661: gdb is broken on ppc arch.
+  * Now compiles on non-i386 archs:
+     closes: #32267
+  * Updated my email address.
 
- -- Roman Hodek <Roman.Hodek@informatik.uni-erlangen.de>  Sat, 13 Feb 1999 13:59:10 -0500
+ -- Vincent Renardias <vincent@debian.org>  Wed, 29 Sep 1999 17:39:17 +0200
+
+gdb (4.18-1.1) unstable; urgency=low
+
+  * Applied some ppc patch i got from the linuxppc gdb.
+
+ -- Sven LUTHER <luther@debian.org>  Mon, 14 Jun 1999 19:54:49 +0200
+
+gdb (4.18-1) unstable; urgency=low
+
+  * New upstream version!
+
+ -- Vincent Renardias <vincent@waw.com>  Thu, 22 Apr 1999 17:35:41 +0200
+
+gdb (4.17.19981224-3.m68k.objc.threads.hwwp.fpu.gnat) unstable; urgency=low
+
+  * Upgrade to new code.
+  * Apply HJL's 4.17.0.4 -> 4.17.0.8 patch.
+  * Fix #30463.
+
+ -- Vincent Renardias <vincent@waw.com>  Mon, 18 Jan 1999 23:38:36 +0100
 
 gdb (4.17-4.m68k.objc.threads.hwwp.fpu.gnat.3) frozen unstable; urgency=low
 

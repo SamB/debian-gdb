@@ -1,5 +1,5 @@
 /* Object file "section" support for the BFD library.
-   Copyright (C) 1990, 91, 92, 93, 94, 95, 96, 1997
+   Copyright (C) 1990, 91, 92, 93, 94, 95, 96, 97, 98, 1999
    Free Software Foundation, Inc.
    Written by Cygnus Support.
 
@@ -137,7 +137,7 @@ SUBSECTION
 #include "bfd.h"
 #include "sysdep.h"
 #include "libbfd.h"
-
+#include "bfdlink.h"
 
 /*
 DOCDD
@@ -215,7 +215,7 @@ CODE_FRAGMENT
 .           standard data. *}
 .#define SEC_CONSTRUCTOR 0x100
 .
-.        {* The section is a constuctor, and should be placed at the
+.        {* The section is a constructor, and should be placed at the
 .          end of the text, data, or bss section(?). *}
 .#define SEC_CONSTRUCTOR_TEXT 0x1100
 .#define SEC_CONSTRUCTOR_DATA 0x2100
@@ -304,6 +304,22 @@ CODE_FRAGMENT
 .	   else up the line will take care of it later.  *}
 .#define SEC_LINKER_CREATED 0x800000
 .
+.	{* This section should not be subject to garbage collection.  *}
+.#define SEC_KEEP 0x1000000
+.
+.	{* This section contains "short" data, and should be placed
+.	   "near" the GP.  *}
+.#define SEC_SHORT 0x2000000
+.
+.	{* This section should be blocked (weak alignment).  Guarantees a
+.          section will not cross a page boundary if smaller than a page, or
+.          be aligned on a page boundary if >= a page.  *}
+.#define SEC_BLOCK 0x4000000
+.
+.	{* Conditionally link this section; link only if there are no
+.          references found to any symbol in the section *}
+.#define SEC_CLINK 0x8000000
+.
 .	{*  End of section flags.  *}
 .
 .	{* Some internal packed boolean fields.  *}
@@ -316,6 +332,9 @@ CODE_FRAGMENT
 .
 .	{* A mark flag used by some of the linker backends.  *}
 .	unsigned int linker_mark : 1;
+.
+.	{* A mark flag used by some linker backends for garbage collection.  *}
+.	unsigned int gc_mark : 1;
 .
 .	{* End of internal packed boolean fields.  *}
 .
@@ -334,9 +353,17 @@ CODE_FRAGMENT
 .
 .   bfd_vma lma;
 .
+.   {* CYGNUS LOCAL TI COFF/twall *}
+.        {*  The memory page of the section (for TI COFF, usually PROG or DATA)
+.           Needed on targets with a multiple address space.  The
+.           file flag HAS_LOAD_PAGE should be set if this field is used.  *}
+.
+.   int load_page;
+.
 .        {* The size of the section in bytes, as it will be output.
 .           contains a value even if the section has no contents (e.g., the
 .           size of <<.bss>>). This will be filled in after relocation *}
+.   {* end CYGNUS LOCAL *}
 .
 .   bfd_size_type _cooked_size;
 .
@@ -433,6 +460,7 @@ CODE_FRAGMENT
 .
 .   struct bfd_link_order *link_order_head;
 .   struct bfd_link_order *link_order_tail;
+.
 .} asection ;
 .
 .    {* These sections are global, and are managed by BFD.  The application
@@ -471,30 +499,44 @@ CODE_FRAGMENT
 .     ((section->reloc_done) ? (section)->_cooked_size: (abort(),1))
 */
 
+/* We use a macro to initialize the static asymbol structures because
+   traditional C does not permit us to initialize a union member while
+   gcc warns if we don't initialize it.  */
+ /* the_bfd, name, value, attr, section [, udata] */
+#ifdef __STDC__
+#define GLOBAL_SYM_INIT(NAME, SECTION) \
+  { 0, NAME, 0, BSF_SECTION_SYM, (asection *) SECTION, { 0 }}
+#else
+#define GLOBAL_SYM_INIT(NAME, SECTION) \
+  { 0, NAME, 0, BSF_SECTION_SYM, (asection *) SECTION }
+#endif
+
 /* These symbols are global, not specific to any BFD.  Therefore, anything
    that tries to change them is broken, and should be repaired.  */
+
 static const asymbol global_syms[] =
 {
- /* the_bfd, name, value, attr, section [, udata] */
-  {0, BFD_COM_SECTION_NAME, 0, BSF_SECTION_SYM, (asection *) &bfd_com_section},
-  {0, BFD_UND_SECTION_NAME, 0, BSF_SECTION_SYM, (asection *) &bfd_und_section},
-  {0, BFD_ABS_SECTION_NAME, 0, BSF_SECTION_SYM, (asection *) &bfd_abs_section},
-  {0, BFD_IND_SECTION_NAME, 0, BSF_SECTION_SYM, (asection *) &bfd_ind_section},
+  GLOBAL_SYM_INIT (BFD_COM_SECTION_NAME, &bfd_com_section),
+  GLOBAL_SYM_INIT (BFD_UND_SECTION_NAME, &bfd_und_section),
+  GLOBAL_SYM_INIT (BFD_ABS_SECTION_NAME, &bfd_abs_section),
+  GLOBAL_SYM_INIT (BFD_IND_SECTION_NAME, &bfd_ind_section)
 };
 
-#define STD_SECTION(SEC, FLAGS, SYM, NAME, IDX)	\
+/* CYGNUS LOCAL TI COFF/twall@tiac.net */
+#define STD_SECTION(SEC, FLAGS, SYM, NAME, IDX, PAGE)	\
   const asymbol * const SYM = (asymbol *) &global_syms[IDX]; \
   const asection SEC = \
-    { NAME, 0, 0, FLAGS, 0, 0, 0, 0, 0, 0, 0, 0, (asection *) &SEC, \
+    { NAME, 0, 0, FLAGS, 0, 0, 0, 0, 0, 0, PAGE, 0, 0, 0, (asection *) &SEC, \
       0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, \
       (asymbol *) &global_syms[IDX], (asymbol **) &SYM, 0, 0 }
 
 STD_SECTION (bfd_com_section, SEC_IS_COMMON, bfd_com_symbol,
-	     BFD_COM_SECTION_NAME, 0);
-STD_SECTION (bfd_und_section, 0, bfd_und_symbol, BFD_UND_SECTION_NAME, 1);
-STD_SECTION (bfd_abs_section, 0, bfd_abs_symbol, BFD_ABS_SECTION_NAME, 2);
-STD_SECTION (bfd_ind_section, 0, bfd_ind_symbol, BFD_IND_SECTION_NAME, 3);
+	     BFD_COM_SECTION_NAME, 0, 1);
+STD_SECTION (bfd_und_section, 0, bfd_und_symbol, BFD_UND_SECTION_NAME, 1, 0);
+STD_SECTION (bfd_abs_section, 0, bfd_abs_symbol, BFD_ABS_SECTION_NAME, 2, 0);
+STD_SECTION (bfd_ind_section, 0, bfd_ind_symbol, BFD_IND_SECTION_NAME, 3, 0);
 #undef STD_SECTION
+/* end CYGNUS LOCAL */
 
 /*
 DOCDD
@@ -727,7 +769,7 @@ DESCRIPTION
 /*ARGSUSED*/
 boolean
 bfd_set_section_flags (abfd, section, flags)
-     bfd *abfd;
+     bfd *abfd ATTRIBUTE_UNUSED;
      sec_ptr section;
      flagword flags;
 {
@@ -1020,3 +1062,52 @@ DESCRIPTION
 .     BFD_SEND (obfd, _bfd_copy_private_section_data, \
 .		(ibfd, isection, obfd, osection))
 */
+
+/*
+FUNCTION
+	_bfd_strip_section_from_output
+
+SYNOPSIS
+	void _bfd_strip_section_from_output
+	(asection *section);
+
+DESCRIPTION
+	Remove @var{section} from the output.  If the output section becomes
+	empty, remove it from the output bfd.
+*/
+void
+_bfd_strip_section_from_output (s)
+     asection *s;
+{
+  asection **spp, *os;
+  struct bfd_link_order *p, *pp;
+
+  /* Excise the input section from the link order.  */
+  os = s->output_section;
+  for (p = os->link_order_head, pp = NULL; p != NULL; pp = p, p = p->next)
+    if (p->type == bfd_indirect_link_order
+	&& p->u.indirect.section == s)
+      {
+	if (pp)
+	  pp->next = p->next;
+	else
+	  os->link_order_head = p->next;
+	if (!p->next)
+	  os->link_order_tail = pp;
+	break;
+      }
+
+  /* If the output section is empty, remove it too.  Careful about sections
+     that have been discarded in the link script -- they are mapped to 
+     bfd_abs_section, which has no owner.  */
+  if (!os->link_order_head && os->owner)
+    {
+      for (spp = &os->owner->sections; *spp; spp = &(*spp)->next)
+	if (*spp == os)
+	  {
+	    *spp = os->next;
+	    os->owner->section_count--;
+	    break;
+	  }
+    }
+}

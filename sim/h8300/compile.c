@@ -74,6 +74,10 @@ void sim_set_simcache_size PARAMS ((int));
 
 #include "inst.h"
 
+/* The rate at which to call the host's poll_quit callback. */
+
+#define POLL_QUIT_INTERVAL 0x80000
+
 #define LOW_BYTE(x) ((x) & 0xff)
 #define HIGH_BYTE(x) (((x)>>8) & 0xff)
 #define P(X,Y) ((X<<8) | Y)
@@ -1726,7 +1730,7 @@ sim_resume (sd, step, siggnal)
 
       if (--poll_count < 0)
 	{
-	  poll_count = 100;
+	  poll_count = POLL_QUIT_INTERVAL;
 	  if ((*sim_callback->poll_quit) != NULL
 	      && (*sim_callback->poll_quit) (sim_callback))
 	    sim_stop (sd);
@@ -1816,11 +1820,12 @@ sim_read (sd, addr, buffer, size)
 #define TICK_REGNUM     12
 
 
-void
-sim_store_register (sd, rn, value)
+int
+sim_store_register (sd, rn, value, length)
      SIM_DESC sd;
      int rn;
      unsigned char *value;
+     int length;
 {
   int longval;
   int shortval;
@@ -1862,13 +1867,15 @@ sim_store_register (sd, rn, value)
       cpu.ticks = longval;
       break;
     }
+  return -1;
 }
 
-void
-sim_fetch_register (sd, rn, buf)
+int
+sim_fetch_register (sd, rn, buf, length)
      SIM_DESC sd;
      int rn;
      unsigned char *buf;
+     int length;
 {
   int v;
   int longreg = 0;
@@ -1920,6 +1927,7 @@ sim_fetch_register (sd, rn, buf)
       buf[0] = v >> 8;
       buf[1] = v;
     }
+  return -1;
 }
 
 void

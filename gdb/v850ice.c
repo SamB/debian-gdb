@@ -1,67 +1,89 @@
 /* ICE interface for the NEC V850 for GDB, the GNU debugger.
    Copyright 1996, Free Software Foundation, Inc.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
 
 #include "defs.h"
 #include "gdb_string.h"
-#if 0
 #include "frame.h"
-#endif
+#include "symtab.h"
 #include "inferior.h"
-#if 0
-#include "bfd.h"
-#endif
+#include "breakpoint.h"
 #include "symfile.h"
 #include "target.h"
-#if 0
-#include "wait.h"
-#include "gdbcmd.h"
 #include "objfiles.h"
-#include "gdb-stabs.h"
-#include "gdbthread.h"
-#endif
-#define WIN32_LEAN_AND_MEAN
+#include "gdbcore.h"
+#include "value.h"
+#include "command.h"
+
 #include <windows.h>
+#include <winuser.h>		/* for WM_USER */
+
+extern unsigned long int strtoul (const char *nptr, char **endptr,
+				  int base);
+
+/* Local data definitions */
+struct MessageIO
+  {
+    int size;			/* length of input or output in bytes         */
+    char *buf;			/* buffer having the input/output information */
+  };
+
+/* Prototypes for functions located in other files */
+extern void break_command PARAMS ((char *, int));
+
+extern void stepi_command PARAMS ((char *, int));
+
+extern void nexti_command PARAMS ((char *, int));
+
+extern void continue_command PARAMS ((char *, int));
+
+extern int (*ui_loop_hook) PARAMS ((int));
 
 /* Prototypes for local functions */
+static int init_hidden_window PARAMS ((void));
 
-static void v850ice_files_info PARAMS ((struct target_ops *ignore));
+static LRESULT CALLBACK v850ice_wndproc PARAMS ((HWND, UINT, WPARAM, LPARAM));
+
+static void v850ice_files_info PARAMS ((struct target_ops * ignore));
 
 static int v850ice_xfer_memory PARAMS ((CORE_ADDR memaddr, char *myaddr,
 					int len, int should_write,
-					struct target_ops *target));
+					struct target_ops * target));
 
 static void v850ice_prepare_to_store PARAMS ((void));
 
 static void v850ice_fetch_registers PARAMS ((int regno));
 
 static void v850ice_resume PARAMS ((int pid, int step,
-				   enum target_signal siggnal));
+				    enum target_signal siggnal));
 
 static void v850ice_open PARAMS ((char *name, int from_tty));
 
 static void v850ice_close PARAMS ((int quitting));
 
+static void v850ice_stop PARAMS ((void));
+
 static void v850ice_store_registers PARAMS ((int regno));
 
 static void v850ice_mourn PARAMS ((void));
 
-static int v850ice_wait PARAMS ((int pid, struct target_waitstatus *status));
+static int v850ice_wait PARAMS ((int pid, struct target_waitstatus * status));
 
 static void v850ice_kill PARAMS ((void));
 
@@ -71,89 +93,223 @@ static int v850ice_insert_breakpoint PARAMS ((CORE_ADDR, char *));
 
 static int v850ice_remove_breakpoint PARAMS ((CORE_ADDR, char *));
 
-static int ice_open = 0;
+static void v850ice_command PARAMS ((char *, int));
 
-#ifndef EXPORT
-#define EXPORT __declspec(dllexport)
-#endif
+static int ice_disassemble PARAMS ((unsigned long, int, char *));
 
-struct MessageIO
+static int ice_lookup_addr PARAMS ((unsigned long *, char *, char *));
+
+static int ice_lookup_symbol PARAMS ((unsigned long, char *));
+
+static void ice_SimulateDisassemble PARAMS ((char *, int));
+
+static void ice_SimulateAddrLookup PARAMS ((char *, int));
+
+static void ice_Simulate_SymLookup PARAMS ((char *, int));
+
+static void ice_fputs PARAMS ((const char *, GDB_FILE *));
+
+static int ice_file PARAMS ((char *));
+
+static int ice_cont PARAMS ((char *));
+
+static int ice_stepi PARAMS ((char *));
+
+static int ice_nexti PARAMS ((char *));
+
+static void togdb_force_update PARAMS ((void));
+
+static void do_gdb (char *, char *, void (*func) PARAMS ((char *, int)), int);
+
+
+/* Globals */
+static HWND hidden_hwnd;	/* HWND for messages */
+
+long (__stdcall * ExeAppReq) PARAMS ((char *, long, char *, struct MessageIO *));
+
+long (__stdcall * RegisterClient) PARAMS ((HWND));
+
+long (__stdcall * UnregisterClient) PARAMS ((void));
+
+
+/* Globals local to this file only */
+static int ice_open = 0;	/* Is ICE open? */
+
+static char *v850_CB_Result;	/* special char array for saving 'callback' results */
+
+static int SimulateCallback;	/* simulate a callback event */
+
+#define MAX_BLOCK_SIZE    64*1024	/* Cannot transfer memory in blocks bigger
+					   than this */
+/* MDI/ICE Message IDs */
+#define GSINGLESTEP     0x200	/* single-step target          */
+#define GRESUME         0x201	/* resume target               */
+#define GREADREG        0x202	/* read a register             */
+#define GWRITEREG       0x203	/* write a register            */
+#define GWRITEBLOCK     0x204	/* write a block of memory     */
+#define GREADBLOCK      0x205	/* read a block of memory      */
+#define GSETBREAK       0x206	/* set a breakpoint            */
+#define GREMOVEBREAK    0x207	/* remove a breakpoint         */
+#define GHALT           0x208	/* ??? */
+#define GCHECKSTATUS    0x209	/* check status of ICE         */
+#define GMDIREPLY       0x210	/* Reply for previous query - NOT USED */
+#define GDOWNLOAD       0x211	/* something for MDI           */
+#define GCOMMAND        0x212	/* execute command in ice      */
+#define GLOADFILENAME   0x213	/* retrieve load filename      */
+#define GWRITEMEM       0x214	/* write word, half-word, or byte */
+
+/* GCHECKSTATUS return codes: */
+#define ICE_Idle        0x00
+#define ICE_Breakpoint  0x01	/* hit a breakpoint */
+#define ICE_Stepped     0x02	/* have stepped     */
+#define ICE_Exception   0x03	/* have exception   */
+#define ICE_Halted      0x04	/* hit a user halt  */
+#define ICE_Exited      0x05	/* called exit      */
+#define ICE_Terminated  0x06	/* user terminated  */
+#define ICE_Running     0x07
+#define ICE_Unknown     0x99
+
+/* Windows messages */
+#define WM_STATE_CHANGE WM_USER+101
+#define WM_SYM_TO_ADDR  WM_USER+102
+#define WM_ADDR_TO_SYM  WM_USER+103
+#define WM_DISASSEMBLY  WM_USER+104
+#define WM_SOURCE       WM_USER+105
+
+/* STATE_CHANGE codes */
+#define STATE_CHANGE_REGS   1	/* Register(s) changed */
+#define STATE_CHANGE_LOAD   2	/* HW reset            */
+#define STATE_CHANGE_RESET  3	/* Load new file       */
+#define STATE_CHANGE_CONT   4	/* Run target          */
+#define STATE_CHANGE_STOP   5	/* Stop target         */
+#define STATE_CHANGE_STEPI  6	/* Stepi target        */
+#define STATE_CHANGE_NEXTI  7	/* Nexti target        */
+
+static struct target_ops v850ice_ops;	/* Forward decl */
+
+/* This function creates a hidden window */
+static int
+init_hidden_window ()
 {
-  int size;			/* length of input or output in bytes */
-  char *buf;			/* buffer having the input/output information */
-};
+  WNDCLASS class;
 
-struct MessageIO null_iob = { 0, NULL };
+  if (hidden_hwnd != NULL)
+    return 1;
 
-EXPORT long __stdcall ExeAppReq (char *, long, char *, struct MessageIO *);
-EXPORT long __stdcall RegisterClient (HWND);
-EXPORT long __stdcall UnregisterClient (void);
-EXPORT long __stdcall GdbCallBack (void);
+  class.style = 0;
+  class.cbClsExtra = 0;
+  class.cbWndExtra = 0;
+  class.hInstance = GetModuleHandle (0);
+  class.hbrBackground = NULL;
+  class.lpszMenuName = NULL;
+  class.lpszClassName = "gdb_v850ice";
+  class.lpfnWndProc = v850ice_wndproc;
+  class.hIcon = NULL;
+  class.hCursor = NULL;
 
-#define	MREADREG          0x0001
-#define	MWRITEREG         0x0002
-#define	MREADMEM          0x0003
-#define	MWRITEMEM         0x0004
-#define	MSINGLESTEP       0x0005
-#define	MRESUME           0x0006
-#define	MLOADPROGRAM      0x0007
-#define	MSETBREAK         0x0008
-#define	MREMOVEBREAK      0x0009
-#define	MQUIT             0x000A
-#define	MTERMINATE        0x000B
-#define	MATTACH           0x000C
-#define	MCHECKSTATUS      0x000D
-#define	MHALT             0x000E
-#define	MDIRECTCMD        0x000F
-#define	MSYMADR           0x0010
-#define	MGETTASKLIST      0x0011
-#define	MREADVECREG       0x0012
-#define	MWRITEVECREG      0x0013
-#define	MGETCHANGEDREGS   0x0014
-#define	MGETSERVERINFO    0x0015
-#define	MREADBLOCK        0x0016
-#define	MSETHARDBRK       0x0017
-#define	MREMOVEHARDBRK    0x0018
-#define	MCOPYBLOCK        0x0019
-#define	MBLOCKFILL        0x001A
-#define	MFINDBLOCK        0x001B
-#define	MCOMPAREBLOCK     0x001C
-#define	MREFRESH          0x001D
-#define	MSPECIAL          0x001E
-#define	MGETCMDLIST       0x001F
-#define	MEXPVAL           0x0020
-#define	MEXPFAILED        0x0021
-#define	MSAVESTATE        0x0022
-#define	MWRITEBLOCK       0x0023
-#define	MDETACH           0x0024
-#define	MGETMODULES       0x0025
-#define	MREMOTESYMBOL     0x0026
-#define	MREADCSTRING      0x0027
-#define	MLOADMODULE       0x0028
-#define	MDIDSYSCALL       0x0029
-#define	MDBPWRITEBUFFERS  0x002A
-#define	MBPID		  0x002B
-#define MINITEXEC         0x002C
-#define	MEXITEXEC	  0x002D
-#define	MRCCMD    	  0x002E
-#define	MDOWNLOAD	  0x0050
+  if (!RegisterClass (&class))
+    return 0;
 
-#define StatRunning	0
-#define StatExecBreak	1   /* an execution breakpoint has been reached */
-#define StatStepped	2   /* a single step has been completed */
-#define StatException	3   /* the target has stopped due to an exception */
-#define StatHalted	4   /* target has been halted by a user request */
-#define StatExited      5   /* target called exit */
-#define StatTerminated  6   /* target program terminated by a user request */
-#define StatNoProcess   7   /* no process on target and none of the above */
-#define StatNeedInput   8   /* REV: obsolete */
-#define StatNeedDirCmd  9   /* waiting for an entry in the remote window */
-#define StatHardBreak	10  /* hit hardware breakpoint */
-#define StatFailure	11  /* an error occured in the last run/single */
+  hidden_hwnd = CreateWindow ("gdb_v850ice", "gdb_v850ice", WS_TILED,
+			      0, 0, 0, 0, NULL, NULL, class.hInstance,
+			      NULL);
+  if (hidden_hwnd == NULL)
+    {
+      char buf[200];
+      DWORD err;
 
-extern struct target_ops v850ice_ops;	/* Forward decl */
+      err = GetLastError ();
+      FormatMessage (FORMAT_MESSAGE_FROM_SYSTEM, NULL, err,
+		     0, buf, 200, NULL);
+      printf_unfiltered ("Could not create window: %s", buf);
+      return 0;
+    }
 
-/*   "pir", "tkcw", "chcw", "adtre" */
+  return 1;
+}
+
+/* 
+   This function is installed as the message handler for the hidden window
+   which QBox will use to communicate with gdb. It recognize and acts
+   on the following messages:
+
+   WM_SYM_TO_ADDR  \
+   WM_ADDR_TO_SYM   | Not implemented at NEC's request
+   WM_DISASSEMBLY  /
+   WM_STATE_CHANGE - tells us that a state change has occured in the ICE
+ */
+static LRESULT CALLBACK
+v850ice_wndproc (hwnd, message, wParam, lParam)
+     HWND hwnd;
+     UINT message;
+     WPARAM wParam;
+     LPARAM lParam;
+{
+  LRESULT result = FALSE;
+
+  switch (message)
+    {
+    case WM_SYM_TO_ADDR:
+      MessageBox (0, "Symbol resolution\nNot implemented", "GDB", MB_OK);
+      break;
+    case WM_ADDR_TO_SYM:
+      MessageBox (0, "Address resolution\nNot implemented", "GDB", MB_OK);
+      break;
+    case WM_SOURCE:
+      break;
+    case WM_STATE_CHANGE:
+      switch (wParam)
+	{
+	case STATE_CHANGE_LOAD:
+	  {
+	    struct MessageIO iob;
+	    char buf[128];
+
+	    iob.buf = buf;
+	    iob.size = 128;
+
+	    /* Load in a new file... Need filename */
+	    ExeAppReq ("GDB", GLOADFILENAME, NULL, &iob);
+	    if (!catch_errors ((catch_errors_ftype *) ice_file, iob.buf, "", RETURN_MASK_ALL))
+	      printf_unfiltered ("load errored\n");
+	  }
+	  break;
+	case STATE_CHANGE_RESET:
+	  registers_changed ();
+	  flush_cached_frames ();
+	  togdb_force_update ();
+	  result = TRUE;
+	  break;
+	case STATE_CHANGE_REGS:
+	  registers_changed ();
+	  togdb_force_update ();
+	  result = TRUE;
+	  break;
+	case STATE_CHANGE_CONT:
+	  if (!catch_errors ((catch_errors_ftype *) ice_cont, NULL, "", RETURN_MASK_ALL))
+	    printf_unfiltered ("continue errored\n");
+	  result = TRUE;
+	  break;
+	case STATE_CHANGE_STEPI:
+	  if (!catch_errors ((catch_errors_ftype *) ice_stepi, (PTR) (int) lParam, "",
+			     RETURN_MASK_ALL))
+	    printf_unfiltered ("stepi errored\n");
+	  result = TRUE;
+	  break;
+	case STATE_CHANGE_NEXTI:
+	  if (!catch_errors ((catch_errors_ftype *) ice_nexti, (PTR) (int) lParam, "",
+			     RETURN_MASK_ALL))
+	    printf_unfiltered ("nexti errored\n");
+	  result = TRUE;
+	  break;
+	}
+    }
+
+  if (result == FALSE)
+    return DefWindowProc (hwnd, message, wParam, lParam);
+
+  return FALSE;
+}
 
 /* Code for opening a connection to the ICE.  */
 
@@ -162,7 +318,7 @@ v850ice_open (name, from_tty)
      char *name;
      int from_tty;
 {
-  long retval;
+  HINSTANCE handle;
 
   if (name)
     error ("Too many arguments.");
@@ -178,34 +334,43 @@ v850ice_open (name, from_tty)
 
   target_terminal_init ();
 
+  /* Initialize everything necessary to facilitate communication
+     between QBox, gdb, and the DLLs which control the ICE */
+  if (ExeAppReq == NULL)
+    {
+      handle = LoadLibrary ("necmsg.dll");
+      if (handle == NULL)
+	error ("Cannot load necmsg.dll");
+
+      ExeAppReq = (long (*)PARAMS ((char *, long, char *, struct MessageIO *)))
+	GetProcAddress (handle, "ExeAppReq");
+      RegisterClient = (long (*)PARAMS ((HWND)))
+	GetProcAddress (handle, "RegisterClient");
+      UnregisterClient = (long (*)PARAMS ((void)))
+	GetProcAddress (handle, "UnregisterClient");
+
+      if (ExeAppReq == NULL || RegisterClient == NULL || UnregisterClient == NULL)
+	error ("Could not find requisite functions in necmsg.dll.");
+
+      if (!init_hidden_window ())
+	error ("could not initialize message handling");
+    }
+
+  /* Tell the DLL we are here */
+  RegisterClient (hidden_hwnd);
+
+  ice_open = 1;
+
   /* Without this, some commands which require an active target (such as kill)
      won't work.  This variable serves (at least) double duty as both the pid
      of the target process (if it has such), and as a flag indicating that a
      target is active.  These functions should be split out into seperate
      variables, especially since GDB will someday have a notion of debugging
      several processes.  */
-
   inferior_pid = 42000;
 
-  /* Start the v850ice connection; if error (0), discard this target.
-     In particular, if the user quits, be sure to discard it
-     (we'd be in an inconsistent state otherwise).  */
-
-  WinExec ("necsrv", SW_SHOW);	/* Start up necsrv */
-
-  retval = RegisterClient (NULL);
-
-  if (retval == 0)
-    {
-      ice_open = 1;
-
-      start_remote ();
-      return;
-    }
-
-  pop_target();
-
-  error ("v850ice_open: MINITEXEC return error: 0x%x", retval);
+  start_remote ();
+  return;
 }
 
 /* Clean up connection to a remote debugger.  */
@@ -215,18 +380,20 @@ static void
 v850ice_close (quitting)
      int quitting;
 {
-  long retval;
-
   if (ice_open)
     {
-#if 0
-      retval = ExeAppReq ("GDB", MEXITEXEC, NULL, &null_iob);
-      if (retval)
-	error ("ExeAppReq (MEXITEXEC) returned %d", retval);
-#endif
-      ice_open = 0;
       UnregisterClient ();
+      ice_open = 0;
+      inferior_pid = 0;
     }
+}
+
+/* Stop the process on the ice. */
+static void
+v850ice_stop ()
+{
+  /* This is silly, but it works... */
+  v850ice_command ("stop", 0);
 }
 
 static void
@@ -250,11 +417,16 @@ v850ice_resume (pid, step, siggnal)
      enum target_signal siggnal;
 {
   long retval;
+  char buf[256];
+  struct MessageIO iob;
+
+  iob.size = 0;
+  iob.buf = buf;
 
   if (step)
-    retval = ExeAppReq ("GDB", MSINGLESTEP, "step", &null_iob);
+    retval = ExeAppReq ("GDB", GSINGLESTEP, "step", &iob);
   else
-    retval = ExeAppReq ("GDB", MRESUME, "run", &null_iob);
+    retval = ExeAppReq ("GDB", GRESUME, "run", &iob);
 
   if (retval)
     error ("ExeAppReq (step = %d) returned %d", step, retval);
@@ -271,11 +443,54 @@ v850ice_wait (pid, status)
      struct target_waitstatus *status;
 {
   long v850_status;
+  char buf[256];
+  struct MessageIO iob;
+  int done = 0;
+  int count = 0;
 
-  v850_status = ExeAppReq ("GDB", MCHECKSTATUS, NULL, &null_iob);
+  iob.size = 0;
+  iob.buf = buf;
 
-  status->kind = TARGET_WAITKIND_STOPPED;
-  status->value.sig = TARGET_SIGNAL_TRAP;
+  do
+    {
+      if (count++ % 100000)
+	{
+	  ui_loop_hook (0);
+	  count = 0;
+	}
+
+      v850_status = ExeAppReq ("GDB", GCHECKSTATUS, NULL, &iob);
+
+      switch (v850_status)
+	{
+	case ICE_Idle:
+	case ICE_Breakpoint:
+	case ICE_Stepped:
+	case ICE_Halted:
+	  status->kind = TARGET_WAITKIND_STOPPED;
+	  status->value.sig = TARGET_SIGNAL_TRAP;
+	  done = 1;
+	  break;
+	case ICE_Exception:
+	  status->kind = TARGET_WAITKIND_SIGNALLED;
+	  status->value.sig = TARGET_SIGNAL_SEGV;
+	  done = 1;
+	  break;
+	case ICE_Exited:
+	  status->kind = TARGET_WAITKIND_EXITED;
+	  status->value.integer = 0;
+	  done = 1;
+	  break;
+	case ICE_Terminated:
+	  status->kind = TARGET_WAITKIND_SIGNALLED;
+	  status->value.sig = TARGET_SIGNAL_KILL;
+	  done = 1;
+	  break;
+	default:
+	  break;
+	}
+    }
+  while (!done);
 
   return inferior_pid;
 }
@@ -287,11 +502,11 @@ convert_register (regno, buf)
 {
   if (regno <= 31)
     sprintf (buf, "r%d", regno);
-  else if (reg_names[regno][0] == 's'
-	   && reg_names[regno][1] == 'r')
+  else if (REGISTER_NAME (regno)[0] == 's'
+	   && REGISTER_NAME (regno)[1] == 'r')
     return 0;
   else
-    sprintf (buf, "%s", reg_names[regno]);
+    sprintf (buf, "%s", REGISTER_NAME (regno));
 
   return 1;
 }
@@ -325,11 +540,11 @@ v850ice_fetch_registers (regno)
 
   iob.size = sizeof val;
   iob.buf = val;
-  retval = ExeAppReq ("GDB", MREADREG, cmd, &iob);
+  retval = ExeAppReq ("GDB", GREADREG, cmd, &iob);
   if (retval)
-    error ("ExeAppReq returned %d: cmd = %s", retval, cmd);
+    error ("1: ExeAppReq returned %d: cmd = %s", retval, cmd);
 
-  regval = strtoul (val, &p, 16);
+  regval = strtoul (val, NULL, 16);
   if (regval == 0 && p == val)
     error ("v850ice_fetch_registers (%d):  bad value from ICE: %s.",
 	   regno, val);
@@ -348,6 +563,10 @@ v850ice_store_registers (regno)
   long retval;
   char cmd[100];
   unsigned long regval;
+  char buf[256];
+  struct MessageIO iob;
+  iob.size = 0;
+  iob.buf = buf;
 
   if (regno == -1)
     {
@@ -363,23 +582,25 @@ v850ice_store_registers (regno)
     return;
   sprintf (cmd + strlen (cmd), "=0x%x", regval);
 
-  retval = ExeAppReq ("GDB", MWRITEREG, cmd, &null_iob);
+  retval = ExeAppReq ("GDB", GWRITEREG, cmd, &iob);
   if (retval)
-    error ("ExeAppReq returned %d: cmd = %s", retval, cmd);
+    error ("2: ExeAppReq returned %d: cmd = %s", retval, cmd);
 }
 
 /* Prepare to store registers.  Nothing to do here, since the ICE can write one
    register at a time.  */
 
-static void 
+static void
 v850ice_prepare_to_store ()
 {
 }
 
 /* Read or write LEN bytes from inferior memory at MEMADDR, transferring
    to or from debugger address MYADDR.  Write to inferior if SHOULD_WRITE is
-   nonzero.  Returns length of data written or read; 0 for error.  */
+   nonzero.  Returns length of data written or read; 0 for error.
 
+   We can only read/write MAX_BLOCK_SIZE bytes at a time, though, or the DLL
+   dies */
 /* ARGSUSED */
 static int
 v850ice_xfer_memory (memaddr, myaddr, len, should_write, target)
@@ -387,56 +608,113 @@ v850ice_xfer_memory (memaddr, myaddr, len, should_write, target)
      char *myaddr;
      int len;
      int should_write;
-     struct target_ops *target;			/* ignored */
+     struct target_ops *target;	/* ignored */
 {
   long retval;
   char cmd[100];
   struct MessageIO iob;
-
-  iob.size = len;
-  iob.buf = myaddr;
+  int sent;
 
   if (should_write)
     {
-#if 1
-      sprintf (cmd, "memory b c 0x%x=0x00 l=%d", (int)memaddr, len);
-      retval = ExeAppReq ("GDB", MWRITEBLOCK, cmd, &iob);
-#else
-      sprintf (cmd, "memory b c 0x%x=0x%x", (int)memaddr, *myaddr & 0xff);
-      retval = ExeAppReq ("GDB", MWRITEBLOCK, cmd, &iob);
-      return 1;
-#endif
+      if (len == 4 || len == 2 || len == 1)
+	{
+	  long value = 0;
+	  char buf[256];
+	  char c;
+
+	  iob.size = 0;
+	  iob.buf = buf;
+
+	  sent = 0;
+	  switch (len)
+	    {
+	    case 4:
+	      c = 'w';
+	      value |= (long) ((myaddr[3] << 24) & 0xff000000);
+	      value |= (long) ((myaddr[2] << 16) & 0x00ff0000);
+	      value |= (long) ((myaddr[1] << 8) & 0x0000ff00);
+	      value |= (long) (myaddr[0] & 0x000000ff);
+	      break;
+	    case 2:
+	      c = 'h';
+	      value |= (long) ((myaddr[1] << 8) & 0xff00);
+	      value |= (long) (myaddr[0] & 0x00ff);
+	      break;
+	    case 1:
+	      c = 'b';
+	      value |= (long) (myaddr[0] & 0xff);
+	      break;
+	    }
+
+	  sprintf (cmd, "memory %c c 0x%x=0x%x", c, (int) memaddr, value);
+	  retval = ExeAppReq ("GDB", GWRITEMEM, cmd, &iob);
+	  if (retval == 0)
+	    sent = len;
+	}
+      else
+	{
+	  sent = 0;
+	  do
+	    {
+	      iob.size = len > MAX_BLOCK_SIZE ? MAX_BLOCK_SIZE : len;
+	      iob.buf = myaddr;
+	      sprintf (cmd, "memory b c 0x%x=0x00 l=%d", (int) memaddr, iob.size);
+	      retval = ExeAppReq ("GDB", GWRITEBLOCK, cmd, &iob);
+	      if (retval != 0)
+		break;
+	      len -= iob.size;
+	      memaddr += iob.size;
+	      myaddr += iob.size;
+	      sent += iob.size;
+	    }
+	  while (len > 0);
+	}
     }
   else
     {
       unsigned char *tmp;
+      unsigned char *t;
       int i;
 
       tmp = alloca (len + 100);
+      t = tmp;
       memset (tmp + len, 0xff, 100);
-      
-#if 1
-      sprintf (cmd, "memory b 0x%x l=%d", (int)memaddr, len);
-      retval = ExeAppReq ("GDB", MREADBLOCK, cmd, &iob);
-#else
-      sprintf (cmd, "memory h 0x%x", (int)memaddr);
-      retval = ExeAppReq ("GDB", MREADMEM, cmd, &iob);
-#endif
-      for (i = 0; i <  100; i++)
+
+      sent = 0;
+      do
 	{
-	  if (tmp[len + i] != 0xff)
-	    {
-	      warning ("MREADBLOCK trashed bytes after transfer area.");
-	      break;
-	    }
+	  iob.size = len > MAX_BLOCK_SIZE ? MAX_BLOCK_SIZE : len;
+	  iob.buf = tmp;
+	  sprintf (cmd, "memory b 0x%x l=%d", (int) memaddr, iob.size);
+	  retval = ExeAppReq ("GDB", GREADBLOCK, cmd, &iob);
+	  if (retval != 0)
+	    break;
+	  len -= iob.size;
+	  memaddr += iob.size;
+	  sent += iob.size;
+	  tmp += iob.size;
 	}
-      memcpy (myaddr, tmp, len);
+      while (len > 0);
+
+      if (retval == 0)
+	{
+	  for (i = 0; i < 100; i++)
+	    {
+	      if (t[sent + i] != 0xff)
+		{
+		  warning ("GREADBLOCK trashed bytes after transfer area.");
+		  break;
+		}
+	    }
+	  memcpy (myaddr, t, sent);
+	}
     }
 
-  if (retval)
-    error ("ExeAppReq returned %d: cmd = %s", retval, cmd);
+  if (retval != 0)
+    error ("3: ExeAppReq returned %d: cmd = %s", retval, cmd);
 
-  return len;
+  return sent;
 }
 
 static void
@@ -453,16 +731,16 @@ v850ice_insert_breakpoint (addr, contents_cache)
 {
   long retval;
   char cmd[100];
+  char buf[256];
+  struct MessageIO iob;
 
+  iob.size = 0;
+  iob.buf = buf;
   sprintf (cmd, "%d, ", addr);
 
-#if 1
-  retval = ExeAppReq ("GDB", MSETBREAK, cmd, &null_iob);
-#else
-  retval = ExeAppReq ("GDB", MSETHARDBRK, cmd, &null_iob);
-#endif
+  retval = ExeAppReq ("GDB", GSETBREAK, cmd, &iob);
   if (retval)
-    error ("ExeAppReq (MSETBREAK) returned %d: cmd = %s", retval, cmd);
+    error ("ExeAppReq (GSETBREAK) returned %d: cmd = %s", retval, cmd);
 
   return 0;
 }
@@ -474,16 +752,17 @@ v850ice_remove_breakpoint (addr, contents_cache)
 {
   long retval;
   char cmd[100];
+  char buf[256];
+  struct MessageIO iob;
+
+  iob.size = 0;
+  iob.buf = buf;
 
   sprintf (cmd, "%d, ", addr);
 
-#if 1
-  retval = ExeAppReq ("GDB", MREMOVEBREAK, cmd, &null_iob);
-#else
-  retval = ExeAppReq ("GDB", MREMOVEHARDBRK, cmd, &null_iob);
-#endif
+  retval = ExeAppReq ("GDB", GREMOVEBREAK, cmd, &iob);
   if (retval)
-    error ("ExeAppReq (MREMOVEBREAK) returned %d: cmd = %s", retval, cmd);
+    error ("ExeAppReq (GREMOVEBREAK) returned %d: cmd = %s", retval, cmd);
 
   return 0;
 }
@@ -492,6 +771,7 @@ static void
 v850ice_kill ()
 {
   target_mourn_inferior ();
+  inferior_pid = 0;
 }
 
 static void
@@ -499,53 +779,185 @@ v850ice_mourn ()
 {
 }
 
+static void
+v850ice_load (filename, from_tty)
+     char *filename;
+     int from_tty;
+{
+  struct MessageIO iob;
+  char buf[256];
+
+  iob.size = 0;
+  iob.buf = buf;
+  generic_load (filename, from_tty);
+  ExeAppReq ("GDB", GDOWNLOAD, filename, &iob);
+}
+
+static int
+ice_file (arg)
+     char *arg;
+{
+  char *s;
+
+  target_detach (NULL, 0);
+  pop_target ();
+
+  printf_unfiltered ("\n");
+
+  s = arg;
+  while (*s != '\0')
+    {
+      if (*s == '\\')
+	*s = '/';
+      s++;
+    }
+
+  /* Safegaurd against confusing the breakpoint routines... */
+  delete_command (NULL, 0);
+
+  /* Must supress from_tty, otherwise we could start asking if the
+     user really wants to load a new symbol table, etc... */
+  printf_unfiltered ("Reading symbols from %s...", arg);
+  exec_file_command (arg, 0);
+  symbol_file_command (arg, 0);
+  printf_unfiltered ("done\n");
+
+  /* exec_file_command will kill our target, so reinstall the ICE as
+     the target. */
+  v850ice_open (NULL, 0);
+
+  togdb_force_update ();
+  return 1;
+}
+
+static int
+ice_cont (c)
+     char *c;
+{
+  printf_filtered ("continue (ice)\n");
+  ReplyMessage ((LRESULT) 1);
+
+      continue_command (NULL, 1);
+
+  return 1;
+}
+
+static void
+do_gdb (cmd, str, func, count)
+     char *cmd;
+     char *str;
+     void (*func) PARAMS ((char *, int));
+     int count;
+{
+  ReplyMessage ((LRESULT) 1);
+
+  while (count--)
+    {
+      printf_unfiltered (str);
+
+	  func (NULL, 0);
+    }
+}
+
+
+static int
+ice_stepi (c)
+     char *c;
+{
+  int count = (int) c;
+
+  do_gdb ("gdb_immediate stepi", "stepi (ice)\n", stepi_command, count);
+  return 1;
+}
+
+static int
+ice_nexti (c)
+     char *c;
+{
+  int count = (int) c;
+
+  do_gdb ("gdb_immediate nexti", "nexti (ice)\n", nexti_command, count);
+  return 1;
+}
+
+static void
+v850ice_command (arg, from_tty)
+     char *arg;
+     int from_tty;
+{
+  struct MessageIO iob;
+  char buf[256];
+
+  iob.buf = buf;
+  iob.size = 0;
+  ExeAppReq ("GDB", GCOMMAND, arg, &iob);
+}
+
+static void
+togdb_force_update (void)
+{
+}
+
+
 /* Define the target subroutine names */
 
-struct target_ops v850ice_ops = {
-  "ice",			/* to_shortname */
-  "NEC V850 ICE interface",	/* to_longname */
-  "Debug a system controlled by a NEC 850 ICE.", /* to_doc */
-  v850ice_open,			/* to_open */
-  v850ice_close,		/* to_close */
-  NULL,				/* to_attach */
-  v850ice_detach,		/* to_detach */
-  v850ice_resume,		/* to_resume */
-  v850ice_wait,			/* to_wait */
-  v850ice_fetch_registers,	/* to_fetch_registers */
-  v850ice_store_registers,	/* to_store_registers */
-  v850ice_prepare_to_store,	/* to_prepare_to_store */
-  v850ice_xfer_memory,		/* to_xfer_memory */
-  v850ice_files_info,		/* to_files_info */
-  v850ice_insert_breakpoint,	/* to_insert_breakpoint */
-  v850ice_remove_breakpoint,	/* to_remove_breakpoint */
-  NULL,				/* to_terminal_init */
-  NULL,				/* to_terminal_inferior */
-  NULL,				/* to_terminal_ours_for_output */
-  NULL,				/* to_terminal_ours */
-  NULL,				/* to_terminal_info */
-  v850ice_kill,			/* to_kill */
-  generic_load,			/* to_load */
-  NULL,				/* to_lookup_symbol */
-  NULL,				/* to_create_inferior */
-  v850ice_mourn,		/* to_mourn_inferior */
-  0,				/* to_can_run */
-  0,				/* to_notice_signals */
-  NULL,				/* to_thread_alive */
-  0,				/* to_stop */
-  process_stratum,		/* to_stratum */
-  NULL,				/* to_next */
-  1,				/* to_has_all_memory */
-  1,				/* to_has_memory */
-  1,				/* to_has_stack */
-  1,				/* to_has_registers */
-  1,				/* to_has_execution */
-  NULL,				/* sections */
-  NULL,				/* sections_end */
-  OPS_MAGIC			/* to_magic */
-};
+static void
+init_850ice_ops (void)
+{
+  v850ice_ops.to_shortname = "ice";
+  v850ice_ops.to_longname = "NEC V850 ICE interface";
+  v850ice_ops.to_doc = "Debug a system controlled by a NEC 850 ICE.";
+  v850ice_ops.to_open = v850ice_open;
+  v850ice_ops.to_close = v850ice_close;
+  v850ice_ops.to_attach = NULL;
+  v850ice_ops.to_post_attach = NULL;
+  v850ice_ops.to_require_attach = NULL;
+  v850ice_ops.to_detach = v850ice_detach;
+  v850ice_ops.to_require_detach = NULL;
+  v850ice_ops.to_resume = v850ice_resume;
+  v850ice_ops.to_wait = v850ice_wait;
+  v850ice_ops.to_post_wait = NULL;
+  v850ice_ops.to_fetch_registers = v850ice_fetch_registers;
+  v850ice_ops.to_store_registers = v850ice_store_registers;
+  v850ice_ops.to_prepare_to_store = v850ice_prepare_to_store;
+  v850ice_ops.to_xfer_memory = v850ice_xfer_memory;
+  v850ice_ops.to_files_info = v850ice_files_info;
+  v850ice_ops.to_insert_breakpoint = v850ice_insert_breakpoint;
+  v850ice_ops.to_remove_breakpoint = v850ice_remove_breakpoint;
+  v850ice_ops.to_terminal_init = NULL;
+  v850ice_ops.to_terminal_inferior = NULL;
+  v850ice_ops.to_terminal_ours_for_output = NULL;
+  v850ice_ops.to_terminal_ours = NULL;
+  v850ice_ops.to_terminal_info = NULL;
+  v850ice_ops.to_kill = v850ice_kill;
+  v850ice_ops.to_load = v850ice_load;
+  v850ice_ops.to_lookup_symbol = NULL;
+  v850ice_ops.to_create_inferior = NULL;
+  v850ice_ops.to_mourn_inferior = v850ice_mourn;
+  v850ice_ops.to_can_run = 0;
+  v850ice_ops.to_notice_signals = 0;
+  v850ice_ops.to_thread_alive = NULL;
+  v850ice_ops.to_stop = v850ice_stop;
+  v850ice_ops.to_pid_to_exec_file = NULL;
+  v850ice_ops.to_core_file_to_sym_file = NULL;
+  v850ice_ops.to_stratum = process_stratum;
+  v850ice_ops.DONT_USE = NULL;
+  v850ice_ops.to_has_all_memory = 1;
+  v850ice_ops.to_has_memory = 1;
+  v850ice_ops.to_has_stack = 1;
+  v850ice_ops.to_has_registers = 1;
+  v850ice_ops.to_has_execution = 1;
+  v850ice_ops.to_sections = NULL;
+  v850ice_ops.to_sections_end = NULL;
+  v850ice_ops.to_magic = OPS_MAGIC;
+}
 
 void
 _initialize_v850ice ()
 {
+  init_850ice_ops ();
   add_target (&v850ice_ops);
+
+  add_com ("ice", class_obscure, v850ice_command,
+	   "Send command to ICE");
 }

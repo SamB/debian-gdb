@@ -51,11 +51,11 @@
  */
 unsigned long
 strtoul(nptr, endptr, base)
-	CONST char *nptr;
+	const char *nptr;
 	char **endptr;
 	register int base;
 {
-	register CONST char *s = nptr;
+	register const char *s = nptr;
 	register unsigned long acc;
 	register int c;
 	register unsigned long cutoff;
@@ -91,7 +91,7 @@ strtoul(nptr, endptr, base)
 			break;
 		if (c >= base)
 			break;
-		if (any < 0 || acc > cutoff || acc == cutoff && c > cutlim)
+		if (any < 0 || acc > cutoff || (acc == cutoff && c > cutlim))
 			any = -1;
 		else {
 			any = 1;

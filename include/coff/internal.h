@@ -53,6 +53,7 @@ struct internal_filehdr
   long f_nsyms;			/* number of symtab entries	*/
   unsigned short f_opthdr;	/* sizeof(optional hdr)		*/
   unsigned short f_flags;	/* flags			*/
+  unsigned short f_target_id;	/* (TI COFF specific)		*/
 };
 
 
@@ -67,6 +68,7 @@ struct internal_filehdr
  *	F_DYNLOAD	rs/6000 aix: dynamically loadable w/imports & exports
  *	F_SHROBJ	rs/6000 aix: file is a shared object
  *      F_DLL           PE format DLL
+ *      F_LDPAGE        TI COFF uses load page
  */
 
 #define	F_RELFLG	(0x0001)
@@ -79,6 +81,9 @@ struct internal_filehdr
 #define	F_DYNLOAD	(0x1000)
 #define	F_SHROBJ	(0x2000)
 #define F_DLL           (0x2000)
+/* CYGNUS LOCAL TI COFF/twall@tiac.net */
+#define F_LDPAGE        (0x4000)
+/* end CYGNUS LOCAL */
 
 /* extra structure which is used in the optional header */
 typedef struct _IMAGE_DATA_DIRECTORY 
@@ -88,9 +93,13 @@ typedef struct _IMAGE_DATA_DIRECTORY
 }  IMAGE_DATA_DIRECTORY;
 #define IMAGE_NUMBEROF_DIRECTORY_ENTRIES  16
 
-/* default image base for NT */
+/* Default image base for NT.  */
 #define NT_EXE_IMAGE_BASE 0x400000
 #define NT_DLL_IMAGE_BASE 0x10000000
+
+/* Default image base for BeOS. */
+#define BEOS_EXE_IMAGE_BASE 0x80000000
+#define BEOS_DLL_IMAGE_BASE 0x10000000
 
 /* Extra stuff in a PE aouthdr */
 
@@ -215,6 +224,13 @@ struct internal_aouthdr
 #define C_ALIAS	 	105	/* duplicate tag		*/
 #define C_HIDDEN	106	/* ext symbol in dmert public lib */
 
+#define C_WEAKEXT	127	/* weak symbol -- GNU extension */
+
+/* New storage classes for TI COFF */
+#define C_UEXT		19	/* Tentative external definition */
+#define C_STATLAB	20	/* Static load time label */
+#define C_EXTLAB	21	/* External load time label */
+#define C_SYSTEM	23	/* System Wide variable */
 
 /* New storage classes for WINDOWS_NT   */
 #define C_SECTION       104     /* section name */
@@ -260,11 +276,11 @@ struct internal_aouthdr
 #define C_ESTAT         (0x90)
 
 /* Storage classes for Thumb symbols */
-#define C_THUMBEXT      (128 + C_EXT)
-#define C_THUMBSTAT     (128 + C_STAT)
-#define C_THUMBLABEL    (128 + C_LABEL)
-#define C_THUMBEXTFUNC  (C_THUMBEXT  + 20)
-#define C_THUMBSTATFUNC (C_THUMBSTAT + 20)
+#define C_THUMBEXT      (128 + C_EXT)		/* 130 */
+#define C_THUMBSTAT     (128 + C_STAT)		/* 131 */
+#define C_THUMBLABEL    (128 + C_LABEL)		/* 134 */
+#define C_THUMBEXTFUNC  (C_THUMBEXT  + 20)	/* 150 */
+#define C_THUMBSTATFUNC (C_THUMBSTAT + 20)	/* 151 */
 
 /********************** SECTION HEADER **********************/
 
@@ -289,6 +305,9 @@ struct internal_scnhdr
   unsigned long s_nlnno;	/* number of line number entries*/
   long s_flags;			/* flags			*/
   long s_align;			/* used on I960			*/
+  /* CYGNUS LOCAL TI COFF/twall@tiac.net */
+  unsigned long s_page;         /* TI TMS320 series             */
+  /* end CYGNUS LOCAL */
 };
 
 /*
@@ -318,7 +337,6 @@ struct internal_scnhdr
 									     beginning on a word boundary. */
 
 #define STYP_LIT	0x8020	/* Literal data (like STYP_TEXT) */
-
 
 
 /********************** LINE NUMBERS **********************/
@@ -410,12 +428,16 @@ struct internal_syment
 
 #define BTYPE(x)	((x) & N_BTMASK)
 
-#define ISPTR(x)	(((x) & N_TMASK) == (DT_PTR << N_BTSHFT))
-#define ISFCN(x)	(((x) & N_TMASK) == (DT_FCN << N_BTSHFT))
-#define ISARY(x)	(((x) & N_TMASK) == (DT_ARY << N_BTSHFT))
-#define ISTAG(x)	((x)==C_STRTAG||(x)==C_UNTAG||(x)==C_ENTAG)
-#define DECREF(x) ((((x)>>N_TSHIFT)&~N_BTMASK)|((x)&N_BTMASK))
-
+#define ISPTR(x) \
+  (((unsigned long) (x) & N_TMASK) == ((unsigned long) DT_PTR << N_BTSHFT))
+#define ISFCN(x) \
+  (((unsigned long) (x) & N_TMASK) == ((unsigned long) DT_FCN << N_BTSHFT))
+#define ISARY(x) \
+  (((unsigned long) (x) & N_TMASK) == ((unsigned long) DT_ARY << N_BTSHFT))
+#define ISTAG(x) \
+  ((x) == C_STRTAG || (x) == C_UNTAG || (x) == C_ENTAG)
+#define DECREF(x) \
+  ((((x) >> N_TSHIFT) & ~ N_BTMASK) | ((x) & N_BTMASK))
 
 union internal_auxent
 {

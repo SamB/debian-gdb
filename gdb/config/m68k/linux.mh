@@ -7,10 +7,3 @@ NAT_FILE= nm-linux.h
 NATDEPFILES= infptrace.o solib.o inftarg.o fork-child.o corelow.o core-aout.o core-regset.o m68klinux-nat.o
 
 GDBSERVER_DEPFILES= low-linux.o
-
-# Use ncurses instead of termcap.
-TERMCAP = -lncurses
-# Use the pre-packaged readline.
-READLINE_SRC = /usr/include/readline
-READLINE_DIR = $(READLINE_SRC)
-READLINE = -lreadline

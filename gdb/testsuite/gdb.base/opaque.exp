@@ -28,9 +28,23 @@ set bug_id 0
 
 set testfile "opaque"
 set binfile ${objdir}/${subdir}/opaque
-if  { [gdb_compile "${srcdir}/${subdir}/opaque0.c ${srcdir}/${subdir}/opaque1.c" "${binfile}" executable {debug}] != "" } {
+
+#if  { [gdb_compile "${srcdir}/${subdir}/opaque0.c ${srcdir}/${subdir}/opaque1.c" "${binfile}" executable {debug}] != "" } {
+#     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+#}
+
+if  { [gdb_compile "${srcdir}/${subdir}/opaque0.c" "${binfile}0.o" object {debug}] != "" } {
      gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
 }
+
+if  { [gdb_compile "${srcdir}/${subdir}/opaque1.c" "${binfile}1.o" object {debug}] != "" } {
+     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+}
+
+if  { [gdb_compile "${binfile}0.o ${binfile}1.o" ${binfile} executable {debug}] != "" } {
+     gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
+}
+
 
 # Create and source the file that provides information about the compiler
 # used to compile the test case.
@@ -92,7 +106,7 @@ gdb_test "whatis foop" \
 # Ensure that we know the form of the structure that foop points to.
 
 setup_xfail_on_opaque_pointer
-if {!$gcc_compiled} then { setup_xfail "rs6000-*-*" "hppa*-*-hpux*" }
+if {!$gcc_compiled} then { setup_xfail "rs6000-*-*" }
 gdb_test "ptype foop" \
     "type = struct foo \{\[\r\n\]+    int a;\[\r\n\]+    int b;\[\r\n\]+\} \[*\]+" \
     "ptype on opaque struct pointer (statically)"
@@ -153,7 +167,7 @@ gdb_test "whatis foop" \
 # Ensure that we know the form of the thing foop points to.
 
 setup_xfail_on_opaque_pointer
-if {!$gcc_compiled} then { setup_xfail "rs6000-*-*" "hppa*-*-hpux*" }
+if {!$gcc_compiled} then { setup_xfail "rs6000-*-*" }
 gdb_test "ptype foop" \
     "type = struct foo \{\[\r\n\]+    int a;\[\r\n\]+    int b;\[\r\n\]+\} \[*\]+" \
     "ptype on opaque struct pointer (dynamically) 1"
@@ -167,7 +181,7 @@ gdb_test "whatis afoo" \
 
 gdb_test "ptype afoo" \
     "type = struct foo \{\[\r\n\]+    int a;\[\r\n\]+    int b;\[\r\n\]+\}" \
-    "ptype on opaque struct instance (dynamically) 1"
+    "ptype on opaque struct instance (dynamically) xyz 1"
 
 
 # Ensure that we know the form of an explicit struct foo.
@@ -206,7 +220,29 @@ gdb_test "whatis foop" \
 # Ensure that we know the form of the thing foop points to.
 
 setup_xfail_on_opaque_pointer
-if {!$gcc_compiled} then { setup_xfail "rs6000-*-*" "hppa*-*-hpux*" }
+if {!$gcc_compiled} then { setup_xfail "rs6000-*-*" }
+gdb_test "ptype foop" \
+    "type = struct foo \{\[\r\n\]+    int a;\[\r\n\]+    int b;\[\r\n\]+\} \[*\]+" \
+    "ptype on opaque struct pointer (dynamically) 2"
+
+gdb_test "whatis afoo" \
+    "type = struct foo" \
+    "whatis on opaque struct instance (dynamically) 1"
+
+
+# Ensure that we know the form of afoo, an instance of a struct foo.
+
+gdb_test "ptype afoo" \
+    "type = struct foo \{\r\n    int a;\r\n    int b;\r\n\}" \
+    "ptype on opaque struct instance (dynamically) 1"
+
+gdb_test "ptype afoo" \
+    "type = struct foo \{\[\r\n\]*.*int a;\[\r\n\]*.*int b;\[\r\n\]*}\[\r\n\]*" \
+    "ptype on opaque struct instance (dynamically) pqr 1"
+
+
+# Ensure that we know the form of an explicit struct foo.
+
 gdb_test "ptype foop" \
     "type = struct foo \{\[\r\n\]+    int a;\[\r\n\]+    int b;\[\r\n\]+\} \[*\]+" \
     "ptype on opaque struct pointer (dynamically) 2"

@@ -23,14 +23,14 @@ class VB
 public:
     int vb;
     int fvb();
-    virtual vvb();
+    virtual int vvb();
 };
 
 class V : public VA, public VB
 {
 public:
     int f();
-    virtual vv();
+    virtual int vv();
     int w;
 };
 
@@ -170,7 +170,7 @@ extern "C" {
 };
 #endif
 
-main()
+int main()
 {
 #ifdef usestubs
    set_debug_traps();
@@ -182,6 +182,8 @@ main()
     e.vb = 11;
 
     test_calls();
+    return 0;
+    
 }
 
 int A::f() {return 1;}

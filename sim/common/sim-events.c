@@ -33,8 +33,11 @@
 #endif
 #endif
 
-#include <signal.h> /* For SIGPROCMASK et.al. */
+#ifdef HAVE_STDLIB_H
+#include <stdlib.h>
+#endif
 
+#include <signal.h> /* For SIGPROCMASK et.al. */
 
 typedef enum {
   watch_invalid,
@@ -89,7 +92,7 @@ struct _sim_event {
   unsigned wallclock;
   /* watch core address */
   address_word core_addr;
-  sim_core_maps core_map;
+  unsigned core_map;
   /* watch sim addr */
   void *host_addr;
   /* watch core/sim range */
@@ -98,6 +101,8 @@ struct _sim_event {
   unsigned lb;
   unsigned64 ub64;
   unsigned64 lb64;
+  /* trace info (if any) */
+  char *trace;
   /* list */
   sim_event *next;
 };
@@ -134,22 +139,22 @@ struct _sim_event {
 
 #define _ETRACE sd, NULL
 
+#undef ETRACE_P
+#define ETRACE_P (WITH_TRACE && STATE_EVENTS (sd)->trace)
+
 #undef ETRACE
 #define ETRACE(ARGS) \
 do \
   { \
-    if (WITH_TRACE) \
+    if (ETRACE_P) \
       { \
-        if (STATE_EVENTS (sd)->trace) \
-          { \
-	    if (STRACE_DEBUG_P (sd)) \
-	      { \
-		const char *file; \
-		SIM_FILTER_PATH (file, __FILE__); \
-		trace_printf (sd, NULL, "%s:%d: ", file, __LINE__); \
-	      } \
-            trace_printf  ARGS; \
-          } \
+        if (STRACE_DEBUG_P (sd)) \
+	  { \
+	    const char *file; \
+	    SIM_FILTER_PATH (file, __FILE__); \
+	    trace_printf (sd, NULL, "%s:%d: ", file, __LINE__); \
+	  } \
+        trace_printf  ARGS; \
       } \
   } \
 while (0)
@@ -157,8 +162,8 @@ while (0)
 
 /* event queue iterator - don't iterate over the held queue. */
 
-STATIC_INLINE_SIM_EVENTS\
-(sim_event **)
+#if EXTERN_SIM_EVENTS_P
+static sim_event **
 next_event_queue (SIM_DESC sd,
 		  sim_event **queue)
 {
@@ -174,6 +179,7 @@ next_event_queue (SIM_DESC sd,
     sim_io_error (sd, "next_event_queue - bad queue");
   return NULL;
 }
+#endif
 
 
 STATIC_INLINE_SIM_EVENTS\
@@ -191,13 +197,15 @@ sim_events_poll (SIM_DESC sd,
    This is called via sim_module_install to install the "events" subsystem
    into the simulator.  */
 
+#if EXTERN_SIM_EVENTS_P
 STATIC_SIM_EVENTS (MODULE_UNINSTALL_FN) sim_events_uninstall;
 STATIC_SIM_EVENTS (MODULE_INIT_FN) sim_events_init;
 STATIC_SIM_EVENTS (MODULE_RESUME_FN) sim_events_resume;
 STATIC_SIM_EVENTS (MODULE_SUSPEND_FN) sim_events_suspend;
+#endif
 
-EXTERN_SIM_EVENTS\
-(SIM_RC)
+#if EXTERN_SIM_EVENTS_P
+SIM_RC
 sim_events_install (SIM_DESC sd)
 {
   SIM_ASSERT (STATE_MAGIC (sd) == SIM_MAGIC_NUMBER);
@@ -207,13 +215,14 @@ sim_events_install (SIM_DESC sd)
   sim_module_add_suspend_fn (sd, sim_events_suspend);
   return SIM_RC_OK;
 }
+#endif
 
 
 /* Suspend/resume the event queue manager when the simulator is not
    running */
 
-STATIC_SIM_EVENTS\
-(SIM_RC)
+#if EXTERN_SIM_EVENTS_P
+static SIM_RC
 sim_events_resume (SIM_DESC sd)
 {
   sim_events *events = STATE_EVENTS (sd);
@@ -222,9 +231,10 @@ sim_events_resume (SIM_DESC sd)
   events->resume_wallclock = sim_elapsed_time_get ();
   return SIM_RC_OK;
 }
+#endif
 
-STATIC_SIM_EVENTS\
-(SIM_RC)
+#if EXTERN_SIM_EVENTS_P
+static SIM_RC
 sim_events_suspend (SIM_DESC sd)
 {
   sim_events *events = STATE_EVENTS (sd);
@@ -234,23 +244,25 @@ sim_events_suspend (SIM_DESC sd)
   events->resume_wallclock = 0;
   return SIM_RC_OK;
 }
+#endif
 
 
 /* Uninstall the "events" subsystem from the simulator.  */
 
-STATIC_SIM_EVENTS\
-(void)
+#if EXTERN_SIM_EVENTS_P
+static void
 sim_events_uninstall (SIM_DESC sd)
 {
   SIM_ASSERT (STATE_MAGIC (sd) == SIM_MAGIC_NUMBER);
   /* FIXME: free buffers, etc. */
 }
+#endif
 
 
 /* malloc/free */
 
-STATIC_INLINE_SIM_EVENTS\
-(sim_event *)
+#if EXTERN_SIM_EVENTS_P
+static sim_event *
 sim_events_zalloc (SIM_DESC sd)
 {
   sim_events *events = STATE_EVENTS (sd);
@@ -277,6 +289,7 @@ sim_events_zalloc (SIM_DESC sd)
     }
   return new;
 }
+#endif
 
 STATIC_INLINE_SIM_EVENTS\
 (void)
@@ -286,13 +299,18 @@ sim_events_free (SIM_DESC sd,
   sim_events *events = STATE_EVENTS (sd);
   dead->next = events->free_list;
   events->free_list = dead;
+  if (dead->trace != NULL)
+    {
+      free (dead->trace); /* NB: asprintf returns a `free' buf */
+      dead->trace = NULL;
+    }
 }
 
 
 /* Initialize the simulator event manager */
 
-EXTERN_SIM_EVENTS\
-(SIM_RC)
+#if EXTERN_SIM_EVENTS_P
+SIM_RC
 sim_events_init (SIM_DESC sd)
 {
   sim_events *events = STATE_EVENTS (sd);
@@ -300,7 +318,7 @@ sim_events_init (SIM_DESC sd)
   /* drain the interrupt queue */
   events->nr_held = 0;
   if (events->held == NULL)
-    events->held = zalloc (sizeof (sim_event) * MAX_NR_SIGNAL_SIM_EVENTS);
+    events->held = NZALLOC (sim_event, MAX_NR_SIGNAL_SIM_EVENTS);
 
   /* drain the normal queues */
   {
@@ -334,6 +352,7 @@ sim_events_init (SIM_DESC sd)
 
   return SIM_RC_OK;
 }
+#endif
 
 
 INLINE_SIM_EVENTS\
@@ -349,8 +368,14 @@ INLINE_SIM_EVENTS\
 (unsigned long)
 sim_events_elapsed_time (SIM_DESC sd)
 {
-  return (sim_elapsed_time_since (STATE_EVENTS (sd)->resume_wallclock)
-	  + STATE_EVENTS (sd)->elapsed_wallclock);
+  unsigned long elapsed = STATE_EVENTS (sd)->elapsed_wallclock;
+
+  /* Are we being called inside sim_resume?
+     (Is there a simulation in progress?)  */
+  if (STATE_EVENTS (sd)->resume_wallclock != 0)
+     elapsed += sim_elapsed_time_since (STATE_EVENTS (sd)->resume_wallclock);
+
+  return elapsed;
 }
 
 
@@ -374,8 +399,8 @@ update_time_from_event (SIM_DESC sd)
 }
 
 
-STATIC_INLINE_SIM_EVENTS\
-(void)
+#if EXTERN_SIM_EVENTS_P
+static void
 insert_sim_event (SIM_DESC sd,
 		  sim_event *new_event,
 		  signed64 delta)
@@ -411,33 +436,74 @@ insert_sim_event (SIM_DESC sd,
   /* adjust the time until the first event */
   update_time_from_event (sd);
 }
+#endif
 
 
-EXTERN_SIM_EVENTS\
-(sim_event *)
+#if EXTERN_SIM_EVENTS_P
+sim_event *
 sim_events_schedule (SIM_DESC sd,
 		     signed64 delta_time,
 		     sim_event_handler *handler,
 		     void *data)
 {
+  va_list dummy;
+  return sim_events_schedule_vtracef (sd, delta_time, handler, data,
+				      NULL, dummy);
+}
+#endif
+
+
+#if EXTERN_SIM_EVENTS_P
+sim_event *
+sim_events_schedule_tracef (SIM_DESC sd,
+			    signed64 delta_time,
+			    sim_event_handler *handler,
+			    void *data,
+			    const char *fmt,
+			    ...)
+{
+  sim_event *new_event;
+  va_list ap;
+  va_start (ap, fmt);
+  new_event = sim_events_schedule_vtracef (sd, delta_time, handler, data, fmt, ap);
+  va_end (ap);
+  return new_event;
+}
+#endif
+
+
+#if EXTERN_SIM_EVENTS_P
+sim_event *
+sim_events_schedule_vtracef (SIM_DESC sd,
+			     signed64 delta_time,
+			     sim_event_handler *handler,
+			     void *data,
+			     const char *fmt,
+			     va_list ap)
+{
   sim_event *new_event = sim_events_zalloc (sd);
   new_event->data = data;
   new_event->handler = handler;
   new_event->watching = watch_timer;
+  if (fmt == NULL || !ETRACE_P || vasprintf (&new_event->trace, fmt, ap) < 0)
+    new_event->trace = NULL;
   insert_sim_event(sd, new_event, delta_time);
   ETRACE((_ETRACE,
-	  "event scheduled at %ld - tag 0x%lx - time %ld, handler 0x%lx, data 0x%lx\n",
+	  "event scheduled at %ld - tag 0x%lx - time %ld, handler 0x%lx, data 0x%lx%s%s\n",
 	  (long)sim_events_time(sd),
 	  (long)new_event,
 	  (long)new_event->time_of_event,
 	  (long)new_event->handler,
-	  (long)new_event->data));
+	  (long)new_event->data,
+	  (new_event->trace != NULL) ? ", " : "",
+	  (new_event->trace != NULL) ? new_event->trace : ""));
   return new_event;
 }
+#endif
 
 
-EXTERN_SIM_EVENTS\
-(void)
+#if EXTERN_SIM_EVENTS_P
+void
 sim_events_schedule_after_signal (SIM_DESC sd,
 				  signed64 delta_time,
 				  sim_event_handler *handler,
@@ -482,10 +548,11 @@ sim_events_schedule_after_signal (SIM_DESC sd,
 	   (long)new_event->handler,
 	   (long)new_event->data));
 }
+#endif
 
 
-EXTERN_SIM_EVENTS\
-(sim_event *)
+#if EXTERN_SIM_EVENTS_P
+sim_event *
 sim_events_watch_clock (SIM_DESC sd,
 			unsigned delta_ms_time,
 			sim_event_handler *handler,
@@ -518,10 +585,11 @@ sim_events_watch_clock (SIM_DESC sd,
 	   (long)new_event->data));
   return new_event;
 }
+#endif
 
 
-EXTERN_SIM_EVENTS\
-(sim_event *)
+#if EXTERN_SIM_EVENTS_P
+sim_event *
 sim_events_watch_sim (SIM_DESC sd,
 		      void *host_addr,
 		      int nr_bytes,
@@ -595,13 +663,14 @@ sim_events_watch_sim (SIM_DESC sd,
 	   (long)new_event->data));
   return new_event;
 }
+#endif
 
 
-EXTERN_SIM_EVENTS\
-(sim_event *)
+#if EXTERN_SIM_EVENTS_P
+sim_event *
 sim_events_watch_core (SIM_DESC sd,
 		       address_word core_addr,
-		       sim_core_maps core_map,
+		       unsigned core_map,
 		       int nr_bytes,
 		       int byte_order,
 		       int is_within,
@@ -674,10 +743,11 @@ sim_events_watch_core (SIM_DESC sd,
 	   (long)new_event->data));
   return new_event;
 }
+#endif
 
 
-EXTERN_SIM_EVENTS\
-(void)
+#if EXTERN_SIM_EVENTS_P
+void
 sim_events_deschedule (SIM_DESC sd,
 		       sim_event *event_to_remove)
 {
@@ -697,12 +767,14 @@ sim_events_deschedule (SIM_DESC sd,
 	      sim_event *dead = *ptr_to_current;
 	      *ptr_to_current = dead->next;
 	      ETRACE ((_ETRACE,
-		       "event/watch descheduled at %ld - tag 0x%lx - time %ld, handler 0x%lx, data 0x%lx\n",
+		       "event/watch descheduled at %ld - tag 0x%lx - time %ld, handler 0x%lx, data 0x%lx%s%s\n",
 		       (long) sim_events_time (sd),
 		       (long) event_to_remove,
 		       (long) dead->time_of_event,
 		       (long) dead->handler,
-		       (long) dead->data));
+		       (long) dead->data,
+		       (dead->trace != NULL) ? ", " : "",
+		       (dead->trace != NULL) ? dead->trace : ""));
 	      sim_events_free (sd, dead);
 	      update_time_from_event (sd);
 	      SIM_ASSERT ((events->time_from_event >= 0) == (events->queue != NULL));
@@ -715,6 +787,7 @@ sim_events_deschedule (SIM_DESC sd,
 	   (long) sim_events_time (sd),
 	   (long) event_to_remove));
 }
+#endif
 
 
 STATIC_INLINE_SIM_EVENTS\
@@ -1037,11 +1110,13 @@ sim_events_process (SIM_DESC sd)
 	  sim_event_handler *handler = to_do->handler;
 	  void *data = to_do->data;
 	  ETRACE((_ETRACE,
-		  "event issued at %ld - tag 0x%lx - handler 0x%lx, data 0x%lx\n",
+		  "event issued at %ld - tag 0x%lx - handler 0x%lx, data 0x%lx%s%s\n",
 		  (long) event_time,
 		  (long) to_do,
 		  (long) handler,
-		  (long) data));
+		  (long) data,
+		  (to_do->trace != NULL) ? ", " : "",
+		  (to_do->trace != NULL) ? to_do->trace : ""));
 	  sim_events_free (sd, to_do);
 	  handler (sd, data);
 	}
@@ -1063,11 +1138,13 @@ sim_events_process (SIM_DESC sd)
       events->queue = to_do->next;
       update_time_from_event (sd);
       ETRACE((_ETRACE,
-	      "event issued at %ld - tag 0x%lx - handler 0x%lx, data 0x%lx\n",
+	      "event issued at %ld - tag 0x%lx - handler 0x%lx, data 0x%lx%s%s\n",
 	      (long) event_time,
 	      (long) to_do,
 	      (long) handler,
-	      (long) data));
+	      (long) data,
+	      (to_do->trace != NULL) ? ", " : "",
+	      (to_do->trace != NULL) ? to_do->trace : ""));
       sim_events_free (sd, to_do);
       handler (sd, data);
     }

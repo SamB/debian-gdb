@@ -1,6 +1,8 @@
 /* Simulator support for m32r.
 
-Copyright (C) 1996, 1997, 1998 Free Software Foundation, Inc.
+THIS FILE IS MACHINE GENERATED WITH CGEN.
+
+Copyright (C) 1996, 1997, 1998, 1999 Free Software Foundation, Inc.
 
 This file is part of the GNU Simulators.
 
@@ -21,13 +23,13 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 */
 
 #include "sim-main.h"
-#include "cpu-sim.h"
-#include "cpu-opc.h"
+#include "bfd.h"
 
-const MACH machs[] = {
-#ifdef HAVE_CPU_M32R
-  { "m32r", 32, 32, & m32r_models[0], & m32r_imp_properties },
+const MACH *sim_machs[] =
+{
+#ifdef HAVE_CPU_M32RBF
+  & m32r_mach,
 #endif
-  { 0 }
+  0
 };
 

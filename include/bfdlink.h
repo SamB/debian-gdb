@@ -1,5 +1,5 @@
 /* bfdlink.h -- header file for BFD link routines
-   Copyright 1993, 94, 95, 96, 1997 Free Software Foundation, Inc.
+   Copyright 1993, 94, 95, 96, 97, 1999 Free Software Foundation, Inc.
    Written by Steve Chamberlain and Ian Lance Taylor, Cygnus Support.
 
 This file is part of BFD, the Binary File Descriptor library.
@@ -193,6 +193,12 @@ struct bfd_link_info
      on the output file, but may be checked when reading the input
      files.  */
   boolean traditional_format;
+  /* true if we want to produced optimized output files.  This might
+     need much more time and therefore must be explicitly selected.  */
+  boolean optimize;
+  /* true if BFD should generate errors for undefined symbols
+     even if generating a shared object.  */
+  boolean no_undefined;
   /* Which symbols to strip.  */
   enum bfd_link_strip strip;
   /* Which local symbols to discard.  */
@@ -226,6 +232,18 @@ struct bfd_link_info
   struct bfd_hash_table *wrap_hash;
   /* If a base output file is wanted, then this points to it */
   PTR base_file;
+
+  /* If non-zero, specifies that branches which are problematic for the
+  MPC860 C0 (or earlier) should be checked for and modified.  It gives the
+  number of bytes that should be checked at the end of each text page. */
+  int mpc860c0;
+
+  /* The function to call when the executable or shared object is
+     loaded.  */
+  const char *init_function;
+  /* The function to call when the executable or shared object is
+     unloaded.  */
+  const char *fini_function;
 };
 
 /* This structures holds a set of callback functions.  These are
@@ -469,7 +487,9 @@ struct bfd_elf_version_expr
   /* Next regular expression for this version.  */
   struct bfd_elf_version_expr *next;
   /* Regular expression.  */
-  const char *match;
+  const char *pattern;
+  /* Matching function.  */
+  int (*match) PARAMS((struct bfd_elf_version_expr *, const char *));
 };
 
 /* Version dependencies.  */

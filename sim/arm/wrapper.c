@@ -47,6 +47,11 @@ static int mem_size = (1 << 21);
 /* Non-zero to display start up banner, and maybe other things.  */
 static int verbosity;
 
+/* Non-zero to set big endian mode.  */
+static int big_endian;
+
+int stop_simulator;
+
 static void 
 init ()
 {
@@ -56,6 +61,7 @@ init ()
     {
       ARMul_EmulateInit();
       state = ARMul_NewState ();
+      state->bigendSig = (big_endian ? HIGH : LOW);
       ARMul_MemoryInit(state, mem_size);
       ARMul_OSInit(state);
       ARMul_CoProInit(state); 
@@ -150,7 +156,9 @@ int
 sim_stop (sd)
      SIM_DESC sd;
 {
-  return 0;
+  state->Emulate = STOP;
+  stop_simulator = 1;
+  return 1;
 }
 
 void
@@ -159,6 +167,7 @@ sim_resume (sd, step, siggnal)
      int step, siggnal;
 {
   state->EndCondition = 0;
+  stop_simulator = 0;
 
   if (step)
     {
@@ -303,21 +312,24 @@ tomem (state, memory,  val)
     }
 }
 
-void
-sim_store_register (sd, rn, memory)
+int
+sim_store_register (sd, rn, memory, length)
      SIM_DESC sd;
      int rn;
      unsigned char *memory;
+     int length;
 {
   init ();
   ARMul_SetReg(state, state->Mode, rn, frommem (state, memory));
+  return -1;
 }
 
-void
-sim_fetch_register (sd, rn, memory)
+int
+sim_fetch_register (sd, rn, memory, length)
      SIM_DESC sd;
      int rn;
      unsigned char *memory;
+     int length;
 {
   ARMword regval;
 
@@ -329,10 +341,8 @@ sim_fetch_register (sd, rn, memory)
   else
     regval = 0;		/* FIXME: should report an error */
   tomem (state, memory, regval);
+  return -1;
 }
-
-
-
 
 SIM_DESC
 sim_open (kind, ptr, abfd, argv)
@@ -344,6 +354,54 @@ sim_open (kind, ptr, abfd, argv)
   sim_kind = kind;
   myname = argv[0];
   sim_callback = ptr;
+  
+  /* Decide upon the endian-ness of the processor.
+     If we can, get the information from the bfd itself.
+     Otherwise look to see if we have been given a command
+     line switch that tells us.  Otherwise default to little endian.  */
+  if (abfd != NULL)
+    big_endian = bfd_big_endian (abfd);
+  else if (argv[1] != NULL)
+    {
+      int i;
+      
+      /* Scan for endian-ness switch.  */
+      for (i = 0; (argv[i] != NULL) && (argv[i][0] != 0); i++)
+      if (argv[i][0] == '-' && argv[i][1] == 'E')
+        {
+          char c;
+          
+          if ((c = argv[i][2]) == 0)
+            {
+              ++i;
+              c = argv[i][0];
+            }
+
+          switch (c)
+            {
+            case 0:
+              sim_callback->printf_filtered
+                (sim_callback, "No argument to -E option provided\n");
+              break;
+
+            case 'b':
+            case 'B':
+              big_endian = 1;
+              break;
+
+            case 'l':
+            case 'L':
+              big_endian = 0;
+              break;
+
+            default:
+              sim_callback->printf_filtered
+                (sim_callback, "Unrecognised argument to -E option\n");
+              break;
+            }
+        }
+    }
+
   return (SIM_DESC) 1;
 }
 
@@ -382,7 +440,12 @@ sim_stop_reason (sd, reason, sigrc)
      enum sim_stop *reason;
      int *sigrc;
 {
-  if (state->EndCondition == 0)
+  if (stop_simulator)
+    {
+      *reason = sim_stopped;
+      *sigrc = SIGINT;
+    }
+  else if (state->EndCondition == 0)
     {
       *reason = sim_exited;
       *sigrc = state->Reg[0] & 255;

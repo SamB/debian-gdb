@@ -54,9 +54,19 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 extern struct obstack frame_cache_obstack;
 
+struct frame_extra_info
+{
+  /* Functions calling alloca() change the value of the stack
+     pointer. We need to use initial stack pointer (which is saved in
+     r31 by gcc) in such cases. If a compiler emits traceback table,
+     then we should use the alloca register specified in traceback
+     table. FIXME. */
+  CORE_ADDR initial_sp;			/* initial stack pointer. */
+};
+
 /* Static function prototypes */
 
-static void frame_get_cache_fsr PARAMS ((struct frame_info *fi,
+static void frame_get_saved_regs PARAMS ((struct frame_info *fi,
 					 struct rs6000_framedata *fdatap));
 
 
@@ -375,7 +385,7 @@ push_dummy_frame ()
   /* so far, 32*2 + 32 words = 384 bytes have been written. 
      7 extra registers in our register set: pc, ps, cnd, lr, cnt, xer, mq */
 
-  for (ii=1; ii <= (LAST_SP_REGNUM-FIRST_SP_REGNUM+1); ++ii) {
+  for (ii=1; ii <= (LAST_UISA_SP_REGNUM-FIRST_UISA_SP_REGNUM+1); ++ii) {
     write_memory (sp-384-(ii*4), 
 	       &registers[REGISTER_BYTE (FPLAST_REGNUM + ii)], 4);
   }
@@ -414,7 +424,7 @@ pop_dummy_frame ()
   }
 
   /* restore the rest of the registers. */
-  for (ii=1; ii <=(LAST_SP_REGNUM-FIRST_SP_REGNUM+1); ++ii)
+  for (ii=1; ii <=(LAST_UISA_SP_REGNUM-FIRST_UISA_SP_REGNUM+1); ++ii)
     read_memory (sp-384-(ii*4),
     		&registers[REGISTER_BYTE (FPLAST_REGNUM + ii)], 4);
 
@@ -825,7 +835,7 @@ frame_saved_pc (fi)
    in which case the framedata are read.  */
 
 static void
-frame_get_cache_fsr (fi, fdatap)
+frame_get_saved_regs (fi, fdatap)
      struct frame_info *fi;
      struct rs6000_framedata *fdatap;
 {
@@ -833,19 +843,26 @@ frame_get_cache_fsr (fi, fdatap)
   CORE_ADDR frame_addr; 
   struct rs6000_framedata work_fdata;
 
-  if (fi->cache_fsr)
+  if (fi->saved_regs)
     return;
   
-  if (fdatap == NULL) {
-    fdatap = &work_fdata;
-    (void) skip_prologue (get_pc_function_start (fi->pc), fdatap);
-  }
+  if (fdatap == NULL)
+    {
+      fdatap = &work_fdata;
+      (void) skip_prologue (get_pc_function_start (fi->pc), fdatap);
+    }
 
-  fi->cache_fsr = (struct frame_saved_regs *)
-      obstack_alloc (&frame_cache_obstack, sizeof (struct frame_saved_regs));
-  memset (fi->cache_fsr, '\0', sizeof (struct frame_saved_regs));
+  frame_saved_regs_zalloc (fi);
 
-  if (fi->prev && fi->prev->frame)
+  /* If there were any saved registers, figure out parent's stack
+     pointer. */
+  /* The following is true only if the frame doesn't have a call to
+     alloca(), FIXME. */
+
+  if (fdatap->saved_fpr == 0 && fdatap->saved_gpr == 0
+      && fdatap->lr_offset == 0 && fdatap->cr_offset == 0)
+    frame_addr = 0;
+  else if (fi->prev && fi->prev->frame)
     frame_addr = fi->prev->frame;
   else
     frame_addr = read_memory_integer (fi->frame, 4);
@@ -853,34 +870,47 @@ frame_get_cache_fsr (fi, fdatap)
   /* if != -1, fdatap->saved_fpr is the smallest number of saved_fpr.
      All fpr's from saved_fpr to fp31 are saved.  */
 
-  if (fdatap->saved_fpr >= 0) {
-    int fpr_offset = frame_addr + fdatap->fpr_offset;
-    for (ii = fdatap->saved_fpr; ii < 32; ii++) {
-      fi->cache_fsr->regs [FP0_REGNUM + ii] = fpr_offset;
-      fpr_offset += 8;
+  if (fdatap->saved_fpr >= 0)
+    {
+      int i;
+      int fpr_offset = frame_addr + fdatap->fpr_offset;
+      for (i = fdatap->saved_fpr; i < 32; i++)
+	{
+	  fi->saved_regs [FP0_REGNUM + i] = fpr_offset;
+	  fpr_offset += 8;
+	}
     }
-  }
 
   /* if != -1, fdatap->saved_gpr is the smallest number of saved_gpr.
      All gpr's from saved_gpr to gpr31 are saved.  */
-  
-  if (fdatap->saved_gpr >= 0) {
-    int gpr_offset = frame_addr + fdatap->gpr_offset;
-    for (ii = fdatap->saved_gpr; ii < 32; ii++) {
-      fi->cache_fsr->regs [ii] = gpr_offset;
-      gpr_offset += 4;
+
+  if (fdatap->saved_gpr >= 0)
+    {
+      int i;
+      int gpr_offset = frame_addr + fdatap->gpr_offset;
+      for (i = fdatap->saved_gpr; i < 32; i++)
+	{
+	  fi->saved_regs [i] = gpr_offset;
+	  gpr_offset += 4;
+	}
     }
-  }
 
   /* If != 0, fdatap->cr_offset is the offset from the frame that holds
      the CR.  */
   if (fdatap->cr_offset != 0)
-    fi->cache_fsr->regs [CR_REGNUM] = frame_addr + fdatap->cr_offset;
+    fi->saved_regs [CR_REGNUM] = frame_addr + fdatap->cr_offset;
 
   /* If != 0, fdatap->lr_offset is the offset from the frame that holds
      the LR.  */
   if (fdatap->lr_offset != 0)
-    fi->cache_fsr->regs [LR_REGNUM] = frame_addr + fdatap->lr_offset;
+    fi->saved_regs [LR_REGNUM] = frame_addr + fdatap->lr_offset;
+}
+
+void
+frame_init_saved_regs (fi)
+     struct frame_info *fi;
+{
+  frame_get_saved_regs (fi, NULL);
 }
 
 /* Return the address of a frame. This is the inital %sp value when the frame
@@ -898,13 +928,13 @@ frame_initial_stack_address (fi)
   /* if the initial stack pointer (frame address) of this frame is known,
      just return it. */
 
-  if (fi->initial_sp)
-    return fi->initial_sp;
+  if (fi->extra_info->initial_sp)
+    return fi->extra_info->initial_sp;
 
   /* If we're in a signal handler caller, fi->frame is fine */
   if (fi->signal_handler_caller) {
-    fi->initial_sp = fi->frame;
-    return fi->initial_sp;
+    fi->extra_info->initial_sp = fi->frame;
+    return fi->extra_info->initial_sp;
   }
 
   /* find out if this function is using an alloca register.. */
@@ -913,22 +943,22 @@ frame_initial_stack_address (fi)
 
   /* if saved registers of this frame are not known yet, read and cache them. */
 
-  if (!fi->cache_fsr)
-    frame_get_cache_fsr (fi, &fdata);
+  if (!fi->saved_regs)
+    frame_get_saved_regs (fi, &fdata);
 
   /* If no alloca register used, then fi->frame is the value of the %sp for
      this frame, and it is good enough. */
 
   if (fdata.alloca_reg < 0) {
-    fi->initial_sp = fi->frame;
-    return fi->initial_sp;
+    fi->extra_info->initial_sp = fi->frame;
+    return fi->extra_info->initial_sp;
   }
 
   /* This function has an alloca register. If this is the top-most frame
      (with the lowest address), the value in alloca register is good. */
 
   if (!fi->next)
-    return fi->initial_sp = read_register (fdata.alloca_reg);     
+    return fi->extra_info->initial_sp = read_register (fdata.alloca_reg);     
 
   /* Otherwise, this is a caller frame. Callee has usually already saved
      registers, but there are exceptions (such as when the callee
@@ -937,15 +967,15 @@ frame_initial_stack_address (fi)
 
   for (callee_fi = fi->next; callee_fi; callee_fi = callee_fi->next) {
 
-    if (!callee_fi->cache_fsr)
-      frame_get_cache_fsr (callee_fi, NULL);
+    if (!callee_fi->saved_regs)
+      frame_get_saved_regs (callee_fi, NULL);
 
     /* this is the address in which alloca register is saved. */
 
-    tmpaddr = callee_fi->cache_fsr->regs [fdata.alloca_reg];
+    tmpaddr = callee_fi->saved_regs [fdata.alloca_reg];
     if (tmpaddr) {
-      fi->initial_sp = read_memory_integer (tmpaddr, 4); 
-      return fi->initial_sp;
+      fi->extra_info->initial_sp = read_memory_integer (tmpaddr, 4); 
+      return fi->extra_info->initial_sp;
     }
 
     /* Go look into deeper levels of the frame chain to see if any one of
@@ -955,9 +985,18 @@ frame_initial_stack_address (fi)
   /* If alloca register was not saved, by the callee (or any of its callees)
      then the value in the register is still good. */
 
-  return fi->initial_sp = read_register (fdata.alloca_reg);     
+  return fi->extra_info->initial_sp = read_register (fdata.alloca_reg);     
 }
 
+CORE_ADDR
+frame_args_address (fi)
+     struct frame_info *fi;
+{
+  if (fi->extra_info->initial_sp != 0)
+    return fi->extra_info->initial_sp;
+  else
+    return frame_initial_stack_address (fi);
+}
 
 CORE_ADDR
 rs6000_frame_chain (thisframe)
@@ -999,8 +1038,9 @@ init_extra_frame_info (fromleaf, fi)
     int fromleaf;
     struct frame_info *fi;
 {
-    fi->initial_sp = 0;
-    fi->cache_fsr  = 0;
+    fi->extra_info = (struct frame_extra_info*)
+        frame_obstack_alloc (sizeof (struct frame_extra_info));
+    fi->extra_info->initial_sp = 0;
     if (fi->next != 0) {
 	/* We're called from get_prev_frame_info; check to see if
 	   this is a signal frame by looking to see if the pc points
@@ -1009,7 +1049,7 @@ init_extra_frame_info (fromleaf, fi)
 	if (target_read_memory(fi->pc, buf, sizeof(buf)) != 0)
 	    return;
 	if (   extract_unsigned_integer(buf,4)   == INSTR_LI_R0_0x7777
-	    || extract_unsigned_integer(buf+4,4) == INSTR_SC )
+               || extract_unsigned_integer(buf+4,4) == INSTR_SC )
 	    fi->signal_handler_caller = 1;
 	else
 	    fi->signal_handler_caller = 0;
@@ -1018,6 +1058,7 @@ init_extra_frame_info (fromleaf, fi)
 
 /* Some of the following code was swiped from tm-rs6000.h. */
 
+#if 0
 void
 frame_find_saved_regs(struct frame_info *fi, struct frame_saved_regs *fsr)
 {
@@ -1096,6 +1137,7 @@ frame_find_saved_regs(struct frame_info *fi, struct frame_saved_regs *fsr)
     fsr->regs [LR_REGNUM] = frame_addr + fdata.lr_offset;
   }
 }
+#endif
 
 void
 init_frame_pc_first(int fromleaf, struct frame_info *fi)
@@ -1343,8 +1385,65 @@ int in_sigtramp2(CORE_ADDR pc, char *func_name)
 	        && extract_unsigned_integer(buf,4)   == INSTR_LI_R0_0x7777) );
 }
 
+/* Sequence of bytes for breakpoint instruction.  */
+
+#define BIG_BREAKPOINT { 0x7d, 0x82, 0x10, 0x08 }
+#define LITTLE_BREAKPOINT { 0x08, 0x10, 0x82, 0x7d }
+
+unsigned char *
+breakpoint_from_pc (bp_addr, bp_size)
+     CORE_ADDR *bp_addr;
+     int *bp_size;
+{
+  static unsigned char big_breakpoint[] = BIG_BREAKPOINT;
+  static unsigned char little_breakpoint[] = LITTLE_BREAKPOINT;
+  *bp_size = 4;
+  if (TARGET_BYTE_ORDER == BIG_ENDIAN)
+    return big_breakpoint;
+  else
+    return little_breakpoint;
+}
+
+/* Function: get_saved_register
+   Just call the generic_get_saved_register function.  */
+
+#ifdef USE_GENERIC_DUMMY_FRAMES
+void
+get_saved_register (raw_buffer, optimized, addrp, frame, regnum, lval)
+     char *raw_buffer;
+     int *optimized;
+     CORE_ADDR *addrp;
+     struct frame_info *frame;
+     int regnum;
+     enum lval_type *lval;
+{
+  generic_get_saved_register (raw_buffer, optimized, addrp, 
+			      frame, regnum, lval);
+}
+#endif
+
+#ifdef ELF_OBJECT_FORMAT
+
+/* Function: ppc_push_return_address (pc, sp)
+   Set up the return address for the inferior function call. */
+
+CORE_ADDR                                      
+ppc_push_return_address (pc, sp)
+     CORE_ADDR pc;
+     CORE_ADDR sp;
+{
+  write_register (LR_REGNUM, CALL_DUMMY_ADDRESS ());
+  return sp;
+}
+
+#endif
+
+#define _REGISTER_NAME ppc_register_name
+#include "rs6000-variant.c"
+
 void
 _initialize_ppclinux_tdep ()
 {
   tm_print_insn = gdb_print_insn_powerpc;
+  _initialize_variant();
 }

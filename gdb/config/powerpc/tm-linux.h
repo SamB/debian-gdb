@@ -23,7 +23,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "powerpc/tm-ppc-eabi.h"
 
 /* We can single step on linux */
-#undef NO_SINGLE_STEP
+#undef  SOFTWARE_SINGLE_STEP
+#define SOFTWARE_SINGLE_STEP(p,q) abort() /* Will never execute! */
+#undef  SOFTWARE_SINGLE_STEP_P
+#define SOFTWARE_SINGLE_STEP_P 0
 
 /* Make sure nexti gets the help it needs for debugging assembly code
    without symbols */
@@ -45,6 +48,12 @@ extern int at_subroutine_call_instruction_target();
 /* We need this file for the SOLIB_TRAMPOLINE stuff. */
 #include "tm-sysv4.h"
 
+/* BREAKPOINT_FROM_PC uses the program counter value to determine the
+   breakpoint that should be used */
+extern breakpoint_from_pc_fn breakpoint_from_pc;
+#undef  BREAKPOINT_FROM_PC
+#define BREAKPOINT_FROM_PC(pcptr, lenptr) breakpoint_from_pc (pcptr, lenptr)
+
 #undef SKIP_TRAMPOLINE_CODE
 extern CORE_ADDR skip_trampoline_code (CORE_ADDR pc);
 #define	SKIP_TRAMPOLINE_CODE(pc) skip_trampoline_code (pc)
@@ -56,6 +65,13 @@ extern int in_sigtramp (CORE_ADDR pc, char *func_name);
 #define CANNOT_FETCH_REGISTER(regno) ((regno) == MQ_REGNUM)
 #define CANNOT_STORE_REGISTER(regno) ((regno) == MQ_REGNUM)
 
+/* Return the name of register number REG.  This may return "" to
+   indicate a register number that's not used on this variant.
+   (Register numbers may be sparse for consistency between variants.)  */
+extern char *ppc_register_name (int reg);
+#undef  REGISTER_NAME
+#define REGISTER_NAME(reg) (ppc_register_name(reg))
+
 /* Linux doesn't use the PowerOpen ABI for function pointer representation */
 #undef CONVERT_FROM_FUNC_PTR_ADDR
 
@@ -64,13 +80,13 @@ extern int in_sigtramp (CORE_ADDR pc, char *func_name);
 	init_extra_frame_info (fromleaf, fi)
 extern void init_extra_frame_info ();
 
-#undef FRAME_FIND_SAVED_REGS
-struct frame_saved_regs;
-struct frame_info;
-void frame_find_saved_regs PARAMS((struct frame_info *fi,
-				   struct frame_saved_regs *fsr));
-#define FRAME_FIND_SAVED_REGS(frame_info, frame_saved_regs) \
-        frame_find_saved_regs (frame_info, &frame_saved_regs)
+extern void frame_init_saved_regs PARAMS ((struct frame_info *));
+#undef  FRAME_INIT_SAVED_REGS
+#define FRAME_INIT_SAVED_REGS(FI) frame_init_saved_regs (FI)
+
+extern CORE_ADDR frame_args_address PARAMS ((struct frame_info *));
+#undef  FRAME_ARGS_ADDRESS
+#define FRAME_ARGS_ADDRESS(FI) frame_args_address (FI)
 
 #undef INIT_FRAME_PC_FIRST
 #define INIT_FRAME_PC_FIRST(fromleaf, prev) \

@@ -1,6 +1,8 @@
-/* Simulator instruction decoder for m32r.
+/* Simulator instruction decoder for m32rbf.
 
-Copyright (C) 1996, 1997, 1998 Free Software Foundation, Inc.
+THIS FILE IS MACHINE GENERATED WITH CGEN.
+
+Copyright (C) 1996, 1997, 1998, 1999 Free Software Foundation, Inc.
 
 This file is part of the GNU Simulators.
 
@@ -20,506 +22,1799 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 */
 
-#define WANT_CPU
-#define WANT_CPU_M32R
+#define WANT_CPU m32rbf
+#define WANT_CPU_M32RBF
 
 #include "sim-main.h"
-#include "sim-xcat.h"
-#include "cpu-sim.h"
-#include "cpu-opc.h"
+#include "sim-assert.h"
 
-/* FIXME: wip, may eventually only want one form so this would then go
-   away.  However, in the mean time, having both keeps a stable version
-   around while the cache version is being developed.
-   It may still be useful to allow two versions to exist though.  */
-#if WITH_SCACHE
-#define EX(fn) XCONCAT3 (m32r,_ex_,fn)
-#else
-#define EX(fn) 0
-#endif
+/* The instruction descriptor array.
+   This is computed at runtime.  Space for it is not malloc'd to save a
+   teensy bit of cpu in the decoder.  Moving it to malloc space is trivial
+   but won't be done until necessary (we don't currently support the runtime
+   addition of instructions nor an SMP machine with different cpus).  */
+static IDESC m32rbf_insn_data[M32RBF_INSN_MAX];
 
-#if WITH_SEM_SWITCH_FULL
-#define FULL(fn) 0
-#else
-#define FULL(fn) XCONCAT3 (m32r,_sem_,fn)
-#endif
+/* Commas between elements are contained in the macros.
+   Some of these are conditionally compiled out.  */
 
-#if WITH_SEM_SWITCH_FAST
-#define FAST(fn) 0
-#else
-#if WITH_SCACHE
-#define FAST(fn) XCONCAT3 (m32r,_semc_,fn)
-#else
-#define FAST(fn) 0
-#endif
-#endif
-
-/*#define DECODE M32R_DECODE*/
-
-/* The decode_illegal case is currently non-static and the generator doesn't
-   prepend m32r_, so simplify things by handling it here.  */
-#define decode_illegal m32r_decode_illegal
-
-static DECODE decode_add = { M32R_INSN_ADD, & m32r_cgen_insn_table_entries[M32R_INSN_ADD], EX (fmt_0_add), FULL (add), FAST (add) };
-static DECODE decode_add3 = { M32R_INSN_ADD3, & m32r_cgen_insn_table_entries[M32R_INSN_ADD3], EX (fmt_1_add3), FULL (add3), FAST (add3) };
-static DECODE decode_and = { M32R_INSN_AND, & m32r_cgen_insn_table_entries[M32R_INSN_AND], EX (fmt_0_add), FULL (and), FAST (and) };
-static DECODE decode_and3 = { M32R_INSN_AND3, & m32r_cgen_insn_table_entries[M32R_INSN_AND3], EX (fmt_2_and3), FULL (and3), FAST (and3) };
-static DECODE decode_or = { M32R_INSN_OR, & m32r_cgen_insn_table_entries[M32R_INSN_OR], EX (fmt_0_add), FULL (or), FAST (or) };
-static DECODE decode_or3 = { M32R_INSN_OR3, & m32r_cgen_insn_table_entries[M32R_INSN_OR3], EX (fmt_3_or3), FULL (or3), FAST (or3) };
-static DECODE decode_xor = { M32R_INSN_XOR, & m32r_cgen_insn_table_entries[M32R_INSN_XOR], EX (fmt_0_add), FULL (xor), FAST (xor) };
-static DECODE decode_xor3 = { M32R_INSN_XOR3, & m32r_cgen_insn_table_entries[M32R_INSN_XOR3], EX (fmt_2_and3), FULL (xor3), FAST (xor3) };
-static DECODE decode_addi = { M32R_INSN_ADDI, & m32r_cgen_insn_table_entries[M32R_INSN_ADDI], EX (fmt_4_addi), FULL (addi), FAST (addi) };
-static DECODE decode_addv = { M32R_INSN_ADDV, & m32r_cgen_insn_table_entries[M32R_INSN_ADDV], EX (fmt_0_add), FULL (addv), FAST (addv) };
-static DECODE decode_addv3 = { M32R_INSN_ADDV3, & m32r_cgen_insn_table_entries[M32R_INSN_ADDV3], EX (fmt_5_addv3), FULL (addv3), FAST (addv3) };
-static DECODE decode_addx = { M32R_INSN_ADDX, & m32r_cgen_insn_table_entries[M32R_INSN_ADDX], EX (fmt_6_addx), FULL (addx), FAST (addx) };
-static DECODE decode_bc8 = { M32R_INSN_BC8, & m32r_cgen_insn_table_entries[M32R_INSN_BC8], EX (fmt_7_bc8), FULL (bc8), FAST (bc8) };
-static DECODE decode_bc24 = { M32R_INSN_BC24, & m32r_cgen_insn_table_entries[M32R_INSN_BC24], EX (fmt_8_bc24), FULL (bc24), FAST (bc24) };
-static DECODE decode_beq = { M32R_INSN_BEQ, & m32r_cgen_insn_table_entries[M32R_INSN_BEQ], EX (fmt_9_beq), FULL (beq), FAST (beq) };
-static DECODE decode_beqz = { M32R_INSN_BEQZ, & m32r_cgen_insn_table_entries[M32R_INSN_BEQZ], EX (fmt_10_beqz), FULL (beqz), FAST (beqz) };
-static DECODE decode_bgez = { M32R_INSN_BGEZ, & m32r_cgen_insn_table_entries[M32R_INSN_BGEZ], EX (fmt_10_beqz), FULL (bgez), FAST (bgez) };
-static DECODE decode_bgtz = { M32R_INSN_BGTZ, & m32r_cgen_insn_table_entries[M32R_INSN_BGTZ], EX (fmt_10_beqz), FULL (bgtz), FAST (bgtz) };
-static DECODE decode_blez = { M32R_INSN_BLEZ, & m32r_cgen_insn_table_entries[M32R_INSN_BLEZ], EX (fmt_10_beqz), FULL (blez), FAST (blez) };
-static DECODE decode_bltz = { M32R_INSN_BLTZ, & m32r_cgen_insn_table_entries[M32R_INSN_BLTZ], EX (fmt_10_beqz), FULL (bltz), FAST (bltz) };
-static DECODE decode_bnez = { M32R_INSN_BNEZ, & m32r_cgen_insn_table_entries[M32R_INSN_BNEZ], EX (fmt_10_beqz), FULL (bnez), FAST (bnez) };
-static DECODE decode_bl8 = { M32R_INSN_BL8, & m32r_cgen_insn_table_entries[M32R_INSN_BL8], EX (fmt_11_bl8), FULL (bl8), FAST (bl8) };
-static DECODE decode_bl24 = { M32R_INSN_BL24, & m32r_cgen_insn_table_entries[M32R_INSN_BL24], EX (fmt_12_bl24), FULL (bl24), FAST (bl24) };
-static DECODE decode_bnc8 = { M32R_INSN_BNC8, & m32r_cgen_insn_table_entries[M32R_INSN_BNC8], EX (fmt_7_bc8), FULL (bnc8), FAST (bnc8) };
-static DECODE decode_bnc24 = { M32R_INSN_BNC24, & m32r_cgen_insn_table_entries[M32R_INSN_BNC24], EX (fmt_8_bc24), FULL (bnc24), FAST (bnc24) };
-static DECODE decode_bne = { M32R_INSN_BNE, & m32r_cgen_insn_table_entries[M32R_INSN_BNE], EX (fmt_9_beq), FULL (bne), FAST (bne) };
-static DECODE decode_bra8 = { M32R_INSN_BRA8, & m32r_cgen_insn_table_entries[M32R_INSN_BRA8], EX (fmt_13_bra8), FULL (bra8), FAST (bra8) };
-static DECODE decode_bra24 = { M32R_INSN_BRA24, & m32r_cgen_insn_table_entries[M32R_INSN_BRA24], EX (fmt_14_bra24), FULL (bra24), FAST (bra24) };
-static DECODE decode_cmp = { M32R_INSN_CMP, & m32r_cgen_insn_table_entries[M32R_INSN_CMP], EX (fmt_15_cmp), FULL (cmp), FAST (cmp) };
-static DECODE decode_cmpi = { M32R_INSN_CMPI, & m32r_cgen_insn_table_entries[M32R_INSN_CMPI], EX (fmt_16_cmpi), FULL (cmpi), FAST (cmpi) };
-static DECODE decode_cmpu = { M32R_INSN_CMPU, & m32r_cgen_insn_table_entries[M32R_INSN_CMPU], EX (fmt_15_cmp), FULL (cmpu), FAST (cmpu) };
-static DECODE decode_cmpui = { M32R_INSN_CMPUI, & m32r_cgen_insn_table_entries[M32R_INSN_CMPUI], EX (fmt_17_cmpui), FULL (cmpui), FAST (cmpui) };
-static DECODE decode_div = { M32R_INSN_DIV, & m32r_cgen_insn_table_entries[M32R_INSN_DIV], EX (fmt_18_div), FULL (div), FAST (div) };
-static DECODE decode_divu = { M32R_INSN_DIVU, & m32r_cgen_insn_table_entries[M32R_INSN_DIVU], EX (fmt_18_div), FULL (divu), FAST (divu) };
-static DECODE decode_rem = { M32R_INSN_REM, & m32r_cgen_insn_table_entries[M32R_INSN_REM], EX (fmt_18_div), FULL (rem), FAST (rem) };
-static DECODE decode_remu = { M32R_INSN_REMU, & m32r_cgen_insn_table_entries[M32R_INSN_REMU], EX (fmt_18_div), FULL (remu), FAST (remu) };
-static DECODE decode_jl = { M32R_INSN_JL, & m32r_cgen_insn_table_entries[M32R_INSN_JL], EX (fmt_19_jl), FULL (jl), FAST (jl) };
-static DECODE decode_jmp = { M32R_INSN_JMP, & m32r_cgen_insn_table_entries[M32R_INSN_JMP], EX (fmt_20_jmp), FULL (jmp), FAST (jmp) };
-static DECODE decode_ld = { M32R_INSN_LD, & m32r_cgen_insn_table_entries[M32R_INSN_LD], EX (fmt_21_ld), FULL (ld), FAST (ld) };
-static DECODE decode_ld_d = { M32R_INSN_LD_D, & m32r_cgen_insn_table_entries[M32R_INSN_LD_D], EX (fmt_22_ld_d), FULL (ld_d), FAST (ld_d) };
-static DECODE decode_ldb = { M32R_INSN_LDB, & m32r_cgen_insn_table_entries[M32R_INSN_LDB], EX (fmt_23_ldb), FULL (ldb), FAST (ldb) };
-static DECODE decode_ldb_d = { M32R_INSN_LDB_D, & m32r_cgen_insn_table_entries[M32R_INSN_LDB_D], EX (fmt_24_ldb_d), FULL (ldb_d), FAST (ldb_d) };
-static DECODE decode_ldh = { M32R_INSN_LDH, & m32r_cgen_insn_table_entries[M32R_INSN_LDH], EX (fmt_25_ldh), FULL (ldh), FAST (ldh) };
-static DECODE decode_ldh_d = { M32R_INSN_LDH_D, & m32r_cgen_insn_table_entries[M32R_INSN_LDH_D], EX (fmt_26_ldh_d), FULL (ldh_d), FAST (ldh_d) };
-static DECODE decode_ldub = { M32R_INSN_LDUB, & m32r_cgen_insn_table_entries[M32R_INSN_LDUB], EX (fmt_23_ldb), FULL (ldub), FAST (ldub) };
-static DECODE decode_ldub_d = { M32R_INSN_LDUB_D, & m32r_cgen_insn_table_entries[M32R_INSN_LDUB_D], EX (fmt_24_ldb_d), FULL (ldub_d), FAST (ldub_d) };
-static DECODE decode_lduh = { M32R_INSN_LDUH, & m32r_cgen_insn_table_entries[M32R_INSN_LDUH], EX (fmt_25_ldh), FULL (lduh), FAST (lduh) };
-static DECODE decode_lduh_d = { M32R_INSN_LDUH_D, & m32r_cgen_insn_table_entries[M32R_INSN_LDUH_D], EX (fmt_26_ldh_d), FULL (lduh_d), FAST (lduh_d) };
-static DECODE decode_ld_plus = { M32R_INSN_LD_PLUS, & m32r_cgen_insn_table_entries[M32R_INSN_LD_PLUS], EX (fmt_21_ld), FULL (ld_plus), FAST (ld_plus) };
-static DECODE decode_ld24 = { M32R_INSN_LD24, & m32r_cgen_insn_table_entries[M32R_INSN_LD24], EX (fmt_27_ld24), FULL (ld24), FAST (ld24) };
-static DECODE decode_ldi8 = { M32R_INSN_LDI8, & m32r_cgen_insn_table_entries[M32R_INSN_LDI8], EX (fmt_28_ldi8), FULL (ldi8), FAST (ldi8) };
-static DECODE decode_ldi16 = { M32R_INSN_LDI16, & m32r_cgen_insn_table_entries[M32R_INSN_LDI16], EX (fmt_29_ldi16), FULL (ldi16), FAST (ldi16) };
-static DECODE decode_lock = { M32R_INSN_LOCK, & m32r_cgen_insn_table_entries[M32R_INSN_LOCK], EX (fmt_0_add), FULL (lock), FAST (lock) };
-static DECODE decode_machi = { M32R_INSN_MACHI, & m32r_cgen_insn_table_entries[M32R_INSN_MACHI], EX (fmt_30_machi), FULL (machi), FAST (machi) };
-static DECODE decode_maclo = { M32R_INSN_MACLO, & m32r_cgen_insn_table_entries[M32R_INSN_MACLO], EX (fmt_30_machi), FULL (maclo), FAST (maclo) };
-static DECODE decode_macwhi = { M32R_INSN_MACWHI, & m32r_cgen_insn_table_entries[M32R_INSN_MACWHI], EX (fmt_30_machi), FULL (macwhi), FAST (macwhi) };
-static DECODE decode_macwlo = { M32R_INSN_MACWLO, & m32r_cgen_insn_table_entries[M32R_INSN_MACWLO], EX (fmt_30_machi), FULL (macwlo), FAST (macwlo) };
-static DECODE decode_mul = { M32R_INSN_MUL, & m32r_cgen_insn_table_entries[M32R_INSN_MUL], EX (fmt_0_add), FULL (mul), FAST (mul) };
-static DECODE decode_mulhi = { M32R_INSN_MULHI, & m32r_cgen_insn_table_entries[M32R_INSN_MULHI], EX (fmt_15_cmp), FULL (mulhi), FAST (mulhi) };
-static DECODE decode_mullo = { M32R_INSN_MULLO, & m32r_cgen_insn_table_entries[M32R_INSN_MULLO], EX (fmt_15_cmp), FULL (mullo), FAST (mullo) };
-static DECODE decode_mulwhi = { M32R_INSN_MULWHI, & m32r_cgen_insn_table_entries[M32R_INSN_MULWHI], EX (fmt_15_cmp), FULL (mulwhi), FAST (mulwhi) };
-static DECODE decode_mulwlo = { M32R_INSN_MULWLO, & m32r_cgen_insn_table_entries[M32R_INSN_MULWLO], EX (fmt_15_cmp), FULL (mulwlo), FAST (mulwlo) };
-static DECODE decode_mv = { M32R_INSN_MV, & m32r_cgen_insn_table_entries[M32R_INSN_MV], EX (fmt_31_mv), FULL (mv), FAST (mv) };
-static DECODE decode_mvfachi = { M32R_INSN_MVFACHI, & m32r_cgen_insn_table_entries[M32R_INSN_MVFACHI], EX (fmt_32_mvfachi), FULL (mvfachi), FAST (mvfachi) };
-static DECODE decode_mvfaclo = { M32R_INSN_MVFACLO, & m32r_cgen_insn_table_entries[M32R_INSN_MVFACLO], EX (fmt_32_mvfachi), FULL (mvfaclo), FAST (mvfaclo) };
-static DECODE decode_mvfacmi = { M32R_INSN_MVFACMI, & m32r_cgen_insn_table_entries[M32R_INSN_MVFACMI], EX (fmt_32_mvfachi), FULL (mvfacmi), FAST (mvfacmi) };
-static DECODE decode_mvfc = { M32R_INSN_MVFC, & m32r_cgen_insn_table_entries[M32R_INSN_MVFC], EX (fmt_33_mvfc), FULL (mvfc), FAST (mvfc) };
-static DECODE decode_mvtachi = { M32R_INSN_MVTACHI, & m32r_cgen_insn_table_entries[M32R_INSN_MVTACHI], EX (fmt_34_mvtachi), FULL (mvtachi), FAST (mvtachi) };
-static DECODE decode_mvtaclo = { M32R_INSN_MVTACLO, & m32r_cgen_insn_table_entries[M32R_INSN_MVTACLO], EX (fmt_34_mvtachi), FULL (mvtaclo), FAST (mvtaclo) };
-static DECODE decode_mvtc = { M32R_INSN_MVTC, & m32r_cgen_insn_table_entries[M32R_INSN_MVTC], EX (fmt_35_mvtc), FULL (mvtc), FAST (mvtc) };
-static DECODE decode_neg = { M32R_INSN_NEG, & m32r_cgen_insn_table_entries[M32R_INSN_NEG], EX (fmt_31_mv), FULL (neg), FAST (neg) };
-static DECODE decode_nop = { M32R_INSN_NOP, & m32r_cgen_insn_table_entries[M32R_INSN_NOP], EX (fmt_36_nop), FULL (nop), FAST (nop) };
-static DECODE decode_not = { M32R_INSN_NOT, & m32r_cgen_insn_table_entries[M32R_INSN_NOT], EX (fmt_31_mv), FULL (not), FAST (not) };
-static DECODE decode_rac = { M32R_INSN_RAC, & m32r_cgen_insn_table_entries[M32R_INSN_RAC], EX (fmt_37_rac), FULL (rac), FAST (rac) };
-static DECODE decode_rach = { M32R_INSN_RACH, & m32r_cgen_insn_table_entries[M32R_INSN_RACH], EX (fmt_37_rac), FULL (rach), FAST (rach) };
-static DECODE decode_rte = { M32R_INSN_RTE, & m32r_cgen_insn_table_entries[M32R_INSN_RTE], EX (fmt_36_nop), FULL (rte), FAST (rte) };
-static DECODE decode_seth = { M32R_INSN_SETH, & m32r_cgen_insn_table_entries[M32R_INSN_SETH], EX (fmt_38_seth), FULL (seth), FAST (seth) };
-static DECODE decode_sll = { M32R_INSN_SLL, & m32r_cgen_insn_table_entries[M32R_INSN_SLL], EX (fmt_0_add), FULL (sll), FAST (sll) };
-static DECODE decode_sll3 = { M32R_INSN_SLL3, & m32r_cgen_insn_table_entries[M32R_INSN_SLL3], EX (fmt_5_addv3), FULL (sll3), FAST (sll3) };
-static DECODE decode_slli = { M32R_INSN_SLLI, & m32r_cgen_insn_table_entries[M32R_INSN_SLLI], EX (fmt_39_slli), FULL (slli), FAST (slli) };
-static DECODE decode_sra = { M32R_INSN_SRA, & m32r_cgen_insn_table_entries[M32R_INSN_SRA], EX (fmt_0_add), FULL (sra), FAST (sra) };
-static DECODE decode_sra3 = { M32R_INSN_SRA3, & m32r_cgen_insn_table_entries[M32R_INSN_SRA3], EX (fmt_5_addv3), FULL (sra3), FAST (sra3) };
-static DECODE decode_srai = { M32R_INSN_SRAI, & m32r_cgen_insn_table_entries[M32R_INSN_SRAI], EX (fmt_39_slli), FULL (srai), FAST (srai) };
-static DECODE decode_srl = { M32R_INSN_SRL, & m32r_cgen_insn_table_entries[M32R_INSN_SRL], EX (fmt_0_add), FULL (srl), FAST (srl) };
-static DECODE decode_srl3 = { M32R_INSN_SRL3, & m32r_cgen_insn_table_entries[M32R_INSN_SRL3], EX (fmt_5_addv3), FULL (srl3), FAST (srl3) };
-static DECODE decode_srli = { M32R_INSN_SRLI, & m32r_cgen_insn_table_entries[M32R_INSN_SRLI], EX (fmt_39_slli), FULL (srli), FAST (srli) };
-static DECODE decode_st = { M32R_INSN_ST, & m32r_cgen_insn_table_entries[M32R_INSN_ST], EX (fmt_15_cmp), FULL (st), FAST (st) };
-static DECODE decode_st_d = { M32R_INSN_ST_D, & m32r_cgen_insn_table_entries[M32R_INSN_ST_D], EX (fmt_40_st_d), FULL (st_d), FAST (st_d) };
-static DECODE decode_stb = { M32R_INSN_STB, & m32r_cgen_insn_table_entries[M32R_INSN_STB], EX (fmt_15_cmp), FULL (stb), FAST (stb) };
-static DECODE decode_stb_d = { M32R_INSN_STB_D, & m32r_cgen_insn_table_entries[M32R_INSN_STB_D], EX (fmt_40_st_d), FULL (stb_d), FAST (stb_d) };
-static DECODE decode_sth = { M32R_INSN_STH, & m32r_cgen_insn_table_entries[M32R_INSN_STH], EX (fmt_15_cmp), FULL (sth), FAST (sth) };
-static DECODE decode_sth_d = { M32R_INSN_STH_D, & m32r_cgen_insn_table_entries[M32R_INSN_STH_D], EX (fmt_40_st_d), FULL (sth_d), FAST (sth_d) };
-static DECODE decode_st_plus = { M32R_INSN_ST_PLUS, & m32r_cgen_insn_table_entries[M32R_INSN_ST_PLUS], EX (fmt_15_cmp), FULL (st_plus), FAST (st_plus) };
-static DECODE decode_st_minus = { M32R_INSN_ST_MINUS, & m32r_cgen_insn_table_entries[M32R_INSN_ST_MINUS], EX (fmt_15_cmp), FULL (st_minus), FAST (st_minus) };
-static DECODE decode_sub = { M32R_INSN_SUB, & m32r_cgen_insn_table_entries[M32R_INSN_SUB], EX (fmt_0_add), FULL (sub), FAST (sub) };
-static DECODE decode_subv = { M32R_INSN_SUBV, & m32r_cgen_insn_table_entries[M32R_INSN_SUBV], EX (fmt_0_add), FULL (subv), FAST (subv) };
-static DECODE decode_subx = { M32R_INSN_SUBX, & m32r_cgen_insn_table_entries[M32R_INSN_SUBX], EX (fmt_6_addx), FULL (subx), FAST (subx) };
-static DECODE decode_trap = { M32R_INSN_TRAP, & m32r_cgen_insn_table_entries[M32R_INSN_TRAP], EX (fmt_41_trap), FULL (trap), FAST (trap) };
-static DECODE decode_unlock = { M32R_INSN_UNLOCK, & m32r_cgen_insn_table_entries[M32R_INSN_UNLOCK], EX (fmt_15_cmp), FULL (unlock), FAST (unlock) };
-DECODE m32r_decode_illegal = {
-  M32R_INSN_ILLEGAL, & m32r_cgen_insn_table_entries[0],
-  EX (illegal), FULL (illegal),
-  FAST (illegal)
-};
-
-/* The order must match that of `labels' in sem-switch.c.  */
-
-DECODE *m32r_decode_vars[] = {
-  & m32r_decode_illegal,
-  & decode_add,
-  & decode_add3,
-  & decode_and,
-  & decode_and3,
-  & decode_or,
-  & decode_or3,
-  & decode_xor,
-  & decode_xor3,
-  & decode_addi,
-  & decode_addv,
-  & decode_addv3,
-  & decode_addx,
-  & decode_bc8,
-  & decode_bc24,
-  & decode_beq,
-  & decode_beqz,
-  & decode_bgez,
-  & decode_bgtz,
-  & decode_blez,
-  & decode_bltz,
-  & decode_bnez,
-  & decode_bl8,
-  & decode_bl24,
-  & decode_bnc8,
-  & decode_bnc24,
-  & decode_bne,
-  & decode_bra8,
-  & decode_bra24,
-  & decode_cmp,
-  & decode_cmpi,
-  & decode_cmpu,
-  & decode_cmpui,
-  & decode_div,
-  & decode_divu,
-  & decode_rem,
-  & decode_remu,
-  & decode_jl,
-  & decode_jmp,
-  & decode_ld,
-  & decode_ld_d,
-  & decode_ldb,
-  & decode_ldb_d,
-  & decode_ldh,
-  & decode_ldh_d,
-  & decode_ldub,
-  & decode_ldub_d,
-  & decode_lduh,
-  & decode_lduh_d,
-  & decode_ld_plus,
-  & decode_ld24,
-  & decode_ldi8,
-  & decode_ldi16,
-  & decode_lock,
-  & decode_machi,
-  & decode_maclo,
-  & decode_macwhi,
-  & decode_macwlo,
-  & decode_mul,
-  & decode_mulhi,
-  & decode_mullo,
-  & decode_mulwhi,
-  & decode_mulwlo,
-  & decode_mv,
-  & decode_mvfachi,
-  & decode_mvfaclo,
-  & decode_mvfacmi,
-  & decode_mvfc,
-  & decode_mvtachi,
-  & decode_mvtaclo,
-  & decode_mvtc,
-  & decode_neg,
-  & decode_nop,
-  & decode_not,
-  & decode_rac,
-  & decode_rach,
-  & decode_rte,
-  & decode_seth,
-  & decode_sll,
-  & decode_sll3,
-  & decode_slli,
-  & decode_sra,
-  & decode_sra3,
-  & decode_srai,
-  & decode_srl,
-  & decode_srl3,
-  & decode_srli,
-  & decode_st,
-  & decode_st_d,
-  & decode_stb,
-  & decode_stb_d,
-  & decode_sth,
-  & decode_sth_d,
-  & decode_st_plus,
-  & decode_st_minus,
-  & decode_sub,
-  & decode_subv,
-  & decode_subx,
-  & decode_trap,
-  & decode_unlock,
-  0
-};
-
-/* The decoder needs a slightly different computed goto switch control.  */
-#ifdef __GNUC__
-#define DECODE_SWITCH(N, X) goto *labels_##N[X];
-#else
-#define DECODE_SWITCH(N, X) switch (X)
-#endif
-
-/* Given an instruction, return a pointer to its DECODE entry.  */
-
-DECODE *
-m32r_decode (current_cpu, insn)
-     SIM_CPU *current_cpu;
-     insn_t insn;
+static const struct insn_sem m32rbf_insn_sem[] =
 {
+  { VIRTUAL_INSN_X_INVALID, M32RBF_INSN_X_INVALID, M32RBF_SFMT_EMPTY },
+  { VIRTUAL_INSN_X_AFTER, M32RBF_INSN_X_AFTER, M32RBF_SFMT_EMPTY },
+  { VIRTUAL_INSN_X_BEFORE, M32RBF_INSN_X_BEFORE, M32RBF_SFMT_EMPTY },
+  { VIRTUAL_INSN_X_CTI_CHAIN, M32RBF_INSN_X_CTI_CHAIN, M32RBF_SFMT_EMPTY },
+  { VIRTUAL_INSN_X_CHAIN, M32RBF_INSN_X_CHAIN, M32RBF_SFMT_EMPTY },
+  { VIRTUAL_INSN_X_BEGIN, M32RBF_INSN_X_BEGIN, M32RBF_SFMT_EMPTY },
+  { M32R_INSN_ADD, M32RBF_INSN_ADD, M32RBF_SFMT_ADD },
+  { M32R_INSN_ADD3, M32RBF_INSN_ADD3, M32RBF_SFMT_ADD3 },
+  { M32R_INSN_AND, M32RBF_INSN_AND, M32RBF_SFMT_ADD },
+  { M32R_INSN_AND3, M32RBF_INSN_AND3, M32RBF_SFMT_AND3 },
+  { M32R_INSN_OR, M32RBF_INSN_OR, M32RBF_SFMT_ADD },
+  { M32R_INSN_OR3, M32RBF_INSN_OR3, M32RBF_SFMT_OR3 },
+  { M32R_INSN_XOR, M32RBF_INSN_XOR, M32RBF_SFMT_ADD },
+  { M32R_INSN_XOR3, M32RBF_INSN_XOR3, M32RBF_SFMT_AND3 },
+  { M32R_INSN_ADDI, M32RBF_INSN_ADDI, M32RBF_SFMT_ADDI },
+  { M32R_INSN_ADDV, M32RBF_INSN_ADDV, M32RBF_SFMT_ADDV },
+  { M32R_INSN_ADDV3, M32RBF_INSN_ADDV3, M32RBF_SFMT_ADDV3 },
+  { M32R_INSN_ADDX, M32RBF_INSN_ADDX, M32RBF_SFMT_ADDX },
+  { M32R_INSN_BC8, M32RBF_INSN_BC8, M32RBF_SFMT_BC8 },
+  { M32R_INSN_BC24, M32RBF_INSN_BC24, M32RBF_SFMT_BC24 },
+  { M32R_INSN_BEQ, M32RBF_INSN_BEQ, M32RBF_SFMT_BEQ },
+  { M32R_INSN_BEQZ, M32RBF_INSN_BEQZ, M32RBF_SFMT_BEQZ },
+  { M32R_INSN_BGEZ, M32RBF_INSN_BGEZ, M32RBF_SFMT_BEQZ },
+  { M32R_INSN_BGTZ, M32RBF_INSN_BGTZ, M32RBF_SFMT_BEQZ },
+  { M32R_INSN_BLEZ, M32RBF_INSN_BLEZ, M32RBF_SFMT_BEQZ },
+  { M32R_INSN_BLTZ, M32RBF_INSN_BLTZ, M32RBF_SFMT_BEQZ },
+  { M32R_INSN_BNEZ, M32RBF_INSN_BNEZ, M32RBF_SFMT_BEQZ },
+  { M32R_INSN_BL8, M32RBF_INSN_BL8, M32RBF_SFMT_BL8 },
+  { M32R_INSN_BL24, M32RBF_INSN_BL24, M32RBF_SFMT_BL24 },
+  { M32R_INSN_BNC8, M32RBF_INSN_BNC8, M32RBF_SFMT_BC8 },
+  { M32R_INSN_BNC24, M32RBF_INSN_BNC24, M32RBF_SFMT_BC24 },
+  { M32R_INSN_BNE, M32RBF_INSN_BNE, M32RBF_SFMT_BEQ },
+  { M32R_INSN_BRA8, M32RBF_INSN_BRA8, M32RBF_SFMT_BRA8 },
+  { M32R_INSN_BRA24, M32RBF_INSN_BRA24, M32RBF_SFMT_BRA24 },
+  { M32R_INSN_CMP, M32RBF_INSN_CMP, M32RBF_SFMT_CMP },
+  { M32R_INSN_CMPI, M32RBF_INSN_CMPI, M32RBF_SFMT_CMPI },
+  { M32R_INSN_CMPU, M32RBF_INSN_CMPU, M32RBF_SFMT_CMP },
+  { M32R_INSN_CMPUI, M32RBF_INSN_CMPUI, M32RBF_SFMT_CMPI },
+  { M32R_INSN_DIV, M32RBF_INSN_DIV, M32RBF_SFMT_DIV },
+  { M32R_INSN_DIVU, M32RBF_INSN_DIVU, M32RBF_SFMT_DIV },
+  { M32R_INSN_REM, M32RBF_INSN_REM, M32RBF_SFMT_DIV },
+  { M32R_INSN_REMU, M32RBF_INSN_REMU, M32RBF_SFMT_DIV },
+  { M32R_INSN_JL, M32RBF_INSN_JL, M32RBF_SFMT_JL },
+  { M32R_INSN_JMP, M32RBF_INSN_JMP, M32RBF_SFMT_JMP },
+  { M32R_INSN_LD, M32RBF_INSN_LD, M32RBF_SFMT_LD },
+  { M32R_INSN_LD_D, M32RBF_INSN_LD_D, M32RBF_SFMT_LD_D },
+  { M32R_INSN_LDB, M32RBF_INSN_LDB, M32RBF_SFMT_LD },
+  { M32R_INSN_LDB_D, M32RBF_INSN_LDB_D, M32RBF_SFMT_LD_D },
+  { M32R_INSN_LDH, M32RBF_INSN_LDH, M32RBF_SFMT_LD },
+  { M32R_INSN_LDH_D, M32RBF_INSN_LDH_D, M32RBF_SFMT_LD_D },
+  { M32R_INSN_LDUB, M32RBF_INSN_LDUB, M32RBF_SFMT_LD },
+  { M32R_INSN_LDUB_D, M32RBF_INSN_LDUB_D, M32RBF_SFMT_LD_D },
+  { M32R_INSN_LDUH, M32RBF_INSN_LDUH, M32RBF_SFMT_LD },
+  { M32R_INSN_LDUH_D, M32RBF_INSN_LDUH_D, M32RBF_SFMT_LD_D },
+  { M32R_INSN_LD_PLUS, M32RBF_INSN_LD_PLUS, M32RBF_SFMT_LD_PLUS },
+  { M32R_INSN_LD24, M32RBF_INSN_LD24, M32RBF_SFMT_LD24 },
+  { M32R_INSN_LDI8, M32RBF_INSN_LDI8, M32RBF_SFMT_LDI8 },
+  { M32R_INSN_LDI16, M32RBF_INSN_LDI16, M32RBF_SFMT_LDI16 },
+  { M32R_INSN_LOCK, M32RBF_INSN_LOCK, M32RBF_SFMT_LOCK },
+  { M32R_INSN_MACHI, M32RBF_INSN_MACHI, M32RBF_SFMT_MACHI },
+  { M32R_INSN_MACLO, M32RBF_INSN_MACLO, M32RBF_SFMT_MACHI },
+  { M32R_INSN_MACWHI, M32RBF_INSN_MACWHI, M32RBF_SFMT_MACHI },
+  { M32R_INSN_MACWLO, M32RBF_INSN_MACWLO, M32RBF_SFMT_MACHI },
+  { M32R_INSN_MUL, M32RBF_INSN_MUL, M32RBF_SFMT_ADD },
+  { M32R_INSN_MULHI, M32RBF_INSN_MULHI, M32RBF_SFMT_MULHI },
+  { M32R_INSN_MULLO, M32RBF_INSN_MULLO, M32RBF_SFMT_MULHI },
+  { M32R_INSN_MULWHI, M32RBF_INSN_MULWHI, M32RBF_SFMT_MULHI },
+  { M32R_INSN_MULWLO, M32RBF_INSN_MULWLO, M32RBF_SFMT_MULHI },
+  { M32R_INSN_MV, M32RBF_INSN_MV, M32RBF_SFMT_MV },
+  { M32R_INSN_MVFACHI, M32RBF_INSN_MVFACHI, M32RBF_SFMT_MVFACHI },
+  { M32R_INSN_MVFACLO, M32RBF_INSN_MVFACLO, M32RBF_SFMT_MVFACHI },
+  { M32R_INSN_MVFACMI, M32RBF_INSN_MVFACMI, M32RBF_SFMT_MVFACHI },
+  { M32R_INSN_MVFC, M32RBF_INSN_MVFC, M32RBF_SFMT_MVFC },
+  { M32R_INSN_MVTACHI, M32RBF_INSN_MVTACHI, M32RBF_SFMT_MVTACHI },
+  { M32R_INSN_MVTACLO, M32RBF_INSN_MVTACLO, M32RBF_SFMT_MVTACHI },
+  { M32R_INSN_MVTC, M32RBF_INSN_MVTC, M32RBF_SFMT_MVTC },
+  { M32R_INSN_NEG, M32RBF_INSN_NEG, M32RBF_SFMT_MV },
+  { M32R_INSN_NOP, M32RBF_INSN_NOP, M32RBF_SFMT_NOP },
+  { M32R_INSN_NOT, M32RBF_INSN_NOT, M32RBF_SFMT_MV },
+  { M32R_INSN_RAC, M32RBF_INSN_RAC, M32RBF_SFMT_RAC },
+  { M32R_INSN_RACH, M32RBF_INSN_RACH, M32RBF_SFMT_RAC },
+  { M32R_INSN_RTE, M32RBF_INSN_RTE, M32RBF_SFMT_RTE },
+  { M32R_INSN_SETH, M32RBF_INSN_SETH, M32RBF_SFMT_SETH },
+  { M32R_INSN_SLL, M32RBF_INSN_SLL, M32RBF_SFMT_ADD },
+  { M32R_INSN_SLL3, M32RBF_INSN_SLL3, M32RBF_SFMT_SLL3 },
+  { M32R_INSN_SLLI, M32RBF_INSN_SLLI, M32RBF_SFMT_SLLI },
+  { M32R_INSN_SRA, M32RBF_INSN_SRA, M32RBF_SFMT_ADD },
+  { M32R_INSN_SRA3, M32RBF_INSN_SRA3, M32RBF_SFMT_SLL3 },
+  { M32R_INSN_SRAI, M32RBF_INSN_SRAI, M32RBF_SFMT_SLLI },
+  { M32R_INSN_SRL, M32RBF_INSN_SRL, M32RBF_SFMT_ADD },
+  { M32R_INSN_SRL3, M32RBF_INSN_SRL3, M32RBF_SFMT_SLL3 },
+  { M32R_INSN_SRLI, M32RBF_INSN_SRLI, M32RBF_SFMT_SLLI },
+  { M32R_INSN_ST, M32RBF_INSN_ST, M32RBF_SFMT_ST },
+  { M32R_INSN_ST_D, M32RBF_INSN_ST_D, M32RBF_SFMT_ST_D },
+  { M32R_INSN_STB, M32RBF_INSN_STB, M32RBF_SFMT_STB },
+  { M32R_INSN_STB_D, M32RBF_INSN_STB_D, M32RBF_SFMT_STB_D },
+  { M32R_INSN_STH, M32RBF_INSN_STH, M32RBF_SFMT_STH },
+  { M32R_INSN_STH_D, M32RBF_INSN_STH_D, M32RBF_SFMT_STH_D },
+  { M32R_INSN_ST_PLUS, M32RBF_INSN_ST_PLUS, M32RBF_SFMT_ST_PLUS },
+  { M32R_INSN_ST_MINUS, M32RBF_INSN_ST_MINUS, M32RBF_SFMT_ST_PLUS },
+  { M32R_INSN_SUB, M32RBF_INSN_SUB, M32RBF_SFMT_ADD },
+  { M32R_INSN_SUBV, M32RBF_INSN_SUBV, M32RBF_SFMT_ADDV },
+  { M32R_INSN_SUBX, M32RBF_INSN_SUBX, M32RBF_SFMT_ADDX },
+  { M32R_INSN_TRAP, M32RBF_INSN_TRAP, M32RBF_SFMT_TRAP },
+  { M32R_INSN_UNLOCK, M32RBF_INSN_UNLOCK, M32RBF_SFMT_UNLOCK },
+};
+
+static const struct insn_sem m32rbf_insn_sem_invalid = {
+  VIRTUAL_INSN_X_INVALID, M32RBF_INSN_X_INVALID, M32RBF_SFMT_EMPTY
+};
+
+/* Initialize an IDESC from the compile-time computable parts.  */
+
+static INLINE void
+init_idesc (SIM_CPU *cpu, IDESC *id, const struct insn_sem *t)
+{
+  const CGEN_INSN *insn_table = CGEN_CPU_INSN_TABLE (CPU_CPU_DESC (cpu))->init_entries;
+
+  id->num = t->index;
+  id->sfmt = t->sfmt;
+  if ((int) t->type <= 0)
+    id->idata = & cgen_virtual_insn_table[- (int) t->type];
+  else
+    id->idata = & insn_table[t->type];
+  id->attrs = CGEN_INSN_ATTRS (id->idata);
+  /* Oh my god, a magic number.  */
+  id->length = CGEN_INSN_BITSIZE (id->idata) / 8;
+
+#if WITH_PROFILE_MODEL_P
+  id->timing = & MODEL_TIMING (CPU_MODEL (cpu)) [t->index];
   {
-#ifdef __GNUC__
-    static void *labels_0[256] = {
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && case_0_28, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && case_0_87, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && case_0_95, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && case_0_112, && case_0_113, && case_0_114, && case_0_115, 
-      && case_0_116, && case_0_117, && case_0_118, && case_0_119, 
-      && case_0_120, && case_0_121, && case_0_122, && case_0_123, 
-      && case_0_124, && case_0_125, && case_0_126, && case_0_127, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && default_0, && default_0, && default_0, && default_0, 
-      && case_0_240, && case_0_241, && case_0_242, && case_0_243, 
-      && case_0_244, && case_0_245, && case_0_246, && case_0_247, 
-      && case_0_248, && case_0_249, && case_0_250, && case_0_251, 
-      && case_0_252, && case_0_253, && case_0_254, && case_0_255, 
-    };
-#endif
-    static DECODE *insns[256] = {
-      &decode_subv, &decode_subx, &decode_sub, &decode_neg, 
-      &decode_cmp, &decode_cmpu, &decode_illegal, &decode_illegal, 
-      &decode_addv, &decode_addx, &decode_add, &decode_not, 
-      &decode_and, &decode_xor, &decode_or, &decode_illegal, 
-      &decode_srl, &decode_illegal, &decode_sra, &decode_illegal, 
-      &decode_sll, &decode_illegal, &decode_mul, &decode_illegal, 
-      &decode_mv, &decode_mvfc, &decode_mvtc, &decode_illegal, 
-      0, &decode_rte, &decode_illegal, &decode_trap, 
-      &decode_stb, &decode_illegal, &decode_sth, &decode_illegal, 
-      &decode_st, &decode_unlock, &decode_st_plus, &decode_st_minus, 
-      &decode_ldb, &decode_ldub, &decode_ldh, &decode_lduh, 
-      &decode_ld, &decode_lock, &decode_ld_plus, &decode_illegal, 
-      &decode_mulhi, &decode_mullo, &decode_mulwhi, &decode_mulwlo, 
-      &decode_machi, &decode_maclo, &decode_macwhi, &decode_macwlo, 
-      &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-      &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-      &decode_addi, &decode_addi, &decode_addi, &decode_addi, 
-      &decode_addi, &decode_addi, &decode_addi, &decode_addi, 
-      &decode_addi, &decode_addi, &decode_addi, &decode_addi, 
-      &decode_addi, &decode_addi, &decode_addi, &decode_addi, 
-      &decode_srli, &decode_srli, &decode_srai, &decode_srai, 
-      &decode_slli, &decode_slli, &decode_illegal, 0, 
-      &decode_rach, &decode_rac, &decode_illegal, &decode_illegal, 
-      &decode_illegal, &decode_illegal, &decode_illegal, 0, 
-      &decode_ldi8, &decode_ldi8, &decode_ldi8, &decode_ldi8, 
-      &decode_ldi8, &decode_ldi8, &decode_ldi8, &decode_ldi8, 
-      &decode_ldi8, &decode_ldi8, &decode_ldi8, &decode_ldi8, 
-      &decode_ldi8, &decode_ldi8, &decode_ldi8, &decode_ldi8, 
-      0, 0, 0, 0, 
-      0, 0, 0, 0, 
-      0, 0, 0, 0, 
-      0, 0, 0, 0, 
-      &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-      &decode_cmpi, &decode_cmpui, &decode_illegal, &decode_illegal, 
-      &decode_addv3, &decode_illegal, &decode_add3, &decode_illegal, 
-      &decode_and3, &decode_xor3, &decode_or3, &decode_illegal, 
-      &decode_div, &decode_divu, &decode_rem, &decode_remu, 
-      &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-      &decode_srl3, &decode_illegal, &decode_sra3, &decode_illegal, 
-      &decode_sll3, &decode_illegal, &decode_illegal, &decode_ldi16, 
-      &decode_stb_d, &decode_illegal, &decode_sth_d, &decode_illegal, 
-      &decode_st_d, &decode_illegal, &decode_illegal, &decode_illegal, 
-      &decode_ldb_d, &decode_ldub_d, &decode_ldh_d, &decode_lduh_d, 
-      &decode_ld_d, &decode_illegal, &decode_illegal, &decode_illegal, 
-      &decode_beq, &decode_bne, &decode_illegal, &decode_illegal, 
-      &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-      &decode_beqz, &decode_bnez, &decode_bltz, &decode_bgez, 
-      &decode_blez, &decode_bgtz, &decode_illegal, &decode_illegal, 
-      &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-      &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-      &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-      &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-      &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-      &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-      &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-      &decode_seth, &decode_illegal, &decode_illegal, &decode_illegal, 
-      &decode_ld24, &decode_ld24, &decode_ld24, &decode_ld24, 
-      &decode_ld24, &decode_ld24, &decode_ld24, &decode_ld24, 
-      &decode_ld24, &decode_ld24, &decode_ld24, &decode_ld24, 
-      &decode_ld24, &decode_ld24, &decode_ld24, &decode_ld24, 
-      0, 0, 0, 0, 
-      0, 0, 0, 0, 
-      0, 0, 0, 0, 
-      0, 0, 0, 0, 
-    };
-    unsigned int val = (((insn >> 8) & (15 << 4)) | ((insn >> 4) & (15 << 0)));
-    DECODE_SWITCH (0, val)
-      {
-      CASE (0, 28) :
-        {
-          static DECODE *insns[16] = {
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-            &decode_illegal, &decode_illegal, &decode_jl, &decode_jmp, 
-          };
-          unsigned int val = (((insn >> 8) & (15 << 0)));
-          return insns[val];
-        }
-      CASE (0, 87) :
-        {
-          static DECODE *insns[16] = {
-            &decode_mvtachi, &decode_mvtaclo, &decode_illegal, &decode_illegal, 
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-          };
-          unsigned int val = (((insn >> 0) & (15 << 0)));
-          return insns[val];
-        }
-      CASE (0, 95) :
-        {
-          static DECODE *insns[16] = {
-            &decode_mvfachi, &decode_mvfaclo, &decode_mvfacmi, &decode_illegal, 
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-          };
-          unsigned int val = (((insn >> 0) & (15 << 0)));
-          return insns[val];
-        }
-      CASE (0, 112) :
-        {
-          static DECODE *insns[16] = {
-            &decode_nop, &decode_illegal, &decode_illegal, &decode_illegal, 
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-            &decode_bc8, &decode_bnc8, &decode_bl8, &decode_bra8, 
-          };
-          unsigned int val = (((insn >> 8) & (15 << 0)));
-          return insns[val];
-        }
-      CASE (0, 113) : /* fall through */
-      CASE (0, 114) : /* fall through */
-      CASE (0, 115) : /* fall through */
-      CASE (0, 116) : /* fall through */
-      CASE (0, 117) : /* fall through */
-      CASE (0, 118) : /* fall through */
-      CASE (0, 119) : /* fall through */
-      CASE (0, 120) : /* fall through */
-      CASE (0, 121) : /* fall through */
-      CASE (0, 122) : /* fall through */
-      CASE (0, 123) : /* fall through */
-      CASE (0, 124) : /* fall through */
-      CASE (0, 125) : /* fall through */
-      CASE (0, 126) : /* fall through */
-      CASE (0, 127) :
-        {
-          static DECODE *insns[16] = {
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-            &decode_bc8, &decode_bnc8, &decode_bl8, &decode_bra8, 
-          };
-          unsigned int val = (((insn >> 8) & (15 << 0)));
-          return insns[val];
-        }
-      CASE (0, 240) : /* fall through */
-      CASE (0, 241) : /* fall through */
-      CASE (0, 242) : /* fall through */
-      CASE (0, 243) : /* fall through */
-      CASE (0, 244) : /* fall through */
-      CASE (0, 245) : /* fall through */
-      CASE (0, 246) : /* fall through */
-      CASE (0, 247) : /* fall through */
-      CASE (0, 248) : /* fall through */
-      CASE (0, 249) : /* fall through */
-      CASE (0, 250) : /* fall through */
-      CASE (0, 251) : /* fall through */
-      CASE (0, 252) : /* fall through */
-      CASE (0, 253) : /* fall through */
-      CASE (0, 254) : /* fall through */
-      CASE (0, 255) :
-        {
-          static DECODE *insns[16] = {
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-            &decode_illegal, &decode_illegal, &decode_illegal, &decode_illegal, 
-            &decode_bc24, &decode_bnc24, &decode_bl24, &decode_bra24, 
-          };
-          unsigned int val = (((insn >> 8) & (15 << 0)));
-          return insns[val];
-        }
-      DEFAULT (0) : return insns[val];
-      }
-    ENDSWITCH (0)
+    SIM_DESC sd = CPU_STATE (cpu);
+    SIM_ASSERT (t->index == id->timing->num);
   }
+#endif
+
+  /* Semantic pointers are initialized elsewhere.  */
+}
+
+/* Initialize the instruction descriptor table.  */
+
+void
+m32rbf_init_idesc_table (SIM_CPU *cpu)
+{
+  IDESC *id,*tabend;
+  const struct insn_sem *t,*tend;
+  int tabsize = M32RBF_INSN_MAX;
+  IDESC *table = m32rbf_insn_data;
+
+  memset (table, 0, tabsize * sizeof (IDESC));
+
+  /* First set all entries to the `invalid insn'.  */
+  t = & m32rbf_insn_sem_invalid;
+  for (id = table, tabend = table + tabsize; id < tabend; ++id)
+    init_idesc (cpu, id, t);
+
+  /* Now fill in the values for the chosen cpu.  */
+  for (t = m32rbf_insn_sem, tend = t + sizeof (m32rbf_insn_sem) / sizeof (*t);
+       t != tend; ++t)
+    {
+      init_idesc (cpu, & table[t->index], t);
+    }
+
+  /* Link the IDESC table into the cpu.  */
+  CPU_IDESC (cpu) = table;
+}
+
+/* Given an instruction, return a pointer to its IDESC entry.  */
+
+const IDESC *
+m32rbf_decode (SIM_CPU *current_cpu, IADDR pc,
+              CGEN_INSN_INT base_insn, CGEN_INSN_INT entire_insn,
+              ARGBUF *abuf)
+{
+  /* Result of decoder.  */
+  M32RBF_INSN_TYPE itype;
+
+  {
+    CGEN_INSN_INT insn = base_insn;
+
+    {
+      unsigned int val = (((insn >> 8) & (15 << 4)) | ((insn >> 4) & (15 << 0)));
+      switch (val)
+      {
+      case 0 : itype = M32RBF_INSN_SUBV; goto extract_sfmt_addv;
+      case 1 : itype = M32RBF_INSN_SUBX; goto extract_sfmt_addx;
+      case 2 : itype = M32RBF_INSN_SUB; goto extract_sfmt_add;
+      case 3 : itype = M32RBF_INSN_NEG; goto extract_sfmt_mv;
+      case 4 : itype = M32RBF_INSN_CMP; goto extract_sfmt_cmp;
+      case 5 : itype = M32RBF_INSN_CMPU; goto extract_sfmt_cmp;
+      case 8 : itype = M32RBF_INSN_ADDV; goto extract_sfmt_addv;
+      case 9 : itype = M32RBF_INSN_ADDX; goto extract_sfmt_addx;
+      case 10 : itype = M32RBF_INSN_ADD; goto extract_sfmt_add;
+      case 11 : itype = M32RBF_INSN_NOT; goto extract_sfmt_mv;
+      case 12 : itype = M32RBF_INSN_AND; goto extract_sfmt_add;
+      case 13 : itype = M32RBF_INSN_XOR; goto extract_sfmt_add;
+      case 14 : itype = M32RBF_INSN_OR; goto extract_sfmt_add;
+      case 16 : itype = M32RBF_INSN_SRL; goto extract_sfmt_add;
+      case 18 : itype = M32RBF_INSN_SRA; goto extract_sfmt_add;
+      case 20 : itype = M32RBF_INSN_SLL; goto extract_sfmt_add;
+      case 22 : itype = M32RBF_INSN_MUL; goto extract_sfmt_add;
+      case 24 : itype = M32RBF_INSN_MV; goto extract_sfmt_mv;
+      case 25 : itype = M32RBF_INSN_MVFC; goto extract_sfmt_mvfc;
+      case 26 : itype = M32RBF_INSN_MVTC; goto extract_sfmt_mvtc;
+      case 28 :
+        {
+          unsigned int val = (((insn >> 8) & (15 << 0)));
+          switch (val)
+          {
+          case 14 : itype = M32RBF_INSN_JL; goto extract_sfmt_jl;
+          case 15 : itype = M32RBF_INSN_JMP; goto extract_sfmt_jmp;
+          default : itype = M32RBF_INSN_X_INVALID; goto extract_sfmt_empty;
+          }
+        }
+      case 29 : itype = M32RBF_INSN_RTE; goto extract_sfmt_rte;
+      case 31 : itype = M32RBF_INSN_TRAP; goto extract_sfmt_trap;
+      case 32 : itype = M32RBF_INSN_STB; goto extract_sfmt_stb;
+      case 34 : itype = M32RBF_INSN_STH; goto extract_sfmt_sth;
+      case 36 : itype = M32RBF_INSN_ST; goto extract_sfmt_st;
+      case 37 : itype = M32RBF_INSN_UNLOCK; goto extract_sfmt_unlock;
+      case 38 : itype = M32RBF_INSN_ST_PLUS; goto extract_sfmt_st_plus;
+      case 39 : itype = M32RBF_INSN_ST_MINUS; goto extract_sfmt_st_plus;
+      case 40 : itype = M32RBF_INSN_LDB; goto extract_sfmt_ld;
+      case 41 : itype = M32RBF_INSN_LDUB; goto extract_sfmt_ld;
+      case 42 : itype = M32RBF_INSN_LDH; goto extract_sfmt_ld;
+      case 43 : itype = M32RBF_INSN_LDUH; goto extract_sfmt_ld;
+      case 44 : itype = M32RBF_INSN_LD; goto extract_sfmt_ld;
+      case 45 : itype = M32RBF_INSN_LOCK; goto extract_sfmt_lock;
+      case 46 : itype = M32RBF_INSN_LD_PLUS; goto extract_sfmt_ld_plus;
+      case 48 : itype = M32RBF_INSN_MULHI; goto extract_sfmt_mulhi;
+      case 49 : itype = M32RBF_INSN_MULLO; goto extract_sfmt_mulhi;
+      case 50 : itype = M32RBF_INSN_MULWHI; goto extract_sfmt_mulhi;
+      case 51 : itype = M32RBF_INSN_MULWLO; goto extract_sfmt_mulhi;
+      case 52 : itype = M32RBF_INSN_MACHI; goto extract_sfmt_machi;
+      case 53 : itype = M32RBF_INSN_MACLO; goto extract_sfmt_machi;
+      case 54 : itype = M32RBF_INSN_MACWHI; goto extract_sfmt_machi;
+      case 55 : itype = M32RBF_INSN_MACWLO; goto extract_sfmt_machi;
+      case 64 : /* fall through */
+      case 65 : /* fall through */
+      case 66 : /* fall through */
+      case 67 : /* fall through */
+      case 68 : /* fall through */
+      case 69 : /* fall through */
+      case 70 : /* fall through */
+      case 71 : /* fall through */
+      case 72 : /* fall through */
+      case 73 : /* fall through */
+      case 74 : /* fall through */
+      case 75 : /* fall through */
+      case 76 : /* fall through */
+      case 77 : /* fall through */
+      case 78 : /* fall through */
+      case 79 : itype = M32RBF_INSN_ADDI; goto extract_sfmt_addi;
+      case 80 : /* fall through */
+      case 81 : itype = M32RBF_INSN_SRLI; goto extract_sfmt_slli;
+      case 82 : /* fall through */
+      case 83 : itype = M32RBF_INSN_SRAI; goto extract_sfmt_slli;
+      case 84 : /* fall through */
+      case 85 : itype = M32RBF_INSN_SLLI; goto extract_sfmt_slli;
+      case 87 :
+        {
+          unsigned int val = (((insn >> 0) & (15 << 0)));
+          switch (val)
+          {
+          case 0 : itype = M32RBF_INSN_MVTACHI; goto extract_sfmt_mvtachi;
+          case 1 : itype = M32RBF_INSN_MVTACLO; goto extract_sfmt_mvtachi;
+          default : itype = M32RBF_INSN_X_INVALID; goto extract_sfmt_empty;
+          }
+        }
+      case 88 : itype = M32RBF_INSN_RACH; goto extract_sfmt_rac;
+      case 89 : itype = M32RBF_INSN_RAC; goto extract_sfmt_rac;
+      case 95 :
+        {
+          unsigned int val = (((insn >> 0) & (15 << 0)));
+          switch (val)
+          {
+          case 0 : itype = M32RBF_INSN_MVFACHI; goto extract_sfmt_mvfachi;
+          case 1 : itype = M32RBF_INSN_MVFACLO; goto extract_sfmt_mvfachi;
+          case 2 : itype = M32RBF_INSN_MVFACMI; goto extract_sfmt_mvfachi;
+          default : itype = M32RBF_INSN_X_INVALID; goto extract_sfmt_empty;
+          }
+        }
+      case 96 : /* fall through */
+      case 97 : /* fall through */
+      case 98 : /* fall through */
+      case 99 : /* fall through */
+      case 100 : /* fall through */
+      case 101 : /* fall through */
+      case 102 : /* fall through */
+      case 103 : /* fall through */
+      case 104 : /* fall through */
+      case 105 : /* fall through */
+      case 106 : /* fall through */
+      case 107 : /* fall through */
+      case 108 : /* fall through */
+      case 109 : /* fall through */
+      case 110 : /* fall through */
+      case 111 : itype = M32RBF_INSN_LDI8; goto extract_sfmt_ldi8;
+      case 112 :
+        {
+          unsigned int val = (((insn >> 8) & (15 << 0)));
+          switch (val)
+          {
+          case 0 : itype = M32RBF_INSN_NOP; goto extract_sfmt_nop;
+          case 12 : itype = M32RBF_INSN_BC8; goto extract_sfmt_bc8;
+          case 13 : itype = M32RBF_INSN_BNC8; goto extract_sfmt_bc8;
+          case 14 : itype = M32RBF_INSN_BL8; goto extract_sfmt_bl8;
+          case 15 : itype = M32RBF_INSN_BRA8; goto extract_sfmt_bra8;
+          default : itype = M32RBF_INSN_X_INVALID; goto extract_sfmt_empty;
+          }
+        }
+      case 113 : /* fall through */
+      case 114 : /* fall through */
+      case 115 : /* fall through */
+      case 116 : /* fall through */
+      case 117 : /* fall through */
+      case 118 : /* fall through */
+      case 119 : /* fall through */
+      case 120 : /* fall through */
+      case 121 : /* fall through */
+      case 122 : /* fall through */
+      case 123 : /* fall through */
+      case 124 : /* fall through */
+      case 125 : /* fall through */
+      case 126 : /* fall through */
+      case 127 :
+        {
+          unsigned int val = (((insn >> 8) & (15 << 0)));
+          switch (val)
+          {
+          case 12 : itype = M32RBF_INSN_BC8; goto extract_sfmt_bc8;
+          case 13 : itype = M32RBF_INSN_BNC8; goto extract_sfmt_bc8;
+          case 14 : itype = M32RBF_INSN_BL8; goto extract_sfmt_bl8;
+          case 15 : itype = M32RBF_INSN_BRA8; goto extract_sfmt_bra8;
+          default : itype = M32RBF_INSN_X_INVALID; goto extract_sfmt_empty;
+          }
+        }
+      case 132 : itype = M32RBF_INSN_CMPI; goto extract_sfmt_cmpi;
+      case 133 : itype = M32RBF_INSN_CMPUI; goto extract_sfmt_cmpi;
+      case 136 : itype = M32RBF_INSN_ADDV3; goto extract_sfmt_addv3;
+      case 138 : itype = M32RBF_INSN_ADD3; goto extract_sfmt_add3;
+      case 140 : itype = M32RBF_INSN_AND3; goto extract_sfmt_and3;
+      case 141 : itype = M32RBF_INSN_XOR3; goto extract_sfmt_and3;
+      case 142 : itype = M32RBF_INSN_OR3; goto extract_sfmt_or3;
+      case 144 : itype = M32RBF_INSN_DIV; goto extract_sfmt_div;
+      case 145 : itype = M32RBF_INSN_DIVU; goto extract_sfmt_div;
+      case 146 : itype = M32RBF_INSN_REM; goto extract_sfmt_div;
+      case 147 : itype = M32RBF_INSN_REMU; goto extract_sfmt_div;
+      case 152 : itype = M32RBF_INSN_SRL3; goto extract_sfmt_sll3;
+      case 154 : itype = M32RBF_INSN_SRA3; goto extract_sfmt_sll3;
+      case 156 : itype = M32RBF_INSN_SLL3; goto extract_sfmt_sll3;
+      case 159 : itype = M32RBF_INSN_LDI16; goto extract_sfmt_ldi16;
+      case 160 : itype = M32RBF_INSN_STB_D; goto extract_sfmt_stb_d;
+      case 162 : itype = M32RBF_INSN_STH_D; goto extract_sfmt_sth_d;
+      case 164 : itype = M32RBF_INSN_ST_D; goto extract_sfmt_st_d;
+      case 168 : itype = M32RBF_INSN_LDB_D; goto extract_sfmt_ld_d;
+      case 169 : itype = M32RBF_INSN_LDUB_D; goto extract_sfmt_ld_d;
+      case 170 : itype = M32RBF_INSN_LDH_D; goto extract_sfmt_ld_d;
+      case 171 : itype = M32RBF_INSN_LDUH_D; goto extract_sfmt_ld_d;
+      case 172 : itype = M32RBF_INSN_LD_D; goto extract_sfmt_ld_d;
+      case 176 : itype = M32RBF_INSN_BEQ; goto extract_sfmt_beq;
+      case 177 : itype = M32RBF_INSN_BNE; goto extract_sfmt_beq;
+      case 184 : itype = M32RBF_INSN_BEQZ; goto extract_sfmt_beqz;
+      case 185 : itype = M32RBF_INSN_BNEZ; goto extract_sfmt_beqz;
+      case 186 : itype = M32RBF_INSN_BLTZ; goto extract_sfmt_beqz;
+      case 187 : itype = M32RBF_INSN_BGEZ; goto extract_sfmt_beqz;
+      case 188 : itype = M32RBF_INSN_BLEZ; goto extract_sfmt_beqz;
+      case 189 : itype = M32RBF_INSN_BGTZ; goto extract_sfmt_beqz;
+      case 220 : itype = M32RBF_INSN_SETH; goto extract_sfmt_seth;
+      case 224 : /* fall through */
+      case 225 : /* fall through */
+      case 226 : /* fall through */
+      case 227 : /* fall through */
+      case 228 : /* fall through */
+      case 229 : /* fall through */
+      case 230 : /* fall through */
+      case 231 : /* fall through */
+      case 232 : /* fall through */
+      case 233 : /* fall through */
+      case 234 : /* fall through */
+      case 235 : /* fall through */
+      case 236 : /* fall through */
+      case 237 : /* fall through */
+      case 238 : /* fall through */
+      case 239 : itype = M32RBF_INSN_LD24; goto extract_sfmt_ld24;
+      case 240 : /* fall through */
+      case 241 : /* fall through */
+      case 242 : /* fall through */
+      case 243 : /* fall through */
+      case 244 : /* fall through */
+      case 245 : /* fall through */
+      case 246 : /* fall through */
+      case 247 : /* fall through */
+      case 248 : /* fall through */
+      case 249 : /* fall through */
+      case 250 : /* fall through */
+      case 251 : /* fall through */
+      case 252 : /* fall through */
+      case 253 : /* fall through */
+      case 254 : /* fall through */
+      case 255 :
+        {
+          unsigned int val = (((insn >> 8) & (15 << 0)));
+          switch (val)
+          {
+          case 12 : itype = M32RBF_INSN_BC24; goto extract_sfmt_bc24;
+          case 13 : itype = M32RBF_INSN_BNC24; goto extract_sfmt_bc24;
+          case 14 : itype = M32RBF_INSN_BL24; goto extract_sfmt_bl24;
+          case 15 : itype = M32RBF_INSN_BRA24; goto extract_sfmt_bra24;
+          default : itype = M32RBF_INSN_X_INVALID; goto extract_sfmt_empty;
+          }
+        }
+      default : itype = M32RBF_INSN_X_INVALID; goto extract_sfmt_empty;
+      }
+    }
+  }
+
+  /* The instruction has been decoded, now extract the fields.  */
+
+ extract_sfmt_empty:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.fmt_empty.f
+
+
+  /* Record the fields for the semantic handler.  */
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_empty", (char *) 0));
+
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_add:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_add.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_add", "dr 0x%x", 'x', f_r1, "sr 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_dr) = f_r1;
+      FLD (in_sr) = f_r2;
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_add3:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_add3.f
+    UINT f_r1;
+    UINT f_r2;
+    INT f_simm16;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 32, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 32, 12, 4);
+    f_simm16 = EXTRACT_MSB0_INT (insn, 32, 16, 16);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_simm16) = f_simm16;
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_add3", "f_simm16 0x%x", 'x', f_simm16, "sr 0x%x", 'x', f_r2, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_sr) = f_r2;
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_and3:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_and3.f
+    UINT f_r1;
+    UINT f_r2;
+    UINT f_uimm16;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 32, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 32, 12, 4);
+    f_uimm16 = EXTRACT_MSB0_UINT (insn, 32, 16, 16);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_uimm16) = f_uimm16;
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_and3", "f_uimm16 0x%x", 'x', f_uimm16, "sr 0x%x", 'x', f_r2, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_sr) = f_r2;
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_or3:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_and3.f
+    UINT f_r1;
+    UINT f_r2;
+    UINT f_uimm16;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 32, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 32, 12, 4);
+    f_uimm16 = EXTRACT_MSB0_UINT (insn, 32, 16, 16);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_uimm16) = f_uimm16;
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_or3", "f_uimm16 0x%x", 'x', f_uimm16, "sr 0x%x", 'x', f_r2, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_sr) = f_r2;
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_addi:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_addi.f
+    UINT f_r1;
+    INT f_simm8;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_simm8 = EXTRACT_MSB0_INT (insn, 16, 8, 8);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_simm8) = f_simm8;
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addi", "f_simm8 0x%x", 'x', f_simm8, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_dr) = f_r1;
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_addv:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_add.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addv", "dr 0x%x", 'x', f_r1, "sr 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_dr) = f_r1;
+      FLD (in_sr) = f_r2;
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_addv3:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_add3.f
+    UINT f_r1;
+    UINT f_r2;
+    INT f_simm16;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 32, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 32, 12, 4);
+    f_simm16 = EXTRACT_MSB0_INT (insn, 32, 16, 16);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_simm16) = f_simm16;
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addv3", "f_simm16 0x%x", 'x', f_simm16, "sr 0x%x", 'x', f_r2, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_sr) = f_r2;
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_addx:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_add.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addx", "dr 0x%x", 'x', f_r1, "sr 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_dr) = f_r1;
+      FLD (in_sr) = f_r2;
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_bc8:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_bl8.f
+    SI f_disp8;
+
+    f_disp8 = ((((EXTRACT_MSB0_INT (insn, 16, 8, 8)) << (2))) + (((pc) & (-4))));
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_disp8) = f_disp8;
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bc8", "disp8 0x%x", 'x', f_disp8, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_bc24:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_bl24.f
+    SI f_disp24;
+
+    f_disp24 = ((((EXTRACT_MSB0_INT (insn, 32, 8, 24)) << (2))) + (pc));
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_disp24) = f_disp24;
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bc24", "disp24 0x%x", 'x', f_disp24, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_beq:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_beq.f
+    UINT f_r1;
+    UINT f_r2;
+    SI f_disp16;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 32, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 32, 12, 4);
+    f_disp16 = ((((EXTRACT_MSB0_INT (insn, 32, 16, 16)) << (2))) + (pc));
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_disp16) = f_disp16;
+  FLD (i_src1) = & CPU (h_gr)[f_r1];
+  FLD (i_src2) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_beq", "disp16 0x%x", 'x', f_disp16, "src1 0x%x", 'x', f_r1, "src2 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_src1) = f_r1;
+      FLD (in_src2) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_beqz:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_beq.f
+    UINT f_r2;
+    SI f_disp16;
+
+    f_r2 = EXTRACT_MSB0_UINT (insn, 32, 12, 4);
+    f_disp16 = ((((EXTRACT_MSB0_INT (insn, 32, 16, 16)) << (2))) + (pc));
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_disp16) = f_disp16;
+  FLD (i_src2) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_beqz", "disp16 0x%x", 'x', f_disp16, "src2 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_src2) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_bl8:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_bl8.f
+    SI f_disp8;
+
+    f_disp8 = ((((EXTRACT_MSB0_INT (insn, 16, 8, 8)) << (2))) + (((pc) & (-4))));
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_disp8) = f_disp8;
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bl8", "disp8 0x%x", 'x', f_disp8, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (out_h_gr_14) = 14;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_bl24:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_bl24.f
+    SI f_disp24;
+
+    f_disp24 = ((((EXTRACT_MSB0_INT (insn, 32, 8, 24)) << (2))) + (pc));
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_disp24) = f_disp24;
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bl24", "disp24 0x%x", 'x', f_disp24, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (out_h_gr_14) = 14;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_bra8:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_bl8.f
+    SI f_disp8;
+
+    f_disp8 = ((((EXTRACT_MSB0_INT (insn, 16, 8, 8)) << (2))) + (((pc) & (-4))));
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_disp8) = f_disp8;
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bra8", "disp8 0x%x", 'x', f_disp8, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_bra24:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_bl24.f
+    SI f_disp24;
+
+    f_disp24 = ((((EXTRACT_MSB0_INT (insn, 32, 8, 24)) << (2))) + (pc));
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_disp24) = f_disp24;
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bra24", "disp24 0x%x", 'x', f_disp24, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_cmp:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_st_plus.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_src1) = & CPU (h_gr)[f_r1];
+  FLD (i_src2) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_cmp", "src1 0x%x", 'x', f_r1, "src2 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_src1) = f_r1;
+      FLD (in_src2) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_cmpi:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_st_d.f
+    UINT f_r2;
+    INT f_simm16;
+
+    f_r2 = EXTRACT_MSB0_UINT (insn, 32, 12, 4);
+    f_simm16 = EXTRACT_MSB0_INT (insn, 32, 16, 16);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_simm16) = f_simm16;
+  FLD (i_src2) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_cmpi", "f_simm16 0x%x", 'x', f_simm16, "src2 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_src2) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_div:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_add.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 32, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 32, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_div", "dr 0x%x", 'x', f_r1, "sr 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_dr) = f_r1;
+      FLD (in_sr) = f_r2;
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_jl:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_jl.f
+    UINT f_r2;
+
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_jl", "sr 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_sr) = f_r2;
+      FLD (out_h_gr_14) = 14;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_jmp:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_mvtc.f
+    UINT f_r2;
+
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_jmp", "sr 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_sr) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_ld:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_ld_plus.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ld", "sr 0x%x", 'x', f_r2, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_sr) = f_r2;
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_ld_d:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_add3.f
+    UINT f_r1;
+    UINT f_r2;
+    INT f_simm16;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 32, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 32, 12, 4);
+    f_simm16 = EXTRACT_MSB0_INT (insn, 32, 16, 16);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_simm16) = f_simm16;
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ld_d", "f_simm16 0x%x", 'x', f_simm16, "sr 0x%x", 'x', f_r2, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_sr) = f_r2;
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_ld_plus:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_ld_plus.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ld_plus", "sr 0x%x", 'x', f_r2, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_sr) = f_r2;
+      FLD (out_dr) = f_r1;
+      FLD (out_sr) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_ld24:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_ld24.f
+    UINT f_r1;
+    UINT f_uimm24;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 32, 4, 4);
+    f_uimm24 = EXTRACT_MSB0_UINT (insn, 32, 8, 24);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_uimm24) = f_uimm24;
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ld24", "uimm24 0x%x", 'x', f_uimm24, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_ldi8:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_addi.f
+    UINT f_r1;
+    INT f_simm8;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_simm8 = EXTRACT_MSB0_INT (insn, 16, 8, 8);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_simm8) = f_simm8;
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldi8", "f_simm8 0x%x", 'x', f_simm8, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_ldi16:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_add3.f
+    UINT f_r1;
+    INT f_simm16;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 32, 4, 4);
+    f_simm16 = EXTRACT_MSB0_INT (insn, 32, 16, 16);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_simm16) = f_simm16;
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldi16", "f_simm16 0x%x", 'x', f_simm16, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_lock:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_ld_plus.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lock", "sr 0x%x", 'x', f_r2, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_sr) = f_r2;
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_machi:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_st_plus.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_src1) = & CPU (h_gr)[f_r1];
+  FLD (i_src2) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_machi", "src1 0x%x", 'x', f_r1, "src2 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_src1) = f_r1;
+      FLD (in_src2) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_mulhi:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_st_plus.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_src1) = & CPU (h_gr)[f_r1];
+  FLD (i_src2) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mulhi", "src1 0x%x", 'x', f_r1, "src2 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_src1) = f_r1;
+      FLD (in_src2) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_mv:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_ld_plus.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mv", "sr 0x%x", 'x', f_r2, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_sr) = f_r2;
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_mvfachi:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_seth.f
+    UINT f_r1;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mvfachi", "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_mvfc:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_mvfc.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_r2) = f_r2;
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mvfc", "f_r2 0x%x", 'x', f_r2, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_mvtachi:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_st_plus.f
+    UINT f_r1;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_src1) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mvtachi", "src1 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_src1) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_mvtc:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_mvtc.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_r1) = f_r1;
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mvtc", "f_r1 0x%x", 'x', f_r1, "sr 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_sr) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_nop:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.fmt_empty.f
+
+
+  /* Record the fields for the semantic handler.  */
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_nop", (char *) 0));
+
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_rac:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.fmt_empty.f
+
+
+  /* Record the fields for the semantic handler.  */
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_rac", (char *) 0));
+
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_rte:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.fmt_empty.f
+
+
+  /* Record the fields for the semantic handler.  */
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_rte", (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_seth:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_seth.f
+    UINT f_r1;
+    UINT f_hi16;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 32, 4, 4);
+    f_hi16 = EXTRACT_MSB0_UINT (insn, 32, 16, 16);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_hi16) = f_hi16;
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_seth", "f_hi16 0x%x", 'x', f_hi16, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_sll3:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_add3.f
+    UINT f_r1;
+    UINT f_r2;
+    INT f_simm16;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 32, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 32, 12, 4);
+    f_simm16 = EXTRACT_MSB0_INT (insn, 32, 16, 16);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_simm16) = f_simm16;
+  FLD (i_sr) = & CPU (h_gr)[f_r2];
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sll3", "f_simm16 0x%x", 'x', f_simm16, "sr 0x%x", 'x', f_r2, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_sr) = f_r2;
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_slli:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_slli.f
+    UINT f_r1;
+    UINT f_uimm5;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_uimm5 = EXTRACT_MSB0_UINT (insn, 16, 11, 5);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_uimm5) = f_uimm5;
+  FLD (i_dr) = & CPU (h_gr)[f_r1];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_slli", "f_uimm5 0x%x", 'x', f_uimm5, "dr 0x%x", 'x', f_r1, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_dr) = f_r1;
+      FLD (out_dr) = f_r1;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_st:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_st_plus.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_src1) = & CPU (h_gr)[f_r1];
+  FLD (i_src2) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_st", "src1 0x%x", 'x', f_r1, "src2 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_src1) = f_r1;
+      FLD (in_src2) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_st_d:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_st_d.f
+    UINT f_r1;
+    UINT f_r2;
+    INT f_simm16;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 32, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 32, 12, 4);
+    f_simm16 = EXTRACT_MSB0_INT (insn, 32, 16, 16);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_simm16) = f_simm16;
+  FLD (i_src1) = & CPU (h_gr)[f_r1];
+  FLD (i_src2) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_st_d", "f_simm16 0x%x", 'x', f_simm16, "src1 0x%x", 'x', f_r1, "src2 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_src1) = f_r1;
+      FLD (in_src2) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_stb:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_st_plus.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_src1) = & CPU (h_gr)[f_r1];
+  FLD (i_src2) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stb", "src1 0x%x", 'x', f_r1, "src2 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_src1) = f_r1;
+      FLD (in_src2) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_stb_d:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_st_d.f
+    UINT f_r1;
+    UINT f_r2;
+    INT f_simm16;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 32, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 32, 12, 4);
+    f_simm16 = EXTRACT_MSB0_INT (insn, 32, 16, 16);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_simm16) = f_simm16;
+  FLD (i_src1) = & CPU (h_gr)[f_r1];
+  FLD (i_src2) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stb_d", "f_simm16 0x%x", 'x', f_simm16, "src1 0x%x", 'x', f_r1, "src2 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_src1) = f_r1;
+      FLD (in_src2) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_sth:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_st_plus.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_src1) = & CPU (h_gr)[f_r1];
+  FLD (i_src2) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sth", "src1 0x%x", 'x', f_r1, "src2 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_src1) = f_r1;
+      FLD (in_src2) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_sth_d:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_st_d.f
+    UINT f_r1;
+    UINT f_r2;
+    INT f_simm16;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 32, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 32, 12, 4);
+    f_simm16 = EXTRACT_MSB0_INT (insn, 32, 16, 16);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_simm16) = f_simm16;
+  FLD (i_src1) = & CPU (h_gr)[f_r1];
+  FLD (i_src2) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sth_d", "f_simm16 0x%x", 'x', f_simm16, "src1 0x%x", 'x', f_r1, "src2 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_src1) = f_r1;
+      FLD (in_src2) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_st_plus:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_st_plus.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_src1) = & CPU (h_gr)[f_r1];
+  FLD (i_src2) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_st_plus", "src1 0x%x", 'x', f_r1, "src2 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_src1) = f_r1;
+      FLD (in_src2) = f_r2;
+      FLD (out_src2) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_trap:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_trap.f
+    UINT f_uimm4;
+
+    f_uimm4 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_uimm4) = f_uimm4;
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_trap", "f_uimm4 0x%x", 'x', f_uimm4, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_unlock:
+  {
+    const IDESC *idesc = &m32rbf_insn_data[itype];
+    CGEN_INSN_INT insn = entire_insn;
+#define FLD(f) abuf->fields.sfmt_st_plus.f
+    UINT f_r1;
+    UINT f_r2;
+
+    f_r1 = EXTRACT_MSB0_UINT (insn, 16, 4, 4);
+    f_r2 = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (i_src1) = & CPU (h_gr)[f_r1];
+  FLD (i_src2) = & CPU (h_gr)[f_r2];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_unlock", "src1 0x%x", 'x', f_r1, "src2 0x%x", 'x', f_r2, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_src1) = f_r1;
+      FLD (in_src2) = f_r2;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
 }

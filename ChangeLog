@@ -1,15 +1,1159 @@
-Tue Apr 14 12:50:02 1998  Jason Molenda  (crash@bugshack.cygnus.com)
+1999-09-23  Brendan Kehoe  <brendan@cygnus.com>
 
-	* ltmain, ltconfig.sh:  Regenerated from current libtool sources.
+	* Makefile.in (configure-target-libiberty): Depend on
+	configure-target-newlib, in order to accurately assess the presence
+	or absence of particular headers for the target.
+
+1999-09-22  DJ Delorie  <dj@cygnus.com>
+
+	* configure.in (host_tools): add less
+
+Tue Sep  7 23:33:57 1999  Linas Vepstas  <linas@linas.org>
+
+	* config.guess: Add OS/390 match pattern.
+	* config.sub: Add mvs, openedition targets.
+	* configure.in (i370-ibm-opened*): New.
+
+1999-08-25  Nick Clifton  <nickc@cygnus.com>
+
+	* configure.in: Do not configure or build ld for AIX
+	platforms.  ld is known to be broken on these platforms.
+
+1999-08-06  Michael Meissner  <meissner@cygnus.com>
+
+	* configure.in (*-*-cygwin*): If the build system and the host are
+	both cygwin, build texinfo.
+
+Wed Aug  4 02:07:14 1999  Jeffrey A Law  (law@cygnus.com)
+
+	* config.sub (vxworks case): Use os=-vxworks, not os=vxworks.
+
+1999-07-11  Ian Lance Taylor  <ian@zembu.com>
+
+	* configure: Add -W -Wall to the default CFLAGS when compiling with
+	gcc.
+
+Thu Jul  8 12:32:23 1999  John David Anglin <dave@hiauly1.hia.nrc.ca>
+
+	* configure.in: Build ld, binutils & gas for hppa*-*-linux-gnu*.
+
+1999-06-30  Mark Mitchell  <mark@codesourcery.com>
+
+	* configure.in: Build ld on IRIX6.
+
+Wed Aug 25 01:12:25 1999  Rainer Orth  <ro@TechFak.Uni-Bielefeld.DE>
+
+	* config-ml.in: Pass compiler flag corresponding to multidirs to
+	subdir configures.
+
+1999-07-16  Drew Moseley  <dmoseley@cygnus.com>
+
+	* configure.in (noconfigdirs): Removed autoconf, automake
+	and gprof from the noconfigdirs list for cygwin hosts.
+
+Tue Jun 22 23:45:18 1999  Tom Tromey  <tromey@cygnus.com>
+
+	* configure.in (target_libs): Added target-zlib.
+	* Makefile.in (ALL_TARGET_MODULES): Added zlib.
+	(CONFIGURE_TARGET_MODULES): Likewise.
+	(CHECK_TARGET_MODULES): Likewise.
+	(INSTALL_TARGET_MODULES): Likewise.
+	(CLEAN_TARGET_MODULES): Likewise.
+	(configure-target-zlib): New target.
+	(all-target-zlib): Likewise.
+	(all-target-libjava): Depend on all-target-zlib.
+	(configure-target-libjava): Depend on configure-target-zlib.
+
+	* Makefile.in (configure-target-libjava): Depend on
+	configure-target-newlib.
+	(configure-target-boehm-gc): New target.
+	(configure-target-qthreads): New target.
+
+        * configure.in (host_tools): Added zip.
+        * Makefile.in (all-target-libjava): Depend on all-zip.
+        (all-zip): New target.
+        (ALL_MODULES): Added all-zip.
+        (NATIVE_CHECK_MODULES): Added check-zip.
+        (INSTALL_MODULES): Added install-zip.
+        (CLEAN_MODULES): Added clean-zip.
+
+        * configure.in (target_libs): Added target-qthreads.
+        * Makefile.in (ALL_TARGET_MODULES): Added qthreads.
+        (CONFIGURE_TARGET_MODULES): Likewise.
+        (CHECK_TARGET_MODULES): Likewise.
+        (INSTALL_TARGET_MODULES): Likewise.
+        (CLEAN_TARGET_MODULES): Likewise.
+        (all-target-qthreads): New target.
+        (configure-target-libjava): Depend on configure-target-qthreads.
+        (all-target-libjava): Depend on all-target-qthreads.
+
+	* Makefile.in (ALL_TARGET_MODULES): Added libjava, boehm-gc.
+	(CONFIGURE_TARGET_MODULES): Likewise.
+	(CHECK_TARGET_MODULES): Likewise.
+	(INSTALL_TARGET_MODULES): Likewise.
+	(CLEAN_TARGET_MODULES): Likewise.
+	(all-target-libjava): New target.
+	(all-target-boehm-gc): Likewise.
+	* configure.in (target_libs): Added libjava, boehm-gc.
+
+1999-06-21  Angela Marie Thomas <angela@cygnus.com>
+
+	* configure (tooldir): Set OBJCOPY and OBJDUMP appropriately for
+	Canadian cross.
+
+1999-06-11  Drew Moseley  <dmoseley@cygnus.com>
+
+	* configure (tooldir): Force configure to set OBJCOPY and OBJDUMP
+	appropriately.
+
+	* Makefile.in (configure-target-cygmon): Make
+	configure-target-cygmon depend on configure-target-bsp.
+
+1999-06-04  Nick Clifton  <nickc@cygnus.com>
+
+	* config.sub: Add mcore target.
+
+Tue Jun  8 20:52:22 1999  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* config-ml.in: Create multi-lib directory path by parts.  Do not
+ 	assume parent directories have been created.
+
+Tue Jun 01 16:57:46 1999  Jeff Johnston <jjohnstn@cygnus.com>
+
+        * configure.in: Enable target-libgloss for sh targets.
+
+Sun May 30 16:03:16 1999  Cort Dougan  <cort@cs.nmt.edu>
+
+	* config.guess (ppc-*-linux-gnu): Also use ld emul elf32ppclinux.
+
+Tue May 25 15:18:57 1999  Christopher Faylor <cgf@cygnus.com>
+
+	* config.sub: Replace missing parenthesis.
+
+1999-05-24  Nick Clifton  <nickc@cygnus.com>
+
+	* config.sub: Tidied up case statements.
+
+Tue May 25 11:34:43 1999  Andrew Cagney  <cagney@amy.cygnus.com>
+
+	* config.sub (maybe_os): Missing paren in case statement.
+
+Tue May 25 11:20:46 1999  H.J. Lu  (hjl@gnu.org)
+
+	* config.guess (dummy): Changed to $dummy.
+
+
+1999-05-24  Nick Clifton  <nickc@cygnus.com>
+
+	* config.sub: Updated to match latest EGCS version.
+
+1999-05-22  Ben Elliston  <bje@cygnus.com>
+
+	* config.guess: Handle NEC UX/4800. Contributed by Jiro Takabatake
+	<jiro@din.or.jp>.
+
+	* config.guess: Merge with FSF version. Future changes will be
+	more accurately recorded in this ChangeLog.
+	* config.sub: Likewise.
+
+1999-05-18  Ulrich Drepper  <drepper@cygnus.com>
+
+	* configure.in: There is currently no support for gdb on the
+	Netwinder platform.
+
+1999-05-13  Jim Wilson  <wilson@cygnus.com>
+
+	* config.guess (i?86:*:5:7): Change the "7" to "7*" to accept 7.0.1.
+
+1999-05-05  Tom Tromey  <tromey@cygnus.com>
+
+	* ltmain.sh: Added missing `$'.
+
+	* configure.in (target_libs): Added target-zlib.
+	* Makefile.in (ALL_TARGET_MODULES): Added zlib.
+	(CONFIGURE_TARGET_MODULES): Likewise.
+	(CHECK_TARGET_MODULES): Likewise.
+	(INSTALL_TARGET_MODULES): Likewise.
+	(CLEAN_TARGET_MODULES): Likewise.
+	(configure-target-zlib): New target.
+	(all-target-zlib): Likewise.
+	(all-target-libjava): Depend on all-target-zlib.
+	(configure-target-libjava): Depend on configure-target-zlib.
+
+1999-05-04  Tom Tromey  <tromey@cygnus.com>
+
+	* ltmain.in: [mode link] Reverted change of 1999-04-30.  Instead,
+	put `-B' options from command line into new CC.
+
+1999-04-30  Tom Tromey  <tromey@cygnus.com>
+
+	* ltmain.sh: [mode link] Always use CC given by ltconfig.
+
+1999-04-23  Tom Tromey  <tromey@cygnus.com>
+
+	* ltconfig, ltmain.sh: Update to libtool 1.2f.
+
+1999-04-20  Drew Moseley  <dmoseley@cygnus.com>
+
+	* configure.in (noconfigdirs): Don't build libstub for arm-elf targets.
+	(noconfigdirs): Don't build any bsp stuff for for arm-oabi targets.
+	Bad merge removed these two changes.
+
+Thu May 20 10:00:42 1999   Stephen L Moshier  <moshier@world.std.com>
+
+	 * Makefile.in (GCC_FOR_TARGET): Add -I$(build_tooldir)/include.
+
+1999-04-23  Tom Tromey  <tromey@cygnus.com>
+
+	* ltconfig, ltmain.sh: Update to libtool 1.2f.
+
+Tue Apr 13 22:50:54 1999  Donn Terry (donn@interix.com)
+                          Martin Heller (Ing.-Buero_Heller@t-online.de)
+
+	* config.guess (interix Alpha): Add.
+
+Sun Apr 11 23:55:34 1999  Alexandre Oliva  <oliva@dcc.unicamp.br>
+
+	* config-ml.in: On mips*-*-*, if multidirs contains mabi=64, try to
+	link a trivial program with -mabi=64.  If it fails, remove mabi=64
+	from multidirs.
+
+1999-04-11  Richard Henderson  <rth@cygnus.com>
+
+	* configure.in (i?86-*-beos*): Do config gperf; don't config
+	gdb, newlib, or libgloss.
+
+Sat Apr 10 21:50:01 1999  Philipp Thomas  (kthomas@gwdg.de)
+
+	* config.sub: Set basic_machine to i586 when target_alias = k6-*.
+
+1999-04-08  Nick Clifton  <nickc@cygnus.com>
+
+	* config.sub: Add support for mcore targets.
+
+1999-04-07  Michael Meissner  <meissner@cygnus.com>
+
+	* configure.in (d30v-*): Use config/mt-d30v as makefile fragment,
+	not mt-ospace, in order to shut up assembler warning about using
+	symbols that are named the same as registers.
+
+1999-04-07  Drew Moseley  <dmoseley@cygnus.com>
+
+	* Makefile.in (all-target-cygmon): Added all-target-bsp to the
+	dependency list for all-target-cygmon.
+
+1999-04-05  Doug Evans  <devans@casey.cygnus.com>
+
+	* config-ml.in: Check $host, not $target, for selective multilibs.
+	(arm-*-*): Allow disabling of biendian, h/w fp, 26 bit apcs,
+	thumb interworking, and underscore prefix multilibs.
+
+1999-04-04  Ian Lance Taylor  <ian@zembu.com>
+
+	* missing: Update to version from current automake.
+
+Fri Apr  2 15:11:32 1999  H.J. Lu  (hjl@gnu.org)
+
+	* configure (gxx_include_dir): Removed.
+
+	* configure.in (gxx_include_dir): Handle it.
+	* Makefile.in: Likewise.
+
+1999-03-29  Gavin Romig-Koch  <gavin@cygnus.com>
+
+	* config.sub (mips64vr4111,mips64vr4111el) Add.
+
+1999-03-21  Ben Elliston  <bje@cygnus.com>
+
+        * config.guess: Correct typo for detecting ELF on FreeBSD.
+
+Thu Mar 18 00:17:50 1999  Mark Elbrecht <snowball3@usa.net>
+
+	* config/mh-go32: Delete.
+	* config/mh-djgpp: New. Renamed from mh-go32.
+	* configure.in (pc-msdosdjgpp): Set host_makefile_frag to
+	config/mh-djgpp.
+
+Thu Mar 11 18:37:23 1999  Drew Moseley  <dmoseley@cygnus.com>
+
+	* Makefile.in (all-target-bsp): Added all-gcc all-binutils and
+	all-target-newlib to dependency list for all-target-bsp.
+
+Thu Mar 11 01:19:31 1999  Mumit Khan  <khan@xraylith.wisc.edu>
+
+	* config.sub: Add i386-uwin support.
+	* config.guess: Likewise.
+
+Thu Mar 11 01:07:55 1999  Franz Sirl <Franz.Sirl-kernel@lauterbach.com>
+
+	* configure.in: cleanup, add mh-*pic handling for arm, special
+	case powerpc*-*-aix*
+
+Wed Mar 10 18:35:07 1999  Jeff Johnston  <jjohnstn@cygnus.com>
+
+	* configure.in (noconfigdirs): Removed target-libgloss so libnosys.a
+	can be built.
+
+Wed Mar 10 17:39:09 1999  Drew Moseley  <dmoseley@cygnus.com>
+
+	* configure.in: Added bsp support to arm-*-coff and arm-*-elf
+ 	targets.
+
+1999-03-02  Nick Clifton  <nickc@cygnus.com>
+
+	* config.sub: Rename CYGNUS LOCAL to EGCS LOCAL
+
+Sun Feb 28 02:20:00 1999  Geoffrey Noer  <noer@cygnus.com>
+
+	* config.sub: Check for "cygwin*" rather than "cygwin32*"
+
+1999-02-24  Nick Clifton  <nickc@cygnus.com>
+
+	* config.sub: Fix typo in arm recognition.
+
+Wed Feb 24 13:51:40 1999  Drew Moseley  <dmoseley@cygnus.com>
+
+	* configure.in (noconfigdirs): Changed target_configdirs to
+	include target-bsp only for m68k-*-elf* and m68k-*-coff*
+	rather than m68k-*-* since it is not known to work on
+	m68k-aout. Ditto for arm-*-*oabi.
+
+Wed Feb 24 12:52:17 1999  Stan Shebs  <shebs@andros.cygnus.com>
+
+	* configure.in (*-*-windows*): Remove, no longer used.
+	* config/mh-windows: Ditto.
+
+1999-02-19  Ben Elliston <bje@cygnus.com>
+
+	* config.guess: Automatically recognise ELF on FreeBSD. From Niall
+	Smart and improved by Andrew Cagney.
+
+Thu Feb 18 19:55:09 1999  Marc Espie <espie@cvs.openbsd.org>
+
+	* config.guess: Recognize openbsd-*-hppa.
+
+Wed Feb 17 01:38:59 1999  H.J. Lu  (hjl@gnu.org)
+
+	* Makefile.in (REALLY_SET_LIB_PATH): Append $$$(RPATH_ENVVAR)
+	only if it is not empty.
+
+1999-02-17  Nick Clifton  <nickc@cygnus.com>
+
+	Patch from: Scott Bambrough <scottb@corelcomputer.com>
+
+	* config.guess: Modified to recognize uname's armv* syntax.
+
+	* config.sub: Modified to recognize uname's armv* syntax.
+
+1999-02-17  Mark Salter  <msalter@cygnus.com>
+
+	* configure.in: Added target-bsp for sparclite.
+
+Mon Feb  8 14:17:24 1999  Richard Henderson  <rth@cygnus.com>
+
+	* config.sub: Recognize alphapca5[67] and up to alphaev8.
+
+1999-02-08  Nick Clifton  <nickc@cygnus.com>
+
+	* configure.in: Add support for strongarm port.
+	* config.sub: Add support for strongarm target.
+
+Sun Feb  7 18:01:54 1999  Mumit Khan  <khan@xraylith.wisc.edu>
+
+	* configure.in (*-*-cygwin32*): Use config/mh-cygwin instead of
+	the old name config/mh-cygwin32.
+	Enable texinfo.
+
+Thu Feb  4 20:43:25 1999  Ian Lance Taylor  <ian@cygnus.com>
+
+	* configure.in: Do build ld for ix86 Solaris.
+
+Tue Feb  2 19:46:40 1999  Jim Wilson  <wilson@cygnus.com>
+
+	* Makefile.in (EXTRA_GCC_FLAGS):  Set AR to $AR instead of
+	$AR_FOR_TARGET.  Likewise for RANLIB.
+
+Tue Feb  2 20:05:05 1999  Catherine Moore  <clm@cygnus.com>
+
+        * config.sub (oabi):  Recognize.
+        * configure.in (arm-*-oabi):  Handle.
+
+Sat Jan 30 06:09:00 1999  Robert Lipe  (robertlipe@usa.net)
+
+	* config.guess: Improve detection of i686 on UnixWare 7.
+
+Sat Jan 30 08:04:00 1999  Mumit Khan  <khan@xraylith.wisc.edu>
+
+	* config.guess: Add support for i386-pc-interix.
+	* config.sub: Likewise.
+	* configure.in: Likewise.
+	* config/mh-interix: New file.
+
+Mon Jan 18 13:59:20 1999  Christopher Faylor <cgf@cygnus.com>
+
+	* Makefile.in: Remove unneeded all-target-libio from
+	from all-target-winsup target since it is now unneeded.
+	Add all-target-libtermcap in its place since it is now
+	needed.
+
+Wed Dec 30 20:34:52 1998  Christopher Faylor <cgf@cygnus.com>
+
+	* configure.in: makefile stub for cygwin target is probably
+	unnecessary.  Remove it for now.
+	* config/mt-cygwin: Remove.
+
+Wed Dec 30 01:13:03 1998  Christopher Faylor <cgf@cygnus.com>
+
+	* configure.in: libtermcap.a should be built when cygwin is the
+	target as well as the host.
+	* config.guess: Allow mixed case in cygwin uname output.
+	* Makefile.in: Add libtermcap target.
+	* config/mt-cygwin: New file.  libtermcap target info.
+
+Tue Dec 15 17:02:58 1998  Bob Manson  <manson@charmed.cygnus.com>
+
+	* configure.in: Add cygmon for x86-coff and x86-elf. Configure
+ 	cygmon for all sparclite targets, regardless of object format.
+
+1998-12-15  Mark Salter  <msalter@cygnus.com>
+
+	* configure.in: Added target-bsp for several target architectures.
+
+	* Makefile.in: Added rules for bsp.
+
+1998-12-11  Tom Tromey  <tromey@cygnus.com>
+
+	* Makefile.in (configure-target-libjava): Depend on
+	configure-target-newlib.
+	(configure-target-boehm-gc): New target.
+	(configure-target-qthreads): New target.
+
+Wed Dec 23 00:20:50 1998  Jeffrey A Law  (law@cygnus.com)
+
+	* config.sub: Clean up handling of hppa2.0.
+
+Tue Dec 22 23:56:31 1998  Rodney Brown  (rodneybrown@pmsc.com)
+
+	* config.guess: Use C code to identify more HP machines.
+
+Thu Dec 17 01:22:30 1998  Jeffrey A Law  (law@cygnus.com)
+
+	* config.sub: Handle hppa2.0.
+
+Fri Dec  4 01:34:02 1998  Jeffrey A Law  (law@cygnus.com)
+
+	* config.guess: Improve detection of hppa2.0 processors.
+
+Fri Dec  4 01:33:05 1998  Niall Smart <nialls@euristix.ie>
+
+	* config.guess: Recognize FreeBSD using ELF automatically.
+
+1998-11-26  Manfred Hollstein  <manfred@s-direktnet.de>
+
+	* configure (skip-this-dir): Add handling for new shell script, which
+	might be created by a sub-directory's configure to indicate, this particular
+	directory is "unwanted".
+	* Makefile.in ($(CONFIGURE_TARGET_MODULES)): Likewise.
+
+
+Wed Nov 18 18:28:45 1998  Geoffrey Noer  <noer@cygnus.com>
+
+	* ltconfig: import from libtool, after changing libtool to
+	account for the cygwin name change.
+
+Wed Nov 18 18:09:14 1998  Geoffrey Noer  <noer@cygnus.com>
+
+	* Makefile.in: CC_FOR_TARGET and CXX_FOR_TARGET should also
+	include newlib/libc/sys/cygwin and newlib/libc/sys/cygwin32.
+
+Wed Nov 18 20:13:29 1998  Christopher Faylor <cgf@cygnus.com>
+
+	* configure.in: Add libtermcap to list of cygwin dependencies.
+
+Tue Nov 17 16:57:51 1998  Geoffrey Noer  <noer@cygnus.com>
+
+        * Makefile.in: modify CC_FOR_TARGET and CXX_FOR_TARGET so that
+        they include winsup/include when it's a cygwin target.
+
+1998-11-12  Tom Tromey  <tromey@cygnus.com>
+
+	* configure.in (host_tools): Added zip.
+	* Makefile.in (all-target-libjava): Depend on all-zip.
+	(all-zip): New target.
+	(ALL_MODULES): Added all-zip.
+	(NATIVE_CHECK_MODULES): Added check-zip.
+	(INSTALL_MODULES): Added install-zip.
+	(CLEAN_MODULES): Added clean-zip.
+
+Thu Nov 12 17:27:21 1998  Geoffrey Noer  <noer@cygnus.com>
+
+	* Makefile.in: lose "32" from comment about cygwin.
+
+Thu Nov  5 15:00:31 1998  Nick Clifton  <nickc@cygnus.com>
+
+	* configure.in: Use -Os to build target libraries for the fr30.
+
+Wed Nov  4 18:49:43 1998  Dave Brolley  <brolley@cygnus.com>
+
+	* config.sub: Add fr30.
+
+Mon Nov  2 15:19:33 1998  Geoffrey Noer  <noer@cygnus.com>
+
+        * configure.in: drop "32" from config/mh-cygwin32.  Check
+	cygwin* instead of cygwin32*.
+	* config.sub: Check cygwin* instead of cygwin32*.
+
+1998-10-20  Syd Polk  <spolk@cygnus.com>
+
+	* Makefile.in configure.in: Add the ability to use tcl8.1 and tk8.1
+	if desired.
+
+Sun Oct 18 18:34:50 1998  Jeffrey A Law  (law@cygnus.com)
+
+	* config.if (cxx_interface, libstdcxx_interface): Do not try to set
+	these if the appropriate directories and files to not exist.
+
+Wed Oct 14 10:29:06 1998  Jeffrey A Law  (law@cygnus.com)
+
+
+	* Makefile.in (DEVO_SUPPORT): Add config.if.
+
+Mon Oct 12 12:09:30 1998  Alexandre Oliva  <oliva@dcc.unicamp.br>
+
+	* Makefile.in (build_tooldir): New variable, same as tooldir.
+	(CC_FOR_TARGET, GCC_FOR_TARGET, CXX_FOR_TARGET): Add
+	-B$(build_tooldir)/bin/.
+	(BASE_FLAGS_TO_PASS): Pass build_tooldir down.
+
+Tue Oct 13 09:17:06 1998  Jeffrey A Law  (law@cygnus.com)
+
+	* config.sub: Bring back lost sparcv9.
+
+Wed Sep 30 22:20:50 1998  Robert Lipe  <robertl@dgii.com>
+
+	* config.sub: Add support for i[34567]86-pc-udk.
+	* configure.in: Likewise.
+
+Wed Sep 30 19:23:48 1998  Geoffrey Noer  <noer@cygnus.com>
+
+	* Makefile.in: add bzip2 package building bits for user
+	tools module
+	* configure.in: ditto
+
+1998-09-30  Manfred Hollstein  <manfred@s-direktnet.de>
+
+	 * configure.in (target_subdir): Remove duplicate line.
+
+Tue Sep 29 22:45:41 1998  Felix Lee  <flee@cygnus.com>
+
+	* Makefile.in (all-automake): fix dependencies.
+
+Mon Sep 28 04:04:27 1998  Jeffrey A Law  (law@cygnus.com)
+
+	* configure.in: Minor cleanups for building in the $(target_alias)
+	subdir.
+
+1998-09-22  Jim Wilson  <wilson@cygnus.com>
+
+	* Makefile.in (bootstrap): Set r and s before make all.  Use
+	BASE_FLAGS_TO_PASS in make all.
+	(cross): Likewise.
+
+1998-09-20  Mark Mitchell  <mark@markmitchell.com>
+
+	* Makefile.in (bootstrap): Pass TARGET_FLAGS_TO_PASS to `make all'.
+
+
+Sun Sep 20 00:13:02 1998  Richard Henderson  <rth@cygnus.com>
+
+	* config.sub: Fix typo in last change.
+
+1998-09-19  Michael Hayes  <m.hayes@elec.canterbury.ac.nz>
+
+	* config.sub: Add support for C4x target.
+	* configure.in: Likewise.
+
+1998-09-13  David S. Miller  <davem@pierdol.cobaltmicro.com>
+
+	* config.sub: Recognize sparcv9 just like sparc64.
+
+Wed Sep  9 15:44:52 1998  Robert Lipe  <robertl@dgii.com>
+
+	* config.guess: Match "Pent II" or "PentII" for OpenServer.
+
+Tue Sep  8 01:18:39 1998  Jeffrey A Law  (law@cygnus.com)
+
+	* config.guess: Correctly identify Pentium II sco boxes.
+
+	* config.guess: Fix "tr" code.  From Weiwen Liu.
+
+Sat Sep  5 13:56:52 1998  John Hughes  <john@Calva.COM>
+
+	* configure.in: Do not assume x86-svr4 or x86-unixware can handle
+	stabs.
+
+Sat Sep  5 02:12:02 1998  Jeffrey A Law  (law@cygnus.com)
+
+	* Makefile.in (TARGET_CONFIGDIRS): Add libchill.
+	(ALL_TARGET_MODULES): Add all-target-libchill.
+	(CONFIGURE_TARGET_MODULES, CHECK_TARGET_MODULES): Similarly.
+	(INSTALL_TARGET_MODULES, CLEAN_TARGET_MODULES): Similarly.
+	(all-target-libchill): Add dependencies.
+	* configure.in (target_libs): Add libchill.
+
+Sun Aug 30 22:27:02 1998  Lutz Wohlrab <lutz.wohlrab@informatik.tu-chemnitz.de>
+
+	* config.guess: Avoid assumptions about "tr" behaves when
+	LANG is set to something other than English.
+
+Sun Aug 30 22:14:44 1998  H.J. Lu  (hjl@gnu.org)
+
+	* configure (gxx_include_dir): Changed to
+	'${prefix}/include/g++'-${libstdcxx_interface}.
+
+	* config.if: New to determine the interfaces.
+
+Sun Aug 30 21:15:19 1998  Mark Klein (mklein@dis.com)
+
+	* config.guess: Detect and handle MPE/IX.
+	* config.sub: Deal with MPE/IX.
+
+Sat Aug 29 14:32:55 1998  David Edelsohn  <edelsohn@mhpcc.edu>
+
+	* configure.in: Use mh-aix43.
+
+1998-07-29  Manfred Hollstein  <manfred@s-direktnet.de>
+
+	* configure: Fix --without/--disable cases for gxx-include-dir.
+
+Fri Aug 28 12:28:26 1998  Per Bothner  <bothner@cygnus.com>
+
+	* mdata-sh:  Imported.  Needed for automake support.
+
+Fri Aug 21 13:33:13 1998  Tom Tromey  <tromey@cygnus.com>
+
+	* configure.in (target_libs): Added target-qthreads.
+	* Makefile.in (ALL_TARGET_MODULES): Added qthreads.
+	(CONFIGURE_TARGET_MODULES): Likewise.
+	(CHECK_TARGET_MODULES): Likewise.
+	(INSTALL_TARGET_MODULES): Likewise.
+	(CLEAN_TARGET_MODULES): Likewise.
+	(all-target-qthreads): New target.
+	(configure-target-libjava): Depend on configure-target-qthreads.
+	(all-target-libjava): Depend on all-target-qthreads.
+
+Thu Aug 13 12:49:29 1998  H.J. Lu  <hjl@gnu.org>
+
+	* Makefile.in (taz): Try "chmod -R og=u ." before
+	"chmod og=u `find . -print`".
+
+Fri Jul 31 09:38:33 1998  Catherine Moore  <clm@cygnus.com>
+
+        * configure.in: Add arm-elf and thumb-elf support.
+
+Mon Jul 27 16:23:58 1998  Doug Evans  <devans@canuck.cygnus.com>
+
+	* Makefile.in: Undo previous patch.
+
+Fri Jul 24 19:55:24 1998  Doug Evans  <devans@canuck.cygnus.com>
+
+	* Makefile.in (INSTALL_TARGET): Move EXTRA_TARGET_HOST_INSTALL_MODULES
+	to here ...
+	(install-no-fixedincludes): and here
+	(INSTALL_MODULES): ... from here.
+
+Fri Jul 24 17:01:42 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* config.sub: Merge with FSF.
+
+	* config.guess: Merge with FSF.
+
+Fri Jul 24 08:43:36 1998  Doug Evans  <devans@canuck.cygnus.com>
+
+	* configure (extraconfigdirs): New variable.
+	(SUBDIRS): Add extraconfigdirs and recurse on them too.
+	* Makefile.in (all): Move higher in file.
+	(EXTRA_TARGET_HOST_ALL_MODULES): New variable.
+	(EXTRA_TARGET_HOST_{INSTALL,CHECK}_MODULES): New variables.
+	(ALL_MODULES): Add EXTRA_TARGET_HOST_ALL_MODULES.
+	(CROSS_CHECK_MODULES): Add EXTRA_TARGET_HOST_CHECK_MODULES.
+	(INSTALL_MODULES): Add EXTRA_TARGET_HOST_INSTALL_MODULES.
+
+1998-07-23  Brendan Kehoe  <brendan@cygnus.com>
+
+	* Makefile.in (all-target-libjava): Depend on all-gcc and
+	all-target-newlib.
+	(configure-target-libjava): Depend on $(ALL_GCC).
+
+Sat Jul 18 14:32:43 CDT 1998  Robert Lipe  <robertl@dgii.com>
+
+	* config.guess: (*-pc-sco3.2v5) Add detection for Pentium II.
+	(*-pc-unixware7) Add detection for Pentium II, Pentium Pro.
+
+Fri Jul 17 13:30:18 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* ylwrap: Change absolute path checks to check for DOS style path
+	names.
+
+	* ylwrap: Don't use a full path name if the source file is in the
+	same directory.  From hjl@lucon.org (H.J. Lu).
+
+	* config-ml.in: Default to being verbose, to match Feb 18 change to
+	configure.
+
+Thu Jul 16 12:29:51 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	Brought over from egcs:
+
+	Sat Jun 27 22:46:32 1998  Jeffrey A Law  (law@cygnus.com)
+
+	* configure.in (target_subdir): Set to ${target_alias} instead
+	of "libraries".
+
+	Mon Sep  1 16:45:44 1997  Jim Wilson  <wilson@cygnus.com>
+
+	* configure.in (target_subdir): Set to libraries if enable_multilib.
+
+Wed Jul 15 01:00:54 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* Makefile.in ($(CONFIGURE_TARGET_MODULES)): If there are any
+	multilibs, force reconfiguration the first time we create
+	multilib.out in a subdirectory, in case TARGET_SUBDIR is `.'.
+
+Tue Jul 14 23:41:03 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* configure.in: Strip any --no option from CONFIG_ARGUMENTS, to
+	avoid confusion with --no-recursion.
+
+Tue Jul 14 15:37:41 1998  Geoffrey Noer  <noer@cygnus.com>
+
+	* configure.in: Win32 hosts shouldn't use install -x
+	* install-sh: remove -x option, and special .exe-handling
+	hack.
+
+Tue Jul 14 15:28:41 1998  Richard Henderson  <rth@cygnus.com>
+
+	* config.guess: Recognize i586-pc-beos.
+	* configure.in: Don't build some bits for beos.
+
+Tue Jul 14 13:22:18 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* configure: If CC is set but CFLAGS is not, and CC is gcc, make
+	CFLAGS default to -O2.
+
+	* ltmain.sh: Add some hacks to make SunOS --enable-shared work
+	when using GNU ld.
+
+Fri Jul 10 13:18:23 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* ltmain.sh: Correct install when using a different shell.
+
+Tue Jul  7 15:24:38 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* ltconfig, ltmain.sh: Update to libtool 1.2b.
+
+Thu Jul  2 13:57:36 1998  Klaus Kaempf  <kkaempf@rmi.de>
+
+	* makefile.vms: Update to build binutils/makefile.vms.  Add install
+	target.
+
+Wed Jul  1 16:45:21 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* ltconfig: Update to correct AIX handling.
+
+Sat Jun 27 22:46:32 1998  Jeffrey A Law  (law@cygnus.com)
+
+	* Makefile.in (BASE_FLAGS_TO_PASS): Add TARGET_SUBDIR.
+
+	* configure.in (target_subdir): Set to ${target_alias} instead
+	of "libraries".
+
+1998-06-26  Manfred Hollstein  <manfred@s-direktnet.de>
+
+	* Makefile.in (BASE_FLAGS_TO_PASS): Add gcc_version_trigger.
+	(Makefile): Depend on $(gcc_version_trigger).
+
+	* configure (gcc_version): Change default initializer to empty
+	string.
+	(gcc_version_trigger): New variable; pass this variable down
+	to subdir configures to enable them checking gcc's version
+	themselves. Emit make macros for both gcc_version vars.
+	(topsrcdir): Initialize reliably.
+	(recursion line): Remove --with-gcc-version=${gcc_version}.
+
+1998-06-24  Manfred Hollstein  <manfred@s-direktnet.de>
+
+	* configure (enable_version_specific_runtime_libs): Implement new flag
+	--enable-version-specific-runtime-libs which installs C++ runtime stuff
+	in $(libsubdir); emit definition in each generated Makefile.
+	(gxx_include_dir): Initialize depending on
+	$enable_version_specific_runtime_libs.
+
+1998-06-24  Manfred Hollstein  <manfred@s-direktnet.de>
+
+	* configure (gcc_version): Initialize properly depending on
+	how and where configure is started.
+	(recursion line): Pass a --with-gcc-version=${gcc_version}
+	to configures in subdirs.
+
+Wed Jun 24 16:01:59 1998  John Metzler  <jmetzler@cygnus.com>
+
+	* configure.in (noconfigdirs): Add configure pattern for mips tx39
+ 	cygmon
+
+Tue Jun 23 22:42:32 1998  Mark Alexander  <marka@cygnus.com>
+
+	* configure.in: Add cygmon and libstub support for mn10200.
+
+1998-06-19  Manfred Hollstein  <manfred@s-direktnet.de>
+
+	* configure (gcc_version): Add new variable describing the
+	particular gcc version we're building.
+	* Makefile.in (libsubdir): Add new macro for the directory
+	in which the compiler finds executables, libraries, etc.
+	(BASE_FLAGS_TO_PASS): Pass down gcc_version, target_alias
+	and libsubdir.
+
+Fri Jun 19 02:36:59 1998  Alexandre Oliva <oliva@dcc.unicamp.br>
+
+	* Makefile.in (local-clean): Remove *.log.
+	(warning.log): Built with warn_summary from build.log.
+	(mail-report.log): Run test_summary.
+	(mail-report-with-warnings.log): Run test_summary including
+	warning.log in the report.
+
+Thu Jun 18 11:26:03 1998  Robert Lipe  <robertl@dgii.com>
+
+	* config.guess: Detection of Pentium II for *-sco-3.2v5*.
+
+Mon Jun 15 14:53:54 1998  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* Makefile.in (grep): Grep no longer depends on libiberty.
+
+Fri Jun 12 14:03:34 1998  Syd Polk  <spolk@cygnus.com>
+
+	* Makefile.in: all-snavigator needs all-libgui.
+
+Thu Jun 11 19:43:47 1998  Mark Alexander  <marka@cygnus.com>
+
+	* configure.in: Add cygmon and libstub support for mn10300.
+
+Wed Jun 10 11:19:47 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* missing: Update to version from automake 1.3.
+
+	* ltmain.sh: On installation, don't get confused if the same name
+	appears more than once in the list of library names.
+
+Wed Jun  3 14:51:42 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* config.sub: Accept m68060 and m5200 as CPU names.
+
+Mon Jun  1 17:25:16 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* configure: Use && rather than using -a in test, because odd
+	strings can confuse test.
+	* configure.in: Likewise.
+
+Thu May 28 19:31:13 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* ltconfig, ltmain.sh: Bring in Visual C++ support.
+
+Sat May 23 23:44:13 1998  Alexandre Oliva <oliva@dcc.unicamp.br>
+
+	* Makefile.in (boostrap2-lean, bootstrap3-lean,
+	bootstrap4-lean): New targets.
+
+Mon May 11 23:11:34 1998  Jeffrey A Law  (law@cygnus.com)
+
+	* COPYING.LIB: Update FSF address.
+
+Fri May  8 01:30:20 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* ltconfig, ltmain.sh: Update to libtool 1.2a.
+
+	* Makefile.in (GASB_SUPPORT_DIRS): Remove intl; already included via
+	GAS_SUPPORT_DIRS.
+
+Thu May  7 17:27:35 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* ltconfig, ltmain.sh: Avoid producing a version number if
+	-version-info was not used.
+
+Wed May  6 10:26:06 1998  Stu Grossman  <grossman@babylon-5.cygnus.com>
+
+	* Makefile.in:  Add dependencies for boehm-gc to libjava.
+
+Tue May  5 18:02:24 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* configure.in: Add --with-newlib to CONFIG_ARGUMENTS if we are
+	building with newlib.
+
+1998-04-30  Paul Eggert  <eggert@twinsun.com>
+
+        * Makefile.in (EXTRA_GCC_FLAGS): Remove backslash at end;
+        Solaris `make' causes it to continue to next definition.
+
+Wed Apr 29 17:07:10 1998  Stu Grossman  <grossman@babylon-5.cygnus.com>
+
+	* Makefile.in: Added dependencies to all-target-boehm-gc and
+ 	all-target-libjava to have them configure during the build.
+
+Tue Apr 28 18:11:24 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* configure.in: Change alpha to alpha* in several places.
+
+Tue Apr 28 07:42:00 1998  Mark Alexander  <marka@cygnus.com>
+
+	* config.sub: Recognize sparc86x.
+
+Tue Apr 28 07:35:02 1998  Michael Meissner  <meissner@cygnus.com>
+
+	* configure.in (--enable-target-optspace): Remove debug echo.
+
+Thu Apr 23 21:31:16 1998  Jim Wilson  <wilson@cygnus.com>
+
+	* configure: Set CXXFLAGS from CXXFLAGS, not CFLAGS.
+
+Thu Apr 23 12:26:38 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* ltconfig: Update cygwin32 support.
+
+	* Makefile.in (GAS_SUPPORT_DIRS): Add intl.
+	(BINUTILS_SUPPORT_DIRS, GASB_SUPPORT_DIRS): Likewise.
+	(GDB_SUPPORT_DIRS): Likewise.
+
+Wed Apr 22 12:30:10 1998  Michael Meissner  <meissner@cygnus.com>
+
+	* configure.in (target_makefile_frag): If --enable-target-optspace,
+	use -Os to compile target libraries rather than -O2.  Default to
+	using -Os for d10v and m32r if --{enable,disable}-target-optspace is
+	not used.
+	* configure.in (target_cflags): Ditto for d30v.
+
+Tue Apr 21 23:06:54 1998  Tom Tromey  <tromey@cygnus.com>
+
+	* Makefile.in (all-bfd): Depend on all-intl.
+	(all-binutils): Likewise.
+	(all-gas): Likewise.
+	(all-gprof): Likewise.
+	(all-ld): Likewise.
+
+Mon Apr 20 14:26:26 1998  Tom Tromey  <tromey@cygnus.com>
+
+	* Makefile.in (ALL_TARGET_MODULES): Added libjava, boehm-gc.
+	(CONFIGURE_TARGET_MODULES): Likewise.
+	(CHECK_TARGET_MODULES): Likewise.
+	(INSTALL_TARGET_MODULES): Likewise.
+	(CLEAN_TARGET_MODULES): Likewise.
+	(all-target-libjava): New target.
+	(all-target-boehm-gc): Likewise.
+	* configure.in (target_libs): Added libjava, boehm-gc.
+
+1998-04-19  Brendan Kehoe  <brendan@cygnus.com>
+
+	* configure.in (host_tools): Fix typo, lbtool -> libtool.
+
+Fri Apr 17 16:20:42 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* Makefile.in (all-bfd): Depend upon all-libiberty.
+
+	* ltconfig, ltmain.sh: Bring in newer cygwin32 support.
+
+Fri Apr 17 12:22:22 1998  Bob Manson  <manson@charmed.cygnus.com>
+
+	* Makefile.in: Add libstub.
+
+	* configure.in: Ditto. Build libstub for targets that have cygmon
+	support.
+
+Tue Apr 14 18:01:55 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* configure.in: Don't set PICFLAG on ix86-cygwin32.
 
 Tue Apr 14 12:24:45 1998  J. Kean Johnston  <jkj@sco.com>
 
 	* configure.in: Recognise i[3456]96-*-sysv5* as a valid host, and
 	use mh-sysv5 if specified.  Support gprof on SCO Open Server.
 
-Wed Apr  8 19:45:41 1998 Philippe De Muyter  <phdm@macqel.be>
+Tue Apr 14 11:33:51 1998  Krister Walfridsson <cato@df.lth.se>
 
-        * Makefile.in (EXTRA_GCC_FLAGS): XFOO lines shortened.
+	* configure: Define DEFAULT_M4 by searching PATH.
+	* Makfile.in: Use DEFAULT_M4.
+
+Mon Apr 13 15:37:24 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* ltconfig: Add cygwin32 support.
+
+	* Makefile.in, configure.in: Add libtool as a native only directory
+ 	to configure and build.
+
+Wed Apr  8 13:18:56 1998  Philippe De Muyter  <phdm@macqel.be>
+
+	* Makefile.in (EXTRA_GCC_FLAGS): XFOO lines shortened.
+
+Thu Apr  2 14:48:44 1998  Geoffrey Noer  <noer@cygnus.com>
+
+	* Makefile.in: add ash make rules
+	* configure.in: add ash to native_only and host_tools lists
+
+Thu Mar 26 12:53:20 1998  Tom Tromey  <tromey@cygnus.com>
+
+	* Makefile.in (all-gettext, all-intl): New targets.
+	(ALL_MODULES): Added all-gettext, all-intl.
+	(CROSS_CHECK_MODULES): Added check-gettext, check-intl.
+	(INSTALL_MODULES): Added install-gettext, install-intl.
+	(CLEAN_MODULES): Added clean-gettext, clean-intl.
+
+	* configure.in (host_tools): Added gettext.
+	(native_only): Likewise.
+	(noconfigdirs) [various cases]: Likewise.
+	(host_libs): Added intl.
+
+Wed Mar 25 11:49:12 1998  Jason Molenda  (crash@bugshack.cygnus.com)
+
+	* Makefile.in: Revert yesterday's change.
+	(all-target-winsup):  all-target-librx stays out of here.
+
+Tue Mar 24 16:58:29 1998  Jason Molenda  (crash@bugshack.cygnus.com)
+
+	* Makefile.in (TARGET_CONFIGDIRS, ALL_TARGET_MODULES,
+	CONFIGURE_TARGET_MODULES, CHECK_TARGET_MODULES,
+	INSTALL_TARGET_MODULES, CLEAN_TARGET_MODULES, all-target-winsup):
+	Remove references to librx and libg++.
+
+Tue Mar 24 18:28:12 1998  Eric Mumpower  <nocturne@cygnus.com>
+
+	* Makefile.in (BASE_FLAGS_TO_PASS): Pass $(lispdir) down to
+	recursive makes
+
+Tue Mar 24 11:37:45 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* Makefile.in (CC_FOR_TARGET): Use $(TARGET_SUBDIR) when passing -B
+	for newlib directory.
+	(CXX_FOR_TARGET): Likewise.
+
+Mon Mar 23 11:30:21 1998  Jeffrey A Law  (law@cygnus.com)
+
+	* ltconfig: Update after libtool/ltconfig.in change for
+	hpux11.
+
+Fri Mar 20 18:51:43 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* ltconfig, ltmain.sh: Update to libtool 1.2.
+
+Fri Mar 20 09:32:14 1998  Manfred Hollstein  <manfred@s-direktnet.de>
+
+	* Makefile.in (install-gcc): Don't specify LANGUAGES here.
+	(install-gcc-cross): Instead, override LANGUAGES here.
+
+1998-03-18  Dave Love  <d.love@dl.ac.uk>
+
+	* Makefile.in ($(CONFIGURE_TARGET_MODULES)): Set CONFIG_SITE to a
+	non-existent file since /dev/null loses with bash 2.0/autoconf 2.12.
+
+Wed Mar 18 09:24:59 1998  Nick Clifton  <nickc@cygnus.com>
+
+	* configure.in: Add Thumb-pe target.
+
+Tue Mar 17 16:59:00 1998  Syd Polk <spolk@cygnus.com>
+	* Makefile.in - changed sn targets to snavigator
+	* configure.in - changed sn targets to snavigator
+
+Tue Mar 17 10:33:28 1998  Manfred Hollstein  <manfred@s-direktnet.de>
+
+	* config-ml.in: After building symlink tree call make distclean
+	if a Makefile got linked into ${ml_dir}/${ml_libdir}; this happens
+	to be the case for libiberty.
+
+Tue Mar 17 10:22:37 1998  H.J. Lu  (hjl@gnu.ai.mit.edu)
+
+	* configure: When making link, also check the current
+	directory. The configure scripts may create one.
+
+Fri Mar  6 01:02:03 1998  Richard Henderson  <rth@cygnus.com>
+
+	* config.sub: Accept alphapca56 and alphaev6 properly.
+
+Fri Mar  6 00:14:55 1998  Franz Sirl <Franz.Sirl-kernel@lauterbach.com>
+
+	* configure.in: Revert 3 Jan change for powerpc-linux-gnulibc1.
+
+
+Mon Feb 23 15:09:18 1998  Bruno Haible <bruno@linuix.mathematik.uni-karlsruhe.de
+
+        * config.sub (sco5): Fix typo.
+
+Mon Feb 23 14:46:06 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* Makefile.in (INSTALL_MODULES): Move install-tcl before
+	install-itcl.
+	(install-itcl): Remove dependency on install-tcl.
+
+Mon Feb 23 09:53:28 1998  Mark Alexander  <marka@cygnus.com>
+
+	* configure.in: Remove libgloss from noconfigdirs for MN10300.
+
+Fri Feb 20 16:47:24 1998  Tom Tromey  <tromey@cygnus.com>
+
+	* configure: Don't let builds be done in source tree.
+
+Thu Feb 19 13:40:41 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* configure.in: Don't build libgui for a cygwin32 target when not on
+	a cygwin32 host.
+
+Wed Feb 18 12:29:00 1998  Jason Molenda  (crash@bugshack.cygnus.com)
+
+	* configure (redirect): Set to null, so default behavior of
+	configure is now --verbose.
+
+1998-02-16  Dave Love  <d.love@dl.ac.uk>
+
+	* Makefile.in ($(CONFIGURE_TARGET_MODULES)): Run configure with
+	CONFIG_SITE=/dev/null to forestall lossage with site configuration.
+
+Mon Feb 16 12:23:53 1998  Manfred Hollstein  <Manfred.Hollstein@ks.sel.alcatel.de>
+
+	* Makefile.in (BASE_FLAGS_TO_PASS, EXTRA_TARGET_FLAGS): Really add
+	this change to sync Makefile.in with its ChangeLog entries.
+
+Thu Feb 12 15:03:08 1998  H.J. Lu  <hjl@gnu.org>
+
+	* ltmain.sh (mkdir): Check that the directory doesn't exist
+	before we exit with error, so that we don't get races during
+	parallel builds.
+
+Sat Feb  7 15:19:18 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* ltconfig, ltmain.sh: Update from libtool 1.0i.
+
+Fri Feb  6 01:33:52 1998  Manfred Hollstein  <manfred@s-direktnet.de>
+
+	* Makefile.in (BASE_FLAGS_TO_PASS): Don't pass PICFLAG and
+	PICFLAG_FOR_TARGET.
+	(EXTRA_TARGET_FLAGS): Don't pass PICFLAG_FOR_TARGET.
+
+	* configure: Emit a definition for the new macro enable_shared
+	into each Makefile.
+
+	* config/mh-sparcpic (PICFLAG): Define to properly according
+	to current multilib configuration.
+	* config/mt-sparcpic (PICFLAG_FOR_TARGET): Define to properly
+	according to current multilib configuration.
+
+Thu Feb  5 17:01:12 1998  Jason Molenda  (crash@bugshack.cygnus.com)
+
+	* configure.in (host_tools, native_only): Add libtool.
+
+Wed Feb  4 16:53:58 1998  Geoffrey Noer  <noer@cygnus.com>
+
+	* configure.in: add target-gperf to noconfigdirs for Cygwin32.
+	Fix typo in ming config comment.
+
+Wed Feb  4 18:56:13 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* ltconfig, ltmain.sh: Update from libtool 1.0h.
 
 Mon Feb  2 19:38:19 1998  Ian Lance Taylor  <ian@cygnus.com>
 
@@ -61,6 +1205,10 @@ Thu Jan 22 15:14:01 1998  Fred Fish  <fnf@cygnus.com>
 	* .cvsignore: Remove *-info and *-install since they match
 	release-info and mpw-install, which we don't want to just ignore.
 
+Thu Jan 22 01:38:33 1998  Richard Henderson  <rth@cygnus.com>
+
+	* configure.in: Revert 3 Jan change for alpha-linux-gnulibc1.
+
 Sat Jan 17 21:28:08 1998  Pieter Nagel <pnagel@epiuse.co.za>
 
 	* Makefile.in (FLAGS_TO_PASS): Pass down gcc_include_dir and
@@ -73,13 +1221,13 @@ Sat Jan 17 21:04:59 1998 H.J. Lu  (hjl@gnu.org)
 
 Fri Jan 16 00:41:37 1998  Alexandre Oliva <oliva@dcc.unicamp.br>
 
-	* configure.in: check whether host and target makefile
-	fragments exist before adding them to *_makefile_frag
+	* configure.in: Check whether host and target makefile
+	fragments exist before adding them to *_makefile_frag.
 
 Wed Jan 14 23:39:10 1998  Bob Manson  <manson@charmed.cygnus.com>
 
 	* configure.in (target_configdirs): Add cygmon for sparc64-elf.
-	
+
 Wed Jan 14 12:48:07 1998  Keith Seitz  <keiths@pizza.cygnus.com>
 
 	* configure.in: Make sure we only replace RPATH_ENVVAR on
@@ -135,6 +1283,10 @@ Thu Dec 18 13:13:03 1997  Doug Evans  <devans@canuck.cygnus.com>
 
 	* mkdep: New file.
 
+Wed Dec 17 09:53:02 1997  Michael Meissner  <meissner@cygnus.com>
+
+	* configure.in (d30v-*-*): Allow configuring of libide, vmake, etc.
+
 Tue Dec 16 17:36:05 1997  Ian Lance Taylor  <ian@cygnus.com>
 
 	* Makefile.in: Add libgui directory.
@@ -151,6 +1303,10 @@ Fri Dec 12 10:43:31 1997  Brendan Kehoe  <brendan@canuck.cygnus.com>
 	* Makefile.in (all-target-gperf): Change dependency to
 	all-target-libstdc++.
 
+Thu Dec 11 23:30:51 1997  Fred Fish  <fnf@ninemoons.com>
+
+	* config.guess: Add BeOS support.
+
 Wed Dec 10 15:10:38 1997  Ian Lance Taylor  <ian@cygnus.com>
 
 	Source directory cvs renamed to cvssrc:
@@ -162,6 +1318,15 @@ Wed Dec 10 15:10:38 1997  Ian Lance Taylor  <ian@cygnus.com>
 	(INSTALL_MODULES): Change install-cvs to install-cvssrc.
 	(CLEAN_MODULES): Change clean-cvs to clean-cvssrc.
 	(all-cvssrc): Rename target from all-cvs.
+
+Wed Dec  3 07:55:59 1997  Jeffrey A Law  (law@cygnus.com)
+
+	* configure (gxx_include_dir): Fix thinko.
+
+Tue Dec  2 10:55:34 1997  Jeffrey A Law  (law@cygnus.com)
+
+	* Makefile.in (INSTALL_TARGET_CROSS): Define.
+	(install-cross, install-gcc-cross): New targets.
 
 Tue Dec  2 10:08:31 1997  Nick Clifton  <nickc@cygnus.com>
 
@@ -175,15 +1340,49 @@ Sun Nov 30 16:12:27 1997  Bob Manson  <manson@charmed.cygnus.com>
 
 	* configure.in: Build cygmon for sparc-elf and sparclite-aout.
 
+Thu Nov 27 01:31:30 1997  Jeffrey A Law  (law@cygnus.com)
+
+	* Makefile.in (INSTALL_TARGET): Do install-gcc first.
+	* configure (gxx_include_dir): Provide a definition for subdirs
+	which do not use autoconf.
+
 Wed Nov 26 11:53:33 1997  Keith Seitz  <keiths@onions.cygnus.com>
 
 	* Makefile.in, configure, configure.in, ChangeLog: merge with foundry's
-	11/18/97 build 
+	11/18/97 build
+
+Wed Nov 26 16:08:50 1997  Jeffrey A Law  (law@cygnus.com)
+
+	* From Franz Sirl.
+	* config.guess (powerpc*-*-linux): Handle glibc2 beta release
+	found on RedHat Linux systems.
+
+Fri Nov 21 09:51:01 1997  Jeffrey A Law  (law@cygnus.com)
+
+	* config.guess (alpha stuff): Merge with FSF to avoid incorrect
+	guesses.
+
+Thu Nov 13 11:38:37 1997  Jeffrey A Law  (law@cygnus.com)
+
+	* configure.in (i[3456]86-ncr-sysv4.3*): Tweak.
 
 Mon Nov 10 15:23:21 1997  H.J. Lu  <hjl@gnu.ai.mit.edu>
 
 	* ltmain.sh: If mkdir fails, check whether the directory was created
 	anyhow by some other process.
+
+Mon Nov 10 14:38:03 1997  Michael Meissner  <meissner@cygnus.com>
+
+	* configure.in (d30v-*-*): Configure all directories.
+
+Sun Nov  9 17:36:20 1997  Michael Meissner  <meissner@cygnus.com>
+
+	* configure.in (d30v-*-*): Configure newlib, libiberty directories
+	for the D30V.
+
+Sat Nov  8 14:42:59 1997  Michael Meissner  <meissner@cygnus.com>
+
+	* configure.in (d30v-*-*): Configure target-libgloss on the D30V.
 
 Fri Nov  7 10:34:09 1997  Rob Savoye  <rob@darkstar.cygnus.com>
 
@@ -191,6 +1390,10 @@ Fri Nov  7 10:34:09 1997  Rob Savoye  <rob@darkstar.cygnus.com>
         progrms.
         * include/remote-sim.h:  Add extern "C" { so it can be used with C++
         programs.
+
+Thu Oct 30 11:09:29 1997  Michael Meissner  <meissner@cygnus.com>
+
+	* configure.in (d30v-*-*): Configure GCC now.
 
 Mon Oct 27 13:17:24 1997  Stan Shebs  <shebs@andros.cygnus.com>
 
@@ -200,6 +1403,12 @@ Mon Oct 27 13:17:24 1997  Stan Shebs  <shebs@andros.cygnus.com>
 Mon Oct 27 12:03:53 1997  Jason Merrill  <jason@yorick.cygnus.com>
 
 	* Makefile.in: check-target-libio depends on all-target-libstdc++.
+
+Sun Oct 26 11:48:27 1997  Manfred Hollstein  (manfred@s-direktnet.de)
+
+	* Makefile.in (bootstrap-lean): Combined with `normal' bootstrap
+	targets using "$@" to provide support for similar but not identical
+	targets without having to duplicate code.
 
 Mon Oct 20 15:28:49 1997  Klaus K"ampf  <kkaempf@progis.de>
 
@@ -225,9 +1434,30 @@ Wed Oct  1 13:11:27 1997  Ian Lance Taylor  <ian@cygnus.com>
 	infodir, libdir, libexecdir, localstatedir, mandir, oldincludedir,
 	sbindir, sharedstatedir, and sysconfdir.
 
+Mon Sep 29 00:38:08 1997 Aaron Jackson <jackson@negril.msrce.howard.edu>
+
+	* Makefile.in (bootstrap-lean): New target.
+
+Wed Sep 24 18:06:27 1997  Stu Grossman  <grossman@babylon-5.cygnus.com>
+
+	* configure.in (d30v):  Remove tcl, tk, expect, gdb, itcl, tix, db,
+ 	sn, and gnuserv from noconfigdirs.
+
 Wed Sep 24 15:18:32 1997  Ian Lance Taylor  <ian@cygnus.com>
 
 	* ltmain.sh: Tweak shell pattern to avoid bug in NetBSD /bin/sh.
+
+Thu Sep 18 23:58:27 1997  Jeffrey A Law  (law@cygnus.com)
+
+* Makefile.in (cross): New target.
+
+Thu Sep 18 21:43:23 1997  Alexandre Oliva  <oliva@dcc.unicamp.br>
+			  Jeff Law         <law@cygnus.com>
+
+	* Makefile.in (bootstrap2, bootstrap3): New targets.
+	(all-bootstrap): Remove outdated and confusing target.
+	(bootstrap, bootstrap2, bootstrap3): Don't pass BOOT_CFLAGS down.
+
 
 1997-09-15 02:37  Ulrich Drepper  <drepper@cygnus.com>
 
@@ -247,8 +1477,23 @@ Sun Sep 14 20:53:42 1997  Geoffrey Noer  <noer@cygnus.com>
 	* config/mh-cygwin32: ok to build split texinfo files
 
 Fri Sep 12 16:19:20 1997  Geoffrey Noer  <noer@cygnus.com>
-	
+
 	* configure.in: remove bison from noconfigdirs for Cygwin32 host
+
+Thu Sep 11 16:40:46 1997  H.J. Lu  (hjl@gnu.ai.mit.edu)
+
+	* Makefile.in (local-distclean): Also remove mh-frag mt-frag.
+
+	* configure.in (skipdirs): Add target-librx for Linux.
+	(alpha-*-linux*): Use config/mh-elfalphapic and config/mt-elfalphapic.
+
+Wed Sep 10 21:29:54 1997  Jeffrey A Law  (law@cygnus.com)
+
+	* Makefile.in (bootstrap): New target.
+
+Wed Sep 10 15:19:22 1997  Jeffrey A Law  (law@cygnus.com)
+
+	* config.sub: Accept 'amigados' for backward compatability.
 
 Mon Sep  8 20:46:20 1997  Ian Lance Taylor  <ian@cygnus.com>
 
@@ -262,10 +1507,22 @@ Fri Sep  5 16:11:28 1997  Joel Sherrill  (joel@OARcorp.com)
 
         * configure.in (*-*-rtems*): Do not build libgloss for rtems.
 
+Fri Sep  5 12:27:17 1997  Jeffrey A Law  (law@cygnus.com)
+
+	* config.sub: Handle v850-elf.
+
 Wed Sep  3 12:15:24 1997  Chris Provenzano  <proven@cygnus.com>
 
 	* ltconfig: Set CONFIG_SHELL in libtool.
 	* ltmain.sh: Use CONFIG_SHELL instead of /bin/sh
+
+Mon Sep  1 16:45:44 1997  Jim Wilson  <wilson@cygnus.com>
+
+	* configure.in (target_subdir): Set to libraries if enable_multilib.
+
+Wed Aug 27 16:15:11 1997  Jim Wilson  <wilson@cygnus.com>
+
+	* config.guess: Update from gcc directory.
 
 Tue Aug 26 16:46:46 1997  Andrew Cagney  <cagney@b1.cygnus.com>
 
@@ -280,6 +1537,18 @@ Tue Aug 19 01:41:32 1997  Jason Merrill  <jason@yorick.cygnus.com>
 
 	* Makefile.in (BISON): Add -L flag.
 	(YACC): Likewise.
+
+Mon Aug 18 11:30:50 1997  Nick Clifton  <nickc@cygnus.com>
+
+	* configure.in (noconfigdirs): Add support for v850e target.
+
+	* config.sub (maybe_os): Add support for v850e target.
+
+Mon Aug 18 11:30:50 1997  Nick Clifton  <nickc@cygnus.com>
+
+	* configure.in (noconfigdirs): Add support for v850ea target.
+
+	* config.sub (maybe_os): Add support for v850ea target.
 
 Mon Aug 18 09:24:06 1997  Gavin Koch  <gavin@cygnus.com>
 
@@ -412,7 +1681,7 @@ Tue Jul 15 14:33:03 1997  Brendan Kehoe  <brendan@lisa.cygnus.com>
 
 Mon Jul 14 11:01:15 1997  Martin M. Hunt  <hunt@cygnus.com>
 
-	* configure (GDB_TK): Needs itcl and tix. 
+	* configure (GDB_TK): Needs itcl and tix.
 
 Mon Jul 14 00:32:10 1997  Jason Merrill  <jason@yorick.cygnus.com>
 
@@ -468,7 +1737,7 @@ Wed Jun 25 12:18:54 1997  Brendan Kehoe  <brendan@lisa.cygnus.com>
 	(CLEAN_TARGET_MODULES): Add clean-target-gperf.
 
 Mon Jun 23 10:51:53 1997  Jeffrey A Law  (law@cygnus.com)
- 
+
 	* config.sub (mn10200): Recognize new basic machine.
 
 Thu Jun 19 14:16:42 1997  Brendan Kehoe  <brendan@lisa.cygnus.com>
@@ -520,7 +1789,7 @@ Thu Jun 12 21:12:28 1997  Bob Manson  <manson@charmed.cygnus.com>
 
 Fri Jun  6 21:38:40 1997  Rob Savoye  <rob@chinadoll.cygnus.com>
 
-	* configure: Use '|' instead of ":" as the seperator in
+	* configure: Use '|' instead of ":" as the separator in
 	sed. Otherwise sed chokes on NT path names with drive
 	designators. Also look for "?:*" as the leading characters in an
 	absolute pathname.
@@ -635,6 +1904,11 @@ Mon Mar 31 16:26:55 1997  Joel Sherrill  <joel@oarcorp.com>
 
         * configure.in (hppa1.1-*-rtems*): New target, like hppa-*-*elf*.
 
+Sun Mar 30 12:38:27 1997  Fred Fish  <fnf@cygnus.com>
+
+	* configure.in: Remove noconfigdirs case since gdb also
+	configures and builds for tic80-coff.
+
 Fri Mar 28 18:28:52 1997  Ian Lance Taylor  <ian@cygnus.com>
 
 	* configure: Set cache_file to config.cache.
@@ -643,6 +1917,11 @@ Fri Mar 28 18:28:52 1997  Ian Lance Taylor  <ian@cygnus.com>
 Wed Mar 26 18:49:39 1997  Ian Lance Taylor  <ian@cygnus.com>
 
 	* COPYING: Update FSF address.
+
+Wed Mar 26 10:38:25 1997  Michael Meissner  <meissner@cygnus.com>
+
+	* configure.in (tic80-*-*): Remove G++ libraries and libgloss from
+	noconfigdirs.
 
 Mon Mar 24 15:02:39 1997  Ian Lance Taylor  <ian@cygnus.com>
 
@@ -680,6 +1959,10 @@ Wed Mar  5 12:09:29 1997  Martin  <hunt@cygnus.com>
 	* configure.in (noconfigdirs): Remove tcl and tk from
 	noconfigdirs for cygwin32 builds.
 
+Fri Feb 28 18:20:15 1997  Fred Fish  <fnf@cygnus.com>
+
+	* configure.in (tic80-*-*): Remove ld from noconfigdirs.
+
 Thu Feb 27 14:57:26 1997  Ken Raeburn  <raeburn@cygnus.com>
 
 	* Makefile.in (GAS_SUPPORT_DIRS, BINUTILS_SUPPORT_DIRS): Remove
@@ -688,6 +1971,28 @@ Thu Feb 27 14:57:26 1997  Ken Raeburn  <raeburn@cygnus.com>
 Tue Feb 25 18:46:14 1997  Stan Shebs  <shebs@andros.cygnus.com>
 
 	* config.sub: Accept -lnews*.
+
+Tue Feb 25 13:19:14 1997  Andrew Cagney  <cagney@kremvax.tpgi.com.au>
+
+	* configure.in (noconfigdirs): Disable target-newlib,
+ 	target-examples and target-libiberty for d30v.
+
+Fri Feb 21 17:56:25 1997  Martin M. Hunt  <hunt@pizza.cygnus.com>
+
+	* configure.in (noconfigdirs): Enable ld for d30v.
+
+Fri Feb 21 20:58:51 1997  Michael Meissner  <meissner@cygnus.com>
+
+	* configure.in (tic80-*-*): Build compiler.
+
+Sun Feb 16 15:41:09 1997  Andrew Cagney  <cagney@critters.cygnus.com>
+
+	* configure.in (d30v-*): Remove sim directory from list of
+ 	unsupported d30v directories
+
+Tue Feb 18 17:32:42 1997  Martin M. Hunt  <hunt@pizza.cygnus.com>
+
+	* config.sub, configure.in: Add d30v target cpu.
 
 Thu Feb 13 22:04:44 1997  Klaus Kaempf  <kkaempf@progis.de>
 
@@ -728,6 +2033,10 @@ Fri Jan 17 15:32:15 1997  Doug Evans  <dje@canuck.cygnus.com>
 
 	* Makefile.in (all-target-winsup): Depend on all-target-libio.
 
+Mon Jan 13 22:46:54 1997  Michael Meissner  <meissner@tiktok.cygnus.com>
+
+	* configure.in (tic80-*-*): Turn off most targets right now.
+
 Fri Jan  3 16:04:03 1997  Ian Lance Taylor  <ian@cygnus.com>
 
 	* Makefile.in (MAKEINFO): Check for the existence of the Makefile,
@@ -739,6 +2048,10 @@ Tue Dec 31 16:00:31 1996  Ian Lance Taylor  <ian@cygnus.com>
 	* configure.in: Remove uses of config/mh-linux.
 
 	* config.sub, config.guess: Merge with latest FSF sources.
+
+Fri Dec 27 23:04:33 1996  Fred Fish  <fnf@cygnus.com>
+
+	* config.sub (case $basic_machine): Add tic80 entries.
 
 Fri Dec 27 12:07:59 1996  Ian Lance Taylor  <ian@cygnus.com>
 
@@ -786,10 +2099,6 @@ Tue Nov 26 11:45:33 1996  Kim Knuttila  <krk@cygnus.com>
 Sat Nov 23 19:26:22 1996  Michael Meissner  <meissner@tiktok.cygnus.com>
 
 	* config.sub: Handle d10v-unknown.
-
-Sat Nov 23 14:23:01 1996  Gavin Koch  <gavin@cygnus.com>
-
-	* gcc/depragmaize.c: Handle MSDOS's (non-unix) text files.
 
 Sat Nov 23 10:23:01 1996  Gavin Koch  <gavin@cygnus.com>
 
@@ -980,7 +2289,7 @@ Mon Oct  7 10:59:35 1996  Ian Lance Taylor  <ian@cygnus.com>
 
 Fri Oct  4 12:22:58 1996  Angela Marie Thomas (angela@cygnus.com)
 
-	* configure.in: Use config/mh-dgux386 for i[345]86-dg-dgux 
+	* configure.in: Use config/mh-dgux386 for i[345]86-dg-dgux
 	host configuration file.
 
 Thu Oct  3 09:28:25 1996  Jeffrey A Law  (law@cygnus.com)
@@ -1114,7 +2423,7 @@ Sat Jul 27 15:10:43 1996  Stan Shebs  <shebs@andros.cygnus.com>
 
 Tue Jul 23 10:47:04 1996  Martin M. Hunt  <hunt@pizza.cygnus.com>
 
-	* configure.in (d10v-*-*): Remove ld from $noconfigdirs. 
+	* configure.in (d10v-*-*): Remove ld from $noconfigdirs.
 
 Mon Jul 22 13:28:51 1996  Brendan Kehoe  <brendan@lisa.cygnus.com>
 
@@ -1734,7 +3043,7 @@ Mon Dec  4 12:38:15 1995  Ian Lance Taylor  <ian@cygnus.com>
 Thu Nov 30 14:45:25 1995  J.T. Conklin  <jtc@rtl.cygnus.com>
 
 	* config/mt-v810 (CC_FOR_TARGET): Add -ansi flag.  NEC compiler
- 	defaults to K&R mode, but doesn't have varargs.h, so we have to 
+ 	defaults to K&R mode, but doesn't have varargs.h, so we have to
 	compile in ANSI mode.
 
 Thu Nov 30 16:57:33 1995  Per Bothner  <bothner@wombat.gnu.ai.mit.edu>
@@ -2017,7 +3326,7 @@ Wed Oct 18 15:53:56 1995  steve chamberlain  <sac@slash.cygnus.com>
 	* Makefile.in: Build winsup.
 	* configure.in: Winsup is configured when target is win32.
 	Can only build win32 target GDB when native.
-	
+
 Mon Oct 16 09:42:31 1995  Jeffrey A Law  (law@cygnus.com)
 
 	* config.guess: Recognize HP model 819 machines as having
@@ -2067,7 +3376,7 @@ Wed Oct  4 22:05:36 1995  Jason Molenda  (crash@phydeaux.cygnus.com)
 
 Wed Oct  4 21:55:00 1995  Jason Molenda  (crash@phydeaux.cygnus.com)
 
-	* configure.in (CC): Try to get CC from 
+	* configure.in (CC): Try to get CC from
 	${srcdir}/${host_makefile_frag}, not ${host_makefile_frag}.
 
 Wed Oct  4 21:44:12 1995  Jason Molenda  (crash@phydeaux.cygnus.com)
@@ -2117,7 +3426,7 @@ Thu Sep 28 21:18:49 1995  Stan Shebs  <shebs@andros.cygnus.com>
 
 Thu Sep 28 17:39:56 1995  steve chamberlain  <sac@slash.cygnus.com>
 
-	* configure.in (host i[345]86-*-win32): Reduce the 
+	* configure.in (host i[345]86-*-win32): Reduce the
 	noconfigdirs again.
 
 Wed Sep 27 12:24:00 1995  Ian Lance Taylor  <ian@cygnus.com>
@@ -2158,7 +3467,7 @@ Mon Sep 18 23:08:26 1995  J.T. Conklin  <jtc@rtl.cygnus.com>
 	gdb, ld and opcodes on v810-*-*.
 
 Sat Sep 16 18:31:08 PDT 1995  Angela Marie Thomas <angela@cygnus.com>
-	
+
 	* config/mh-ncrsvr43: Removed AR_FLAGS
 
 Tue Sep 12 18:03:31 1995  Ian Lance Taylor  <ian@cygnus.com>
@@ -3022,7 +4331,7 @@ Thu Jun  2 10:57:06 1994  Karen Christiansen (karen@cirdan.cygnus.com)
 
 	* brought build-all.mk update-to-date with progressive build-all.mk,
 	  added new targets and hppa info.
-	
+
 Thu Jun  2 00:12:44 1994  Ian Lance Taylor  (ian@tweedledumb.cygnus.com)
 
 	* configure: If config.guess result is a prefix of the user
@@ -3197,7 +4506,7 @@ Sat Apr  9 15:10:45 1994  David J. Mackenzie  (djm@rtl.cygnus.com)
 Fri Apr  8 12:01:41 1994  David J. Mackenzie  (djm@cygnus.com)
 
 	* configure: Ignore --x-includes and --x-libraries, for Autoconf
-	compatibility. 
+	compatibility.
 
 Thu Apr  7 17:31:43 1994  Doug Evans  (dje@canuck.cygnus.com)
 
@@ -3510,7 +4819,7 @@ Wed Nov  3 22:09:46 1993  Ken Raeburn  (raeburn@rtl.cygnus.com)
 
 	* Makefile.in (DISTDOCDIRS): New variable.
 	(taz): Edit local Makefile.in sooner, instead of proto-toplev
-	Makefile.in later.  Build "info" and "dvi" in DISTDOCDIRS.  
+	Makefile.in later.  Build "info" and "dvi" in DISTDOCDIRS.
 
 Wed Nov  3 21:31:52 1993  david d `zoo' zuhn  (zoo@rtl.cygnus.com)
 

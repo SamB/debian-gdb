@@ -1,5 +1,5 @@
 /* ANSI and traditional C compatability macros
-   Copyright 1991, 1992, 1996 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1996, 1999 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
 This program is free software; you can redistribute it and/or modify
@@ -103,10 +103,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #define	PTRCONST	void *CONST
 #define	LONG_DOUBLE	long double
 
+#ifndef IN_GCC
 #define	AND		,
 #define	NOARGS		void
 #define	VOLATILE	volatile
 #define	SIGNED		signed
+#endif /* ! IN_GCC */
 
 #define PARAMS(paramlist)		paramlist
 #define ANSI_PROTOTYPES			1
@@ -115,12 +117,14 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #define VA_START(va_list,var)		va_start(va_list,var)
 
 /* These are obsolete.  Do not use.  */
+#ifndef IN_GCC
 #define CONST				const
 #define DOTS				, ...
 #define PROTO(type, name, arglist)	type name arglist
 #define EXFUN(name, proto)		name proto
 #define DEFUN(name, arglist, args)	name(args)
 #define DEFUN_VOID(name)		name(void)
+#endif /* ! IN_GCC */
 
 #else	/* Not ANSI C.  */
 
@@ -128,13 +132,16 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #define	PTRCONST	PTR
 #define	LONG_DOUBLE	double
 
+#ifndef IN_GCC
 #define	AND		;
 #define	NOARGS
+#define	VOLATILE
+#define	SIGNED
+#endif /* !IN_GCC */
+
 #ifndef const /* some systems define it in header files for non-ansi mode */
 #define	const
 #endif
-#define	VOLATILE
-#define	SIGNED
 
 #define PARAMS(paramlist)		()
 
@@ -142,13 +149,48 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #define VA_START(va_list,var)		va_start(va_list)
 
 /* These are obsolete.  Do not use.  */
+#ifndef IN_GCC
 #define CONST
 #define DOTS
 #define PROTO(type, name, arglist)	type name ()
 #define EXFUN(name, proto)		name()
 #define DEFUN(name, arglist, args)	name arglist args;
 #define DEFUN_VOID(name)		name()
+#endif /* ! IN_GCC */
 
 #endif	/* ANSI C.  */
+
+/* Define macros for some gcc attributes.  This permits us to use the
+   macros freely, and know that they will come into play for the
+   version of gcc in which they are supported.  */
+
+#if __GNUC__ < 2 || (__GNUC__ == 2 && __GNUC_MINOR__ < 7)
+# define __attribute__(x)
+#endif
+
+#ifndef ATTRIBUTE_UNUSED_LABEL
+# if __GNUC__ < 2 || (__GNUC__ == 2 && __GNUC_MINOR__ < 93)
+#  define ATTRIBUTE_UNUSED_LABEL
+# else
+#  define ATTRIBUTE_UNUSED_LABEL ATTRIBUTE_UNUSED
+# endif /* GNUC < 2.93 */
+#endif /* ATTRIBUTE_UNUSED_LABEL */
+
+#ifndef ATTRIBUTE_UNUSED
+#define ATTRIBUTE_UNUSED __attribute__ ((__unused__))
+#endif /* ATTRIBUTE_UNUSED */
+
+#ifndef ATTRIBUTE_NORETURN
+#define ATTRIBUTE_NORETURN __attribute__ ((__noreturn__))
+#endif /* ATTRIBUTE_NORETURN */
+
+#ifndef ATTRIBUTE_PRINTF
+#define ATTRIBUTE_PRINTF(m, n) __attribute__ ((format (__printf__, m, n)))
+#define ATTRIBUTE_PRINTF_1 ATTRIBUTE_PRINTF(1, 2)
+#define ATTRIBUTE_PRINTF_2 ATTRIBUTE_PRINTF(2, 3)
+#define ATTRIBUTE_PRINTF_3 ATTRIBUTE_PRINTF(3, 4)
+#define ATTRIBUTE_PRINTF_4 ATTRIBUTE_PRINTF(4, 5)
+#define ATTRIBUTE_PRINTF_5 ATTRIBUTE_PRINTF(5, 6)
+#endif /* ATTRIBUTE_PRINTF */
 
 #endif	/* ansidecl.h	*/

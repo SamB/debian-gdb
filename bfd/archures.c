@@ -1,5 +1,5 @@
 /* BFD library support routines for architectures.
-   Copyright (C) 1990, 91-97, 1998 Free Software Foundation, Inc.
+   Copyright (C) 1990, 91-98, 1999 Free Software Foundation, Inc.
    Hacked by John Gilmore and Steve Chamberlain of Cygnus Support.
 
 This file is part of BFD, the Binary File Descriptor library.
@@ -70,6 +70,14 @@ DESCRIPTION
 .  bfd_arch_unknown,   {* File arch not known *}
 .  bfd_arch_obscure,   {* Arch known, not one of these *}
 .  bfd_arch_m68k,      {* Motorola 68xxx *}
+.#define bfd_mach_m68000 1
+.#define bfd_mach_m68008 2
+.#define bfd_mach_m68010 3
+.#define bfd_mach_m68020 4
+.#define bfd_mach_m68030 5
+.#define bfd_mach_m68040 6
+.#define bfd_mach_m68060 7
+.#define bfd_mach_cpu32  8
 .  bfd_arch_vax,       {* DEC Vax *}   
 .  bfd_arch_i960,      {* Intel 960 *}
 .    {* The order of the following is important.
@@ -97,8 +105,9 @@ DESCRIPTION
 .#define bfd_mach_sparc_sparclite	3
 .#define bfd_mach_sparc_v8plus		4
 .#define bfd_mach_sparc_v8plusa		5 {* with ultrasparc add'ns *}
-.#define bfd_mach_sparc_v9		6
-.#define bfd_mach_sparc_v9a		7 {* with ultrasparc add'ns *}
+.#define bfd_mach_sparc_sparclite_le	6
+.#define bfd_mach_sparc_v9		7
+.#define bfd_mach_sparc_v9a		8 {* with ultrasparc add'ns *}
 .{* Nonzero if MACH has the v9 instruction set.  *}
 .#define bfd_mach_sparc_v9_p(mach) \
 .  ((mach) >= bfd_mach_sparc_v8plus && (mach) <= bfd_mach_sparc_v9a)
@@ -108,6 +117,7 @@ DESCRIPTION
 .#define bfd_mach_mips4000		4000
 .#define bfd_mach_mips4010		4010
 .#define bfd_mach_mips4100		4100
+.#define bfd_mach_mips4111		4111
 .#define bfd_mach_mips4300		4300
 .#define bfd_mach_mips4400		4400
 .#define bfd_mach_mips4600		4600
@@ -120,6 +130,7 @@ DESCRIPTION
 .  bfd_arch_i386,      {* Intel 386 *}
 .#define bfd_mach_i386_i386 0
 .#define bfd_mach_i386_i8086 1
+.#define bfd_mach_i386_i386_intel_syntax 2
 .  bfd_arch_we32k,     {* AT&T WE32xxx *}
 .  bfd_arch_tahoe,     {* CCI/Harris Tahoe *}
 .  bfd_arch_i860,      {* Intel 860 *}
@@ -136,6 +147,7 @@ DESCRIPTION
 .  bfd_arch_rs6000,    {* IBM RS/6000 *}
 .  bfd_arch_hppa,      {* HP PA RISC *}
 .  bfd_arch_d10v,      {* Mitsubishi D10V *}
+.  bfd_arch_d30v,      {* Mitsubishi D30V *}
 .  bfd_arch_z8k,       {* Zilog Z8000 *}
 .#define bfd_mach_z8001		1
 .#define bfd_mach_z8002		2
@@ -145,24 +157,36 @@ DESCRIPTION
 .#define bfd_mach_sh3        0x30
 .#define bfd_mach_sh3e       0x3e
 .  bfd_arch_alpha,     {* Dec Alpha *}
+.#define bfd_mach_alpha_ev4  0x10
+.#define bfd_mach_alpha_ev5  0x20
+.#define bfd_mach_alpha_ev6  0x30
 .  bfd_arch_arm,       {* Advanced Risc Machines ARM *}
 .#define bfd_mach_arm_2		1
-.#define bfd_mach_arm_2a		2
+.#define bfd_mach_arm_2a	2
 .#define bfd_mach_arm_3		3
 .#define bfd_mach_arm_3M 	4
-.#define bfd_mach_arm_4 		5
+.#define bfd_mach_arm_4 	5
 .#define bfd_mach_arm_4T 	6
+.#define bfd_mach_arm_5 	7
+.#define bfd_mach_arm_5T	8
 .  bfd_arch_ns32k,     {* National Semiconductors ns32000 *}
 .  bfd_arch_w65,       {* WDC 65816 *}
 .  bfd_arch_tic30,     {* Texas Instruments TMS320C30 *}
+.  bfd_arch_tic80,     {* TI TMS320c80 (MVP) *}
 .  bfd_arch_v850,      {* NEC V850 *}
 .#define bfd_mach_v850          0
+.#define bfd_mach_v850e 	'E'
+.#define bfd_mach_v850ea	'A'
 .  bfd_arch_arc,       {* Argonaut RISC Core *}
 .#define bfd_mach_arc_base 0
 .  bfd_arch_m32r,      {* Mitsubishi M32R/D *}
 .#define bfd_mach_m32r		0 {* backwards compatibility *}
 .  bfd_arch_mn10200,   {* Matsushita MN10200 *}
 .  bfd_arch_mn10300,   {* Matsushita MN10300 *}
+.#define bfd_mach_mn10300		300
+.  bfd_arch_fr30,
+.#define bfd_mach_fr30		0x46523330
+.  bfd_arch_mcore,
 .  bfd_arch_last
 .  };
 
@@ -206,6 +230,7 @@ extern const bfd_arch_info_type bfd_alpha_arch;
 extern const bfd_arch_info_type bfd_arc_arch;
 extern const bfd_arch_info_type bfd_arm_arch;
 extern const bfd_arch_info_type bfd_d10v_arch;
+extern const bfd_arch_info_type bfd_d30v_arch;
 extern const bfd_arch_info_type bfd_h8300_arch;
 extern const bfd_arch_info_type bfd_h8500_arch;
 extern const bfd_arch_info_type bfd_hppa_arch;
@@ -223,12 +248,15 @@ extern const bfd_arch_info_type bfd_rs6000_arch;
 extern const bfd_arch_info_type bfd_sh_arch;
 extern const bfd_arch_info_type bfd_sparc_arch;
 extern const bfd_arch_info_type bfd_tic30_arch;
+extern const bfd_arch_info_type bfd_tic80_arch;
 extern const bfd_arch_info_type bfd_vax_arch;
 extern const bfd_arch_info_type bfd_we32k_arch;
 extern const bfd_arch_info_type bfd_z8k_arch;
 extern const bfd_arch_info_type bfd_ns32k_arch;
 extern const bfd_arch_info_type bfd_w65_arch;
 extern const bfd_arch_info_type bfd_v850_arch;
+extern const bfd_arch_info_type bfd_fr30_arch;
+extern const bfd_arch_info_type bfd_mcore_arch;
 
 static const bfd_arch_info_type * const bfd_archures_list[] =
 {
@@ -240,6 +268,7 @@ static const bfd_arch_info_type * const bfd_archures_list[] =
   &bfd_arc_arch,
   &bfd_arm_arch,
   &bfd_d10v_arch,
+  &bfd_d30v_arch,
   &bfd_h8300_arch,
   &bfd_h8500_arch,
   &bfd_hppa_arch,
@@ -257,12 +286,15 @@ static const bfd_arch_info_type * const bfd_archures_list[] =
   &bfd_sh_arch,
   &bfd_sparc_arch,
   &bfd_tic30_arch,
+  &bfd_tic80_arch,
   &bfd_vax_arch,
   &bfd_we32k_arch,
   &bfd_z8k_arch,
   &bfd_ns32k_arch,
   &bfd_w65_arch,
   &bfd_v850_arch,
+  &bfd_fr30_arch,
+  &bfd_mcore_arch,
 #endif
   0
 };
@@ -649,18 +681,20 @@ bfd_default_scan (info, string)
     {
       int strlen_arch_name = strlen (info->arch_name);
       if (strncasecmp (string, info->arch_name, strlen_arch_name) == 0)
-	if (string[strlen_arch_name] == ':')
-	  {
-	    if (strcasecmp (string + strlen_arch_name + 1,
-			    info->printable_name) == 0)
-	      return true;
-	  }
-	else
-	  {
-	    if (strcasecmp (string + strlen_arch_name,
-			    info->printable_name) == 0)
-	      return true;
-	  }
+	{
+	  if (string[strlen_arch_name] == ':')
+	    {
+	      if (strcasecmp (string + strlen_arch_name + 1,
+			      info->printable_name) == 0)
+		return true;
+	    }
+	  else
+	    {
+	      if (strcasecmp (string + strlen_arch_name,
+			      info->printable_name) == 0)
+		return true;
+	    }
+	}
     }
 
   /* Given that PRINTABLE_NAME has the form: <arch> ":" <mach>;
@@ -705,7 +739,7 @@ bfd_default_scan (info, string)
     }
 
   number = 0;
-  while (isdigit(*ptr_src))
+  while (isdigit ((unsigned char) *ptr_src))
     {
       number = number * 10 + *ptr_src  - '0';
       ptr_src++;
@@ -716,14 +750,34 @@ bfd_default_scan (info, string)
 
   switch (number) 
     {
-    case 68010:
-    case 68020:
-    case 68030:
-    case 68040:
-    case 68332:
-    case 68050:        
+      /* FIXME: These are needed to parse IEEE objects.  */
     case 68000: 
-      arch = bfd_arch_m68k; 
+      arch = bfd_arch_m68k;
+      number = bfd_mach_m68000;
+      break;
+    case 68010:
+      arch = bfd_arch_m68k;
+      number = bfd_mach_m68010;
+      break;
+    case 68020:
+      arch = bfd_arch_m68k;
+      number = bfd_mach_m68020;
+      break;
+    case 68030:
+      arch = bfd_arch_m68k;
+      number = bfd_mach_m68030;
+      break;
+    case 68040:
+      arch = bfd_arch_m68k;
+      number = bfd_mach_m68040;
+      break;
+    case 68060:
+      arch = bfd_arch_m68k;
+      number = bfd_mach_m68060;
+      break;
+    case 68332:
+      arch = bfd_arch_m68k;
+      number = bfd_mach_cpu32;
       break;
 
     case 32000:
@@ -842,3 +896,56 @@ bfd_printable_arch_mach (arch, machine)
       return ap->printable_name;
     return "UNKNOWN!";
 }
+
+/* CYGNUS LOCAL octets vs. bytes/twall@tiac.net */
+/*
+FUNCTION
+	bfd_octets_per_byte
+
+SYNOPSIS
+	int bfd_octets_per_byte(bfd *abfd);
+
+DESCRIPTION
+	Return the number of host (8-bit) bytes per target byte (minimum
+        addressable unit).  In most cases, this will be one, but some DSP
+        targets have 16, 32, or even 48 bits per byte.
+
+*/
+
+int
+bfd_octets_per_byte (abfd)
+     bfd *abfd;
+{
+    return bfd_arch_mach_octets_per_byte (bfd_get_arch (abfd), 
+                                          bfd_get_mach (abfd));
+}
+
+/*
+FUNCTION
+	bfd_arch_mach_octets_per_byte
+
+SYNOPSIS
+	int bfd_arch_mach_octets_per_byte(enum bfd_architecture arch,
+                                          unsigned long machine);
+
+DESCRIPTION
+	Return the number of octets per byte (minimum
+        addressable unit).  In most cases, this will be one, but some DSP
+        targets have 16, 32, or even 48 bits per byte.
+        
+        This routine is provided for those cases where a bfd * is not
+        available
+*/
+
+int
+bfd_arch_mach_octets_per_byte (arch, mach)
+    enum bfd_architecture arch;
+    unsigned long mach;
+{
+    const bfd_arch_info_type *ap = bfd_lookup_arch (arch, mach);
+    if (ap)
+      return ap->bits_per_byte / 8;
+    return 1;
+}
+
+/* end CYGNUS LOCAL */

@@ -75,7 +75,7 @@ supply_gregset(gregset_t *gregsetp)
     for (regi=0; regi < 32; regi++)
 	supply_register (regi, (char *) (regp + regi));
 
-    for (regi = FIRST_SP_REGNUM; regi <= LAST_SP_REGNUM; regi++)
+    for (regi = FIRST_UISA_SP_REGNUM; regi <= LAST_UISA_SP_REGNUM; regi++)
 	supply_register (regi, (char *) (regp + regmap[regi]));
 }
 

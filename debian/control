@@ -1,5 +1,5 @@
 Source: gdb
-Maintainer: Vincent Renardias <vincent@waw.com>
+Maintainer: Vincent Renardias <vincent@debian.org>
 Section: devel
 Priority: standard
 Standards-Version: 2.4.0.0

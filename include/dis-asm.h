@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include "bfd.h"
 
-typedef int (*fprintf_ftype) PARAMS((FILE*, const char*, ...));
+typedef int (*fprintf_ftype) PARAMS((PTR, const char*, ...));
 
 enum dis_insn_type {
   dis_noninsn,			/* Not a valid instruction */
@@ -37,7 +37,7 @@ enum dis_insn_type {
 
 typedef struct disassemble_info {
   fprintf_ftype fprintf_func;
-  FILE *stream;
+  PTR stream;
   PTR application_data;
 
   /* Target description.  We could replace this with a pointer to the bfd,
@@ -51,9 +51,15 @@ typedef struct disassemble_info {
   unsigned long mach;
   /* Endianness (for bi-endian cpus).  Mono-endian cpus can ignore this.  */
   enum bfd_endian endian;
-  /* The symbol at the start of the function being disassembled.  This
-     is not set reliably, but if it is not NULL, it is correct.  */
-  asymbol *symbol;
+
+  /* An array of pointers to symbols either at the location being disassembled
+     or at the start of the function being disassembled.  The array is sorted
+     so that the first symbol is intended to be the one used.  The others are
+     present for any misc. purposes.  This is not set reliably, but if it is
+     not NULL, it is correct.  */
+  asymbol **symbols;
+  /* Number of symbols in array.  */
+  int num_symbols;
 
   /* For use by the disassembler.
      The top 16 bits are reserved for public use (and are documented here).
@@ -111,6 +117,13 @@ typedef struct disassemble_info {
   int bytes_per_chunk;
   enum bfd_endian display_endian;
 
+  /* CYGNUS LOCAL octets vs bytes/twall@tiac.net */
+  /* Number of host bytes per incremented target address 
+     Normally one, but some DSPs have byte sizes of 16 or 32
+   */
+  int octets_per_byte;
+  /* end CYGNUS LOCAL */
+
   /* Results from instruction decoders.  Not all decoders yet support
      this information.  This info is set each time an instruction is
      decoded, and is only valid for the last such instruction.
@@ -127,6 +140,9 @@ typedef struct disassemble_info {
 				   zero if unknown.  */
   bfd_vma target2;		/* Second target address for dref2 */
 
+  /* Command line options specific to the target disassembler.  */
+  char * disassembler_options;
+
 } disassemble_info;
 
 
@@ -137,7 +153,8 @@ typedef int (*disassembler_ftype)
 
 extern int print_insn_big_mips		PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_little_mips	PARAMS ((bfd_vma, disassemble_info*));
-extern int print_insn_i386		PARAMS ((bfd_vma, disassemble_info*));
+extern int print_insn_i386_att		PARAMS ((bfd_vma, disassemble_info*));
+extern int print_insn_i386_intel	PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_m68k		PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_z8001		PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_z8002		PARAMS ((bfd_vma, disassemble_info*));
@@ -156,8 +173,10 @@ extern int print_insn_i960		PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_sh		PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_shl		PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_hppa		PARAMS ((bfd_vma, disassemble_info*));
+extern int print_insn_fr30		PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_m32r		PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_m88k		PARAMS ((bfd_vma, disassemble_info*));
+extern int print_insn_mcore		PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_mn10200		PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_mn10300		PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_ns32k		PARAMS ((bfd_vma, disassemble_info*));
@@ -166,8 +185,13 @@ extern int print_insn_little_powerpc	PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_rs6000		PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_w65		PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_d10v		PARAMS ((bfd_vma, disassemble_info*));
+extern int print_insn_d30v		PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_v850		PARAMS ((bfd_vma, disassemble_info*));
 extern int print_insn_tic30		PARAMS ((bfd_vma, disassemble_info*));
+extern int print_insn_vax		PARAMS ((bfd_vma, disassemble_info*));
+extern int print_insn_tic80		PARAMS ((bfd_vma, disassemble_info*));
+
+extern int arm_toggle_regnames          PARAMS ((void));
 
 /* Fetch the disassembler for a given BFD, if that support is available.  */
 extern disassembler_ftype disassembler	PARAMS ((bfd *));
@@ -196,6 +220,7 @@ extern void generic_print_address
 extern int generic_symbol_at_address
   PARAMS ((bfd_vma, struct disassemble_info *));
 
+/* CYGNUS LOCAL octets vs bytes/twall@tiac.net */
 /* Macro to initialize a disassemble_info struct.  This should be called
    by all applications creating such a struct.  */
 #define INIT_DISASSEMBLE_INFO(INFO, STREAM, FPRINTF_FUNC) \
@@ -203,7 +228,9 @@ extern int generic_symbol_at_address
   (INFO).arch = bfd_arch_unknown, \
   (INFO).mach = 0, \
   (INFO).endian = BFD_ENDIAN_UNKNOWN, \
+  (INFO).octets_per_byte = 1, \
   INIT_DISASSEMBLE_INFO_NO_ARCH(INFO, STREAM, FPRINTF_FUNC)
+/* end CYGNUS LOCAL */
 
 /* Call this macro to initialize only the internal variables for the
    disassembler.  Architecture dependent things such as byte order, or machine
@@ -211,9 +238,10 @@ extern int generic_symbol_at_address
    GDB which must initialize these things seperatly.  */
 
 #define INIT_DISASSEMBLE_INFO_NO_ARCH(INFO, STREAM, FPRINTF_FUNC) \
-  (INFO).fprintf_func = (FPRINTF_FUNC), \
-  (INFO).stream = (STREAM), \
-  (INFO).symbol = NULL, \
+  (INFO).fprintf_func = (fprintf_ftype)(FPRINTF_FUNC), \
+  (INFO).stream = (PTR)(STREAM), \
+  (INFO).symbols = NULL, \
+  (INFO).num_symbols = 0, \
   (INFO).buffer = NULL, \
   (INFO).buffer_vma = 0, \
   (INFO).buffer_length = 0, \
