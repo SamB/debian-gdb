@@ -1,3 +1,58 @@
+gdb (6.3-5) unstable; urgency=low
+
+  * Fix NPTL debugging using gdbserver.
+  * Disable the "Incomplete CFI data" warning.
+  * Really include the menu file this time (Closes: #80010).
+  * Include a patch to handle strange binaries produced by Kylix
+    (Closes: #249008).
+  * Fix printing of fork status messages, and disable them by default
+    (Closes: #254039).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Wed,  8 Dec 2004 18:35:02 -0500
+
+gdb (6.3-4) unstable; urgency=low
+
+  * Backport a patch for a warning about the vsyscall DSO.
+  * Backport a spelling fix for PTRACE_EVENT_VFORK_DONE to fix S/390
+    build failure.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Mon, 15 Nov 2004 11:52:13 -0500
+
+gdb (6.3-3) unstable; urgency=low
+
+  * Add flex to build dependencies for ada-lex.l.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun, 14 Nov 2004 00:28:18 -0500
+
+gdb (6.3-2) unstable; urgency=low
+
+  * Backport a patch for a C++ / stabs debug info crash (Closes: #251322).
+  * Correct build dependency for gcj (missed a !).
+  * Correct build dependency for libunwind (it's libunwind7-dev now).
+  * Update fix for fork tracing.  This removes a warning on 2.4 kernels,
+    and fixes UML debugging (Closes: #271069).
+  * Fix single-stepping through a call to NULL on SPARC (Closes: #256012).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sat, 13 Nov 2004 16:50:55 -0500
+
+gdb (6.3-1) unstable; urgency=low
+
+  * New upstream release (Closes: #259219).
+    - Give an error for division by 0 (Closes: #280051).
+    - Includes support for -feliminate-dwarf2-dups.
+    - Limited support for Ada is included; more to come
+      (Closes: #39516, #46470, #57876, #85947).
+  * Update build dependency on texinfo; 4.7-1 could not build GDB.
+  * Build depend on gcj on all architectures other than mips and mipsel
+    (Closes: #272327).
+  * Build depend on libkvm-dev for kfreebsd-gnu (Closes: #264103).
+  * Add libunwind support on ia64 (Closes: #279596).
+  * Make the fork tracing checks more robust.  Prevents stray processes
+    on 2.6.10-rc1.
+  * Add a Debian menu entry for GDB (Closes: #80010).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Fri, 12 Nov 2004 18:45:46 -0500
+
 gdb (6.1-3) unstable; urgency=low
 
   * Fix passing and returning of non-trivial C++ objects (Closes: #160459).

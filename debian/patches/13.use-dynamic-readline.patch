@@ -1,10 +1,12 @@
 Debian local - Use system readline to build.
 
-Index: gdb-6.1/gdb/Makefile.in
+It would be nice to add a configure argument for this upstream.
+
+Index: gdb-6.3/gdb/Makefile.in
 ===================================================================
---- gdb-6.1.orig/gdb/Makefile.in	2004-04-05 13:26:43.000000000 -0400
-+++ gdb-6.1/gdb/Makefile.in	2004-04-05 13:26:44.000000000 -0400
-@@ -113,10 +113,16 @@ BFD_SRC = $(srcdir)/$(BFD_DIR)
+--- gdb-6.3.orig/gdb/Makefile.in	2004-11-03 21:18:49.000000000 -0500
++++ gdb-6.3/gdb/Makefile.in	2004-11-09 23:04:57.204160812 -0500
+@@ -121,10 +121,16 @@ BFD_SRC = $(srcdir)/$(BFD_DIR)
  BFD_CFLAGS = -I$(BFD_DIR) -I$(BFD_SRC)
  
  # Where is the READLINE library?  Typically in ../readline.

@@ -1,6 +1,6 @@
-This is gdb.info, produced by makeinfo version 4.6 from ./gdb.texinfo.
+This is gdb.info, produced by makeinfo version 4.7 from ./gdb.texinfo.
 
-INFO-DIR-SECTION Programming & development tools.
+INFO-DIR-SECTION Software development
 START-INFO-DIR-ENTRY
 * Gdb: (gdb).                     The GNU debugger.
 END-INFO-DIR-ENTRY
@@ -8,7 +8,7 @@ END-INFO-DIR-ENTRY
    This file documents the GNU debugger GDB.
 
    This is the Ninth Edition, of `Debugging with GDB: the GNU
-Source-Level Debugger' for GDB Version 6.1.
+Source-Level Debugger' for GDB Version 6.3.
 
    Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
 1998,
@@ -27,10 +27,119 @@ published by the Free Software Foundation raise funds for GNU
 development."
 
 
+File: gdb.info,  Node: Built-In Func/Proc,  Next: M2 Constants,  Prev: M2 Operators,  Up: Modula-2
+
+12.4.3.2 Built-in functions and procedures
+..........................................
+
+Modula-2 also makes available several built-in procedures and functions.
+In describing these, the following metavariables are used:
+
+A
+     represents an `ARRAY' variable.
+
+C
+     represents a `CHAR' constant or variable.
+
+I
+     represents a variable or constant of integral type.
+
+M
+     represents an identifier that belongs to a set.  Generally used in
+     the same function with the metavariable S.  The type of S should
+     be `SET OF MTYPE' (where MTYPE is the type of M).
+
+N
+     represents a variable or constant of integral or floating-point
+     type.
+
+R
+     represents a variable or constant of floating-point type.
+
+T
+     represents a type.
+
+V
+     represents a variable.
+
+X
+     represents a variable or constant of one of many types.  See the
+     explanation of the function for details.
+
+   All Modula-2 built-in procedures also return a result, described
+below.
+
+`ABS(N)'
+     Returns the absolute value of N.
+
+`CAP(C)'
+     If C is a lower case letter, it returns its upper case equivalent,
+     otherwise it returns its argument.
+
+`CHR(I)'
+     Returns the character whose ordinal value is I.
+
+`DEC(V)'
+     Decrements the value in the variable V by one.  Returns the new
+     value.
+
+`DEC(V,I)'
+     Decrements the value in the variable V by I.  Returns the new
+     value.
+
+`EXCL(M,S)'
+     Removes the element M from the set S.  Returns the new set.
+
+`FLOAT(I)'
+     Returns the floating point equivalent of the integer I.
+
+`HIGH(A)'
+     Returns the index of the last member of A.
+
+`INC(V)'
+     Increments the value in the variable V by one.  Returns the new
+     value.
+
+`INC(V,I)'
+     Increments the value in the variable V by I.  Returns the new
+     value.
+
+`INCL(M,S)'
+     Adds the element M to the set S if it is not already there.
+     Returns the new set.
+
+`MAX(T)'
+     Returns the maximum value of the type T.
+
+`MIN(T)'
+     Returns the minimum value of the type T.
+
+`ODD(I)'
+     Returns boolean TRUE if I is an odd number.
+
+`ORD(X)'
+     Returns the ordinal value of its argument.  For example, the
+     ordinal value of a character is its ASCII value (on machines
+     supporting the ASCII character set).  X must be of an ordered
+     type, which include integral, character and enumerated types.
+
+`SIZE(X)'
+     Returns the size of its argument.  X can be a variable or a type.
+
+`TRUNC(R)'
+     Returns the integral part of R.
+
+`VAL(T,I)'
+     Returns the member of the type T whose ordinal value is I.
+
+     _Warning:_  Sets and their operations are not yet supported, so
+     GDB treats the use of procedures `INCL' and `EXCL' as an error.
+
+
 File: gdb.info,  Node: M2 Constants,  Next: M2 Defaults,  Prev: Built-In Func/Proc,  Up: Modula-2
 
-Constants
-.........
+12.4.3.3 Constants
+..................
 
 GDB allows you to express the constants of Modula-2 in the following
 ways:
@@ -68,8 +177,8 @@ ways:
 
 File: gdb.info,  Node: M2 Defaults,  Next: Deviations,  Prev: M2 Constants,  Up: Modula-2
 
-Modula-2 defaults
-.................
+12.4.3.4 Modula-2 defaults
+..........................
 
 If type and range checking are set automatically by GDB, they both
 default to `on' whenever the working language changes to Modula-2.
@@ -84,8 +193,8 @@ Automatically, for further details.
 
 File: gdb.info,  Node: Deviations,  Next: M2 Checks,  Prev: M2 Defaults,  Up: Modula-2
 
-Deviations from standard Modula-2
-.................................
+12.4.3.5 Deviations from standard Modula-2
+..........................................
 
 A few changes have been made to make Modula-2 programs easier to debug.
 This is done primarily via loosening its type strictness:
@@ -110,8 +219,8 @@ This is done primarily via loosening its type strictness:
 
 File: gdb.info,  Node: M2 Checks,  Next: M2 Scope,  Prev: Deviations,  Up: Modula-2
 
-Modula-2 type and range checks
-..............................
+12.4.3.6 Modula-2 type and range checks
+.......................................
 
      _Warning:_ in this release, GDB does not yet perform type or range
      checking.
@@ -134,8 +243,8 @@ array index bounds, and all built-in functions and procedures.
 
 File: gdb.info,  Node: M2 Scope,  Next: GDB/M2,  Prev: M2 Checks,  Up: Modula-2
 
-The scope operators `::' and `.'
-................................
+12.4.3.7 The scope operators `::' and `.'
+.........................................
 
 There are a few subtle differences between the Modula-2 scope operator
 (`.') and the GDB scope operator (`::').  The two have similar syntax:
@@ -162,8 +271,8 @@ is not an identifier in MODULE.
 
 File: gdb.info,  Node: GDB/M2,  Prev: M2 Scope,  Up: Modula-2
 
-GDB and Modula-2
-................
+12.4.3.8 GDB and Modula-2
+.........................
 
 Some GDB commands have little use when debugging Modula-2 programs.
 Five subcommands of `set print' and `show print' apply specifically to
@@ -181,10 +290,284 @@ by an integral constant, the construct `{TYPE}ADREXP' is still useful.
 as the beginning of a comment.  Use `<>' instead.
 
 
+File: gdb.info,  Node: Ada,  Prev: Modula-2,  Up: Support
+
+12.4.4 Ada
+----------
+
+The extensions made to GDB for Ada only support output from the GNU Ada
+(GNAT) compiler.  Other Ada compilers are not currently supported, and
+attempting to debug executables produced by them is most likely to be
+difficult.
+
+* Menu:
+
+* Ada Mode Intro::              General remarks on the Ada syntax
+                                   and semantics supported by Ada mode
+                                   in GDB.
+* Omissions from Ada::          Restrictions on the Ada expression syntax.
+* Additions to Ada::            Extensions of the Ada expression syntax.
+* Stopping Before Main Program:: Debugging the program during elaboration.
+* Ada Glitches::                Known peculiarities of Ada mode.
+
+
+File: gdb.info,  Node: Ada Mode Intro,  Next: Omissions from Ada,  Up: Ada
+
+12.4.4.1 Introduction
+.....................
+
+The Ada mode of GDB supports a fairly large subset of Ada expression
+syntax, with some extensions.  The philosophy behind the design of this
+subset is
+
+   * That GDB should provide basic literals and access to operations for
+     arithmetic, dereferencing, field selection, indexing, and
+     subprogram calls, leaving more sophisticated computations to
+     subprograms written into the program (which therefore may be
+     called from GDB).
+
+   * That type safety and strict adherence to Ada language restrictions
+     are not particularly important to the GDB user.
+
+   * That brevity is important to the GDB user.
+
+   Thus, for brevity, the debugger acts as if there were implicit
+`with' and `use' clauses in effect for all user-written packages,
+making it unnecessary to fully qualify most names with their packages,
+regardless of context.  Where this causes ambiguity, GDB asks the
+user's intent.
+
+   The debugger will start in Ada mode if it detects an Ada main
+program.  As for other languages, it will enter Ada mode when stopped
+in a program that was translated from an Ada source file.
+
+   While in Ada mode, you may use `-' for comments.  This is useful
+mostly for documenting command files.  The standard GDB comment (`#')
+still works at the beginning of a line in Ada mode, but not in the
+middle (to allow based literals).
+
+   The debugger supports limited overloading.  Given a subprogram call
+in which the function symbol has multiple definitions, it will use the
+number of actual parameters and some information about their types to
+attempt to narrow the set of definitions.  It also makes very limited
+use of context, preferring procedures to functions in the context of
+the `call' command, and functions to procedures elsewhere.
+
+
+File: gdb.info,  Node: Omissions from Ada,  Next: Additions to Ada,  Prev: Ada Mode Intro,  Up: Ada
+
+12.4.4.2 Omissions from Ada
+...........................
+
+Here are the notable omissions from the subset:
+
+   * Only a subset of the attributes are supported:
+
+        - 'First, 'Last, and 'Length  on array objects (not on types
+          and subtypes).
+
+        - 'Min and 'Max.
+
+        - 'Pos and 'Val.
+
+        - 'Tag.
+
+        - 'Range on array objects (not subtypes), but only as the right
+          operand of the membership (`in') operator.
+
+        - 'Access, 'Unchecked_Access, and 'Unrestricted_Access (a GNAT
+          extension).
+
+        - 'Address.
+
+   * The names in `Characters.Latin_1' are not available and
+     concatenation is not implemented.  Thus, escape characters in
+     strings are not currently available.
+
+   * Equality tests (`=' and `/=') on arrays test for bitwise equality
+     of representations.  They will generally work correctly for
+     strings and arrays whose elements have integer or enumeration
+     types.  They may not work correctly for arrays whose element types
+     have user-defined equality, for arrays of real values (in
+     particular, IEEE-conformant floating point, because of negative
+     zeroes and NaNs), and for arrays whose elements contain unused
+     bits with indeterminate values.
+
+   * The other component-by-component array operations (`and', `or',
+     `xor', `not', and relational tests other than equality) are not
+     implemented.
+
+   * There are no record or array aggregates.
+
+   * Calls to dispatching subprograms are not implemented.
+
+   * The overloading algorithm is much more limited (i.e., less
+     selective) than that of real Ada.  It makes only limited use of
+     the context in which a subexpression appears to resolve its
+     meaning, and it is much looser in its rules for allowing type
+     matches.  As a result, some function calls will be ambiguous, and
+     the user will be asked to choose the proper resolution.
+
+   * The `new' operator is not implemented.
+
+   * Entry calls are not implemented.
+
+   * Aside from printing, arithmetic operations on the native VAX
+     floating-point formats are not supported.
+
+   * It is not possible to slice a packed array.
+
+
+File: gdb.info,  Node: Additions to Ada,  Next: Stopping Before Main Program,  Prev: Omissions from Ada,  Up: Ada
+
+12.4.4.3 Additions to Ada
+.........................
+
+As it does for other languages, GDB makes certain generic extensions to
+Ada (*note Expressions::):
+
+   * If the expression E is a variable residing in memory (typically a
+     local variable or array element) and N is a positive integer, then
+     `E@N' displays the values of E and the N-1 adjacent variables
+     following it in memory as an array.  In Ada, this operator is
+     generally not necessary, since its prime use is in displaying
+     parts of an array, and slicing will usually do this in Ada.
+     However, there are occasional uses when debugging programs in
+     which certain debugging information has been optimized away.
+
+   * `B::VAR' means "the variable named VAR that appears in function or
+     file B."  When B is a file name, you must typically surround it in
+     single quotes.
+
+   * The expression `{TYPE} ADDR' means "the variable of type TYPE that
+     appears at address ADDR."
+
+   * A name starting with `$' is a convenience variable (*note
+     Convenience Vars::) or a machine register (*note Registers::).
+
+   In addition, GDB provides a few other shortcuts and outright
+additions specific to Ada:
+
+   * The assignment statement is allowed as an expression, returning
+     its right-hand operand as its value.  Thus, you may enter
+
+          set x := y + 3
+          print A(tmp := y + 1)
+
+   * The semicolon is allowed as an "operator,"  returning as its value
+     the value of its right-hand operand.  This allows, for example,
+     complex conditional breaks:
+
+          break f
+          condition 1 (report(i); k += 1; A(k) > 100)
+
+   * Rather than use catenation and symbolic character names to
+     introduce special characters into strings, one may instead use a
+     special bracket notation, which is also used to print strings.  A
+     sequence of characters of the form `["XX"]' within a string or
+     character literal denotes the (single) character whose numeric
+     encoding is XX in hexadecimal.  The sequence of characters `["""]'
+     also denotes a single quotation mark in strings.   For example,
+             "One line.["0a"]Next line.["0a"]"
+     contains an ASCII newline character (`Ada.Characters.Latin_1.LF')
+     after each period.
+
+   * The subtype used as a prefix for the attributes 'Pos, 'Min, and
+     'Max is optional (and is ignored in any case).  For example, it is
+     valid to write
+
+          print 'max(x, y)
+
+   * When printing arrays, GDB uses positional notation when the array
+     has a lower bound of 1, and uses a modified named notation
+     otherwise.  For example, a one-dimensional array of three integers
+     with a lower bound of 3 might print as
+
+          (3 => 10, 17, 1)
+
+     That is, in contrast to valid Ada, only the first component has a
+     `=>' clause.
+
+   * You may abbreviate attributes in expressions with any unique,
+     multi-character subsequence of their names (an exact match gets
+     preference).  For example, you may use a'len, a'gth, or a'lh in
+     place of  a'length.
+
+   * Since Ada is case-insensitive, the debugger normally maps
+     identifiers you type to lower case.  The GNAT compiler uses
+     upper-case characters for some of its internal identifiers, which
+     are normally of no interest to users.  For the rare occasions when
+     you actually have to look at them, enclose them in angle brackets
+     to avoid the lower-case mapping.  For example,
+          gdb print <JMPBUF_SAVE>[0]
+
+   * Printing an object of class-wide type or dereferencing an
+     access-to-class-wide value will display all the components of the
+     object's specific type (as indicated by its run-time tag).
+     Likewise, component selection on such a value will operate on the
+     specific type of the object.
+
+
+
+File: gdb.info,  Node: Stopping Before Main Program,  Next: Ada Glitches,  Prev: Additions to Ada,  Up: Ada
+
+12.4.4.4 Stopping at the Very Beginning
+.......................................
+
+It is sometimes necessary to debug the program during elaboration, and
+before reaching the main procedure.  As defined in the Ada Reference
+Manual, the elaboration code is invoked from a procedure called
+`adainit'.  To run your program up to the beginning of elaboration,
+simply use the following two commands: `tbreak adainit' and `run'.
+
+
+File: gdb.info,  Node: Ada Glitches,  Prev: Stopping Before Main Program,  Up: Ada
+
+12.4.4.5 Known Peculiarities of Ada Mode
+........................................
+
+Besides the omissions listed previously (*note Omissions from Ada::),
+we know of several problems with and limitations of Ada mode in GDB,
+some of which will be fixed with planned future releases of the debugger
+and the GNU Ada compiler.
+
+   * Currently, the debugger has insufficient information to determine
+     whether certain pointers represent pointers to objects or the
+     objects themselves.  Thus, the user may have to tack an extra
+     `.all' after an expression to get it printed properly.
+
+   * Static constants that the compiler chooses not to materialize as
+     objects in storage are invisible to the debugger.
+
+   * Named parameter associations in function argument lists are
+     ignored (the argument lists are treated as positional).
+
+   * Many useful library packages are currently invisible to the
+     debugger.
+
+   * Fixed-point arithmetic, conversions, input, and output is carried
+     out using floating-point arithmetic, and may give results that
+     only approximate those on the host machine.
+
+   * The type of the 'Address attribute may not be `System.Address'.
+
+   * The GNAT compiler never generates the prefix `Standard' for any of
+     the standard symbols defined by the Ada language.  GDB knows about
+     this: it will strip the prefix from names when you use it, and
+     will never look for a name you have so qualified among local
+     symbols, nor match against symbols in other packages or
+     subprograms.  If you have defined entities anywhere in your
+     program other than parameters and local variables whose simple
+     names match names in `Standard', GNAT's lack of qualification here
+     can cause confusion.  When this happens, you can usually resolve
+     the confusion by qualifying the problematic names with package
+     `Standard' explicitly.
+
+
 File: gdb.info,  Node: Unsupported languages,  Prev: Support,  Up: Languages
 
-Unsupported languages
-=====================
+12.5 Unsupported languages
+==========================
 
 In addition to the other fully-supported programming languages, GDB
 also provides a pseudo-language, called `minimal'.  It does not
@@ -199,8 +582,8 @@ language if the current frame corresponds to an unsupported language.
 
 File: gdb.info,  Node: Symbols,  Next: Altering,  Prev: Languages,  Up: Top
 
-Examining the Symbol Table
-**************************
+13 Examining the Symbol Table
+*****************************
 
 The commands described in this chapter allow you to inquire about the
 symbols (names of variables, functions and types) defined in your
@@ -459,7 +842,6 @@ looks up the value of `x' in the scope of the file `foo.c'.
           }
           (gdb) maint info symtabs
           (gdb)
-
      We see that there is one partial symbol table whose filename
      contains the string `dwarf2read', belonging to the `gdb'
      executable; and we see that GDB has not read in any symtabs yet at
@@ -485,8 +867,8 @@ looks up the value of `x' in the scope of the file `foo.c'.
 
 File: gdb.info,  Node: Altering,  Next: GDB Files,  Prev: Symbols,  Up: Top
 
-Altering Execution
-******************
+14 Altering Execution
+*********************
 
 Once you think you have found an error in your program, you might want
 to find out for certain whether correcting the apparent error would
@@ -510,8 +892,8 @@ address, or even return prematurely from a function.
 
 File: gdb.info,  Node: Assignment,  Next: Jumping,  Up: Altering
 
-Assignment to variables
-=======================
+14.1 Assignment to variables
+============================
 
 To alter the value of a variable, evaluate an assignment expression.
 *Note Expressions: Expressions.  For example,
@@ -594,8 +976,8 @@ stores the value 4 into that memory location.
 
 File: gdb.info,  Node: Jumping,  Next: Signaling,  Prev: Assignment,  Up: Altering
 
-Continuing at a different address
-=================================
+14.2 Continuing at a different address
+======================================
 
 Ordinarily, when you continue your program, you do so at the place where
 it stopped, with the `continue' command.  You can instead continue at
@@ -640,8 +1022,8 @@ has already executed, in order to examine its execution in more detail.
 
 File: gdb.info,  Node: Signaling,  Next: Returning,  Prev: Jumping,  Up: Altering
 
-Giving your program a signal
-============================
+14.3 Giving your program a signal
+=================================
 
 `signal SIGNAL'
      Resume execution where your program stopped, but immediately give
@@ -667,8 +1049,8 @@ directly to your program.
 
 File: gdb.info,  Node: Returning,  Next: Calling,  Prev: Signaling,  Up: Altering
 
-Returning from a function
-=========================
+14.4 Returning from a function
+==============================
 
 `return'
 `return EXPRESSION'
@@ -696,8 +1078,8 @@ selected stack frame returns naturally.
 
 File: gdb.info,  Node: Calling,  Next: Patching,  Prev: Returning,  Up: Altering
 
-Calling program functions
-=========================
+14.5 Calling program functions
+==============================
 
 `call EXPR'
      Evaluate the expression EXPR without displaying `void' returned
@@ -711,8 +1093,8 @@ and saved in the value history.
 
 File: gdb.info,  Node: Patching,  Prev: Calling,  Up: Altering
 
-Patching programs
-=================
+14.6 Patching programs
+======================
 
 By default, GDB opens the file containing your program's executable
 code (or the corefile) read-only.  This prevents accidental alterations
@@ -740,8 +1122,8 @@ to turn on internal debugging flags, or even to make emergency repairs.
 
 File: gdb.info,  Node: GDB Files,  Next: Targets,  Prev: Altering,  Up: Top
 
-GDB Files
-*********
+15 GDB Files
+************
 
 GDB needs to know the file name of the program to be debugged, both in
 order to read its symbol table and in order to start your program.  To
@@ -757,8 +1139,8 @@ the core dump file.
 
 File: gdb.info,  Node: Files,  Next: Separate Debug Files,  Up: GDB Files
 
-Commands to specify files
-=========================
+15.1 Commands to specify files
+==============================
 
 You may want to specify executable and core dump file names.  The usual
 way to do this is at start-up time, using the arguments to GDB's
@@ -872,6 +1254,7 @@ useful.
      It cannot be shared across multiple host platforms.
 
 `core-file [ FILENAME ]'
+`core'
      Specify the whereabouts of a core dump file to be used as the
      "contents of memory".  Traditionally, core files contain only some
      parts of the address space of the process that generated them; GDB
@@ -1021,7 +1404,7 @@ useful.
 
          `IS_COMMON'
                Section contains common symbols.
-
+     
 `set trust-readonly-sections on'
      Tell GDB that readonly sections in your object file really are
      read-only (i.e. that their contents will not change).  In that
@@ -1153,8 +1536,8 @@ target libraries.
 
 File: gdb.info,  Node: Separate Debug Files,  Next: Symbol Errors,  Prev: Files,  Up: GDB Files
 
-Debugging Information in Separate Files
-=======================================
+15.2 Debugging Information in Separate Files
+============================================
 
 GDB allows you to put a program's debugging information in a file
 separate from the executable itself, in a way that allows GDB to find
@@ -1184,10 +1567,9 @@ the debugging information file in three places:
      file `GLOBALDEBUGDIR/EXECDIR/DEBUGFILE', where GLOBALDEBUGDIR is
      the global debug file directory, and EXECDIR has been turned into
      a relative path).
-
-GDB checks under each of these names for a debugging information file
-whose checksum matches that given in the link, and reads the debugging
-information from the first one it finds.
+   GDB checks under each of these names for a debugging information
+file whose checksum matches that given in the link, and reads the
+debugging information from the first one it finds.
 
    So, for example, if you ask GDB to debug `/usr/bin/ls', which has a
 link containing the name `ls.debug', and the global debug directory is
@@ -1305,7 +1687,7 @@ complete code for a function that computes it:
            0x2d02ef8d
          };
        unsigned char *end;
-     
+
        crc = ~crc & 0xffffffff;
        for (end = buf + len; buf < end; ++buf)
          crc = crc32_table[(crc ^ *buf) & 0xff] ^ (crc >> 8);
@@ -1315,8 +1697,8 @@ complete code for a function that computes it:
 
 File: gdb.info,  Node: Symbol Errors,  Prev: Separate Debug Files,  Up: GDB Files
 
-Errors reading symbol files
-===========================
+15.3 Errors reading symbol files
+================================
 
 While reading a symbol file, GDB occasionally encounters problems, such
 as symbol types it does not recognize, or known bugs in compiler
@@ -1396,8 +1778,8 @@ Optional warnings and messages: Messages/Warnings.).
 
 File: gdb.info,  Node: Targets,  Next: Remote Debugging,  Prev: GDB Files,  Up: Top
 
-Specifying a Debugging Target
-*****************************
+16 Specifying a Debugging Target
+********************************
 
 A "target" is the execution environment occupied by your program.
 
@@ -1421,8 +1803,8 @@ Target Commands.).
 
 File: gdb.info,  Node: Active Targets,  Next: Target Commands,  Up: Targets
 
-Active targets
-==============
+16.1 Active targets
+===================
 
 There are three classes of targets: processes, core files, and
 executable files.  GDB can work concurrently on up to three active
@@ -1454,8 +1836,8 @@ To specify as a target a process that is already running, use the
 
 File: gdb.info,  Node: Target Commands,  Next: Byte Order,  Prev: Active Targets,  Up: Targets
 
-Commands for managing targets
-=============================
+16.2 Commands for managing targets
+==================================
 
 `target TYPE PARAMETERS'
      Connects the GDB host environment to a target machine or process.
@@ -1523,7 +1905,6 @@ configuration):
                   target sim
                   load
                   run
-
      works; however, you cannot assume that a specific memory map,
      device drivers, or even basic I/O is available, although some
      simulators do provide these.  For info about any
@@ -1565,8 +1946,8 @@ once you've successfully established a connection.
 
 File: gdb.info,  Node: Byte Order,  Next: Remote,  Prev: Target Commands,  Up: Targets
 
-Choosing target byte order
-==========================
+16.3 Choosing target byte order
+===============================
 
 Some types of processors, such as the MIPS, PowerPC, and Renesas SH,
 offer the ability to run either big-endian or little-endian byte
@@ -1595,8 +1976,8 @@ system.
 
 File: gdb.info,  Node: Remote,  Next: KOD,  Prev: Byte Order,  Up: Targets
 
-Remote debugging
-================
+16.4 Remote debugging
+=====================
 
 If you are trying to debug a program running on a machine that cannot
 run GDB in the usual way, it is often useful to use remote debugging.
@@ -1617,8 +1998,8 @@ use `help target' to list them.
 
 File: gdb.info,  Node: KOD,  Prev: Remote,  Up: Targets
 
-Kernel Object Display
-=====================
+16.5 Kernel Object Display
+==========================
 
 Some targets support kernel object display.  Using this facility, GDB
 communicates specially with the underlying operating system and can
@@ -1655,8 +2036,8 @@ where NAME is the name of the operating system you want to try.
 
 File: gdb.info,  Node: Remote Debugging,  Next: Configurations,  Prev: Targets,  Up: Top
 
-Debugging remote programs
-*************************
+17 Debugging remote programs
+****************************
 
 * Menu:
 
@@ -1669,8 +2050,8 @@ Debugging remote programs
 
 File: gdb.info,  Node: Connecting,  Next: Server,  Up: Remote Debugging
 
-Connecting to a remote target
-=============================
+17.1 Connecting to a remote target
+==================================
 
 On the GDB host machine, you will need an unstripped copy of your
 program, since GDB needs symobl and debugging information.  Start up
@@ -1701,8 +2082,7 @@ same host), you can omit the hostname.  For example, to connect to port
 1234 on your local machine:
 
      target remote :1234
-
-Note that the colon is still required here.
+   Note that the colon is still required here.
 
    To use a UDP connection, use an argument of the form
 `udp:HOST:PORT'.  For example, to connect to UDP port 2828 on a
@@ -1748,8 +2128,8 @@ to connect once more.)  If you type `n', GDB goes back to waiting.
 
 File: gdb.info,  Node: Server,  Next: NetWare,  Prev: Connecting,  Up: Remote Debugging
 
-Using the `gdbserver' program
-=============================
+17.2 Using the `gdbserver' program
+==================================
 
 `gdbserver' is a control program for Unix-like systems, which allows
 you to connect your program with a remote GDB via `target remote'--but
@@ -1842,8 +2222,8 @@ _On the host machine,_
 
 File: gdb.info,  Node: NetWare,  Next: Remote configuration,  Prev: Server,  Up: Remote Debugging
 
-Using the `gdbserve.nlm' program
-================================
+17.3 Using the `gdbserve.nlm' program
+=====================================
 
 `gdbserve.nlm' is a control program for NetWare systems, which allows
 you to connect your program with a remote GDB via `target remote'.
@@ -1882,8 +2262,8 @@ __
 
 File: gdb.info,  Node: Remote configuration,  Next: remote stub,  Prev: NetWare,  Up: Remote Debugging
 
-Remote configuration
-====================
+17.4 Remote configuration
+=========================
 
 The following configuration options are available when debugging remote
 programs:
@@ -1896,8 +2276,8 @@ programs:
 
 File: gdb.info,  Node: remote stub,  Prev: Remote configuration,  Up: Remote Debugging
 
-Implementing a remote stub
-==========================
+17.5 Implementing a remote stub
+===============================
 
 The stub files provided with GDB implement the target side of the
 communication protocol, and the GDB side is implemented in the GDB
@@ -1977,8 +2357,8 @@ added stubs.
 
 File: gdb.info,  Node: Stub Contents,  Next: Bootstrapping,  Up: remote stub
 
-What the stub can do for you
-----------------------------
+17.5.1 What the stub can do for you
+-----------------------------------
 
 The debugging stub for your architecture supplies these three
 subroutines:
@@ -2023,8 +2403,8 @@ subroutines:
 
 File: gdb.info,  Node: Bootstrapping,  Next: Debug Session,  Prev: Stub Contents,  Up: remote stub
 
-What you must do for the stub
------------------------------
+17.5.2 What you must do for the stub
+------------------------------------
 
 The debugging stubs that come with GDB are set up for a particular chip
 architecture, but they have no information about the rest of your
@@ -2103,8 +2483,8 @@ subroutines which `gcc' generates as inline code.
 
 File: gdb.info,  Node: Debug Session,  Prev: Bootstrapping,  Up: remote stub
 
-Putting it all together
------------------------
+17.5.3 Putting it all together
+------------------------------
 
 In summary, when your program is ready to debug, you must follow these
 steps.
@@ -2146,8 +2526,8 @@ steps.
 
 File: gdb.info,  Node: Configurations,  Next: Controlling GDB,  Prev: Remote Debugging,  Up: Top
 
-Configuration-Specific Information
-**********************************
+18 Configuration-Specific Information
+*************************************
 
 While nearly all GDB commands are available for all native and cross
 versions of the debugger, there are some exceptions.  This chapter
@@ -2169,8 +2549,8 @@ are quite different from each other.
 
 File: gdb.info,  Node: Native,  Next: Embedded OS,  Up: Configurations
 
-Native
-======
+18.1 Native
+===========
 
 This section describes details specific to particular native
 configurations.
@@ -2178,25 +2558,57 @@ configurations.
 * Menu:
 
 * HP-UX::                       HP-UX
+* BSD libkvm Interface::	Debugging BSD kernel memory images
 * SVR4 Process Information::    SVR4 process information
 * DJGPP Native::                Features specific to the DJGPP port
 * Cygwin Native::		Features specific to the Cygwin port
 
 
-File: gdb.info,  Node: HP-UX,  Next: SVR4 Process Information,  Up: Native
+File: gdb.info,  Node: HP-UX,  Next: BSD libkvm Interface,  Up: Native
 
-HP-UX
------
+18.1.1 HP-UX
+------------
 
 On HP-UX systems, if you refer to a function or variable name that
 begins with a dollar sign, GDB searches for a user or system name
 first, before it searches for a convenience variable.
 
 
-File: gdb.info,  Node: SVR4 Process Information,  Next: DJGPP Native,  Prev: HP-UX,  Up: Native
+File: gdb.info,  Node: BSD libkvm Interface,  Next: SVR4 Process Information,  Prev: HP-UX,  Up: Native
 
-SVR4 process information
-------------------------
+18.1.2 BSD libkvm Interface
+---------------------------
+
+BSD-derived systems (FreeBSD/NetBSD/OpenBSD) have a kernel memory
+interface that provides a uniform interface for accessing kernel virtual
+memory images, including live systems and crash dumps.  GDB uses this
+interface to allow you to debug live kernels and kernel crash dumps on
+many native BSD configurations.  This is implemented as a special `kvm'
+debugging target.  For debugging a live system, load the currently
+running kernel into GDB and connect to the `kvm' target:
+
+     (gdb) target kvm
+
+   For debugging crash dumps, provide the file name of the crash dump
+as an argument:
+
+     (gdb) target kvm /var/crash/bsd.0
+
+   Once connected to the `kvm' target, the following commands are
+available:
+
+`kvm pcb'
+     Set current context from pcb address.
+
+`kvm proc'
+     Set current context from proc address.  This command isn't
+     available on modern FreeBSD systems.
+
+
+File: gdb.info,  Node: SVR4 Process Information,  Next: DJGPP Native,  Prev: BSD libkvm Interface,  Up: Native
+
+18.1.3 SVR4 process information
+-------------------------------
 
 Many versions of SVR4 provide a facility called `/proc' that can be
 used to examine the image of a running process using file-system
@@ -2218,8 +2630,8 @@ HP-UX or GNU/Linux, for example.
 
 File: gdb.info,  Node: DJGPP Native,  Next: Cygwin Native,  Prev: SVR4 Process Information,  Up: Native
 
-Features for Debugging DJGPP Programs
--------------------------------------
+18.1.4 Features for Debugging DJGPP Programs
+--------------------------------------------
 
 DJGPP is the port of GNU development tools to MS-DOS and MS-Windows.
 DJGPP programs are 32-bit protected-mode programs that use the "DPMI"
@@ -2339,8 +2751,8 @@ commands.
 
 File: gdb.info,  Node: Cygwin Native,  Prev: DJGPP Native,  Up: Native
 
-Features for Debugging MS Windows PE executables
-------------------------------------------------
+18.1.5 Features for Debugging MS Windows PE executables
+-------------------------------------------------------
 
 GDB supports native debugging of MS Windows programs, including DLLs
 with and without symbolic debugging information. There are various
@@ -2414,8 +2826,8 @@ that have no debugging symbols.
 
 File: gdb.info,  Node: Non-debug DLL symbols,  Up: Cygwin Native
 
-Support for DLLs without debugging symbols
-..........................................
+18.1.5.1 Support for DLLs without debugging symbols
+...................................................
 
 Very often on windows, some of the DLLs that your program relies on do
 not include symbolic debugging information (for example,
@@ -2435,8 +2847,8 @@ with no debugging information will cause the symbol names to be
 duplicated in GDB's lookup table, which may adversely affect symbol
 lookup performance.
 
-DLL name prefixes
-.................
+18.1.5.2 DLL name prefixes
+..........................
 
 In keeping with the naming conventions used by the Microsoft debugging
 tools, DLL export symbols are made available with a prefix based on the
@@ -2456,22 +2868,22 @@ even `maint print msymbols' (see *note Symbols::). Here's an example:
 
      (gdb) info function CreateFileA
      All functions matching regular expression "CreateFileA":
-     
+
      Non-debugging symbols:
      0x77e885f4  CreateFileA
      0x77e885f4  KERNEL32!CreateFileA
 
      (gdb) info function !
      All functions matching regular expression "!":
-     
+
      Non-debugging symbols:
      0x6100114c  cygwin1!__assert
      0x61004034  cygwin1!_dll_crt0@0
      0x61004240  cygwin1!dll_crt0(per_process *)
      [etc...]
 
-Working with minimal symbols
-............................
+18.1.5.3 Working with minimal symbols
+.....................................
 
 Symbols extracted from a DLL's export table do not contain very much
 type information. All that GDB can do is guess whether a symbol refers
@@ -2521,8 +2933,8 @@ completely safe.
 
 File: gdb.info,  Node: Embedded OS,  Next: Embedded Processors,  Prev: Native,  Up: Configurations
 
-Embedded Operating Systems
-==========================
+18.2 Embedded Operating Systems
+===============================
 
 This section describes configurations involving the debugging of
 embedded operating systems that are available for several different
@@ -2538,8 +2950,8 @@ real-time operating systems.
 
 File: gdb.info,  Node: VxWorks,  Up: Embedded OS
 
-Using GDB with VxWorks
-----------------------
+18.2.1 Using GDB with VxWorks
+-----------------------------
 
 `target vxworks MACHINENAME'
      A VxWorks system, attached via TCP/IP.  The argument MACHINENAME
@@ -2594,8 +3006,8 @@ installation).
 
 File: gdb.info,  Node: VxWorks Connection,  Next: VxWorks Download,  Up: VxWorks
 
-Connecting to VxWorks
-.....................
+18.2.1.1 Connecting to VxWorks
+..............................
 
 The GDB command `target' lets you connect to a VxWorks target on the
 network.  To connect to a target whose host name is "`tt'", type:
@@ -2621,8 +3033,8 @@ with the GDB command `path', and execute the `target' command again.
 
 File: gdb.info,  Node: VxWorks Download,  Next: VxWorks Attach,  Prev: VxWorks Connection,  Up: VxWorks
 
-VxWorks download
-................
+18.2.1.2 VxWorks download
+.........................
 
 If you have connected to the VxWorks target and you want to debug an
 object that has not yet been loaded, you can use the GDB `load' command
@@ -2660,8 +3072,8 @@ structures that reference the target system's symbol table.)
 
 File: gdb.info,  Node: VxWorks Attach,  Prev: VxWorks Download,  Up: VxWorks
 
-Running tasks
-.............
+18.2.1.3 Running tasks
+......................
 
 You can also attach to an existing task using the `attach' command as
 follows:
@@ -2675,8 +3087,8 @@ time of attachment.
 
 File: gdb.info,  Node: Embedded Processors,  Next: Architectures,  Prev: Embedded OS,  Up: Configurations
 
-Embedded Processors
-===================
+18.3 Embedded Processors
+========================
 
 This section goes into details specific to particular embedded
 configurations.
@@ -2701,8 +3113,8 @@ configurations.
 
 File: gdb.info,  Node: ARM,  Next: H8/300,  Up: Embedded Processors
 
-ARM
----
+18.3.1 ARM
+----------
 
 `target rdi DEV'
      ARM Angel monitor, via RDI library interface to ADP protocol.  You
@@ -2716,8 +3128,8 @@ ARM
 
 File: gdb.info,  Node: H8/300,  Next: H8/500,  Prev: ARM,  Up: Embedded Processors
 
-Renesas H8/300
---------------
+18.3.2 Renesas H8/300
+---------------------
 
 `target hms DEV'
      A Renesas SH, H8/300, or H8/500 board, attached via serial line to
@@ -2760,8 +3172,8 @@ or H8/500:
 
 File: gdb.info,  Node: Renesas Boards,  Next: Renesas ICE,  Up: H8/300
 
-Connecting to Renesas boards
-............................
+18.3.2.1 Connecting to Renesas boards
+.....................................
 
 Use the special `GDB' command `device PORT' if you need to explicitly
 set the serial device.  The default PORT is the first available port on
@@ -2795,9 +3207,9 @@ example, `asyncstr 2' below runs `asyncstr' on `COM2'.
 
      C:\H8300\TEST> asynctsr 2
      C:\H8300\TEST> mode com2:9600,n,8,1,p
-     
+
      Resident portion of MODE loaded
-     
+
      COM2: 9600, n, 8, 1, p
 
      _Warning:_ We have noticed a bug in PC-NFS that conflicts with
@@ -2823,7 +3235,7 @@ executable file without downloading, use the GDB commands `file' or
       the conditions.
      There is absolutely no warranty for GDB; type "show warranty"
      for details.
-     GDB 6.1, Copyright 1992 Free Software Foundation, Inc...
+     GDB 6.3, Copyright 1992 Free Software Foundation, Inc...
      (gdb) target hms
      Connected to remote H8/300 HMS system.
      (gdb) load t.x
@@ -2857,8 +3269,8 @@ board as a "normal exit" of your program.
 
 File: gdb.info,  Node: Renesas ICE,  Next: Renesas Special,  Prev: Renesas Boards,  Up: H8/300
 
-Using the E7000 in-circuit emulator
-...................................
+18.3.2.2 Using the E7000 in-circuit emulator
+............................................
 
 You can use the E7000 in-circuit emulator to develop code for either the
 Renesas SH or the H8/300H.  Use one of these forms of the `target
@@ -2877,8 +3289,8 @@ e7000' command to connect GDB to your E7000:
 
 File: gdb.info,  Node: Renesas Special,  Prev: Renesas ICE,  Up: H8/300
 
-Special GDB commands for Renesas micros
-.......................................
+18.3.2.3 Special GDB commands for Renesas micros
+................................................
 
 Some GDB commands are available only for the H8/300:
 
@@ -2892,8 +3304,8 @@ Some GDB commands are available only for the H8/300:
 
 File: gdb.info,  Node: H8/500,  Next: M32R/D,  Prev: H8/300,  Up: Embedded Processors
 
-H8/500
-------
+18.3.3 H8/500
+-------------
 
 `set memory MOD'
 `show memory'
@@ -2906,8 +3318,8 @@ H8/500
 
 File: gdb.info,  Node: M32R/D,  Next: M68K,  Prev: H8/500,  Up: Embedded Processors
 
-Renesas M32R/D
---------------
+18.3.4 Renesas M32R/D
+---------------------
 
 `target m32r DEV'
      Renesas M32R/D ROM monitor.
@@ -2919,8 +3331,8 @@ Renesas M32R/D
 
 File: gdb.info,  Node: M68K,  Next: MIPS Embedded,  Prev: M32R/D,  Up: Embedded Processors
 
-M68k
-----
+18.3.5 M68k
+-----------
 
 The Motorola m68k configuration includes ColdFire support, and target
 command for the following ROM monitors.
@@ -2948,8 +3360,8 @@ command for the following ROM monitors.
 
 File: gdb.info,  Node: MIPS Embedded,  Next: OpenRISC 1000,  Prev: M68K,  Up: Embedded Processors
 
-MIPS Embedded
--------------
+18.3.6 MIPS Embedded
+--------------------
 
 GDB can use the MIPS remote debugging protocol to talk to a MIPS board
 attached to a serial line.  This is available when you configure GDB
@@ -3061,8 +3473,8 @@ GDB also supports these special commands for MIPS targets:
 
 File: gdb.info,  Node: OpenRISC 1000,  Next: PA,  Prev: MIPS Embedded,  Up: Embedded Processors
 
-OpenRISC 1000
--------------
+18.3.7 OpenRISC 1000
+--------------------
 
 See OR1k Architecture document (`www.opencores.org') for more
 information about platform and commands.
@@ -3116,7 +3528,7 @@ Hardware breakpoints/watchpoint triggers can be set using:
    When triggered, it can capture low level data, like: `PC', `LSEA',
 `LDATA', `SDATA', `READSPR', `WRITESPR', `INSTR'.
 
-   `htrace' commands:
+   `htrace' commands: 
 `hwatch CONDITIONAL'
      Set hardware watchpoint on combination of Load/Store Effecive
      Address(es) or Data.  For example:
@@ -3166,8 +3578,8 @@ Hardware breakpoints/watchpoint triggers can be set using:
 
 File: gdb.info,  Node: PowerPC,  Next: SH,  Prev: PA,  Up: Embedded Processors
 
-PowerPC
--------
+18.3.8 PowerPC
+--------------
 
 `target dink32 DEV'
      DINK32 ROM monitor.
@@ -3184,8 +3596,8 @@ PowerPC
 
 File: gdb.info,  Node: PA,  Next: PowerPC,  Prev: OpenRISC 1000,  Up: Embedded Processors
 
-HP PA Embedded
---------------
+18.3.9 HP PA Embedded
+---------------------
 
 `target op50n DEV'
      OP50N monitor, running on an OKI HPPA board.
@@ -3197,8 +3609,8 @@ HP PA Embedded
 
 File: gdb.info,  Node: SH,  Next: Sparclet,  Prev: PowerPC,  Up: Embedded Processors
 
-Renesas SH
-----------
+18.3.10 Renesas SH
+------------------
 
 `target hms DEV'
      A Renesas SH board attached via serial line to your host.  Use
@@ -3217,8 +3629,8 @@ Renesas SH
 
 File: gdb.info,  Node: Sparclet,  Next: Sparclite,  Prev: SH,  Up: Embedded Processors
 
-Tsqware Sparclet
-----------------
+18.3.11 Tsqware Sparclet
+------------------------
 
 GDB enables developers to debug tasks running on Sparclet targets from
 a Unix host.  GDB uses code that runs on both the Unix host and on the
@@ -3260,8 +3672,8 @@ are ready to run GDB.  From your Unix host, run `gdb' (or
 
 File: gdb.info,  Node: Sparclet File,  Next: Sparclet Connection,  Up: Sparclet
 
-Setting file to debug
-.....................
+18.3.11.1 Setting file to debug
+...............................
 
 The GDB command `file' lets you choose with program to debug.
 
@@ -3284,8 +3696,8 @@ command again.
 
 File: gdb.info,  Node: Sparclet Connection,  Next: Sparclet Download,  Prev: Sparclet File,  Up: Sparclet
 
-Connecting to Sparclet
-......................
+18.3.11.2 Connecting to Sparclet
+................................
 
 The GDB command `target' lets you connect to a Sparclet target.  To
 connect to a target on serial port "`ttya'", type:
@@ -3301,8 +3713,8 @@ connect to a target on serial port "`ttya'", type:
 
 File: gdb.info,  Node: Sparclet Download,  Next: Sparclet Execution,  Prev: Sparclet Connection,  Up: Sparclet
 
-Sparclet download
-.................
+18.3.11.3 Sparclet download
+...........................
 
 Once connected to the Sparclet target, you can use the GDB `load'
 command to download the file from the host to the target.  The file
@@ -3324,8 +3736,8 @@ commands to tell GDB where to map the symbol table.
 
 File: gdb.info,  Node: Sparclet Execution,  Prev: Sparclet Download,  Up: Sparclet
 
-Running and debugging
-.....................
+18.3.11.4 Running and debugging
+...............................
 
 You can now begin debugging the task using GDB's execution control
 commands, `b', `step', `run', etc.  See the GDB manual for the list of
@@ -3344,8 +3756,8 @@ commands.
 
 File: gdb.info,  Node: Sparclite,  Next: ST2000,  Prev: Sparclet,  Up: Embedded Processors
 
-Fujitsu Sparclite
------------------
+18.3.12 Fujitsu Sparclite
+-------------------------
 
 `target sparclite DEV'
      Fujitsu sparclite boards, used only for the purpose of loading.
@@ -3356,8 +3768,8 @@ Fujitsu Sparclite
 
 File: gdb.info,  Node: ST2000,  Next: Z8000,  Prev: Sparclite,  Up: Embedded Processors
 
-Tandem ST2000
--------------
+18.3.13 Tandem ST2000
+---------------------
 
 GDB may be used with a Tandem ST2000 phone switch, running Tandem's
 STDBUG protocol.
@@ -3396,8 +3808,8 @@ ST2000 environment:
 
 File: gdb.info,  Node: Z8000,  Prev: ST2000,  Up: Embedded Processors
 
-Zilog Z8000
------------
+18.3.14 Zilog Z8000
+-------------------
 
 When configured for debugging Zilog Z8000 targets, GDB includes a Z8000
 simulator.
@@ -3437,8 +3849,8 @@ breakpoint that suspends only after at least 5000 simulated clock ticks.
 
 File: gdb.info,  Node: Architectures,  Prev: Embedded Processors,  Up: Configurations
 
-Architectures
-=============
+18.4 Architectures
+==================
 
 This section describes characteristics of architectures that affect all
 uses of GDB with the architecture, both native and cross.
@@ -3452,8 +3864,8 @@ uses of GDB with the architecture, both native and cross.
 
 File: gdb.info,  Node: A29K,  Next: Alpha,  Up: Architectures
 
-A29K
-----
+18.4.1 A29K
+-----------
 
 `set rstack_high_address ADDRESS'
      On AMD 29000 family processors, registers are saved in a separate
@@ -3474,16 +3886,16 @@ A29K
 
 File: gdb.info,  Node: Alpha,  Next: MIPS,  Prev: A29K,  Up: Architectures
 
-Alpha
------
+18.4.2 Alpha
+------------
 
 See the following section.
 
 
 File: gdb.info,  Node: MIPS,  Prev: Alpha,  Up: Architectures
 
-MIPS
-----
+18.4.3 MIPS
+-----------
 
 Alpha- and MIPS-based computers use an unusual stack frame, which
 sometimes requires GDB to search backward in the object code to find
@@ -3509,8 +3921,8 @@ debugging programs on Alpha or MIPS processors.
 
 File: gdb.info,  Node: Controlling GDB,  Next: Sequences,  Prev: Configurations,  Up: Top
 
-Controlling GDB
-***************
+19 Controlling GDB
+******************
 
 You can alter the way GDB interacts with you by using the `set'
 command.  For commands controlling how GDB displays data, see *Note
@@ -3530,8 +3942,8 @@ Print settings: Print Settings.  Other settings are described here.
 
 File: gdb.info,  Node: Prompt,  Next: Editing,  Up: Controlling GDB
 
-Prompt
-======
+19.1 Prompt
+===========
 
 GDB indicates its readiness to read a command by printing a string
 called the "prompt".  This string is normally `(gdb)'.  You can change
@@ -3552,10 +3964,10 @@ prompt that does not.
 
 File: gdb.info,  Node: Editing,  Next: History,  Prev: Prompt,  Up: Controlling GDB
 
-Command editing
-===============
+19.2 Command editing
+====================
 
-GDB reads its input commands via the "readline" interface.  This GNU
+GDB reads its input commands via the "Readline" interface.  This GNU
 library provides consistent behavior for programs which provide a
 command line interface to the user.  Advantages are GNU Emacs-style or
 "vi"-style inline editing of commands, `csh'-like history substitution,
@@ -3574,15 +3986,25 @@ command `set'.
 `show editing'
      Show whether command line editing is enabled.
 
+   *Note Command Line Editing::, for more details about the Readline
+interface.  Users unfamiliar with GNU Emacs or `vi' are encouraged to
+read that chapter.
+
 
 File: gdb.info,  Node: History,  Next: Screen Size,  Prev: Editing,  Up: Controlling GDB
 
-Command history
-===============
+19.3 Command history
+====================
 
 GDB can keep track of the commands you type during your debugging
 sessions, so that you can be certain of precisely what happened.  Use
 these commands to manage the GDB command history facility.
+
+   GDB uses the GNU History library, a part of the Readline package, to
+provide the history facility.  *Note Using History Interactively::, for
+the detailed description of the History library.
+
+   Here is the description of GDB commands related to command history.
 
 `set history filename FNAME'
      Set the name of the GDB command history file to FNAME.  This is
@@ -3609,6 +4031,7 @@ these commands to manage the GDB command history facility.
      or to 256 if this variable is not set.
 
    History expansion assigns special meaning to the character `!'.
+*Note Event Designators::, for more details.
 
    Since `!' is also the logical not operator in C, history expansion
 is off by default. If you decide to enable history expansion with the
@@ -3626,10 +4049,6 @@ even when history expansion is enabled.
 
 `set history expansion off'
      Disable history expansion.
-
-     The readline code comes with more complete documentation of
-     editing and history expansion features.  Users unfamiliar with GNU
-     Emacs or `vi' may wish to read it.
 
 `show history'
 `show history filename'
@@ -3651,8 +4070,8 @@ even when history expansion is enabled.
 
 File: gdb.info,  Node: Screen Size,  Next: Numbers,  Prev: History,  Up: Controlling GDB
 
-Screen size
-===========
+19.4 Screen size
+================
 
 Certain commands to GDB may produce large amounts of information output
 to the screen.  To help you read all of it, GDB pauses and asks you for
@@ -3687,8 +4106,8 @@ with the `set height' and `set width' commands:
 
 File: gdb.info,  Node: Numbers,  Next: ABI,  Prev: Screen Size,  Up: Controlling GDB
 
-Numbers
-=======
+19.5 Numbers
+============
 
 You can always enter numbers in octal, decimal, or hexadecimal in GDB
 by the usual conventions: octal numbers begin with `0', decimal numbers
@@ -3725,8 +4144,8 @@ and output with the `set radix' command.
 
 File: gdb.info,  Node: ABI,  Next: Messages/Warnings,  Prev: Numbers,  Up: Controlling GDB
 
-Configuring the current ABI
-===========================
+19.6 Configuring the current ABI
+================================
 
 GDB can determine the "ABI" (Application Binary Interface) of your
 application automatically.  However, sometimes you need to override its
@@ -3795,8 +4214,8 @@ the HP ANSI C++ compiler.  Other C++ compilers may use the "gnu-v2" or
 
 File: gdb.info,  Node: Messages/Warnings,  Next: Debugging Output,  Prev: ABI,  Up: Controlling GDB
 
-Optional warnings and messages
-==============================
+19.7 Optional warnings and messages
+===================================
 
 By default, GDB is silent about its inner workings.  If you are running
 on a slow machine, you may want to use the `set verbose' command.  This
@@ -3855,12 +4274,12 @@ commands, you can disable this "feature":
 
 File: gdb.info,  Node: Debugging Output,  Prev: Messages/Warnings,  Up: Controlling GDB
 
-Optional messages about internal happenings
-===========================================
+19.8 Optional messages about internal happenings
+================================================
 
 `set debug arch'
      Turns on or off display of gdbarch debugging info. The default is
-     off
+     off 
 
 `show debug arch'
      Displays the current state of displaying gdbarch debugging info.
@@ -3887,6 +4306,13 @@ Optional messages about internal happenings
 `show debug frame'
      Displays the current state of displaying GDB frame debugging info.
 
+`set debug observer'
+     Turns on or off display of GDB observer debugging.  This includes
+     info such as the notification of observable events.
+
+`show debug observer'
+     Displays the current state of observer debugging.
+
 `set debug overload'
      Turns on or off display of GDB C++ overload debugging info. This
      includes info such as ranking of functions, etc. The default is
@@ -3894,7 +4320,7 @@ Optional messages about internal happenings
 
 `show debug overload'
      Displays the current state of displaying GDB C++ overload
-     debugging info.
+     debugging info.  
 
 `set debug remote'
      Turns on or off display of reports on all packets sent back and
@@ -3914,7 +4340,10 @@ Optional messages about internal happenings
 `set debug target'
      Turns on or off display of GDB target debugging info. This info
      includes what is going on at the target level of GDB, as it
-     happens. The default is off.
+     happens. The default is 0.  Set it to 1 to track events, and to 2
+     to also track the value of large memory transfers.  Changes to
+     this flag do not take effect until the next time you connect to a
+     target or use the `run' command.
 
 `show debug target'
      Displays the current state of displaying GDB target debugging info.
@@ -3930,8 +4359,8 @@ Optional messages about internal happenings
 
 File: gdb.info,  Node: Sequences,  Next: TUI,  Prev: Controlling GDB,  Up: Top
 
-Canned Sequences of Commands
-****************************
+20 Canned Sequences of Commands
+*******************************
 
 Aside from breakpoint commands (*note Breakpoint command lists: Break
 Commands.), GDB provides two ways to store sequences of commands for
@@ -3947,8 +4376,8 @@ execution as a unit: user-defined commands and command files.
 
 File: gdb.info,  Node: Define,  Next: Hooks,  Up: Sequences
 
-User-defined commands
-=====================
+20.1 User-defined commands
+==========================
 
 A "user-defined command" is a sequence of GDB commands to which you
 assign a new name as a command.  This is done with the `define'
@@ -4033,8 +4462,8 @@ omit the messages when used in a user-defined command.
 
 File: gdb.info,  Node: Hooks,  Next: Command Files,  Prev: Define,  Up: Sequences
 
-User-defined command hooks
-==========================
+20.2 User-defined command hooks
+===============================
 
 You may define "hooks", which are a special kind of user-defined
 command.  Whenever you run the command `foo', if the user-defined
@@ -4061,11 +4490,11 @@ treat them normally during normal execution, you could define:
      define hook-stop
      handle SIGALRM nopass
      end
-     
+
      define hook-run
      handle SIGALRM pass
      end
-     
+
      define hook-continue
      handle SIGLARM pass
      end
@@ -4077,11 +4506,11 @@ you could define:
      define hook-echo
      echo <<<---
      end
-     
+
      define hookpost-echo
      echo --->>>\n
      end
-     
+
      (gdb) echo Hello World
      <<<---Hello World--->>>
      (gdb)
@@ -4099,8 +4528,8 @@ you get a warning from the `define' command.
 
 File: gdb.info,  Node: Command Files,  Next: Output,  Prev: Hooks,  Up: Sequences
 
-Command files
-=============
+20.3 Command files
+==================
 
 A command file for GDB is a file of lines that are GDB commands.
 Comments (lines starting with `#') may also be included.  An empty line
@@ -4174,8 +4603,8 @@ by the `HOME' environment variable.
 
 File: gdb.info,  Node: Output,  Prev: Command Files,  Up: Sequences
 
-Commands for controlled output
-==============================
+20.4 Commands for controlled output
+===================================
 
 During the execution of a command file or a user-defined command, normal
 GDB output is suppressed; the only output that appears is what is
@@ -4236,8 +4665,8 @@ want.
 
 File: gdb.info,  Node: Interpreters,  Next: Emacs,  Prev: TUI,  Up: Top
 
-Command Interpreters
-********************
+21 Command Interpreters
+***********************
 
 GDB supports multiple command interpreters, and some command
 infrastructure to allow users or user interface writers to switch
@@ -4289,8 +4718,8 @@ versions of GDB which support GDB/MI version 2 (or greater).
 
 File: gdb.info,  Node: TUI,  Next: Interpreters,  Prev: Sequences,  Up: Top
 
-GDB Text User Interface
-***********************
+22 GDB Text User Interface
+**************************
 
 * Menu:
 
@@ -4310,8 +4739,8 @@ output, the program registers and GDB commands in separate text windows.
 
 File: gdb.info,  Node: TUI Overview,  Next: TUI Keys,  Up: TUI
 
-TUI overview
-============
+22.1 TUI overview
+=================
 
 The TUI has two display modes that can be switched while GDB runs:
 
@@ -4418,8 +4847,8 @@ _pc_
 
 File: gdb.info,  Node: TUI Keys,  Next: TUI Single Key Mode,  Prev: TUI Overview,  Up: TUI
 
-TUI Key Bindings
-================
+22.2 TUI Key Bindings
+=====================
 
 The TUI installs several key bindings in the readline keymaps (*note
 Command Line Editing::).  They allow to leave or enter in the TUI mode
@@ -4497,8 +4926,8 @@ the focus, it is necessary to use other readline key bindings such as
 
 File: gdb.info,  Node: TUI Single Key Mode,  Next: TUI Commands,  Prev: TUI Keys,  Up: TUI
 
-TUI Single Key Mode
-===================
+22.3 TUI Single Key Mode
+========================
 
 The TUI provides a _SingleKey_ mode in which it installs a particular
 key binding in the readline keymaps to connect single keys to some gdb
@@ -4545,8 +4974,8 @@ is restored.  The only way to permanently leave this mode is by hitting
 
 File: gdb.info,  Node: TUI Commands,  Next: TUI Configuration,  Prev: TUI Single Key Mode,  Up: TUI
 
-TUI specific commands
-=====================
+22.4 TUI specific commands
+==========================
 
 The TUI has specific commands to control the text windows.  These
 commands are always available, that is they do not depend on the
@@ -4610,8 +5039,8 @@ mode, using these commands will automatically switch in the TUI mode.
 
 File: gdb.info,  Node: TUI Configuration,  Prev: TUI Commands,  Up: TUI
 
-TUI configuration variables
-===========================
+22.5 TUI configuration variables
+================================
 
 The TUI has several configuration variables that control the appearance
 of windows on the terminal.
@@ -4665,8 +5094,8 @@ of windows on the terminal.
 
 File: gdb.info,  Node: Emacs,  Next: Annotations,  Prev: Interpreters,  Up: Top
 
-Using GDB under GNU Emacs
-*************************
+23 Using GDB under GNU Emacs
+****************************
 
 A special interface allows you to use GNU Emacs to view (and edit) the
 source files for the program you are debugging with GDB.
@@ -4787,8 +5216,8 @@ manual (*note Debuggers: (Emacs)Debuggers.).
 
 File: gdb.info,  Node: GDB/MI,  Next: GDB Bugs,  Prev: Annotations,  Up: Top
 
-The GDB/MI Interface
-********************
+24 The GDB/MI Interface
+***********************
 
 Function and Purpose
 ====================
@@ -4847,8 +5276,8 @@ Elena Zannoni.
 
 File: gdb.info,  Node: GDB/MI Command Syntax,  Next: GDB/MI Compatibility with CLI,  Up: GDB/MI
 
-GDB/MI Command Syntax
-=====================
+24.1 GDB/MI Command Syntax
+==========================
 
 * Menu:
 
@@ -4859,8 +5288,8 @@ GDB/MI Command Syntax
 
 File: gdb.info,  Node: GDB/MI Input Syntax,  Next: GDB/MI Output Syntax,  Up: GDB/MI Command Syntax
 
-GDB/MI Input Syntax
--------------------
+24.1.1 GDB/MI Input Syntax
+--------------------------
 
 `COMMAND ==>'
      `CLI-COMMAND | MI-COMMAND'
@@ -4918,8 +5347,8 @@ Notes:
 
 File: gdb.info,  Node: GDB/MI Output Syntax,  Next: GDB/MI Simple Examples,  Prev: GDB/MI Input Syntax,  Up: GDB/MI Command Syntax
 
-GDB/MI Output Syntax
---------------------
+24.1.2 GDB/MI Output Syntax
+---------------------------
 
 The output from GDB/MI consists of zero or more out-of-band records
 followed, optionally, by a single result record.  This result record is
@@ -5039,8 +5468,8 @@ about the various output records.
 
 File: gdb.info,  Node: GDB/MI Simple Examples,  Prev: GDB/MI Output Syntax,  Up: GDB/MI Command Syntax
 
-Simple Examples of GDB/MI Interaction
--------------------------------------
+24.1.3 Simple Examples of GDB/MI Interaction
+--------------------------------------------
 
 This subsection presents several simple examples of interaction using
 the GDB/MI interface.  In these examples, `->' means that the following
@@ -5091,8 +5520,8 @@ Here's what happens if you pass a non-existent command:
 
 File: gdb.info,  Node: GDB/MI Compatibility with CLI,  Next: GDB/MI Output Records,  Prev: GDB/MI Command Syntax,  Up: GDB/MI
 
-GDB/MI Compatibility with CLI
-=============================
+24.2 GDB/MI Compatibility with CLI
+==================================
 
 To help users familiar with GDB's existing CLI interface, GDB/MI
 accepts existing CLI commands.  As specified by the syntax, such
@@ -5108,8 +5537,8 @@ un-supported hybrid of GDB/MI and CLI output.
 
 File: gdb.info,  Node: GDB/MI Output Records,  Next: GDB/MI Command Description Format,  Prev: GDB/MI Compatibility with CLI,  Up: GDB/MI
 
-GDB/MI Output Records
-=====================
+24.3 GDB/MI Output Records
+==========================
 
 * Menu:
 
@@ -5120,8 +5549,8 @@ GDB/MI Output Records
 
 File: gdb.info,  Node: GDB/MI Result Records,  Next: GDB/MI Stream Records,  Up: GDB/MI Output Records
 
-GDB/MI Result Records
----------------------
+24.3.1 GDB/MI Result Records
+----------------------------
 
 In addition to a number of out-of-band notifications, the response to a
 GDB/MI command includes one of the following result indications:
@@ -5141,8 +5570,8 @@ GDB/MI command includes one of the following result indications:
 
 File: gdb.info,  Node: GDB/MI Stream Records,  Next: GDB/MI Out-of-band Records,  Prev: GDB/MI Result Records,  Up: GDB/MI Output Records
 
-GDB/MI Stream Records
----------------------
+24.3.2 GDB/MI Stream Records
+----------------------------
 
 GDB internally maintains a number of output streams: the console, the
 target, and the log.  The output intended for each of these streams is
@@ -5170,8 +5599,8 @@ or a quoted C string (which does not contain an implicit newline).
 
 File: gdb.info,  Node: GDB/MI Out-of-band Records,  Prev: GDB/MI Stream Records,  Up: GDB/MI Output Records
 
-GDB/MI Out-of-band Records
---------------------------
+24.3.3 GDB/MI Out-of-band Records
+---------------------------------
 
 "Out-of-band" records are used to notify the GDB/MI client of
 additional changes that have occurred.  Those changes can either be a
@@ -5185,8 +5614,8 @@ target activity (e.g., target stopped).
 
 File: gdb.info,  Node: GDB/MI Command Description Format,  Next: GDB/MI Breakpoint Table Commands,  Prev: GDB/MI Output Records,  Up: GDB/MI
 
-GDB/MI Command Description Format
-=================================
+24.4 GDB/MI Command Description Format
+======================================
 
 The remaining sections describe blocks of commands.  Each block of
 commands is laid out in a fashion similar to this section.
@@ -5235,8 +5664,8 @@ Example
 
 File: gdb.info,  Node: GDB/MI Breakpoint Table Commands,  Next: GDB/MI Data Manipulation,  Prev: GDB/MI Command Description Format,  Up: GDB/MI
 
-GDB/MI Breakpoint table commands
-================================
+24.5 GDB/MI Breakpoint table commands
+=====================================
 
 This section documents GDB/MI commands for manipulating breakpoints.
 
@@ -5734,8 +6163,8 @@ is deleted.
 
 File: gdb.info,  Node: GDB/MI Data Manipulation,  Next: GDB/MI Program Control,  Prev: GDB/MI Breakpoint Table Commands,  Up: GDB/MI
 
-GDB/MI Data Manipulation
-========================
+24.6 GDB/MI Data Manipulation
+=============================
 
 This section describes the GDB/MI commands that manipulate data:
 examine memory and registers, evaluate expressions, etc.
@@ -5930,7 +6359,7 @@ On a PPC MBX board:
      (gdb)
      -exec-continue
      ^running
-     
+
      (gdb)
      *stopped,reason="breakpoint-hit",bkptno="1",frame={func="main",
      args=[],file="try.c",line="5"}
@@ -6410,8 +6839,8 @@ Example
 
 File: gdb.info,  Node: GDB/MI Program Control,  Next: GDB/MI Miscellaneous Commands,  Prev: GDB/MI Data Manipulation,  Up: GDB/MI
 
-GDB/MI Program control
-======================
+24.7 GDB/MI Program control
+===========================
 
 Program termination
 ...................
@@ -6586,7 +7015,7 @@ Example
      (gdb)
      111-exec-continue
      111^running
-     
+
      (gdb)
      222-exec-interrupt
      222^done
@@ -6594,7 +7023,7 @@ Example
      111*stopped,signal-name="SIGINT",signal-meaning="Interrupt",
      frame={addr="0x00010140",func="foo",args=[],file="try.c",line="13"}
      (gdb)
-     
+
      (gdb)
      -exec-interrupt
      ^error,msg="mi_cmd_exec_interrupt: Inferior not executing."
@@ -6649,7 +7078,7 @@ Example
      (gdb)
      -exec-next-instruction
      ^running
-     
+
      (gdb)
      *stopped,reason="end-stepping-range",
      addr="0x000100d4",line="5",file="hello.c"
@@ -6811,14 +7240,14 @@ Example
      (gdb)
      -exec-step-instruction
      ^running
-     
+
      (gdb)
      *stopped,reason="end-stepping-range",
      frame={func="foo",args=[],file="try.c",line="10"}
      (gdb)
      -exec-step-instruction
      ^running
-     
+
      (gdb)
      *stopped,reason="end-stepping-range",
      frame={addr="0x000100f4",func="foo",args=[],file="try.c",line="10"}
@@ -6965,6 +7394,9 @@ Synopsis
 
    List the source files for the current executable.
 
+   It will always output the filename, but only when GDB can find the
+absolute file name of a source file, will it output the fullname.
+
 GDB Command
 ...........
 
@@ -6974,7 +7406,13 @@ has an analogous command `gdb_listfiles'.
 Example
 .......
 
-N.A.
+     (gdb)
+     -file-list-exec-source-files
+     ^done,files=[
+     {file=foo.c,fullname=/home/foo.c},
+     {file=/home/bar.c,fullname=/home/bar.c},
+     {file=gdb_could_not_find_fullpath.c}]
+     (gdb)
 
 The `-file-list-shared-libraries' Command
 -----------------------------------------
@@ -7044,8 +7482,8 @@ Example
 
 File: gdb.info,  Node: GDB/MI Miscellaneous Commands,  Next: GDB/MI Stack Manipulation,  Prev: GDB/MI Program Control,  Up: GDB/MI
 
-Miscellaneous GDB commands in GDB/MI
-====================================
+24.8 Miscellaneous GDB commands in GDB/MI
+=========================================
 
 The `-gdb-exit' Command
 -----------------------
@@ -7177,8 +7615,8 @@ Example
 
 File: gdb.info,  Node: GDB/MI Stack Manipulation,  Next: GDB/MI Symbol Query,  Prev: GDB/MI Miscellaneous Commands,  Up: GDB/MI
 
-GDB/MI Stack Manipulation Commands
-==================================
+24.9 GDB/MI Stack Manipulation Commands
+=======================================
 
 The `-stack-info-frame' Command
 -------------------------------
@@ -7472,8 +7910,8 @@ Example
 
 File: gdb.info,  Node: GDB/MI Symbol Query,  Next: GDB/MI Target Manipulation,  Prev: GDB/MI Stack Manipulation,  Up: GDB/MI
 
-GDB/MI Symbol Query Commands
-============================
+24.10 GDB/MI Symbol Query Commands
+==================================
 
 The `-symbol-info-address' Command
 ----------------------------------
@@ -7704,8 +8142,8 @@ N.A.
 
 File: gdb.info,  Node: GDB/MI Target Manipulation,  Next: GDB/MI Thread Commands,  Prev: GDB/MI Symbol Query,  Up: GDB/MI
 
-GDB/MI Target Manipulation Commands
-===================================
+24.11 GDB/MI Target Manipulation Commands
+=========================================
 
 The `-target-attach' Command
 ----------------------------
@@ -8016,8 +8454,8 @@ Example
 
 File: gdb.info,  Node: GDB/MI Thread Commands,  Next: GDB/MI Tracepoint Commands,  Prev: GDB/MI Target Manipulation,  Up: GDB/MI
 
-GDB/MI Thread Commands
-======================
+24.12 GDB/MI Thread Commands
+============================
 
 The `-thread-info' Command
 --------------------------
@@ -8130,16 +8568,16 @@ Example
 
 File: gdb.info,  Node: GDB/MI Tracepoint Commands,  Next: GDB/MI Variable Objects,  Prev: GDB/MI Thread Commands,  Up: GDB/MI
 
-GDB/MI Tracepoint Commands
-==========================
+24.13 GDB/MI Tracepoint Commands
+================================
 
 The tracepoint commands are not yet implemented.
 
 
 File: gdb.info,  Node: GDB/MI Variable Objects,  Prev: GDB/MI Tracepoint Commands,  Up: GDB/MI
 
-GDB/MI Variable Objects
-=======================
+24.14 GDB/MI Variable Objects
+=============================
 
 Motivation for Variable Objects in GDB/MI
 -----------------------------------------
@@ -8435,8 +8873,8 @@ A `*' causes all existing variable objects to be updated.
 
 File: gdb.info,  Node: Annotations,  Next: GDB/MI,  Prev: Emacs,  Up: Top
 
-GDB Annotations
-***************
+25 GDB Annotations
+******************
 
 This chapter describes annotations in GDB.  Annotations were designed
 to interface GDB to graphical user interfaces or other similar programs
@@ -8459,8 +8897,8 @@ which want to interact with GDB at a relatively high level.
 
 File: gdb.info,  Node: Annotations Overview,  Next: Server Prefix,  Up: Annotations
 
-What is an Annotation?
-======================
+25.1 What is an Annotation?
+===========================
 
 Annotations start with a newline character, two `control-z' characters,
 and the name of the annotation.  If there is no additional information
@@ -8498,12 +8936,12 @@ level 3 annotations.
      There is absolutely no warranty for GDB.  Type "show warranty"
      for details.
      This GDB was configured as "i386-pc-linux-gnu"
-     
+
      ^Z^Zpre-prompt
      (gdb)
      ^Z^Zprompt
      quit
-     
+
      ^Z^Zpost-prompt
      $
 
@@ -8514,8 +8952,8 @@ annotations; the rest is output from GDB.
 
 File: gdb.info,  Node: Server Prefix,  Next: Prompting,  Prev: Annotations Overview,  Up: Annotations
 
-The Server Prefix
-=================
+25.2 The Server Prefix
+======================
 
 To issue a command to GDB without affecting certain aspects of the
 state which is seen by users, prefix it with `server '.  This means
@@ -8530,8 +8968,8 @@ history, use the `output' command instead of the `print' command.
 
 File: gdb.info,  Node: Prompting,  Next: Errors,  Prev: Server Prefix,  Up: Annotations
 
-Annotation for GDB Input
-========================
+25.3 Annotation for GDB Input
+=============================
 
 When GDB prompts for input, it annotates this fact so it is possible to
 know when to send output, when the output from a given command is over,
@@ -8576,8 +9014,8 @@ following annotations:
 
 File: gdb.info,  Node: Errors,  Next: Invalidation,  Prev: Prompting,  Up: Annotations
 
-Errors
-======
+25.4 Errors
+===========
 
      ^Z^Zquit
 
@@ -8607,8 +9045,8 @@ message.
 
 File: gdb.info,  Node: Invalidation,  Next: Annotations for Running,  Prev: Errors,  Up: Annotations
 
-Invalidation Notices
-====================
+25.5 Invalidation Notices
+=========================
 
 The following annotations say that certain pieces of state may have
 changed.
@@ -8624,8 +9062,8 @@ changed.
 
 File: gdb.info,  Node: Annotations for Running,  Next: Source Annotations,  Prev: Invalidation,  Up: Annotations
 
-Running the Program
-===================
+25.6 Running the Program
+========================
 
 When the program starts executing due to a GDB command such as `step'
 or `continue',
@@ -8677,8 +9115,8 @@ annotations describe how the program stopped.
 
 File: gdb.info,  Node: Source Annotations,  Prev: Annotations for Running,  Up: Annotations
 
-Displaying Source
-=================
+25.7 Displaying Source
+======================
 
 The following annotation is used instead of displaying source code:
 
@@ -8698,8 +9136,8 @@ that this does not depend on the language).
 
 File: gdb.info,  Node: GDB Bugs,  Next: Formatting Documentation,  Prev: GDB/MI,  Up: Top
 
-Reporting Bugs in GDB
-*********************
+26 Reporting Bugs in GDB
+************************
 
 Your bug reports play an essential role in making GDB reliable.
 
@@ -8715,419 +9153,4 @@ information that enables us to fix the bug.
 
 * Bug Criteria::                Have you found a bug?
 * Bug Reporting::               How to report bugs
-
-
-File: gdb.info,  Node: Bug Criteria,  Next: Bug Reporting,  Up: GDB Bugs
-
-Have you found a bug?
-=====================
-
-If you are not sure whether you have found a bug, here are some
-guidelines:
-
-   * If the debugger gets a fatal signal, for any input whatever, that
-     is a GDB bug.  Reliable debuggers never crash.
-
-   * If GDB produces an error message for valid input, that is a bug.
-     (Note that if you're cross debugging, the problem may also be
-     somewhere in the connection to the target.)
-
-   * If GDB does not produce an error message for invalid input, that
-     is a bug.  However, you should note that your idea of "invalid
-     input" might be our idea of "an extension" or "support for
-     traditional practice".
-
-   * If you are an experienced user of debugging tools, your suggestions
-     for improvement of GDB are welcome in any case.
-
-
-File: gdb.info,  Node: Bug Reporting,  Prev: Bug Criteria,  Up: GDB Bugs
-
-How to report bugs
-==================
-
-A number of companies and individuals offer support for GNU products.
-If you obtained GDB from a support organization, we recommend you
-contact that organization first.
-
-   You can find contact information for many support companies and
-individuals in the file `etc/SERVICE' in the GNU Emacs distribution.
-
-   In any event, we also recommend that you submit bug reports for GDB.
-The prefered method is to submit them directly using GDB's Bugs web
-page (http://www.gnu.org/software/gdb/bugs/).  Alternatively, the
-e-mail gateway <bug-gdb@gnu.org> can be used.
-
-   *Do not send bug reports to `info-gdb', or to `help-gdb', or to any
-newsgroups.*  Most users of GDB do not want to receive bug reports.
-Those that do have arranged to receive `bug-gdb'.
-
-   The mailing list `bug-gdb' has a newsgroup `gnu.gdb.bug' which
-serves as a repeater.  The mailing list and the newsgroup carry exactly
-the same messages.  Often people think of posting bug reports to the
-newsgroup instead of mailing them.  This appears to work, but it has one
-problem which can be crucial: a newsgroup posting often lacks a mail
-path back to the sender.  Thus, if we need to ask for more information,
-we may be unable to reach you.  For this reason, it is better to send
-bug reports to the mailing list.
-
-   The fundamental principle of reporting bugs usefully is this:
-*report all the facts*.  If you are not sure whether to state a fact or
-leave it out, state it!
-
-   Often people omit facts because they think they know what causes the
-problem and assume that some details do not matter.  Thus, you might
-assume that the name of the variable you use in an example does not
-matter.  Well, probably it does not, but one cannot be sure.  Perhaps
-the bug is a stray memory reference which happens to fetch from the
-location where that name is stored in memory; perhaps, if the name were
-different, the contents of that location would fool the debugger into
-doing the right thing despite the bug.  Play it safe and give a
-specific, complete example.  That is the easiest thing for you to do,
-and the most helpful.
-
-   Keep in mind that the purpose of a bug report is to enable us to fix
-the bug.  It may be that the bug has been reported previously, but
-neither you nor we can know that unless your bug report is complete and
-self-contained.
-
-   Sometimes people give a few sketchy facts and ask, "Does this ring a
-bell?"  Those bug reports are useless, and we urge everyone to _refuse
-to respond to them_ except to chide the sender to report bugs properly.
-
-   To enable us to fix the bug, you should include all these things:
-
-   * The version of GDB.  GDB announces it if you start with no
-     arguments; you can also print it at any time using `show version'.
-
-     Without this, we will not know whether there is any point in
-     looking for the bug in the current version of GDB.
-
-   * The type of machine you are using, and the operating system name
-     and version number.
-
-   * What compiler (and its version) was used to compile GDB--e.g.
-     "gcc-2.8.1".
-
-   * What compiler (and its version) was used to compile the program
-     you are debugging--e.g.  "gcc-2.8.1", or "HP92453-01 A.10.32.03 HP
-     C Compiler".  For GCC, you can say `gcc --version' to get this
-     information; for other compilers, see the documentation for those
-     compilers.
-
-   * The command arguments you gave the compiler to compile your
-     example and observe the bug.  For example, did you use `-O'?  To
-     guarantee you will not omit something important, list them all.  A
-     copy of the Makefile (or the output from make) is sufficient.
-
-     If we were to try to guess the arguments, we would probably guess
-     wrong and then we might not encounter the bug.
-
-   * A complete input script, and all necessary source files, that will
-     reproduce the bug.
-
-   * A description of what behavior you observe that you believe is
-     incorrect.  For example, "It gets a fatal signal."
-
-     Of course, if the bug is that GDB gets a fatal signal, then we
-     will certainly notice it.  But if the bug is incorrect output, we
-     might not notice unless it is glaringly wrong.  You might as well
-     not give us a chance to make a mistake.
-
-     Even if the problem you experience is a fatal signal, you should
-     still say so explicitly.  Suppose something strange is going on,
-     such as, your copy of GDB is out of synch, or you have encountered
-     a bug in the C library on your system.  (This has happened!)  Your
-     copy might crash and ours would not.  If you told us to expect a
-     crash, then when ours fails to crash, we would know that the bug
-     was not happening for us.  If you had not told us to expect a
-     crash, then we would not be able to draw any conclusion from our
-     observations.
-
-   * If you wish to suggest changes to the GDB source, send us context
-     diffs.  If you even discuss something in the GDB source, refer to
-     it by context, not by line number.
-
-     The line numbers in our development sources will not match those
-     in your sources.  Your line numbers would convey no useful
-     information to us.
-
-
-   Here are some things that are not necessary:
-
-   * A description of the envelope of the bug.
-
-     Often people who encounter a bug spend a lot of time investigating
-     which changes to the input file will make the bug go away and which
-     changes will not affect it.
-
-     This is often time consuming and not very useful, because the way
-     we will find the bug is by running a single example under the
-     debugger with breakpoints, not by pure deduction from a series of
-     examples.  We recommend that you save your time for something else.
-
-     Of course, if you can find a simpler example to report _instead_
-     of the original one, that is a convenience for us.  Errors in the
-     output will be easier to spot, running under the debugger will take
-     less time, and so on.
-
-     However, simplification is not vital; if you do not want to do
-     this, report the bug anyway and send us the entire test case you
-     used.
-
-   * A patch for the bug.
-
-     A patch for the bug does help us if it is a good one.  But do not
-     omit the necessary information, such as the test case, on the
-     assumption that a patch is all we need.  We might see problems
-     with your patch and decide to fix the problem another way, or we
-     might not understand it at all.
-
-     Sometimes with a program as complicated as GDB it is very hard to
-     construct an example that will make the program follow a certain
-     path through the code.  If you do not send us the example, we will
-     not be able to construct one, so we will not be able to verify
-     that the bug is fixed.
-
-     And if we cannot understand what bug you are trying to fix, or why
-     your patch should be an improvement, we will not install it.  A
-     test case will help us to understand.
-
-   * A guess about what the bug is or what it depends on.
-
-     Such guesses are usually wrong.  Even we cannot guess right about
-     such things without first using the debugger to find the facts.
-
-
-File: gdb.info,  Node: Command Line Editing,  Next: Using History Interactively,  Prev: Formatting Documentation,  Up: Top
-
-Command Line Editing
-********************
-
-This chapter describes the basic features of the GNU command line
-editing interface.
-
-* Menu:
-
-* Introduction and Notation::	Notation used in this text.
-* Readline Interaction::	The minimum set of commands for editing a line.
-* Readline Init File::		Customizing Readline from a user's view.
-* Bindable Readline Commands::	A description of most of the Readline commands
-				available for binding
-* Readline vi Mode::		A short description of how to make Readline
-				behave like the vi editor.
-
-
-File: gdb.info,  Node: Introduction and Notation,  Next: Readline Interaction,  Up: Command Line Editing
-
-Introduction to Line Editing
-============================
-
-The following paragraphs describe the notation used to represent
-keystrokes.
-
-   The text `C-k' is read as `Control-K' and describes the character
-produced when the <k> key is pressed while the Control key is depressed.
-
-   The text `M-k' is read as `Meta-K' and describes the character
-produced when the Meta key (if you have one) is depressed, and the <k>
-key is pressed.  The Meta key is labeled <ALT> on many keyboards.  On
-keyboards with two keys labeled <ALT> (usually to either side of the
-space bar), the <ALT> on the left side is generally set to work as a
-Meta key.  The <ALT> key on the right may also be configured to work as
-a Meta key or may be configured as some other modifier, such as a
-Compose key for typing accented characters.
-
-   If you do not have a Meta or <ALT> key, or another key working as a
-Meta key, the identical keystroke can be generated by typing <ESC>
-_first_, and then typing <k>.  Either process is known as "metafying"
-the <k> key.
-
-   The text `M-C-k' is read as `Meta-Control-k' and describes the
-character produced by "metafying" `C-k'.
-
-   In addition, several keys have their own names.  Specifically,
-<DEL>, <ESC>, <LFD>, <SPC>, <RET>, and <TAB> all stand for themselves
-when seen in this text, or in an init file (*note Readline Init File::).
-If your keyboard lacks a <LFD> key, typing <C-j> will produce the
-desired character.  The <RET> key may be labeled <Return> or <Enter> on
-some keyboards.
-
-
-File: gdb.info,  Node: Readline Interaction,  Next: Readline Init File,  Prev: Introduction and Notation,  Up: Command Line Editing
-
-Readline Interaction
-====================
-
-Often during an interactive session you type in a long line of text,
-only to notice that the first word on the line is misspelled.  The
-Readline library gives you a set of commands for manipulating the text
-as you type it in, allowing you to just fix your typo, and not forcing
-you to retype the majority of the line.  Using these editing commands,
-you move the cursor to the place that needs correction, and delete or
-insert the text of the corrections.  Then, when you are satisfied with
-the line, you simply press <RET>.  You do not have to be at the end of
-the line to press <RET>; the entire line is accepted regardless of the
-location of the cursor within the line.
-
-* Menu:
-
-* Readline Bare Essentials::	The least you need to know about Readline.
-* Readline Movement Commands::	Moving about the input line.
-* Readline Killing Commands::	How to delete text, and how to get it back!
-* Readline Arguments::		Giving numeric arguments to commands.
-* Searching::			Searching through previous lines.
-
-
-File: gdb.info,  Node: Readline Bare Essentials,  Next: Readline Movement Commands,  Up: Readline Interaction
-
-Readline Bare Essentials
-------------------------
-
-In order to enter characters into the line, simply type them.  The typed
-character appears where the cursor was, and then the cursor moves one
-space to the right.  If you mistype a character, you can use your erase
-character to back up and delete the mistyped character.
-
-   Sometimes you may mistype a character, and not notice the error
-until you have typed several other characters.  In that case, you can
-type `C-b' to move the cursor to the left, and then correct your
-mistake.  Afterwards, you can move the cursor to the right with `C-f'.
-
-   When you add text in the middle of a line, you will notice that
-characters to the right of the cursor are `pushed over' to make room
-for the text that you have inserted.  Likewise, when you delete text
-behind the cursor, characters to the right of the cursor are `pulled
-back' to fill in the blank space created by the removal of the text.  A
-list of the bare essentials for editing the text of an input line
-follows.
-
-`C-b'
-     Move back one character.
-
-`C-f'
-     Move forward one character.
-
-<DEL> or <Backspace>
-     Delete the character to the left of the cursor.
-
-`C-d'
-     Delete the character underneath the cursor.
-
-Printing characters
-     Insert the character into the line at the cursor.
-
-`C-_' or `C-x C-u'
-     Undo the last editing command.  You can undo all the way back to an
-     empty line.
-
-(Depending on your configuration, the <Backspace> key be set to delete
-the character to the left of the cursor and the <DEL> key set to delete
-the character underneath the cursor, like `C-d', rather than the
-character to the left of the cursor.)
-
-
-File: gdb.info,  Node: Readline Movement Commands,  Next: Readline Killing Commands,  Prev: Readline Bare Essentials,  Up: Readline Interaction
-
-Readline Movement Commands
---------------------------
-
-The above table describes the most basic keystrokes that you need in
-order to do editing of the input line.  For your convenience, many
-other commands have been added in addition to `C-b', `C-f', `C-d', and
-<DEL>.  Here are some commands for moving more rapidly about the line.
-
-`C-a'
-     Move to the start of the line.
-
-`C-e'
-     Move to the end of the line.
-
-`M-f'
-     Move forward a word, where a word is composed of letters and
-     digits.
-
-`M-b'
-     Move backward a word.
-
-`C-l'
-     Clear the screen, reprinting the current line at the top.
-
-   Notice how `C-f' moves forward a character, while `M-f' moves
-forward a word.  It is a loose convention that control keystrokes
-operate on characters while meta keystrokes operate on words.
-
-
-File: gdb.info,  Node: Readline Killing Commands,  Next: Readline Arguments,  Prev: Readline Movement Commands,  Up: Readline Interaction
-
-Readline Killing Commands
--------------------------
-
-"Killing" text means to delete the text from the line, but to save it
-away for later use, usually by "yanking" (re-inserting) it back into
-the line.  (`Cut' and `paste' are more recent jargon for `kill' and
-`yank'.)
-
-   If the description for a command says that it `kills' text, then you
-can be sure that you can get the text back in a different (or the same)
-place later.
-
-   When you use a kill command, the text is saved in a "kill-ring".
-Any number of consecutive kills save all of the killed text together, so
-that when you yank it back, you get it all.  The kill ring is not line
-specific; the text that you killed on a previously typed line is
-available to be yanked back later, when you are typing another line.
-
-   Here is the list of commands for killing text.
-
-`C-k'
-     Kill the text from the current cursor position to the end of the
-     line.
-
-`M-d'
-     Kill from the cursor to the end of the current word, or, if between
-     words, to the end of the next word.  Word boundaries are the same
-     as those used by `M-f'.
-
-`M-<DEL>'
-     Kill from the cursor the start of the current word, or, if between
-     words, to the start of the previous word.  Word boundaries are the
-     same as those used by `M-b'.
-
-`C-w'
-     Kill from the cursor to the previous whitespace.  This is
-     different than `M-<DEL>' because the word boundaries differ.
-
-
-   Here is how to "yank" the text back into the line.  Yanking means to
-copy the most-recently-killed text from the kill buffer.
-
-`C-y'
-     Yank the most recently killed text back into the buffer at the
-     cursor.
-
-`M-y'
-     Rotate the kill-ring, and yank the new top.  You can only do this
-     if the prior command is `C-y' or `M-y'.
-
-
-File: gdb.info,  Node: Readline Arguments,  Next: Searching,  Prev: Readline Killing Commands,  Up: Readline Interaction
-
-Readline Arguments
-------------------
-
-You can pass numeric arguments to Readline commands.  Sometimes the
-argument acts as a repeat count, other times it is the sign of the
-argument that is significant.  If you pass a negative argument to a
-command which normally acts in a forward direction, that command will
-act in a backward direction.  For example, to kill text back to the
-start of the line, you might type `M-- C-k'.
-
-   The general way to pass numeric arguments to a command is to type
-meta digits before the command.  If the first `digit' typed is a minus
-sign (`-'), then the sign of the argument will be negative.  Once you
-have typed one meta digit to get the argument started, you can type the
-remainder of the digits, and then the command.  For example, to give
-the `C-d' command an argument of 10, you could type `M-1 0 C-d', which
-will delete the next ten characters on the input line.
 

@@ -1,0 +1,19 @@
+Source: gdb
+Maintainer: Daniel Jacobowitz <dan@debian.org>
+Section: devel
+Priority: standard
+Standards-Version: 3.5.3
+Build-Depends: autoconf, libtool, texinfo (>= 4.7-2.2), tetex-bin, libncurses5-dev, libreadline4-dev (>= 4.2a-1), bison, gettext, debhelper (>= 4.1.46), dejagnu, gcj [!mips !mipsel], gobjc, mig [@gnu@], cdbs (>= 0.4.17), quilt (>= 0.30-1), libkvm-dev [@kfreebsd@], type-handling (>= 0.2.1), libunwind7-dev [ia64], flex | flex-old
+
+Package: gdb
+Architecture: any
+Section: devel
+Depends: ${shlibs:Depends}
+Conflicts: gdb-arm
+Replaces: gdb-arm, insight (<< 6.1+cvs.2004.04.07-1)
+Description: The GNU Debugger
+ GDB is a source-level debugger, capable of breaking programs at
+ any specific line, displaying variable values, and determining
+ where errors occurred. Currently, it works for C, C++, Fortran
+ Modula 2 and Java programs. A must-have for any serious
+ programmer.

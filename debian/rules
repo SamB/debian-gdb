@@ -33,13 +33,18 @@ ifeq ($(findstring z$(DEB_HOST_GNU_CPU)z,zpowerpcz zi386z zalphaz zia64z zhppaz 
   run_tests := no
 endif
 
+ifeq ($(DEB_HOST_GNU_CPU),ia64)
+  arch_config_args := --with-libunwind
+endif
+
 INSTALL = $(install)
 export INSTALL
 
 # We pass srcdir explicitly to avoid an extra '/.' at the end of it.  That
 # causes a harmless, but ugly, testsuite failure in maint.exp.
 DEB_CONFIGURE_EXTRA_FLAGS := $(DEB_HOST_GNU_TYPE) --disable-gdbtk \
-	--disable-shared --enable-tui --srcdir=$(shell pwd)
+	--disable-shared --enable-tui --srcdir=$(shell pwd) \
+	$(arch_config_args)
 
 DEB_MAKE_BUILD_TARGET = all info
 
@@ -95,13 +100,19 @@ ifeq ($(run_tests),yes)
 endif
 
 	rm -rf debian/gdb/usr/include \
-		debian/gdb/usr/lib \
+		debian/gdb/usr/lib/lib*.* \
 		debian/gdb/usr/share/info/annotate.info* \
 		debian/gdb/usr/share/info/bfd.info* \
 		debian/gdb/usr/share/info/configure.info* \
 		debian/gdb/usr/share/info/mmalloc.info* \
 		debian/gdb/usr/share/info/standards.info* \
 		debian/gdb/usr/share/locale
+
+debian/control:: debian/control.in
+	cat debian/control.in \
+		| sed "s/@kfreebsd@/`type-handling any kfreebsd-gnu`/g" \
+		| sed "s/@gnu@/`type-handling any gnu`/g" \
+		> debian/control
 
 DEB_INSTALL_DOCS_gdb = gdb/NEWS gdb/README gdb/doc/refcard.tex \
 		objdir/gdb/doc/refcard.dvi objdir/gdb/doc/refcard.ps

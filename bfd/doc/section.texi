@@ -107,23 +107,6 @@ Here is the section structure:
 
 @example
 
-/* This structure is used for a comdat section, as in PE.  A comdat
-   section is associated with a particular symbol.  When the linker
-   sees a comdat section, it keeps only one of the sections with a
-   given name and associated with a given symbol.  */
-
-struct bfd_comdat_info
-@{
-  /* The name of the symbol associated with a comdat section.  */
-  const char *name;
-
-  /* The local symbol table index of the symbol associated with a
-     comdat section.  This is only meaningful to the object file format
-     specific code; it is not an index into the list returned by
-     bfd_canonicalize_symtab.  */
-  long symbol;
-@};
-
 typedef struct bfd_section
 @{
   /* The name of the section; the name isn't a copy, the pointer is
@@ -322,9 +305,6 @@ typedef struct bfd_section
   /* See the vma field.  */
   unsigned int user_set_vma : 1;
 
-  /* Whether relocations have been processed.  */
-  unsigned int reloc_done : 1;
-
   /* A mark flag used by some of the linker backends.  */
   unsigned int linker_mark : 1;
 
@@ -352,21 +332,18 @@ typedef struct bfd_section
   unsigned int use_rela_p:1;
 
   /* Bits used by various backends.  */
-  unsigned int has_tls_reloc:1;
 
-  /* Nonzero if this section needs the relax finalize pass.  */
-  unsigned int need_finalize_relax:1;
+  /* Nonzero if this section has TLS related relocations.  */
+  unsigned int has_tls_reloc:1;
 
   /* Nonzero if this section has a gp reloc.  */
   unsigned int has_gp_reloc:1;
 
-  /* Unused bits.  */
-  unsigned int flag13:1;
-  unsigned int flag14:1;
-  unsigned int flag15:1;
-  unsigned int flag16:4;
-  unsigned int flag20:4;
-  unsigned int flag24:8;
+  /* Nonzero if this section needs the relax finalize pass.  */
+  unsigned int need_finalize_relax:1;
+
+  /* Whether relocations have been processed.  */
+  unsigned int reloc_done : 1;
 
   /* End of internal packed boolean fields.  */
 
@@ -385,13 +362,18 @@ typedef struct bfd_section
 
   /* The size of the section in octets, as it will be output.
      Contains a value even if the section has no contents (e.g., the
-     size of @code{.bss}).  This will be filled in after relocation.  */
-  bfd_size_type _cooked_size;
+     size of @code{.bss}).  */
+  bfd_size_type size;
 
-  /* The original size on disk of the section, in octets.  Normally this
-     value is the same as the size, but if some relaxing has
-     been done, then this value will be bigger.  */
-  bfd_size_type _raw_size;
+  /* For input sections, the original size on disk of the section, in
+     octets.  This field is used by the linker relaxation code.  It is
+     currently only set for sections where the linker relaxation scheme
+     doesn't cache altered section and reloc contents (stabs, eh_frame,
+     SEC_MERGE, some coff relaxing targets), and thus the original size
+     needs to be kept to read the section multiple times.
+     For output sections, rawsize holds the section size calculated on
+     a previous linker relaxation pass.  */
+  bfd_size_type rawsize;
 
   /* If this section is going to be output, then this value is the
      offset in *bytes* into the output section of the first byte in the
@@ -447,9 +429,6 @@ typedef struct bfd_section
 
   /* Entity size for merging purposes.  */
   unsigned int entsize;
-
-  /* Optional information about a COMDAT entry; NULL if not COMDAT.  */
-  struct bfd_comdat_info *comdat;
 
   /* Points to the kept section if this section is a link-once section,
      and is discarded.  */
@@ -515,11 +494,6 @@ extern const struct bfd_symbol * const bfd_abs_symbol;
 extern const struct bfd_symbol * const bfd_com_symbol;
 extern const struct bfd_symbol * const bfd_und_symbol;
 extern const struct bfd_symbol * const bfd_ind_symbol;
-#define bfd_get_section_size_before_reloc(section) \
-     ((section)->_raw_size)
-#define bfd_get_section_size_after_reloc(section) \
-     ((section)->reloc_done ? (section)->_cooked_size \
-                            : (abort (), (bfd_size_type) 1))
 
 /* Macros to handle insertion and deletion of a bfd's sections.  These
    only handle the list pointers, ie. do not adjust section_count,
@@ -577,6 +551,29 @@ This should only be used in special cases; the normal way to process
 all sections of a given name is to use @code{bfd_map_over_sections} and
 @code{strcmp} on the name (or better yet, base it on the section flags
 or something else) for each section.
+
+@findex bfd_get_section_by_name_if
+@subsubsection @code{bfd_get_section_by_name_if}
+@strong{Synopsis}
+@example
+asection *bfd_get_section_by_name_if
+   (bfd *abfd,
+    const char *name,
+    bfd_boolean (*func) (bfd *abfd, asection *sect, void *obj),
+    void *obj);
+@end example
+@strong{Description}@*
+Call the provided function @var{func} for each section
+attached to the BFD @var{abfd} whose name matches @var{name},
+passing @var{obj} as an argument. The function will be called
+as if by
+
+@example
+       func (abfd, the_section, obj);
+@end example
+
+It returns the first section for which @var{func} returns true,
+otherwise @code{NULL}.
 
 @findex bfd_get_unique_section_name
 @subsubsection @code{bfd_get_unique_section_name}
@@ -699,6 +696,26 @@ alternative would be to use a loop:
              func (abfd, p, ...)
 @end example
 
+@findex bfd_sections_find_if
+@subsubsection @code{bfd_sections_find_if}
+@strong{Synopsis}
+@example
+asection *bfd_sections_find_if
+   (bfd *abfd,
+    bfd_boolean (*operation) (bfd *abfd, asection *sect, void *obj),
+    void *obj);
+@end example
+@strong{Description}@*
+Call the provided function @var{operation} for each section
+attached to the BFD @var{abfd}, passing @var{obj} as an
+argument. The function will be called as if by
+
+@example
+       operation (abfd, the_section, obj);
+@end example
+
+It returns the first section for which @var{operation} returns true.
+
 @findex bfd_set_section_size
 @subsubsection @code{bfd_set_section_size}
 @strong{Synopsis}
@@ -766,6 +783,17 @@ flag set are requested or if the section does not have the
 with zeroes. If no errors occur, @code{TRUE} is returned, else
 @code{FALSE}.
 
+@findex bfd_malloc_and_get_section
+@subsubsection @code{bfd_malloc_and_get_section}
+@strong{Synopsis}
+@example
+bfd_boolean bfd_malloc_and_get_section
+   (bfd *abfd, asection *section, bfd_byte **buf);
+@end example
+@strong{Description}@*
+Read all data from @var{section} in BFD @var{abfd}
+into a buffer, *@var{buf}, malloc'd by this function.
+
 @findex bfd_copy_private_section_data
 @subsubsection @code{bfd_copy_private_section_data}
 @strong{Synopsis}
@@ -805,6 +833,15 @@ becomes empty, remove it from the output bfd.
 This function won't actually do anything except twiddle flags
 if called too late in the linking process, when it's not safe
 to remove sections.
+
+@findex bfd_generic_is_group_section
+@subsubsection @code{bfd_generic_is_group_section}
+@strong{Synopsis}
+@example
+bfd_boolean bfd_generic_is_group_section (bfd *, const asection *sec);
+@end example
+@strong{Description}@*
+Returns TRUE if @var{sec} is a member of a group.
 
 @findex bfd_generic_discard_group
 @subsubsection @code{bfd_generic_discard_group}

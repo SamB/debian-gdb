@@ -1,6 +1,6 @@
 /* BFD library support routines for architectures.
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003
+   2000, 2001, 2002, 2003, 2004
    Free Software Foundation, Inc.
    Hacked by John Gilmore and Steve Chamberlain of Cygnus Support.
 
@@ -85,6 +85,11 @@ DESCRIPTION
 .#define bfd_mach_mcf5307  11
 .#define bfd_mach_mcf5407  12
 .#define bfd_mach_mcf528x  13
+.#define bfd_mach_mcfv4e   14
+.#define bfd_mach_mcf521x   15
+.#define bfd_mach_mcf5249   16
+.#define bfd_mach_mcf547x   17
+.#define bfd_mach_mcf548x   18
 .  bfd_arch_vax,       {* DEC Vax *}
 .  bfd_arch_i960,      {* Intel 960 *}
 .    {* The order of the following is important.
@@ -123,6 +128,9 @@ DESCRIPTION
 .#define bfd_mach_sparc_v9_p(mach) \
 .  ((mach) >= bfd_mach_sparc_v8plus && (mach) <= bfd_mach_sparc_v9b \
 .   && (mach) != bfd_mach_sparc_sparclite_le)
+.{* Nonzero if MACH is a 64 bit sparc architecture.  *}
+.#define bfd_mach_sparc_64bit_p(mach) \
+.  ((mach) >= bfd_mach_sparc_v9 && (mach) != bfd_mach_sparc_v8plusb)
 .  bfd_arch_mips,      {* MIPS Rxxxx *}
 .#define bfd_mach_mips3000		3000
 .#define bfd_mach_mips3900		3900
@@ -224,12 +232,16 @@ DESCRIPTION
 .#define bfd_mach_sh            1
 .#define bfd_mach_sh2        0x20
 .#define bfd_mach_sh_dsp     0x2d
+.#define bfd_mach_sh2a       0x2a
+.#define bfd_mach_sh2a_nofpu 0x2b
 .#define bfd_mach_sh2e       0x2e
 .#define bfd_mach_sh3        0x30
+.#define bfd_mach_sh3_nommu  0x31
 .#define bfd_mach_sh3_dsp    0x3d
 .#define bfd_mach_sh3e       0x3e
 .#define bfd_mach_sh4        0x40
 .#define bfd_mach_sh4_nofpu  0x41
+.#define bfd_mach_sh4_nommu_nofpu  0x42
 .#define bfd_mach_sh4a       0x4a
 .#define bfd_mach_sh4a_nofpu 0x4b
 .#define bfd_mach_sh4al_dsp  0x4d
@@ -285,6 +297,7 @@ DESCRIPTION
 .#define bfd_mach_frvsimple	2
 .#define bfd_mach_fr300		300
 .#define bfd_mach_fr400		400
+.#define bfd_mach_fr450		450
 .#define bfd_mach_frvtomcat	499	{* fr500 prototype *}
 .#define bfd_mach_fr500		500
 .#define bfd_mach_fr550		550
@@ -305,6 +318,10 @@ DESCRIPTION
 .#define bfd_mach_avr3		3
 .#define bfd_mach_avr4		4
 .#define bfd_mach_avr5		5
+.  bfd_arch_cr16c,       {* National Semiconductor CompactRISC. *}
+.#define bfd_mach_cr16c		1
+.  bfd_arch_crx,       {*  National Semiconductor CRX.  *}
+.#define bfd_mach_crx		1
 .  bfd_arch_cris,      {* Axis CRIS *}
 .  bfd_arch_s390,      {* IBM s390 *}
 .#define bfd_mach_s390_31       31
@@ -373,7 +390,9 @@ extern const bfd_arch_info_type bfd_alpha_arch;
 extern const bfd_arch_info_type bfd_arc_arch;
 extern const bfd_arch_info_type bfd_arm_arch;
 extern const bfd_arch_info_type bfd_avr_arch;
+extern const bfd_arch_info_type bfd_cr16c_arch;
 extern const bfd_arch_info_type bfd_cris_arch;
+extern const bfd_arch_info_type bfd_crx_arch;
 extern const bfd_arch_info_type bfd_d10v_arch;
 extern const bfd_arch_info_type bfd_d30v_arch;
 extern const bfd_arch_info_type bfd_dlx_arch;
@@ -433,7 +452,9 @@ static const bfd_arch_info_type * const bfd_archures_list[] =
     &bfd_arc_arch,
     &bfd_arm_arch,
     &bfd_avr_arch,
+    &bfd_cr16c_arch,
     &bfd_cris_arch,
+    &bfd_crx_arch,
     &bfd_d10v_arch,
     &bfd_d30v_arch,
     &bfd_dlx_arch,

@@ -1,7 +1,7 @@
-This is stabs.info, produced by makeinfo version 4.6 from
+This is stabs.info, produced by makeinfo version 4.7 from
 ./stabs.texinfo.
 
-INFO-DIR-SECTION Programming & development tools.
+INFO-DIR-SECTION Software development
 START-INFO-DIR-ENTRY
 * Stabs: (stabs).                 The "stabs" debugging information format.
 END-INFO-DIR-ENTRY
@@ -49,8 +49,8 @@ This document describes the stabs debugging format.
 
 File: stabs.info,  Node: Overview,  Next: Program Structure,  Prev: Top,  Up: Top
 
-Overview of Stabs
-*****************
+1 Overview of Stabs
+*******************
 
 "Stabs" refers to a format for information that describes a program to
 a debugger.  This format was apparently invented by Peter Kessler at
@@ -82,8 +82,8 @@ directs you to them for more information.
 
 File: stabs.info,  Node: Flow,  Next: Stabs Format,  Up: Overview
 
-Overview of Debugging Information Flow
-======================================
+1.1 Overview of Debugging Information Flow
+==========================================
 
 The GNU C compiler compiles C source in a `.c' file into assembly
 language in a `.s' file, which the assembler translates into a `.o'
@@ -114,8 +114,8 @@ a source of debugging information about the program.
 
 File: stabs.info,  Node: Stabs Format,  Next: String Field,  Prev: Flow,  Up: Overview
 
-Overview of Stab Format
-=======================
+1.2 Overview of Stab Format
+===========================
 
 There are three overall formats for stab assembler directives,
 differentiated by the first word of the stab.  The name of the directive
@@ -148,8 +148,8 @@ of the valid TYPE field values for stab directives.
 
 File: stabs.info,  Node: String Field,  Next: C Example,  Prev: Stabs Format,  Up: Overview
 
-The String Field
-================
+1.3 The String Field
+====================
 
 For most stabs the string field holds the meat of the debugging
 information.  The flexible nature of this field is what makes stabs
@@ -262,8 +262,8 @@ backslashes), AIX can use `?' instead of backslash.
 
 File: stabs.info,  Node: C Example,  Next: Assembly Code,  Prev: String Field,  Up: Overview
 
-A Simple Example in C Source
-============================
+1.4 A Simple Example in C Source
+================================
 
 To get the flavor of how stabs describe source information for a C
 program, let's look at the simple program:
@@ -280,8 +280,8 @@ of the `.s' file in the description of the stabs that follows.
 
 File: stabs.info,  Node: Assembly Code,  Prev: C Example,  Up: Overview
 
-The Simple Example at the Assembly Level
-========================================
+1.5 The Simple Example at the Assembly Level
+============================================
 
 This simple "hello world" example demonstrates several of the stab
 types used to describe C language source files.
@@ -342,8 +342,8 @@ types used to describe C language source files.
 
 File: stabs.info,  Node: Program Structure,  Next: Constants,  Prev: Overview,  Up: Top
 
-Encoding the Structure of the Program
-*************************************
+2 Encoding the Structure of the Program
+***************************************
 
 The elements of the program structure that stabs encode include the name
 of the main function, the names of the source and include files, the
@@ -364,8 +364,8 @@ blocks of code.
 
 File: stabs.info,  Node: Main Program,  Next: Source Files,  Up: Program Structure
 
-Main Program
-============
+2.1 Main Program
+================
 
 Most languages allow the main program to have any name.  The `N_MAIN'
 stab type tells the debugger the name that is used in this program.
@@ -378,8 +378,8 @@ how XCOFF handles this.
 
 File: stabs.info,  Node: Source Files,  Next: Include Files,  Prev: Main Program,  Up: Program Structure
 
-Paths and Names of the Source Files
-===================================
+2.2 Paths and Names of the Source Files
+=======================================
 
 Before any other stabs occur, there must be a stab specifying the source
 file.  This information is contained in a symbol of stab type `N_SO';
@@ -387,8 +387,39 @@ the string field contains the name of the file.  The value of the
 symbol is the start address of the portion of the text section
 corresponding to that file.
 
-   With the Sun Solaris2 compiler, the desc field contains a
-source-language code.
+   Some compilers use the desc field to indicate the language of the
+source file.  Sun's compilers started this usage, and the first
+constants are derived from their documentation.  Languages added by
+gcc/gdb start at 0x32 to avoid conflict with languages Sun may add in
+the future.  A desc field with a value 0 indicates that no language has
+been specified via this mechanism.
+
+`N_SO_AS' (0x1)
+     Assembly language
+
+`N_SO_C'  (0x2)
+     K&R traditional C
+
+`N_SO_ANSI_C' (0x3)
+     ANSI C
+
+`N_SO_CC'  (0x4)
+     C++
+
+`N_SO_FORTRAN' (0x5)
+     Fortran
+
+`N_SO_PASCAL' (0x6)
+     Pascal
+
+`N_SO_FORTRAN90' (0x7)
+     Fortran90
+
+`N_SO_OBJC' (0x32)
+     Objective-C
+
+`N_SO_OBJCPLUS' (0x33)
+     Objective-C++
 
    Some compilers (for example, GCC2 and SunOS4 `/bin/cc') also include
 the directory in which the source was compiled, in a second `N_SO'
@@ -420,8 +451,8 @@ insert to mark the start of a new `.o' file).
 
 File: stabs.info,  Node: Include Files,  Next: Line Numbers,  Prev: Source Files,  Up: Program Structure
 
-Names of Include Files
-======================
+2.3 Names of Include Files
+==========================
 
 There are several schemes for dealing with include files: the
 traditional `N_SOL' approach, Sun's `N_BINCL' approach, and the XCOFF
@@ -472,8 +503,8 @@ and `C_EINCL' do not nest.
 
 File: stabs.info,  Node: Line Numbers,  Next: Procedures,  Prev: Include Files,  Up: Program Structure
 
-Line Numbers
-============
+2.4 Line Numbers
+================
 
 An `N_SLINE' symbol represents the start of a source line.  The desc
 field contains the line number and the value contains the code address
@@ -504,8 +535,8 @@ Files::).
 
 File: stabs.info,  Node: Procedures,  Next: Nested Procedures,  Prev: Line Numbers,  Up: Program Structure
 
-Procedures
-==========
+2.5 Procedures
+==============
 
 All of the following stabs normally use the `N_FUN' symbol type.
 However, Sun's `acc' compiler on SunOS4 uses `N_GSYM' and `N_STSYM',
@@ -611,8 +642,8 @@ for the program.
 
 File: stabs.info,  Node: Nested Procedures,  Next: Block Structure,  Prev: Procedures,  Up: Program Structure
 
-Nested Procedures
-=================
+2.6 Nested Procedures
+=====================
 
 For any of the symbol descriptors representing procedures, after the
 symbol descriptor and the type information is optionally a scope
@@ -648,8 +679,8 @@ produces the stabs:
 
 File: stabs.info,  Node: Block Structure,  Next: Alternate Entry Points,  Prev: Nested Procedures,  Up: Program Structure
 
-Block Structure
-===============
+2.7 Block Structure
+===================
 
 The program's block structure is represented by the `N_LBRAC' (left
 brace) and the `N_RBRAC' (right brace) stab types.  The variables
@@ -678,8 +709,8 @@ the name of the symbol is `.be'; it is the end of the block.
 
 File: stabs.info,  Node: Alternate Entry Points,  Prev: Block Structure,  Up: Program Structure
 
-Alternate Entry Points
-======================
+2.8 Alternate Entry Points
+==========================
 
 Some languages, like Fortran, have the ability to enter procedures at
 some place other than the beginning.  One can declare an alternate entry
@@ -694,8 +725,8 @@ for that information.
 
 File: stabs.info,  Node: Constants,  Next: Variables,  Prev: Program Structure,  Up: Top
 
-Constants
-*********
+3 Constants
+***********
 
 The `c' symbol descriptor indicates that this stab represents a
 constant.  This symbol descriptor is an exception to the general rule
@@ -763,8 +794,8 @@ constants.
 
 File: stabs.info,  Node: Variables,  Next: Types,  Prev: Constants,  Up: Top
 
-Variables
-*********
+4 Variables
+***********
 
 Different types of stabs describe the various ways that variables can be
 allocated: on the stack, globally, in registers, in common blocks,
@@ -783,8 +814,8 @@ statically, or as arguments to a function.
 
 File: stabs.info,  Node: Stack Variables,  Next: Global Variables,  Up: Variables
 
-Automatic Variables Allocated on the Stack
-==========================================
+4.1 Automatic Variables Allocated on the Stack
+==============================================
 
 If a variable's scope is local to a function and its lifetime is only as
 long as that function executes (C calls such variables "automatic"), it
@@ -827,8 +858,8 @@ defined in; see *Note Block Structure::.
 
 File: stabs.info,  Node: Global Variables,  Next: Register Variables,  Prev: Stack Variables,  Up: Variables
 
-Global Variables
-================
+4.2 Global Variables
+====================
 
 A variable whose scope is not specific to just one source file is
 represented by the `G' symbol descriptor.  These stabs use the `N_GSYM'
@@ -860,8 +891,8 @@ variable is defined.  Other compilers, like SunOS4 /bin/cc, output a
 
 File: stabs.info,  Node: Register Variables,  Next: Common Blocks,  Prev: Global Variables,  Up: Variables
 
-Register Variables
-==================
+4.3 Register Variables
+======================
 
 Register variables have their own stab type, `N_RSYM' (`C_RSYM' for
 XCOFF), and their own symbol descriptor, `r'.  The stab's value is the
@@ -883,8 +914,8 @@ other bss symbols.
 
 File: stabs.info,  Node: Common Blocks,  Next: Statics,  Prev: Register Variables,  Up: Variables
 
-Common Blocks
-=============
+4.4 Common Blocks
+=================
 
 A common block is a statically allocated section of memory which can be
 referred to by several source files.  It may contain several variables.
@@ -909,8 +940,8 @@ Fortran variables).  Other stabs (at least type declarations using
 
 File: stabs.info,  Node: Statics,  Next: Based Variables,  Prev: Common Blocks,  Up: Variables
 
-Static Variables
-================
+4.5 Static Variables
+====================
 
 Initialized static variables are represented by the `S' and `V' symbol
 descriptors.  `S' means file scope static, and `V' means procedure
@@ -966,8 +997,8 @@ Linker Relocation::.
 
 File: stabs.info,  Node: Based Variables,  Next: Parameters,  Prev: Statics,  Up: Variables
 
-Fortran Based Variables
-=======================
+4.6 Fortran Based Variables
+===========================
 
 Fortran (at least, the Sun and SGI dialects of FORTRAN-77) has a feature
 which allows allocating arrays with `malloc', but which avoids blurring
@@ -1003,8 +1034,8 @@ arrays of reals.
 
 File: stabs.info,  Node: Parameters,  Prev: Based Variables,  Up: Variables
 
-Parameters
-==========
+4.7 Parameters
+==============
 
 Formal parameters to a function are represented by a stab (or sometimes
 two; see below) for each parameter.  The stabs are in the order in which
@@ -1052,8 +1083,8 @@ pointer (I'm not sure whether this is true or not).
 
 File: stabs.info,  Node: Register Parameters,  Next: Local Variable Parameters,  Up: Parameters
 
-Passing Parameters in Registers
--------------------------------
+4.7.1 Passing Parameters in Registers
+-------------------------------------
 
 If the parameter is passed in a register, then traditionally there are
 two symbols for each argument:
@@ -1098,8 +1129,8 @@ parameters passed by reference (*note Reference Parameters::).
 
 File: stabs.info,  Node: Local Variable Parameters,  Next: Reference Parameters,  Prev: Register Parameters,  Up: Parameters
 
-Storing Parameters as Local Variables
--------------------------------------
+4.7.2 Storing Parameters as Local Variables
+-------------------------------------------
 
 There is a case similar to an argument in a register, which is an
 argument that is actually stored as a local variable.  Sometimes this
@@ -1160,8 +1191,8 @@ and converted to a float).
 
 File: stabs.info,  Node: Reference Parameters,  Next: Conformant Arrays,  Prev: Local Variable Parameters,  Up: Parameters
 
-Passing Parameters by Reference
--------------------------------
+4.7.3 Passing Parameters by Reference
+-------------------------------------
 
 If the parameter is passed by reference (e.g., Pascal `VAR'
 parameters), then the symbol descriptor is `v' if it is in the argument
@@ -1174,8 +1205,8 @@ know.
 
 File: stabs.info,  Node: Conformant Arrays,  Prev: Reference Parameters,  Up: Parameters
 
-Passing Conformant Array Parameters
------------------------------------
+4.7.4 Passing Conformant Array Parameters
+-----------------------------------------
 
 Conformant arrays are a feature of Modula-2, and perhaps other
 languages, in which the size of an array parameter is not known to the
@@ -1189,8 +1220,8 @@ where the size of the array (in elements? in bytes?) is stored.
 
 File: stabs.info,  Node: Types,  Next: Symbol Tables,  Prev: Variables,  Up: Top
 
-Defining Types
-**************
+5 Defining Types
+****************
 
 The examples so far have described types as references to previously
 defined types, or defined in terms of subranges of or pointers to
@@ -1214,8 +1245,8 @@ descriptors that may follow the `=' in a type definition.
 
 File: stabs.info,  Node: Builtin Types,  Next: Miscellaneous Types,  Up: Types
 
-Builtin Types
-=============
+5.1 Builtin Types
+=================
 
 Certain types are built in (`int', `short', `void', `float', etc.); the
 debugger recognizes these types and knows how to handle them.  Thus,
@@ -1240,8 +1271,8 @@ formats.  The following sections describe each of these formats.
 
 File: stabs.info,  Node: Traditional Builtin Types,  Next: Builtin Type Descriptors,  Up: Builtin Types
 
-Traditional Builtin Types
--------------------------
+5.1.1 Traditional Builtin Types
+-------------------------------
 
 This is the traditional, convoluted method for defining builtin types.
 There are several classes of such type definitions: integer, floating
@@ -1255,8 +1286,8 @@ point, and `void'.
 
 File: stabs.info,  Node: Traditional Integer Types,  Next: Traditional Other Types,  Up: Traditional Builtin Types
 
-Traditional Integer Types
-.........................
+5.1.1.1 Traditional Integer Types
+.................................
 
 Often types are defined as subranges of themselves.  If the bounding
 values fit within an `int', then they are given normally.  For example:
@@ -1304,8 +1335,8 @@ this is the case for Convex.
 
 File: stabs.info,  Node: Traditional Other Types,  Prev: Traditional Integer Types,  Up: Traditional Builtin Types
 
-Traditional Other Types
-.......................
+5.1.1.2 Traditional Other Types
+...............................
 
 If the upper bound of a subrange is 0 and the lower bound is positive,
 the type is a floating point type, and the lower bound of the subrange
@@ -1332,8 +1363,8 @@ double-precision floating-point type.
 
 File: stabs.info,  Node: Builtin Type Descriptors,  Next: Negative Type Numbers,  Prev: Traditional Builtin Types,  Up: Builtin Types
 
-Defining Builtin Types Using Builtin Type Descriptors
------------------------------------------------------
+5.1.2 Defining Builtin Types Using Builtin Type Descriptors
+-----------------------------------------------------------
 
 This is the method used by Sun's `acc' for defining builtin types.
 These are the type descriptors to define builtin types:
@@ -1415,8 +1446,8 @@ tell where it ends.
 
 File: stabs.info,  Node: Negative Type Numbers,  Prev: Builtin Type Descriptors,  Up: Builtin Types
 
-Negative Type Numbers
----------------------
+5.1.3 Negative Type Numbers
+---------------------------
 
 This is the method used in XCOFF for defining builtin types.  Since the
 debugger knows about the builtin types anyway, the idea of negative
@@ -1603,8 +1634,8 @@ twos-complement these days).
 
 File: stabs.info,  Node: Miscellaneous Types,  Next: Cross-References,  Prev: Builtin Types,  Up: Types
 
-Miscellaneous Types
-===================
+5.2 Miscellaneous Types
+=======================
 
 `b TYPE-INFORMATION ; BYTES'
      Pascal space type.  This is documented by IBM; what does it mean?
@@ -1652,8 +1683,8 @@ Miscellaneous Types
 
 File: stabs.info,  Node: Cross-References,  Next: Subranges,  Prev: Miscellaneous Types,  Up: Types
 
-Cross-References to Other Types
-===============================
+5.3 Cross-References to Other Types
+===================================
 
 A type can be used before it is defined; one common way to deal with
 that situation is just to use a type reference to a type which has not
@@ -1693,8 +1724,8 @@ String Field::), or what.  The symbol ends with `;'.
 
 File: stabs.info,  Node: Subranges,  Next: Arrays,  Prev: Cross-References,  Up: Types
 
-Subrange Types
-==============
+5.4 Subrange Types
+==================
 
 The `r' type descriptor defines a type as a subrange of another type.
 It is followed by type information for the type of which it is a
@@ -1731,8 +1762,8 @@ Builtin Types::.
 
 File: stabs.info,  Node: Arrays,  Next: Strings,  Prev: Subranges,  Up: Types
 
-Array Types
-===========
+5.5 Array Types
+===============
 
 Arrays use the `a' type descriptor.  Following the type descriptor is
 the type of the index and the type of the array elements.  If the index
@@ -1808,8 +1839,8 @@ the type of the array elements.
 
 File: stabs.info,  Node: Strings,  Next: Enumerations,  Prev: Arrays,  Up: Types
 
-Strings
-=======
+5.6 Strings
+===========
 
 Some languages, like C or the original Pascal, do not have string types,
 they just have related things like arrays of characters.  But most
@@ -1837,8 +1868,8 @@ Field::).
 
 File: stabs.info,  Node: Enumerations,  Next: Structures,  Prev: Strings,  Up: Types
 
-Enumerations
-============
+5.7 Enumerations
+================
 
 Enumerations are defined with the `e' type descriptor.
 
@@ -1889,8 +1920,8 @@ nameless stab (*note String Field::); GCC does this.
 
 File: stabs.info,  Node: Structures,  Next: Typedefs,  Prev: Enumerations,  Up: Types
 
-Structures
-==========
+5.8 Structures
+==============
 
 The encoding of structures in stabs can be shown with an example.
 
@@ -1909,7 +1940,7 @@ of the program in the bss section.
        char  s_char_vec[8];
        struct s_tag* s_next;
      } g_an_s;
-     
+
      typedef struct s_tag s_typedef;
 
    The structure tag has an `N_LSYM' stab type because, like the
@@ -1950,8 +1981,8 @@ non-method fields; see *Note Cplusplus::.
 
 File: stabs.info,  Node: Typedefs,  Next: Unions,  Prev: Structures,  Up: Types
 
-Giving a Type a Name
-====================
+5.9 Giving a Type a Name
+========================
 
 To give a type a name, use the `t' symbol descriptor.  The type is
 specified by the type information (*note String Field::) for the stab.
@@ -1980,8 +2011,8 @@ type--it has a known size but little else about it is specified.
 
 File: stabs.info,  Node: Unions,  Next: Function Types,  Prev: Typedefs,  Up: Types
 
-Unions
-======
+5.10 Unions
+===========
 
      union u_tag {
        int  u_int;
@@ -2024,8 +2055,8 @@ Variables::).
 
 File: stabs.info,  Node: Function Types,  Prev: Unions,  Up: Types
 
-Function Types
-==============
+5.11 Function Types
+===================
 
 Various types can be defined for function variables.  These types are
 not used in defining functions (*note Procedures::); they are used for
@@ -2065,8 +2096,8 @@ new type, 25, which is a function returning `int'.
 
 File: stabs.info,  Node: Symbol Tables,  Next: Cplusplus,  Prev: Types,  Up: Top
 
-Symbol Information in Symbol Tables
-***********************************
+6 Symbol Information in Symbol Tables
+*************************************
 
 This chapter describes the format of symbol table entries and how stab
 assembler directives map to them.  It also describes the
@@ -2080,8 +2111,8 @@ transformations that the assembler and linker make on data from stabs.
 
 File: stabs.info,  Node: Symbol Table Format,  Next: Transformations On Symbol Tables,  Up: Symbol Tables
 
-Symbol Table Format
-===================
+6.1 Symbol Table Format
+=======================
 
 Each time the assembler encounters a stab directive, it puts each field
 of the stab into a corresponding field in a symbol table entry of its
@@ -2112,8 +2143,8 @@ executable by the assembler or the linker.
 
 File: stabs.info,  Node: Transformations On Symbol Tables,  Prev: Symbol Table Format,  Up: Symbol Tables
 
-Transformations on Symbol Tables
-================================
+6.2 Transformations on Symbol Tables
+====================================
 
 The linker concatenates object files and does fixups of externally
 defined symbols.
@@ -2144,8 +2175,8 @@ relocatable address and the linker turns it into an absolute address.
 
 File: stabs.info,  Node: Transformations On Static Variables,  Next: Transformations On Global Variables,  Up: Transformations On Symbol Tables
 
-Transformations on Static Variables
------------------------------------
+6.2.1 Transformations on Static Variables
+-----------------------------------------
 
 This source line defines a static variable at file scope:
 
@@ -2168,8 +2199,8 @@ relocatable address absolute.
 
 File: stabs.info,  Node: Transformations On Global Variables,  Next: Stab Section Transformations,  Prev: Transformations On Static Variables,  Up: Transformations On Symbol Tables
 
-Transformations on Global Variables
------------------------------------
+6.2.2 Transformations on Global Variables
+-----------------------------------------
 
 Stabs for global variables do not contain location information. In this
 case, the debugger finds location information in the assembler or
@@ -2202,8 +2233,8 @@ entry now holds an absolute address:
 
 File: stabs.info,  Node: Stab Section Transformations,  Prev: Transformations On Global Variables,  Up: Transformations On Symbol Tables
 
-Transformations of Stabs in separate sections
----------------------------------------------
+6.2.3 Transformations of Stabs in separate sections
+---------------------------------------------------
 
 For object file formats using stabs in separate sections (*note Stab
 Sections::), use `objdump --stabs' instead of `nm' to show the stabs in
@@ -2241,8 +2272,8 @@ the value is absolute, not relocatable, and so the object file contains
 
 File: stabs.info,  Node: Cplusplus,  Next: Stab Types,  Prev: Symbol Tables,  Up: Top
 
-GNU C++ Stabs
-*************
+7 GNU C++ Stabs
+***************
 
 * Menu:
 
@@ -2264,8 +2295,8 @@ GNU C++ Stabs
 
 File: stabs.info,  Node: Class Names,  Next: Nested Symbols,  Up: Cplusplus
 
-C++ Class Names
-===============
+7.1 C++ Class Names
+===================
 
 In C++, a class name which is declared with `class', `struct', or
 `union', is not only a tag, as in C, but also a type name.  Thus there
@@ -2292,8 +2323,8 @@ type name and a tag.
 
 File: stabs.info,  Node: Nested Symbols,  Next: Basic Cplusplus Types,  Prev: Class Names,  Up: Cplusplus
 
-Defining a Symbol Within Another Type
-=====================================
+7.2 Defining a Symbol Within Another Type
+=========================================
 
 In C++, a symbol (such as a type name) can be defined within another
 type.
@@ -2312,8 +2343,8 @@ descriptor, and `5=*6' is the type information.
 
 File: stabs.info,  Node: Basic Cplusplus Types,  Next: Simple Classes,  Prev: Nested Symbols,  Up: Cplusplus
 
-Basic Types For C++
-===================
+7.3 Basic Types For C++
+=======================
 
 << the examples that follow are based on a01.C >>
 
@@ -2350,8 +2381,8 @@ virtual methods defined.
 
 File: stabs.info,  Node: Simple Classes,  Next: Class Instance,  Prev: Basic Cplusplus Types,  Up: Cplusplus
 
-Simple Class Definition
-=======================
+7.4 Simple Class Definition
+===========================
 
 The stabs describing C++ language features are an extension of the
 stabs describing C.  Stabs representing C++ class types elaborate
@@ -2425,23 +2456,23 @@ for virtual methods.
 
      .stabs "class_name:sym_desc(type)type_def(20)=type_desc(struct)struct_bytes(4)
              field_name(Adat):type(int),bit_offset(0),field_bits(32);
-     
+
              method_name(Ameth)::type_def(21)=type_desc(method)return_type(int);
              :arg_types(int char);
              protection(public)qualifier(normal)virtual(no);;"
              N_LSYM,NIL,NIL,NIL
 
      .stabs "baseA:t20=s4Adat:1,0,32;Ameth::21=##1;:ic;2A.;;",128,0,0,0
-     
+
      .stabs "class_name:sym_desc(struct tag)",N_LSYM,NIL,NIL,NIL
-     
+
      .stabs "baseA:T20",128,0,0,0
 
 
 File: stabs.info,  Node: Class Instance,  Next: Methods,  Prev: Simple Classes,  Up: Cplusplus
 
-Class Instance
-==============
+7.5 Class Instance
+==================
 
 As shown above, describing even a simple C++ class definition is
 accomplished by massively extending the stab format used in C to
@@ -2463,8 +2494,8 @@ different from a standard C stab describing a local variable.
 
 File: stabs.info,  Node: Methods,  Next: Method Type Descriptor,  Prev: Class Instance,  Up: Cplusplus
 
-Method Definition
-=================
+7.6 Method Definition
+=====================
 
 The class definition shown above declares Ameth.  The C++ source below
 defines Ameth:
@@ -2488,7 +2519,7 @@ between GNU mangling and ARM mangling.
 
      .stabs "name:symbol_descriptor(global function)return_type(int)",
              N_FUN, NIL, NIL, code_addr_of_method_start
-     
+
      .stabs "Ameth__5baseAic:F1",36,0,0,_Ameth__5baseAic
 
    Here is the stab for the `this' pointer implicit argument.  The name
@@ -2501,7 +2532,7 @@ symbol, by prefixing the symbol name with `xs'.
      .stabs "name:sym_desc(register param)type_def(19)=
              type_desc(ptr to)type_ref(baseA)=
              type_desc(cross-reference to)baseA:",N_RSYM,NIL,NIL,register_number
-     
+
      .stabs "this:P19=*20=xsbaseA:",64,0,0,8
 
    The stab for the explicit integer argument looks just like a
@@ -2511,7 +2542,7 @@ frame pointer.
 
      .stabs "name:sym_desc(value parameter)type_ref(int)",
              N_PSYM,NIL,NIL,offset_from_arg_ptr
-     
+
      .stabs "in:p1",160,0,0,72
 
    << The examples that follow are based on A1.C >>
@@ -2519,8 +2550,8 @@ frame pointer.
 
 File: stabs.info,  Node: Method Type Descriptor,  Next: Member Type Descriptor,  Prev: Methods,  Up: Cplusplus
 
-The `#' Type Descriptor
-=======================
+7.7 The `#' Type Descriptor
+===========================
 
 This is used to describe a class method.  This is a function which takes
 an extra argument as its first argument, for the `this' pointer.
@@ -2545,8 +2576,8 @@ the compiler it can also be used in other contexts.
 
 File: stabs.info,  Node: Member Type Descriptor,  Next: Protections,  Prev: Method Type Descriptor,  Up: Cplusplus
 
-The `@' Type Descriptor
-=======================
+7.8 The `@' Type Descriptor
+===========================
 
 The `@' type descriptor is used together with the `*' type descriptor
 for a pointer-to-non-static-member-data type.  It is followed by type
@@ -2569,8 +2600,8 @@ digit, `(', or `-', and type attributes never start with those things.
 
 File: stabs.info,  Node: Protections,  Next: Method Modifiers,  Prev: Member Type Descriptor,  Up: Cplusplus
 
-Protections
-===========
+7.9 Protections
+===============
 
 In the simple class definition shown above all member data and
 functions were publicly accessible.  The example that follows contrasts
@@ -2644,8 +2675,8 @@ descriptors apply to the class name struct tag and struct type.
 
 File: stabs.info,  Node: Method Modifiers,  Next: Virtual Methods,  Prev: Protections,  Up: Cplusplus
 
-Method Modifiers (`const', `volatile', `const volatile')
-========================================================
+7.10 Method Modifiers (`const', `volatile', `const volatile')
+=============================================================
 
 << based on a6.C >>
 
@@ -2680,8 +2711,8 @@ the class definition below:
 
 File: stabs.info,  Node: Virtual Methods,  Next: Inheritance,  Prev: Method Modifiers,  Up: Cplusplus
 
-Virtual Methods
-===============
+7.11 Virtual Methods
+====================
 
 << The following examples are based on a4.C >>
 
@@ -2763,8 +2794,8 @@ This is preceded by `~%' and followed by a final semi-colon.
 
 File: stabs.info,  Node: Inheritance,  Next: Virtual Base Classes,  Prev: Virtual Methods,  Up: Cplusplus
 
-Inheritance
-===========
+7.12 Inheritance
+================
 
 Stabs describing C++ derived classes include additional sections that
 describe the inheritance hierarchy of the class.  A derived class stab
@@ -2804,19 +2835,19 @@ the derived class `D'.
              int Adat;
              virtual int A_virt (int arg) { return arg; };
      };
-     
+
      class B {
      public:
              int B_dat;
              virtual int B_virt (int arg) {return arg; };
      };
-     
+
      class C {
      public:
              int Cdat;
              virtual int C_virt (int arg) {return arg; };
      };
-     
+
      class D : A, virtual B, public C {
      public:
              int Ddat;
@@ -2831,10 +2862,10 @@ each base class.
 
      .stabs "A:T20=s8Adat:1,0,32;$vf20:21=*22=ar1;0;1;17,32;
              A_virt::23=##1;:i;2A*-2147483647;20;;;~%20;",128,0,0,0
-     
+
      .stabs "B:Tt25=s8Bdat:1,0,32;$vf25:21,32;B_virt::26=##1;
              :i;2A*-2147483647;25;;;~%25;",128,0,0,0
-     
+
      .stabs "C:Tt28=s8Cdat:1,0,32;$vf28:21,32;C_virt::29=##1;
              :i;2A*-2147483647;28;;;~%28;",128,0,0,0
 
@@ -2858,8 +2889,8 @@ the derivation of this class is encoded as follows.
 
 File: stabs.info,  Node: Virtual Base Classes,  Next: Static Members,  Prev: Inheritance,  Up: Cplusplus
 
-Virtual Base Classes
-====================
+7.13 Virtual Base Classes
+=========================
 
 A derived class object consists of a concatenation in memory of the data
 areas defined by each base class, starting with the leftmost and ending
@@ -2903,8 +2934,8 @@ for `B' at 128, and `Ddat' at 160.
 
 File: stabs.info,  Node: Static Members,  Prev: Virtual Base Classes,  Up: Cplusplus
 
-Static Members
-==============
+7.14 Static Members
+===================
 
 The data area for a class is a concatenation of the space used by the
 data members of the class.  If the class has virtual methods, a vtable
@@ -2917,8 +2948,8 @@ info.  >>
 
 File: stabs.info,  Node: Stab Types,  Next: Symbol Descriptors,  Prev: Cplusplus,  Up: Top
 
-Table of Stab Types
-*******************
+Appendix A Table of Stab Types
+******************************
 
 The following are all the possible values for the stab type field, for
 a.out files, in numeric order.  This does not apply to XCOFF, but it
@@ -2936,8 +2967,8 @@ symbols.
 
 File: stabs.info,  Node: Non-Stab Symbol Types,  Next: Stab Symbol Types,  Up: Stab Types
 
-Non-Stab Symbol Types
-=====================
+A.1 Non-Stab Symbol Types
+=========================
 
 The following types are used by the linker and assembler, not by stab
 directives.  Since this document does not attempt to describe aspects of
@@ -3009,8 +3040,8 @@ given.
 
 File: stabs.info,  Node: Stab Symbol Types,  Prev: Non-Stab Symbol Types,  Up: Stab Types
 
-Stab Symbol Types
-=================
+A.2 Stab Symbol Types
+=====================
 
 The following symbol types indicate that this is a stab.  This is the
 full list of stab numbers, including stab types that are used in
@@ -3157,8 +3188,8 @@ languages other than C.
 
 File: stabs.info,  Node: Symbol Descriptors,  Next: Type Descriptors,  Prev: Stab Types,  Up: Top
 
-Table of Symbol Descriptors
-***************************
+Appendix B Table of Symbol Descriptors
+**************************************
 
 The symbol descriptor is the character which follows the colon in many
 stabs, and which tells what kind of stab it is.  *Note String Field::,
@@ -3273,8 +3304,8 @@ for more information about their use.
 
 File: stabs.info,  Node: Type Descriptors,  Next: Expanded Reference,  Prev: Symbol Descriptors,  Up: Top
 
-Table of Type Descriptors
-*************************
+Appendix C Table of Type Descriptors
+************************************
 
 The type descriptor is the character which follows the type number and
 an equals sign.  It specifies what kind of type is being defined.
@@ -3412,8 +3443,8 @@ an equals sign.  It specifies what kind of type is being defined.
 
 File: stabs.info,  Node: Expanded Reference,  Next: Questions,  Prev: Type Descriptors,  Up: Top
 
-Expanded Reference by Stab Type
-*******************************
+Appendix D Expanded Reference by Stab Type
+******************************************
 
 For a full list of stab types, and cross-references to where they are
 described, see *Note Stab Types::.  This appendix just covers certain
@@ -3454,27 +3485,27 @@ significant stab field.
 
 File: stabs.info,  Node: N_PC,  Next: N_NSYMS,  Up: Expanded Reference
 
-N_PC
-====
+D.1 N_PC
+========
 
- - `.stabs': N_PC
+ -- `.stabs': N_PC
      Global symbol (for Pascal).
 
           "name" -> "symbol_name"  <<?>>
           value  -> supposedly the line number (stab.def is skeptical)
 
           `stabdump.c' says:
-          
+
           global pascal symbol: name,,0,subtype,line
           << subtype? >>
 
 
 File: stabs.info,  Node: N_NSYMS,  Next: N_NOMAP,  Prev: N_PC,  Up: Expanded Reference
 
-N_NSYMS
-=======
+D.2 N_NSYMS
+===========
 
- - `.stabn': N_NSYMS
+ -- `.stabn': N_NSYMS
      Number of symbols (according to Ultrix V4.0).
 
                   0, files,,funcs,lines (stab.def)
@@ -3482,10 +3513,10 @@ N_NSYMS
 
 File: stabs.info,  Node: N_NOMAP,  Next: N_M2C,  Prev: N_NSYMS,  Up: Expanded Reference
 
-N_NOMAP
-=======
+D.3 N_NOMAP
+===========
 
- - `.stabs': N_NOMAP
+ -- `.stabs': N_NOMAP
      No DST map for symbol (according to Ultrix V4.0).  I think this
      means a variable has been optimized out.
 
@@ -3494,10 +3525,10 @@ N_NOMAP
 
 File: stabs.info,  Node: N_M2C,  Next: N_BROWS,  Prev: N_NOMAP,  Up: Expanded Reference
 
-N_M2C
-=====
+D.4 N_M2C
+=========
 
- - `.stabs': N_M2C
+ -- `.stabs': N_M2C
      Modula-2 compilation unit.
 
           "string" -> "unit_name,unit_time_stamp[,code_time_stamp]"
@@ -3512,10 +3543,10 @@ N_M2C
 
 File: stabs.info,  Node: N_BROWS,  Next: N_DEFD,  Prev: N_M2C,  Up: Expanded Reference
 
-N_BROWS
-=======
+D.5 N_BROWS
+===========
 
- - `.stabs': N_BROWS
+ -- `.stabs': N_BROWS
      Sun source code browser, path to `.cb' file
 
      <<?>> "path to associated `.cb' file"
@@ -3525,10 +3556,10 @@ N_BROWS
 
 File: stabs.info,  Node: N_DEFD,  Next: N_EHDECL,  Prev: N_BROWS,  Up: Expanded Reference
 
-N_DEFD
-======
+D.6 N_DEFD
+==========
 
- - `.stabn': N_DEFD
+ -- `.stabn': N_DEFD
      GNU Modula2 definition module dependency.
 
      GNU Modula-2 definition module dependency.  The value is the
@@ -3539,10 +3570,10 @@ N_DEFD
 
 File: stabs.info,  Node: N_EHDECL,  Next: N_MOD2,  Prev: N_DEFD,  Up: Expanded Reference
 
-N_EHDECL
-========
+D.7 N_EHDECL
+============
 
- - `.stabs': N_EHDECL
+ -- `.stabs': N_EHDECL
      GNU C++ exception variable <<?>>.
 
      "STRING is variable name"
@@ -3552,10 +3583,10 @@ N_EHDECL
 
 File: stabs.info,  Node: N_MOD2,  Next: N_CATCH,  Prev: N_EHDECL,  Up: Expanded Reference
 
-N_MOD2
-======
+D.8 N_MOD2
+==========
 
- - `.stab?': N_MOD2
+ -- `.stab?': N_MOD2
      Modula2 info "for imc" (according to Ultrix V4.0)
 
      Note: conflicts with `N_EHDECL'  <<?>>
@@ -3563,10 +3594,10 @@ N_MOD2
 
 File: stabs.info,  Node: N_CATCH,  Next: N_SSYM,  Prev: N_MOD2,  Up: Expanded Reference
 
-N_CATCH
-=======
+D.9 N_CATCH
+===========
 
- - `.stabn': N_CATCH
+ -- `.stabn': N_CATCH
      GNU C++ `catch' clause
 
      GNU C++ `catch' clause.  The value is its address.  The desc field
@@ -3578,10 +3609,10 @@ N_CATCH
 
 File: stabs.info,  Node: N_SSYM,  Next: N_SCOPE,  Prev: N_CATCH,  Up: Expanded Reference
 
-N_SSYM
-======
+D.10 N_SSYM
+===========
 
- - `.stabn': N_SSYM
+ -- `.stabn': N_SSYM
      Structure or union element.
 
      The value is the offset in the structure.
@@ -3591,23 +3622,23 @@ N_SSYM
 
 File: stabs.info,  Node: N_SCOPE,  Next: Gould,  Prev: N_SSYM,  Up: Expanded Reference
 
-N_SCOPE
-=======
+D.11 N_SCOPE
+============
 
- - `.stab?': N_SCOPE
+ -- `.stab?': N_SCOPE
      Modula2 scope information (Sun linker) <<?>>
 
 
 File: stabs.info,  Node: Gould,  Next: N_LENG,  Prev: N_SCOPE,  Up: Expanded Reference
 
-Non-base registers on Gould systems
-===================================
+D.12 Non-base registers on Gould systems
+========================================
 
- - `.stab?': N_NBTEXT
- - `.stab?': N_NBDATA
- - `.stab?': N_NBBSS
- - `.stab?': N_NBSTS
- - `.stab?': N_NBLCS
+ -- `.stab?': N_NBTEXT
+ -- `.stab?': N_NBDATA
+ -- `.stab?': N_NBBSS
+ -- `.stab?': N_NBSTS
+ -- `.stab?': N_NBLCS
      These are used on Gould systems for non-base registers syms.
 
      However, the following values are not the values used by Gould;
@@ -3627,18 +3658,18 @@ Non-base registers on Gould systems
 
 File: stabs.info,  Node: N_LENG,  Prev: Gould,  Up: Expanded Reference
 
-N_LENG
-======
+D.13 N_LENG
+===========
 
- - `.stabn': N_LENG
+ -- `.stabn': N_LENG
      Second symbol entry containing a length-value for the preceding
      entry.  The value is the length.
 
 
 File: stabs.info,  Node: Questions,  Next: Stab Sections,  Prev: Expanded Reference,  Up: Top
 
-Questions and Anomalies
-***********************
+Appendix E Questions and Anomalies
+**********************************
 
    * For GNU C stabs defining local and global variables (`N_LSYM' and
      `N_GSYM'), the desc field is supposed to contain the source line
@@ -3669,8 +3700,8 @@ Questions and Anomalies
 
 File: stabs.info,  Node: Stab Sections,  Next: Symbol Types Index,  Prev: Questions,  Up: Top
 
-Using Stabs in Their Own Sections
-*********************************
+Appendix F Using Stabs in Their Own Sections
+********************************************
 
 Many object file formats allow tools to create object files with custom
 sections containing any arbitrary data.  For any such object file
@@ -3686,8 +3717,8 @@ are used with COFF.
 
 File: stabs.info,  Node: Stab Section Basics,  Next: ELF Linker Relocation,  Up: Stab Sections
 
-How to Embed Stabs in Sections
-==============================
+F.1 How to Embed Stabs in Sections
+==================================
 
 The assembler creates two custom sections, a section named `.stab'
 which contains an array of fixed length structures, one struct per stab,
@@ -3758,8 +3789,8 @@ section.
 
 File: stabs.info,  Node: ELF Linker Relocation,  Prev: Stab Section Basics,  Up: Stab Sections
 
-Having the Linker Relocate Stabs in ELF
-=======================================
+F.2 Having the Linker Relocate Stabs in ELF
+===========================================
 
 This section describes some Sun hacks for Stabs in ELF; it does not
 apply to COFF or SOM.
@@ -3815,13 +3846,14 @@ scheme.
 
 File: stabs.info,  Node: GNU Free Documentation License,  Prev: Symbol Types Index,  Up: Top
 
-GNU Free Documentation License
-******************************
+Appendix G GNU Free Documentation License
+*****************************************
 
                       Version 1.2, November 2002
+
      Copyright (C) 2000,2001,2002 Free Software Foundation, Inc.
      59 Temple Place, Suite 330, Boston, MA  02111-1307, USA
-     
+
      Everyone is permitted to copy and distribute verbatim copies
      of this license document, but changing it is not allowed.
 
@@ -4212,8 +4244,8 @@ GNU Free Documentation License
      you may choose any version ever published (not as a draft) by the
      Free Software Foundation.
 
-ADDENDUM: How to use this License for your documents
-====================================================
+G.1 ADDENDUM: How to use this License for your documents
+========================================================
 
 To use this License in a document you have written, include a copy of
 the License in the document and put the following copyright and license
@@ -4249,170 +4281,174 @@ File: stabs.info,  Node: Symbol Types Index,  Next: GNU Free Documentation Licen
 Symbol Types Index
 ******************
 
+ [index ]
 * Menu:
 
-* .bb:                                   Block Structure.
-* .be:                                   Block Structure.
-* C_BCOMM:                               Common Blocks.
-* C_BINCL:                               Include Files.
-* C_BLOCK:                               Block Structure.
-* C_BSTAT:                               Statics.
-* C_DECL, for types:                     Typedefs.
-* C_ECOML:                               Common Blocks.
-* C_ECOMM:                               Common Blocks.
-* C_EINCL:                               Include Files.
+* .bb:                                   Block Structure.      (line 26)
+* .be:                                   Block Structure.      (line 26)
+* C_BCOMM:                               Common Blocks.        (line 10)
+* C_BINCL:                               Include Files.        (line 41)
+* C_BLOCK:                               Block Structure.      (line 26)
+* C_BSTAT:                               Statics.              (line 31)
+* C_DECL, for types:                     Typedefs.             (line  6)
+* C_ECOML:                               Common Blocks.        (line 17)
+* C_ECOMM:                               Common Blocks.        (line 10)
+* C_EINCL:                               Include Files.        (line 41)
 * C_ENTRY:                               Alternate Entry Points.
-* C_ESTAT:                               Statics.
-* C_FILE:                                Source Files.
-* C_FUN:                                 Procedures.
-* C_GSYM:                                Global Variables.
-* C_LSYM:                                Stack Variables.
-* C_PSYM:                                Parameters.
-* C_RPSYM:                               Register Parameters.
-* C_RSYM:                                Register Variables.
-* C_STSYM:                               Statics.
-* N_BCOMM:                               Common Blocks.
-* N_BINCL:                               Include Files.
-* N_BROWS:                               N_BROWS.
-* N_BSLINE:                              Line Numbers.
-* N_CATCH:                               N_CATCH.
-* N_DEFD:                                N_DEFD.
-* N_DSLINE:                              Line Numbers.
-* N_ECOML:                               Common Blocks.
-* N_ECOMM:                               Common Blocks.
-* N_EHDECL:                              N_EHDECL.
-* N_EINCL:                               Include Files.
+                                                               (line  6)
+* C_ESTAT:                               Statics.              (line 31)
+* C_FILE:                                Source Files.         (line 61)
+* C_FUN:                                 Procedures.           (line 18)
+* C_GSYM:                                Global Variables.     (line  6)
+* C_LSYM:                                Stack Variables.      (line 11)
+* C_PSYM:                                Parameters.           (line 12)
+* C_RPSYM:                               Register Parameters.  (line 15)
+* C_RSYM:                                Register Variables.   (line  6)
+* C_STSYM:                               Statics.              (line 31)
+* N_BCOMM:                               Common Blocks.        (line 10)
+* N_BINCL:                               Include Files.        (line 17)
+* N_BROWS:                               N_BROWS.              (line  7)
+* N_BSLINE:                              Line Numbers.         (line 12)
+* N_CATCH:                               N_CATCH.              (line  7)
+* N_DEFD:                                N_DEFD.               (line  7)
+* N_DSLINE:                              Line Numbers.         (line 12)
+* N_ECOML:                               Common Blocks.        (line 17)
+* N_ECOMM:                               Common Blocks.        (line 10)
+* N_EHDECL:                              N_EHDECL.             (line  7)
+* N_EINCL:                               Include Files.        (line 17)
 * N_ENTRY:                               Alternate Entry Points.
-* N_EXCL:                                Include Files.
-* N_FNAME:                               Procedures.
-* N_FUN, for functions:                  Procedures.
-* N_FUN, for variables:                  Statics.
-* N_GSYM:                                Global Variables.
-* N_GSYM, for functions (Sun acc):       Procedures.
-* N_LBRAC:                               Block Structure.
-* N_LCSYM:                               Statics.
-* N_LENG:                                N_LENG.
+                                                               (line  6)
+* N_EXCL:                                Include Files.        (line 17)
+* N_FNAME:                               Procedures.           (line  6)
+* N_FUN, for functions:                  Procedures.           (line  6)
+* N_FUN, for variables:                  Statics.              (line 12)
+* N_GSYM:                                Global Variables.     (line  6)
+* N_GSYM, for functions (Sun acc):       Procedures.           (line  6)
+* N_LBRAC:                               Block Structure.      (line  6)
+* N_LCSYM:                               Statics.              (line 12)
+* N_LENG:                                N_LENG.               (line  7)
 * N_LSYM, for parameter:                 Local Variable Parameters.
-* N_LSYM, for stack variables:           Stack Variables.
-* N_LSYM, for types:                     Typedefs.
-* N_M2C:                                 N_M2C.
-* N_MAIN:                                Main Program.
-* N_MOD2:                                N_MOD2.
-* N_NBBSS:                               Gould.
-* N_NBDATA:                              Gould.
-* N_NBLCS:                               Gould.
-* N_NBSTS:                               Gould.
-* N_NBTEXT:                              Gould.
-* N_NOMAP:                               N_NOMAP.
-* N_NSYMS:                               N_NSYMS.
-* N_PC:                                  N_PC.
-* N_PSYM:                                Parameters.
-* N_RBRAC:                               Block Structure.
-* N_ROSYM:                               Statics.
-* N_RSYM:                                Register Variables.
-* N_RSYM, for parameters:                Register Parameters.
-* N_SCOPE:                               N_SCOPE.
-* N_SLINE:                               Line Numbers.
-* N_SO:                                  Source Files.
-* N_SOL:                                 Include Files.
-* N_SSYM:                                N_SSYM.
-* N_STSYM:                               Statics.
-* N_STSYM, for functions (Sun acc):      Procedures.
+                                                               (line 35)
+* N_LSYM, for stack variables:           Stack Variables.      (line 11)
+* N_LSYM, for types:                     Typedefs.             (line  6)
+* N_M2C:                                 N_M2C.                (line  7)
+* N_MAIN:                                Main Program.         (line  6)
+* N_MOD2:                                N_MOD2.               (line  7)
+* N_NBBSS:                               Gould.                (line  9)
+* N_NBDATA:                              Gould.                (line  8)
+* N_NBLCS:                               Gould.                (line 11)
+* N_NBSTS:                               Gould.                (line 10)
+* N_NBTEXT:                              Gould.                (line  7)
+* N_NOMAP:                               N_NOMAP.              (line  7)
+* N_NSYMS:                               N_NSYMS.              (line  7)
+* N_PC:                                  N_PC.                 (line  7)
+* N_PSYM:                                Parameters.           (line 12)
+* N_RBRAC:                               Block Structure.      (line  6)
+* N_ROSYM:                               Statics.              (line 12)
+* N_RSYM:                                Register Variables.   (line  6)
+* N_RSYM, for parameters:                Register Parameters.  (line 15)
+* N_SCOPE:                               N_SCOPE.              (line  7)
+* N_SLINE:                               Line Numbers.         (line  6)
+* N_SO:                                  Source Files.         (line  6)
+* N_SOL:                                 Include Files.        (line 11)
+* N_SSYM:                                N_SSYM.               (line  7)
+* N_STSYM:                               Statics.              (line 12)
+* N_STSYM, for functions (Sun acc):      Procedures.           (line  6)
 
 
 
 Tag Table:
-Node: Top871
-Node: Overview1851
-Node: Flow3262
+Node: Top859
+Node: Overview1839
+Node: Flow3254
 Node: Stabs Format4780
-Node: String Field6334
-Node: C Example11757
-Node: Assembly Code12294
-Node: Program Structure14257
-Node: Main Program14979
-Node: Source Files15532
-Node: Include Files17354
-Node: Line Numbers20011
-Node: Procedures21537
-Node: Nested Procedures27419
-Node: Block Structure28587
-Node: Alternate Entry Points29985
-Node: Constants30710
-Node: Variables33818
-Node: Stack Variables34502
-Node: Global Variables36195
-Node: Register Variables37343
-Node: Common Blocks38157
-Node: Statics39403
-Node: Based Variables41976
-Node: Parameters43353
-Node: Register Parameters44957
-Node: Local Variable Parameters47206
-Node: Reference Parameters50109
-Node: Conformant Arrays50717
-Node: Types51422
-Node: Builtin Types52353
-Node: Traditional Builtin Types53491
-Node: Traditional Integer Types53880
-Node: Traditional Other Types56172
-Node: Builtin Type Descriptors57070
-Node: Negative Type Numbers60558
-Node: Miscellaneous Types66901
-Node: Cross-References68779
-Node: Subranges70446
-Node: Arrays71677
-Node: Strings74894
-Node: Enumerations75948
-Node: Structures78325
-Node: Typedefs81029
-Node: Unions82345
-Node: Function Types83916
-Node: Symbol Tables85488
-Node: Symbol Table Format85916
-Node: Transformations On Symbol Tables87356
-Node: Transformations On Static Variables88702
-Node: Transformations On Global Variables89426
-Node: Stab Section Transformations90657
-Node: Cplusplus92028
-Node: Class Names92607
-Node: Nested Symbols93344
-Node: Basic Cplusplus Types94182
-Node: Simple Classes95734
-Node: Class Instance100035
-Node: Methods100744
-Node: Method Type Descriptor102970
-Node: Member Type Descriptor104162
-Node: Protections104985
-Node: Method Modifiers108067
-Node: Virtual Methods109685
-Node: Inheritance113476
-Node: Virtual Base Classes117187
-Node: Static Members119421
-Node: Stab Types119881
-Node: Non-Stab Symbol Types120483
-Node: Stab Symbol Types121906
-Node: Symbol Descriptors125621
-Node: Type Descriptors128378
-Node: Expanded Reference131568
-Node: N_PC132964
-Node: N_NSYMS133333
-Node: N_NOMAP133565
-Node: N_M2C133862
-Node: N_BROWS134287
-Node: N_DEFD134561
-Node: N_EHDECL135009
-Node: N_MOD2135251
-Node: N_CATCH135480
-Node: N_SSYM135965
-Node: N_SCOPE136239
-Node: Gould136418
-Node: N_LENG137395
-Node: Questions137612
-Node: Stab Sections139234
-Node: Stab Section Basics139810
-Node: ELF Linker Relocation143143
-Node: GNU Free Documentation License146545
-Node: Symbol Types Index168948
+Node: String Field6342
+Node: C Example11773
+Node: Assembly Code12318
+Node: Program Structure14289
+Node: Main Program15015
+Node: Source Files15576
+Node: Include Files18028
+Node: Line Numbers20693
+Node: Procedures22227
+Node: Nested Procedures28117
+Node: Block Structure29293
+Node: Alternate Entry Points30699
+Node: Constants31432
+Node: Variables34544
+Node: Stack Variables35232
+Node: Global Variables36933
+Node: Register Variables38089
+Node: Common Blocks38911
+Node: Statics40165
+Node: Based Variables42746
+Node: Parameters44131
+Node: Register Parameters45743
+Node: Local Variable Parameters48004
+Node: Reference Parameters50919
+Node: Conformant Arrays51539
+Node: Types52256
+Node: Builtin Types53191
+Node: Traditional Builtin Types54337
+Node: Traditional Integer Types54738
+Node: Traditional Other Types57046
+Node: Builtin Type Descriptors57960
+Node: Negative Type Numbers61460
+Node: Miscellaneous Types67815
+Node: Cross-References69701
+Node: Subranges71376
+Node: Arrays72615
+Node: Strings75840
+Node: Enumerations76902
+Node: Structures79287
+Node: Typedefs81994
+Node: Unions83318
+Node: Function Types84899
+Node: Symbol Tables86481
+Node: Symbol Table Format86913
+Node: Transformations On Symbol Tables88361
+Node: Transformations On Static Variables89715
+Node: Transformations On Global Variables90451
+Node: Stab Section Transformations91694
+Node: Cplusplus93077
+Node: Class Names93660
+Node: Nested Symbols94405
+Node: Basic Cplusplus Types95251
+Node: Simple Classes96811
+Node: Class Instance101105
+Node: Methods101822
+Node: Method Type Descriptor104041
+Node: Member Type Descriptor105241
+Node: Protections106072
+Node: Method Modifiers109162
+Node: Virtual Methods110790
+Node: Inheritance114591
+Node: Virtual Base Classes118287
+Node: Static Members120531
+Node: Stab Types121001
+Node: Non-Stab Symbol Types121625
+Node: Stab Symbol Types123056
+Node: Symbol Descriptors126779
+Node: Type Descriptors129558
+Node: Expanded Reference132770
+Node: N_PC134188
+Node: N_NSYMS134556
+Node: N_NOMAP134797
+Node: N_M2C135103
+Node: N_BROWS135537
+Node: N_DEFD135820
+Node: N_EHDECL136277
+Node: N_MOD2136528
+Node: N_CATCH136766
+Node: N_SSYM137260
+Node: N_SCOPE137545
+Node: Gould137735
+Node: N_LENG138727
+Node: Questions138955
+Node: Stab Sections140599
+Node: Stab Section Basics141197
+Node: ELF Linker Relocation144538
+Node: GNU Free Documentation License147948
+Node: Symbol Types Index170377
 
 End Tag Table
