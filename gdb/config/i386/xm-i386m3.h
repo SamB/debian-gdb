@@ -1,5 +1,6 @@
 /* Definitions to make GDB run on Mach 3 on an Intel 386
-   Copyright (C) 1986, 1987, 1989, 1991 Free Software Foundation, Inc.
+   Copyright 1986, 1987, 1989, 1991, 1993, 1994, 1996
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,8 +18,6 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
-
-#define HOST_BYTE_ORDER LITTLE_ENDIAN
 
 /* Do implement the attach and detach commands.  */
 #define ATTACH_DETACH	1

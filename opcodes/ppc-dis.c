@@ -1,5 +1,5 @@
 /* ppc-dis.c -- Disassemble PowerPC instructions
-   Copyright 1994 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 2000, 2001, 2002 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support
 
 This file is part of GDB, GAS, and the GNU binutils.
@@ -19,7 +19,6 @@ along with this file; see the file COPYING.  If not, write to the Free
 Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #include <stdio.h>
-#include "ansidecl.h"
 #include "sysdep.h"
 #include "dis-asm.h"
 #include "opcode/ppc.h"
@@ -33,28 +32,62 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  *
 static int print_insn_powerpc PARAMS ((bfd_vma, struct disassemble_info *,
 				       int bigendian, int dialect));
 
-/* Print a big endian PowerPC instruction.  For convenience, also
-   disassemble instructions supported by the Motorola PowerPC 601.  */
+static int powerpc_dialect PARAMS ((struct disassemble_info *));
+
+/* Determine which set of machines to disassemble for.  PPC403/601 or
+   BookE.  For convenience, also disassemble instructions supported
+   by the AltiVec vector unit.  */
+
+int
+powerpc_dialect(info)
+     struct disassemble_info *info;
+{
+  int dialect = PPC_OPCODE_PPC | PPC_OPCODE_ALTIVEC;
+
+  if (BFD_DEFAULT_TARGET_SIZE == 64)
+    dialect |= PPC_OPCODE_64;
+
+  if (info->disassembler_options
+      && (strcmp (info->disassembler_options, "booke") == 0
+	  || strcmp (info->disassembler_options, "booke32") == 0
+	  || strcmp (info->disassembler_options, "booke64") == 0))
+    dialect |= PPC_OPCODE_BOOKE | PPC_OPCODE_BOOKE64;
+  else 
+    dialect |= PPC_OPCODE_403 | PPC_OPCODE_601;
+
+  if (info->disassembler_options
+      && strcmp (info->disassembler_options, "power4") == 0)
+    dialect |= PPC_OPCODE_POWER4;
+
+  if (info->disassembler_options)
+    {
+      if (strstr (info->disassembler_options, "32") != NULL)
+	dialect &= ~PPC_OPCODE_64;
+      else if (strstr (info->disassembler_options, "64") != NULL)
+	dialect |= PPC_OPCODE_64;
+    }
+
+  return dialect;
+}
+
+/* Print a big endian PowerPC instruction.  */
 
 int
 print_insn_big_powerpc (memaddr, info)
      bfd_vma memaddr;
      struct disassemble_info *info;
 {
-  return print_insn_powerpc (memaddr, info, 1,
-			     PPC_OPCODE_PPC | PPC_OPCODE_601);
+  return print_insn_powerpc (memaddr, info, 1, powerpc_dialect(info));
 }
 
-/* Print a little endian PowerPC instruction.  For convenience, also
-   disassemble instructions supported by the Motorola PowerPC 601.  */
+/* Print a little endian PowerPC instruction.  */
 
 int
 print_insn_little_powerpc (memaddr, info)
      bfd_vma memaddr;
      struct disassemble_info *info;
 {
-  return print_insn_powerpc (memaddr, info, 0,
-			     PPC_OPCODE_PPC | PPC_OPCODE_601);
+  return print_insn_powerpc (memaddr, info, 0, powerpc_dialect(info));
 }
 
 /* Print a POWER (RS/6000) instruction.  */
@@ -128,7 +161,7 @@ print_insn_powerpc (memaddr, info, bigendian, dialect)
 	{
 	  operand = powerpc_operands + *opindex;
 	  if (operand->extract)
-	    (*operand->extract) (insn, &invalid);
+	    (*operand->extract) (insn, dialect, &invalid);
 	}
       if (invalid)
 	continue;
@@ -155,7 +188,7 @@ print_insn_powerpc (memaddr, info, bigendian, dialect)
 
 	  /* Extract the value from the instruction.  */
 	  if (operand->extract)
-	    value = (*operand->extract) (insn, (int *) NULL);
+	    value = (*operand->extract) (insn, dialect, (int *) NULL);
 	  else
 	    {
 	      value = (insn >> operand->shift) & ((1 << operand->bits) - 1);
@@ -182,6 +215,8 @@ print_insn_powerpc (memaddr, info, bigendian, dialect)
 	    (*info->fprintf_func) (info->stream, "r%ld", value);
 	  else if ((operand->flags & PPC_OPERAND_FPR) != 0)
 	    (*info->fprintf_func) (info->stream, "f%ld", value);
+	  else if ((operand->flags & PPC_OPERAND_VR) != 0)
+	    (*info->fprintf_func) (info->stream, "v%ld", value);
 	  else if ((operand->flags & PPC_OPERAND_RELATIVE) != 0)
 	    (*info->print_address_func) (memaddr + value, info);
 	  else if ((operand->flags & PPC_OPERAND_ABSOLUTE) != 0)

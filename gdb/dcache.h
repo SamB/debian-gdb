@@ -1,7 +1,8 @@
 /* Declarations for caching.  Typically used by remote back ends for
    caching remote memory.
 
-   Copyright 1992, 1993 Free Software Foundation, Inc.
+   Copyright 1992, 1993, 1995, 1999, 2000, 2001
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,29 +24,20 @@
 #ifndef DCACHE_H
 #define DCACHE_H
 
-typedef int (*memxferfunc) PARAMS ((CORE_ADDR memaddr,
-				    char *myaddr,
-				    int len));
-
 typedef struct dcache_struct DCACHE;
 
-/* Using the data cache DCACHE return the contents of the word at
-   address ADDR in the remote machine.  */
-int dcache_fetch PARAMS ((DCACHE * dcache, CORE_ADDR addr));
-
-/* Flush DCACHE. */
-void dcache_flush PARAMS ((DCACHE * dcache));
+/* Invalidate DCACHE. */
+void dcache_invalidate (DCACHE *dcache);
 
 /* Initialize DCACHE. */
-DCACHE *dcache_init PARAMS ((memxferfunc reading, memxferfunc writing));
+DCACHE *dcache_init (void);
 
-/* Write the word at ADDR both in the data cache and in the remote machine.  */
-int dcache_poke PARAMS ((DCACHE * dcache, CORE_ADDR addr, int data));
+/* Free a DCACHE */
+void dcache_free (DCACHE *);
 
 /* Simple to call from <remote>_xfer_memory */
 
-int dcache_xfer_memory PARAMS ((DCACHE * cache, CORE_ADDR mem, char *my, int len, int should_write));
+int dcache_xfer_memory (DCACHE *cache, CORE_ADDR mem, char *my, int len,
+			int should_write);
 
-/* Write the bytes at ADDR into the data cache and the remote machine. */
-int dcache_poke_block PARAMS ((DCACHE * cache, CORE_ADDR mem, char *my, int len));
 #endif /* DCACHE_H */

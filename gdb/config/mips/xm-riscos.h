@@ -1,4 +1,4 @@
-/* Copyright (C) 1993 Free Software Foundation, Inc.
+/* Copyright 1993, 1994, 1995 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,10 +18,6 @@
    Boston, MA 02111-1307, USA.  */
 
 #define HAVE_TERMIO
-
-#if !defined (HOST_BYTE_ORDER)
-#define HOST_BYTE_ORDER BIG_ENDIAN
-#endif
 
 #define USG 1
 

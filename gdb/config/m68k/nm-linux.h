@@ -1,5 +1,5 @@
 /* Native support for linux, for GDB, the GNU debugger.
-   Copyright (C) 1996,1998 Free Software Foundation, Inc.
+   Copyright 1996, 1998, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,28 +21,21 @@
 #ifndef NM_LINUX_H
 #define NM_LINUX_H
 
+#include "nm-linux.h"
+
 /* Return sizeof user struct to callers in less machine dependent routines */
 
 #define KERNEL_U_SIZE kernel_u_size()
-extern int kernel_u_size PARAMS ((void));
-
-/* Tell gdb that we can attach and detach other processes */
-#define ATTACH_DETACH
+extern int kernel_u_size (void);
 
 #define U_REGS_OFFSET 0
-
-/* We define this if link.h is available, because with ELF we use SVR4 style
-   shared libraries. */
-
-#ifdef HAVE_LINK_H
-#define SVR4_SHARED_LIBS
-#include "solib.h"		/* Support for shared libraries. */
-#endif
 
 #define REGISTER_U_ADDR(addr, blockend, regno) \
 	(addr) = m68k_linux_register_u_addr ((blockend),(regno));
 
-extern int
-m68k_linux_register_u_addr PARAMS ((int, int));
+extern int m68k_linux_register_u_addr (int, int);
+
+/* Override copies of {fetch,store}_inferior_registers in `infptrace.c'.  */
+#define FETCH_INFERIOR_REGISTERS
 
 #endif /* #ifndef NM_LINUX_H */

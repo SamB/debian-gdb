@@ -287,6 +287,8 @@ sim_analyze_program (sd, prog_name, prog_bfd)
 	break;
       }
 
+  bfd_cache_close (prog_bfd);
+
   return SIM_RC_OK;
 }
 
@@ -312,7 +314,7 @@ sim_elapsed_time_get ()
 }
 
 /* Return the elapsed time in milliseconds since START.
-   The actual time may be cpu usage (prefered) or wall clock.  */
+   The actual time may be cpu usage (preferred) or wall clock.  */
 
 unsigned long
 sim_elapsed_time_since (start)

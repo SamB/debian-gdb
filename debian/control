@@ -1,15 +1,19 @@
 Source: gdb
-Maintainer: Vincent Renardias <vincent@debian.org>
+Maintainer: Daniel Jacobowitz <dan@debian.org>
 Section: devel
 Priority: standard
-Standards-Version: 2.4.0.0
+Standards-Version: 3.5.3
+Build-Depends: autoconf, libtool, texinfo, tetex-bin, libncurses5-dev, libreadline4-dev (>= 4.2a-1), bison, gettext, debhelper (>= 3), dejagnu
 
 Package: gdb
-Depends: ${shlibs:Depends}
 Architecture: any
+Section: devel
+Depends: ${shlibs:Depends}
+Conflicts: gdb-arm
+Replaces: gdb-arm
 Description: The GNU Debugger
  GDB is a source-level debugger, capable of breaking programs at
  any specific line, displaying variable values, and determining
  where errors occurred. Currently, it works for C, C++, Fortran
- Modula 2, Ada, Java and Objective-C programs. A must-have for any
- serious programmer.
+ Modula 2 and Java programs. A must-have for any serious
+ programmer.

@@ -1,5 +1,5 @@
 /* Macro definitions for RS6000 running under LynxOS.
-   Copyright 1993 Free Software Foundation, Inc.
+   Copyright 1993, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,8 +25,6 @@
 
 /* Use generic RS6000 definitions. */
 #include "rs6000/tm-rs6000.h"
-
-#undef PC_LOAD_SEGMENT
 
 #define CANNOT_STORE_REGISTER(regno) (regno == PS_REGNUM)
 

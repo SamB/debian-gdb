@@ -1,5 +1,5 @@
 /* A client to make GDB return to command level in Mach 3.
-   Copyright (C) 1992, 1993 Free Software Foundation, Inc.
+   Copyright 1992, 1993, 1994, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -41,9 +41,7 @@
 #include <servers/netname_defs.h>
 
 void
-main (argc, argv)
-     int argc;
-     char **argv;
+main (int argc, char **argv)
 {
   kern_return_t kr;
   mach_msg_header_t msg;

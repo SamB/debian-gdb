@@ -245,7 +245,7 @@ INLINE_SIM_EVENTS\
  int slip);
 
 
-/* Progress time such that an event shall occure upon the next call to
+/* Progress time such that an event shall occur upon the next call to
    sim_events tick */
 
 #if 0
@@ -267,5 +267,11 @@ INLINE_SIM_EVENTS\
 INLINE_SIM_EVENTS\
 (unsigned long) sim_events_elapsed_time
 (SIM_DESC sd);
+
+/* Returns the time that remains before the event is raised. */
+INLINE_SIM_EVENTS\
+(signed64) sim_events_remain_time
+(SIM_DESC sd, sim_event *event);
+
 
 #endif

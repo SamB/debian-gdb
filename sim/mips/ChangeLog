@@ -1,3 +1,367 @@
+2002-03-19  Chris Demetriou  <cgd@broadcom.com>
+
+	* cp1.c (FP_S_s, FP_D_s, FP_S_be, FP_D_be, FP_S_e, FP_D_e, FP_S_f)
+	(FP_D_f, FP_S_fb, FP_D_fb, FPINF_SINGLE, FPINF_DOUBLE): Remove
+	unused definitions.
+
+2002-03-19  Chris Demetriou  <cgd@broadcom.com>
+
+	* cp1.c: Fix many formatting issues.
+
+2002-03-19  Chris G. Demetriou  <cgd@broadcom.com>
+
+	* cp1.c (fpu_format_name): New function to replace...
+	(DOFMT): This.  Delete, and update all callers.
+	(fpu_rounding_mode_name): New function to replace...
+	(RMMODE): This.  Delete, and update all callers.
+
+2002-03-19  Chris G. Demetriou  <cgd@broadcom.com>
+
+	* interp.c: Move FPU support routines from here to...
+	* cp1.c: Here.  New file.
+	* Makefile.in (SIM_OBJS): Add cp1.o to object list.
+	(cp1.o): New target.
+
+2002-03-12  Chris Demetriou  <cgd@broadcom.com>
+
+	* configure.in (mipsisa32*-*-*, mipsisa64*-*-*): New targets.
+	* mips.igen (mips32, mips64): New models, add to all instructions
+	and functions as appropriate.
+	(loadstore_ea, check_u64): New variant for model mips64.
+	(check_fmt_p): New variant for models mipsV and mips64, remove
+	mipsV model marking fro other variant.
+	(SLL) Rename to...
+	(SLLa) this.
+	(CLO, CLZ, MADD, MADDU, MSUB, MSUBU, MUL, SLLb): New instructions
+	for mips32 and mips64.
+	(DCLO, DCLZ): New instructions for mips64.
+
+2002-03-07  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (BREAK, LUI, ORI, SYSCALL, XORI): Print
+	immediate or code as a hex value with the "%#lx" format.
+	(ANDI): Likewise, and fix printed instruction name.
+
+2002-03-05  Chris Demetriou  <cgd@broadcom.com>
+
+	* sim-main.h (UndefinedResult, Unpredictable): New macros
+	which currently do nothing.
+
+2002-03-05  Chris Demetriou  <cgd@broadcom.com>
+
+	* sim-main.h (status_UX, status_SX, status_KX, status_TS)
+	(status_PX, status_MX, status_CU0, status_CU1, status_CU2)
+	(status_CU3): New definitions.
+
+	* sim-main.h (ExceptionCause): Add new values for MIPS32
+	and MIPS64: MDMX, MCheck, CacheErr.  Update comments
+	for DebugBreakPoint and NMIReset to note their status in
+	MIPS32 and MIPS64.
+	(SignalExceptionMDMX, SignalExceptionWatch, SignalExceptionMCheck)
+	(SignalExceptionCacheErr): New exception macros.
+
+2002-03-05  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (check_fpu): Enable check for coprocessor 1 usability.
+	* sim-main.h (COP_Usable): Define, but for now coprocessor 1
+	is always enabled.
+	(SignalExceptionCoProcessorUnusable): Take as argument the
+	unusable coprocessor number.
+
+2002-03-05  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen: Fix formatting of all SignalException calls.
+
+2002-03-05  Chris Demetriou  <cgd@broadcom.com>
+
+	* sim-main.h (SIGNEXTEND): Remove.
+
+2002-03-04  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen: Remove gencode comment from top of file, fix
+	spelling in another comment.
+
+2002-03-04  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (check_fmt, check_fmt_p): New functions to check
+	whether specific floating point formats are usable.
+	(ABS.fmt, ADD.fmt, CEIL.L.fmt, CEIL.W, DIV.fmt, FLOOR.L.fmt)
+	(FLOOR.W.fmt, MOV.fmt, MUL.fmt, NEG.fmt, RECIP.fmt, ROUND.L.fmt)
+	(ROUND.W.fmt, RSQRT.fmt, SQRT.fmt, SUB.fmt, TRUNC.L.fmt, TRUNC.W):
+	Use the new functions.
+	(do_c_cond_fmt): Remove format checks...
+	(C.cond.fmta, C.cond.fmtb): And move them into all callers.
+
+2002-03-03  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen: Fix formatting of check_fpu calls.
+
+2002-03-03  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (FLOOR.L.fmt): Store correct destination register.
+
+2002-03-03  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen: Remove whitespace at end of lines.
+
+2002-03-02  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (loadstore_ea): New function to do effective
+	address calculations.
+	(do_load, do_load_left, do_load_right, LL, LDD, PREF, do_store,
+	do_store_left, do_store_right, SC, SCD, PREFX, SWC1, SWXC1,
+	CACHE): Use loadstore_ea to do effective address computations.
+
+2002-03-02  Chris Demetriou  <cgd@broadcom.com>
+
+	* interp.c (load_word): Use EXTEND32 rather than SIGNEXTEND.
+	* mips.igen (LL, CxC1, MxC1): Likewise.
+
+2002-03-02  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (LL, LLD, PREF, SC, SCD, ABS.fmt, ADD.fmt, CEIL.L.fmt,
+	CEIL.W, CVT.D.fmt, CVT.L.fmt, CVT.S.fmt, CVT.W.fmt, DIV.fmt,
+	FLOOR.L.fmt, FLOOR.W.fmt, MADD.D, MADD.S, MOV.fmt, MOVtf.fmt,
+	MSUB.D, MSUB.S, MUL.fmt, NEG.fmt, NMADD.D, NMADD.S, NMSUB.D,
+	NMSUB.S, PREFX, RECIP.fmt, ROUND.L.fmt, ROUND.W.fmt, RSQRT.fmt,
+	SQRT.fmt, SUB.fmt, SWC1, SWXC1, TRUNC.L.fmt, TRUNC.W, CACHE):
+	Don't split opcode fields by hand, use the opcode field values
+	provided by igen.
+
+2002-03-01  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (do_divu): Fix spacing.
+
+	* mips.igen (do_dsllv): Move to be right before DSLLV,
+	to match the rest of the do_<shift> functions.
+
+2002-03-01  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (do_dsll, do_dsllv, DSLL32, do_dsra, DSRA32, do_dsrl,
+	DSRL32, do_dsrlv): Trace inputs and results.
+
+2002-03-01  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (CACHE): Provide instruction-printing string.
+
+	* interp.c (signal_exception): Comment tokens after #endif.
+
+2002-02-28  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (LWXC1): Mark with filter "64,f", rather than just "32".
+	(MOVtf, MxC1, MxC1, DMxC1, DMxC1, CxC1, CxC1, SQRT.fmt, MOV.fmt, 
+	NEG.fmt, ROUND.L.fmt, TRUNC.L.fmt, CEIL.L.fmt, FLOOR.L.fmt, 
+	ROUND.W.fmt, TRUNC.W, CEIL.W, FLOOR.W.fmt, RECIP.fmt, RSQRT.fmt, 
+	CVT.S.fmt, CVT.D.fmt, CVT.W.fmt, CVT.L.fmt, MOVtf.fmt, C.cond.fmta, 
+	C.cond.fmtb, SUB.fmt, MUL.fmt, DIV.fmt, MOVZ.fmt, MOVN.fmt, LDXC1, 
+	SWXC1, SDXC1, MSUB.D, MSUB.S, NMADD.S, NMADD.D, NMSUB.S, NMSUB.D, 
+	LWC1, SWC1): Add "f" to filter, since these are FP instructions.
+
+2002-02-28  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (DSRA32, DSRAV): Fix order of arguments in
+	instruction-printing string.
+	(LWU): Use '64' as the filter flag.
+
+2002-02-28  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (SDXC1): Fix instruction-printing string.
+
+2002-02-28  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (LDC1, SDC1): Remove mipsI model, and mark with
+	filter flags "32,f".
+
+2002-02-27  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (PREFX): This is a 64-bit instruction, use '64'
+	as the filter flag.
+
+2002-02-27  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (PREFX): Tweak instruction opcode fields (i.e.,
+	add a comma) so that it more closely match the MIPS ISA
+	documentation opcode partitioning.
+	(PREF): Put useful names on opcode fields, and include
+	instruction-printing string.
+
+2002-02-27  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (check_u64): New function which in the future will
+	check whether 64-bit instructions are usable and signal an
+	exception if not.  Currently a no-op.
+	(DADD, DADDI, DADDIU, DADDU, DDIV, DDIVU, DMULT, DMULTU, DSLL,
+	DSLL32, DSLLV, DSRA, DSRA32, DSRAV, DSRL, DSRL32, DSRLV, DSUB,
+	DSUBU, LD, LDL, LDR, LLD, LWU, SCD, SD, SDL, SDR, DMxC1, LDXC1,
+	LWXC1, SDXC1, SWXC1, DMFC0, DMTC0): Use check_u64.
+
+	* mips.igen (check_fpu): New function which in the future will
+	check whether FPU instructions are usable and signal an exception
+	if not.  Currently a no-op.
+	(ABS.fmt, ADD.fmt, BC1a, BC1b, C.cond.fmta, C.cond.fmtb,
+	CEIL.L.fmt, CEIL.W, CxC1, CVT.D.fmt, CVT.L.fmt, CVT.S.fmt,
+	CVT.W.fmt, DIV.fmt, DMxC1, DMxC1, FLOOR.L.fmt, FLOOR.W.fmt, LDC1,
+	LDXC1, LWC1, LWXC1, MADD.D, MADD.S, MxC1, MOV.fmt, MOVtf,
+	MOVtf.fmt, MOVN.fmt, MOVZ.fmt, MSUB.D, MSUB.S, MUL.fmt, NEG.fmt,
+	NMADD.D, NMADD.S, NMSUB.D, NMSUB.S, RECIP.fmt, ROUND.L.fmt,
+	ROUND.W.fmt, RSQRT.fmt, SDC1, SDXC1, SQRT.fmt, SUB.fmt, SWC1,
+	SWXC1, TRUNC.L.fmt, TRUNC.W): Use check_fpu.
+
+2002-02-27  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (do_load_left, do_load_right): Move to be immediately
+	following do_load.
+	(do_store_left, do_store_right): Move to be immediately following
+	do_store.
+
+2002-02-27  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (mipsV): New model name.  Also, add it to
+	all instructions and functions where it is appropriate.
+
+2002-02-18  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen: For all functions and instructions, list model
+	names that support that instruction one per line.
+
+2002-02-11  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen: Add some additional comments about supported
+	models, and about which instructions go where.
+	(BC1b, MFC0, MTC0, RFE): Sort supported models in the same
+	order as is used in the rest of the file.
+
+2002-02-11  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (ADD, ADDI, DADDI, DSUB, SUB): Add comment
+	indicating that ALU32_END or ALU64_END are there to check
+	for overflow.
+	(DADD): Likewise, but also remove previous comment about
+	overflow checking.
+
+2002-02-10  Chris Demetriou  <cgd@broadcom.com>
+
+	* mips.igen (DDIV, DIV, DIVU, DMULT, DMULTU, DSLL, DSLL32,
+	DSLLV, DSRA, DSRA32, DSRAV, DSRL, DSRL32, DSRLV, DSUB, DSUBU,
+	JALR, JR, MOVN, MOVZ, MTLO, MULT, MULTU, SLL, SLLV, SLT, SLTU,
+	SRAV, SRLV, SUB, SUBU, SYNC, XOR, MOVtf, DI, DMFC0, DMTC0, EI,
+	ERET, RFE, TLBP, TLBR, TLBWI, TLBWR): Tweak instruction opcode
+	fields (i.e., add and move commas) so that they more closely
+	match the MIPS ISA documentation opcode partitioning.
+
+2002-02-10  Chris Demetriou  <cgd@broadcom.com>
+
+        * mips.igen (ADDI): Print immediate value.
+        (BREAK): Print code.
+        (DADDIU, DSRAV, DSRLV): Print correct instruction name.
+        (SLL): Print "nop" specially, and don't run the code
+        that does the shift for the "nop" case.
+
+2001-11-17  Fred Fish  <fnf@redhat.com>
+
+	* sim-main.h (float_operation): Move enum declaration outside
+	of _sim_cpu struct declaration.
+
+2001-04-12  Jim Blandy  <jimb@redhat.com>
+
+	* mips.igen (CFC1, CTC1): Pass the correct register numbers to
+	PENDING_FILL.  Use PENDING_SCHED directly to handle the pending
+	set of the FCSR.
+	* sim-main.h (COCIDX): Remove definition; this isn't supported by
+	PENDING_FILL, and you can get the intended effect gracefully by
+	calling PENDING_SCHED directly.
+
+2001-02-23  Ben Elliston  <bje@redhat.com>
+
+	* sim-main.h (ENGINE_ISSUE_PREFIX_HOOK): Only define if not
+	already defined elsewhere.
+
+2001-02-19  Ben Elliston  <bje@redhat.com>
+
+	* sim-main.h (sim_monitor): Return an int.
+	* interp.c (sim_monitor): Add return values.
+	(signal_exception): Handle error conditions from sim_monitor.
+
+2001-02-08  Ben Elliston  <bje@redhat.com>
+
+	* sim-main.c (load_memory): Pass cia to sim_core_read* functions.
+	(store_memory): Likewise, pass cia to sim_core_write*.
+
+2000-10-19  Frank Ch. Eigler  <fche@redhat.com>
+
+	On advice from Chris G. Demetriou <cgd@sibyte.com>:
+	* sim-main.h (GPR_CLEAR): Remove unused alternative macro.
+
+Thu Jul 27 22:02:05 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	From Maciej W. Rozycki <macro@ds2.pg.gda.pl>:
+	* Makefile.in: Don't delete *.igen when cleaning directory.
+
+Wed Jul 19 18:50:51 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* m16.igen (break): Call SignalException not sim_engine_halt.
+
+Mon Jul  3 11:13:20 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	From Jason Eckhardt:
+	* mips.igen (MOVZ.fmt, MOVN.fmt): Move conditional on GPR[RT].
+
+Tue Jun 13 20:52:07 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* mips.igen (MxC1, DMxC1): Fix printf formatting.
+
+2000-05-24  Michael Hayes  <mhayes@cygnus.com>
+
+	* mips.igen (do_dmultx): Fix typo.
+
+Tue May 23 21:39:23 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* configure: Regenerated to track ../common/aclocal.m4 changes.
+
+Fri Apr 28 20:48:36 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* mips.igen (DMxC1): Fix format arguments for sim_io_eprintf call.
+
+2000-04-12  Frank Ch. Eigler  <fche@redhat.com>
+
+	* sim-main.h (GPR_CLEAR): Define macro.
+
+Mon Apr 10 00:07:09 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* interp.c (decode_coproc): Output long using %lx and not %s.
+
+2000-03-21  Frank Ch. Eigler  <fche@redhat.com>
+
+	* interp.c (sim_open): Sort & extend dummy memory regions for
+	--board=jmr3904 for eCos.
+
+2000-03-02  Frank Ch. Eigler  <fche@redhat.com>
+
+	* configure: Regenerated.
+
+Tue Feb  8 18:35:01 2000  Donald Lindsay  <dlindsay@hound.cygnus.com>
+
+	* interp.c, mips.igen: all 5 DEADC0DE situations now have sim_io_eprintf
+	calls, conditional on the simulator being in verbose mode.
+
+Fri Feb  4 09:45:15 2000  Donald Lindsay  <dlindsay@cygnus.com>
+
+	* sim-main.c (cache_op): Added case arm so that CACHE ops to a secondary
+	cache don't get ReservedInstruction traps.
+
+1999-11-29  Mark Salter  <msalter@cygnus.com>
+
+	* dv-tx3904sio.c (tx3904sio_io_write_buffer): Use write value as a mask
+	to clear status bits in sdisr register. This is how the hardware works.
+
+	* interp.c (sim_open): Added more memory aliases for jmr3904 hardware
+	being used by cygmon.
+
+1999-11-11  Andrew Haley  <aph@cygnus.com>
+
+	* interp.c (decode_coproc): Correctly handle DMFC0 and DMTC0
+	instructions.
+
 Thu Sep  9 15:12:08 1999  Geoffrey Keating  <geoffk@cygnus.com>
 
 	* mips.igen (MULT): Correct previous mis-applied patch.

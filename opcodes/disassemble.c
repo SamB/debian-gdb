@@ -1,5 +1,6 @@
 /* Select disassembly routine for specified architecture.
-   Copyright (C) 1994, 1995, 1996, 1997, 1998, 1999 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002
+   Free Software Foundation, Inc.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,7 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
-#include "ansidecl.h"
+#include "sysdep.h"
 #include "dis-asm.h"
 
 #ifdef ARCH_all
@@ -23,32 +24,48 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #define ARCH_alpha
 #define ARCH_arc
 #define ARCH_arm
+#define ARCH_avr
+#define ARCH_cris
 #define ARCH_d10v
 #define ARCH_d30v
 #define ARCH_h8300
 #define ARCH_h8500
 #define ARCH_hppa
+#define ARCH_i370
 #define ARCH_i386
+#define ARCH_i860
 #define ARCH_i960
+#define ARCH_ia64
 #define ARCH_fr30
 #define ARCH_m32r
 #define ARCH_m68k
+#define ARCH_m68hc11
+#define ARCH_m68hc12
 #define ARCH_m88k
 #define ARCH_mcore
 #define ARCH_mips
+#define ARCH_mmix
 #define ARCH_mn10200
 #define ARCH_mn10300
 #define ARCH_ns32k
+#define ARCH_openrisc
+#define ARCH_or32
+#define ARCH_pdp11
+#define ARCH_pj
 #define ARCH_powerpc
 #define ARCH_rs6000
+#define ARCH_s390
 #define ARCH_sh
 #define ARCH_sparc
 #define ARCH_tic30
+#define ARCH_tic54x
 #define ARCH_tic80
 #define ARCH_v850
 #define ARCH_vax
 #define ARCH_w65
+#define ARCH_xstormy16
 #define ARCH_z8k
+#define INCLUDE_SHMEDIA
 #endif
 
 
@@ -77,8 +94,7 @@ disassembler (abfd)
 #ifdef ARCH_arc
     case bfd_arch_arc:
       {
-	disassemble = arc_get_disassembler (bfd_get_mach (abfd),
-					    bfd_big_endian (abfd));
+	disassemble = arc_get_disassembler (abfd);
 	break;
       }
 #endif
@@ -88,6 +104,16 @@ disassembler (abfd)
 	disassemble = print_insn_big_arm;
       else
 	disassemble = print_insn_little_arm;
+      break;
+#endif
+#ifdef ARCH_avr
+    case bfd_arch_avr:
+      disassemble = print_insn_avr;
+      break;
+#endif
+#ifdef ARCH_cris
+    case bfd_arch_cris:
+      disassemble = cris_get_disassembler (abfd);
       break;
 #endif
 #ifdef ARCH_d10v
@@ -106,7 +132,7 @@ disassembler (abfd)
 	disassemble = print_insn_h8300h;
       else if (bfd_get_mach(abfd) == bfd_mach_h8300s)
 	disassemble = print_insn_h8300s;
-      else 
+      else
 	disassemble = print_insn_h8300;
       break;
 #endif
@@ -120,17 +146,29 @@ disassembler (abfd)
       disassemble = print_insn_hppa;
       break;
 #endif
+#ifdef ARCH_i370
+    case bfd_arch_i370:
+      disassemble = print_insn_i370;
+      break;
+#endif
 #ifdef ARCH_i386
     case bfd_arch_i386:
-      if (bfd_get_mach (abfd) == bfd_mach_i386_i386_intel_syntax)
-        disassemble = print_insn_i386_intel;
-      else
-        disassemble = print_insn_i386_att;
+      disassemble = print_insn_i386;
+      break;
+#endif
+#ifdef ARCH_i860
+    case bfd_arch_i860:
+      disassemble = print_insn_i860;
       break;
 #endif
 #ifdef ARCH_i960
     case bfd_arch_i960:
       disassemble = print_insn_i960;
+      break;
+#endif
+#ifdef ARCH_ia64
+    case bfd_arch_ia64:
+      disassemble = print_insn_ia64;
       break;
 #endif
 #ifdef ARCH_fr30
@@ -141,6 +179,14 @@ disassembler (abfd)
 #ifdef ARCH_m32r
     case bfd_arch_m32r:
       disassemble = print_insn_m32r;
+      break;
+#endif
+#if defined(ARCH_m68hc11) || defined(ARCH_m68hc12)
+    case bfd_arch_m68hc11:
+      disassemble = print_insn_m68hc11;
+      break;
+    case bfd_arch_m68hc12:
+      disassemble = print_insn_m68hc12;
       break;
 #endif
 #ifdef ARCH_m68k
@@ -171,6 +217,11 @@ disassembler (abfd)
 	disassemble = print_insn_little_mips;
       break;
 #endif
+#ifdef ARCH_mmix
+    case bfd_arch_mmix:
+      disassemble = print_insn_mmix;
+      break;
+#endif
 #ifdef ARCH_mn10200
     case bfd_arch_mn10200:
       disassemble = print_insn_mn10200;
@@ -179,6 +230,29 @@ disassembler (abfd)
 #ifdef ARCH_mn10300
     case bfd_arch_mn10300:
       disassemble = print_insn_mn10300;
+      break;
+#endif
+#ifdef ARCH_openrisc
+    case bfd_arch_openrisc:
+      disassemble = print_insn_openrisc;
+      break;
+#endif
+#ifdef ARCH_or32
+    case bfd_arch_or32:
+      if (bfd_big_endian (abfd))
+        disassemble = print_insn_big_or32;
+      else
+        disassemble = print_insn_little_or32;
+      break;
+#endif
+#ifdef ARCH_pdp11
+    case bfd_arch_pdp11:
+      disassemble = print_insn_pdp11;
+      break;
+#endif
+#ifdef ARCH_pj
+    case bfd_arch_pj:
+      disassemble = print_insn_pj;
       break;
 #endif
 #ifdef ARCH_powerpc
@@ -191,11 +265,29 @@ disassembler (abfd)
 #endif
 #ifdef ARCH_rs6000
     case bfd_arch_rs6000:
-      disassemble = print_insn_rs6000;
+      if (bfd_get_mach (abfd) == bfd_mach_ppc_620)
+	disassemble = print_insn_big_powerpc;
+      else
+	disassemble = print_insn_rs6000;
+      break;
+#endif
+#ifdef ARCH_s390
+    case bfd_arch_s390:
+      disassemble = print_insn_s390;
       break;
 #endif
 #ifdef ARCH_sh
     case bfd_arch_sh:
+#ifdef INCLUDE_SHMEDIA
+      if (bfd_get_mach (abfd) == bfd_mach_sh5)
+	{
+	  if (bfd_big_endian (abfd))
+	    disassemble = print_insn_sh64;
+	  else
+	    disassemble = print_insn_sh64l;
+	  break;
+	}
+#endif
       if (bfd_big_endian (abfd))
 	disassemble = print_insn_sh;
       else
@@ -210,6 +302,11 @@ disassembler (abfd)
 #ifdef ARCH_tic30
     case bfd_arch_tic30:
       disassemble = print_insn_tic30;
+      break;
+#endif
+#ifdef ARCH_tic54x
+    case bfd_arch_tic54x:
+      disassemble = print_insn_tic54x;
       break;
 #endif
 #ifdef ARCH_tic80
@@ -227,11 +324,16 @@ disassembler (abfd)
       disassemble = print_insn_w65;
       break;
 #endif
+#ifdef ARCH_xstormy16
+    case bfd_arch_xstormy16:
+      disassemble = print_insn_xstormy16;
+      break;
+#endif
 #ifdef ARCH_z8k
     case bfd_arch_z8k:
       if (bfd_get_mach(abfd) == bfd_mach_z8001)
 	disassemble = print_insn_z8001;
-      else 
+      else
 	disassemble = print_insn_z8002;
       break;
 #endif
@@ -244,4 +346,15 @@ disassembler (abfd)
       return 0;
     }
   return disassemble;
+}
+
+void
+disassembler_usage (stream)
+     FILE * stream ATTRIBUTE_UNUSED;
+{
+#ifdef ARCH_arm
+  print_arm_disassembler_options (stream);
+#endif
+
+  return;
 }

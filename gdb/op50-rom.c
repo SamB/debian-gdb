@@ -1,6 +1,6 @@
 /* Remote target glue for the Oki op50n based eval board.
 
-   Copyright 1995 Free Software Foundation, Inc.
+   Copyright 1995, 1998, 1999, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,7 +25,7 @@
 #include "monitor.h"
 #include "serial.h"
 
-static void op50n_open PARAMS ((char *args, int from_tty));
+static void op50n_open (char *args, int from_tty);
 
 /*
  * this array of registers need to match the indexes used by GDB. The
@@ -121,15 +121,13 @@ init_op50n_cmds (void)
 };
 
 static void
-op50n_open (args, from_tty)
-     char *args;
-     int from_tty;
+op50n_open (char *args, int from_tty)
 {
   monitor_open (args, &op50n_cmds, from_tty);
 }
 
 void
-_initialize_op50n ()
+_initialize_op50n (void)
 {
   init_op50n_cmds ();
   init_monitor_ops (&op50n_ops);

@@ -1,5 +1,5 @@
 /* MN10300 ELF support for BFD.
-   Copyright (C) 1998 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000 Free Software Foundation, Inc.
 
 This file is part of BFD, the Binary File Descriptor library.
 
@@ -36,8 +36,7 @@ START_RELOC_NUMBERS (elf_mn10300_reloc_type)
   RELOC_NUMBER (R_MN10300_GNU_VTINHERIT, 7)
   RELOC_NUMBER (R_MN10300_GNU_VTENTRY, 8)
   RELOC_NUMBER (R_MN10300_24, 9)
-  EMPTY_RELOC  (R_MN10300_MAX)
-END_RELOC_NUMBERS
+END_RELOC_NUMBERS (R_MN10300_MAX)
 
 /* Machine variant if we know it.  This field was invented at Cygnus,
    but it is hoped that other vendors will adopt it.  If some standard
@@ -50,4 +49,5 @@ END_RELOC_NUMBERS
    the rest are open. */
 
 #define E_MN10300_MACH_MN10300	0x00810000
+#define E_MN10300_MACH_AM33	0x00820000
 #endif /* _ELF_MN10300_H */

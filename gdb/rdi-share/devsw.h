@@ -8,8 +8,8 @@
 
 /* -*-C-*-
  *
- * $Revision: 1.2 $
- *     $Date: 1998/01/08 11:12:00 $
+ * $Revision: 1.4 $
+ *     $Date: 2000/01/04 14:49:02 $
  *
  */
 #ifndef angsd_devsw_h
@@ -160,7 +160,7 @@ AdpErrs DevSW_Match(const DeviceDescr *device, const char *name,
  *          OK: adp_ok
  *       Error: adp_device_not_open
  */
-AdpErrs DevSW_Close(const DeviceDescr *device, const DevChanID type);
+AdpErrs DevSW_Close(DeviceDescr *device, const DevChanID type);
 
 /*
  *  Function: DevSW_Read
@@ -259,6 +259,13 @@ AdpErrs DevSW_Ioctl(const DeviceDescr *device, const int opcode, void *args);
  */
 bool DevSW_WriteFinished(const DeviceDescr *device);
 
+      
+/*
+ * set filename and enable/disable logginf of ADP packets
+ */
+void DevSW_SetLogfile(const char *filename);
+void DevSW_SetLogEnable(int logEnableFlag);
+      
 #ifdef __cplusplus
     }
 #endif

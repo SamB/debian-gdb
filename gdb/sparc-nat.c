@@ -1,5 +1,6 @@
 /* Functions specific to running gdb native on a SPARC running SunOS4.
-   Copyright 1989, 1992, 1993, 1994, 1996 Free Software Foundation, Inc.
+   Copyright 1989, 1992, 1993, 1994, 1996, 1997, 1998, 1999, 2000, 2001
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,7 +23,11 @@
 #include "inferior.h"
 #include "target.h"
 #include "gdbcore.h"
+#include "regcache.h"
 
+#ifdef HAVE_SYS_PARAM_H
+#include <sys/param.h>
+#endif
 #include <signal.h>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
@@ -43,16 +48,12 @@
 #define	STACK_REGS	2
 #define	FP_REGS		4
 
-static void
-fetch_core_registers PARAMS ((char *, unsigned int, int, CORE_ADDR));
-
 /* Fetch one or more registers from the inferior.  REGNO == -1 to get
    them all.  We actually fetch more than requested, when convenient,
    marking them as valid so we won't fetch them again.  */
 
 void
-fetch_inferior_registers (regno)
-     int regno;
+fetch_inferior_registers (int regno)
 {
   struct regs inferior_registers;
   struct fp_status inferior_fp_registers;
@@ -61,7 +62,7 @@ fetch_inferior_registers (regno)
   /* We should never be called with deferred stores, because a prerequisite
      for writing regs is to have fetched them all (PREPARE_TO_STORE), sigh.  */
   if (deferred_stores)
-    abort ();
+    internal_error (__FILE__, __LINE__, "failed internal consistency check");
 
   DO_DEFERRED_STORES;
 
@@ -74,7 +75,7 @@ fetch_inferior_registers (regno)
       || regno >= Y_REGNUM
       || (!register_valid[SP_REGNUM] && regno < I7_REGNUM))
     {
-      if (0 != ptrace (PTRACE_GETREGS, inferior_pid,
+      if (0 != ptrace (PTRACE_GETREGS, PIDGET (inferior_ptid),
 		       (PTRACE_ARG3_TYPE) & inferior_registers, 0))
 	perror ("ptrace_getregs");
 
@@ -104,7 +105,7 @@ fetch_inferior_registers (regno)
       regno == FPS_REGNUM ||
       (regno >= FP0_REGNUM && regno <= FP0_REGNUM + 31))
     {
-      if (0 != ptrace (PTRACE_GETFPREGS, inferior_pid,
+      if (0 != ptrace (PTRACE_GETFPREGS, PIDGET (inferior_ptid),
 		       (PTRACE_ARG3_TYPE) & inferior_fp_registers,
 		       0))
 	perror ("ptrace_getfpregs");
@@ -122,15 +123,15 @@ fetch_inferior_registers (regno)
      all (16 ptrace calls!) if we really need them.  */
   if (regno == -1)
     {
-      target_read_memory (*(CORE_ADDR *) & registers[REGISTER_BYTE (SP_REGNUM)],
-			  &registers[REGISTER_BYTE (L0_REGNUM)],
+      CORE_ADDR sp = *(unsigned int *) & registers[REGISTER_BYTE (SP_REGNUM)];
+      target_read_memory (sp, &registers[REGISTER_BYTE (L0_REGNUM)],
 			  16 * REGISTER_RAW_SIZE (L0_REGNUM));
       for (i = L0_REGNUM; i <= I7_REGNUM; i++)
 	register_valid[i] = 1;
     }
   else if (regno >= L0_REGNUM && regno <= I7_REGNUM)
     {
-      CORE_ADDR sp = *(CORE_ADDR *) & registers[REGISTER_BYTE (SP_REGNUM)];
+      CORE_ADDR sp = *(unsigned int *) & registers[REGISTER_BYTE (SP_REGNUM)];
       i = REGISTER_BYTE (regno);
       if (register_valid[regno])
 	printf_unfiltered ("register %d valid and read\n", regno);
@@ -145,8 +146,7 @@ fetch_inferior_registers (regno)
    Otherwise, REGNO specifies which register (so we can save time).  */
 
 void
-store_inferior_registers (regno)
-     int regno;
+store_inferior_registers (int regno)
 {
   struct regs inferior_registers;
   struct fp_status inferior_fp_registers;
@@ -193,12 +193,12 @@ store_inferior_registers (regno)
 
   if (wanna_store & STACK_REGS)
     {
-      CORE_ADDR sp = *(CORE_ADDR *) & registers[REGISTER_BYTE (SP_REGNUM)];
+      CORE_ADDR sp = *(unsigned int *) & registers[REGISTER_BYTE (SP_REGNUM)];
 
       if (regno < 0 || regno == SP_REGNUM)
 	{
 	  if (!register_valid[L0_REGNUM + 5])
-	    abort ();
+	    internal_error (__FILE__, __LINE__, "failed internal consistency check");
 	  target_write_memory (sp,
 			       &registers[REGISTER_BYTE (L0_REGNUM)],
 			       16 * REGISTER_RAW_SIZE (L0_REGNUM));
@@ -206,7 +206,7 @@ store_inferior_registers (regno)
       else
 	{
 	  if (!register_valid[regno])
-	    abort ();
+	    internal_error (__FILE__, __LINE__, "failed internal consistency check");
 	  target_write_memory (sp + REGISTER_BYTE (regno) - REGISTER_BYTE (L0_REGNUM),
 			       &registers[REGISTER_BYTE (regno)],
 			       REGISTER_RAW_SIZE (regno));
@@ -217,7 +217,7 @@ store_inferior_registers (regno)
   if (wanna_store & INT_REGS)
     {
       if (!register_valid[G1_REGNUM])
-	abort ();
+	internal_error (__FILE__, __LINE__, "failed internal consistency check");
 
       memcpy (&inferior_registers.r_g1, &registers[REGISTER_BYTE (G1_REGNUM)],
 	      15 * REGISTER_RAW_SIZE (G1_REGNUM));
@@ -231,7 +231,7 @@ store_inferior_registers (regno)
       inferior_registers.r_y =
 	*(int *) &registers[REGISTER_BYTE (Y_REGNUM)];
 
-      if (0 != ptrace (PTRACE_SETREGS, inferior_pid,
+      if (0 != ptrace (PTRACE_SETREGS, PIDGET (inferior_ptid),
 		       (PTRACE_ARG3_TYPE) & inferior_registers, 0))
 	perror ("ptrace_setregs");
     }
@@ -239,25 +239,33 @@ store_inferior_registers (regno)
   if (wanna_store & FP_REGS)
     {
       if (!register_valid[FP0_REGNUM + 9])
-	abort ();
+	internal_error (__FILE__, __LINE__, "failed internal consistency check");
       memcpy (&inferior_fp_registers, &registers[REGISTER_BYTE (FP0_REGNUM)],
 	      sizeof inferior_fp_registers.fpu_fr);
       memcpy (&inferior_fp_registers.Fpu_fsr,
 	      &registers[REGISTER_BYTE (FPS_REGNUM)], sizeof (FPU_FSR_TYPE));
       if (0 !=
-	  ptrace (PTRACE_SETFPREGS, inferior_pid,
+	  ptrace (PTRACE_SETFPREGS, PIDGET (inferior_ptid),
 		  (PTRACE_ARG3_TYPE) & inferior_fp_registers, 0))
 	perror ("ptrace_setfpregs");
     }
 }
 
+/* Provide registers to GDB from a core file.
+
+   CORE_REG_SECT points to an array of bytes, which are the contents
+   of a `note' from a core file which BFD thinks might contain
+   register contents.  CORE_REG_SIZE is its size.
+
+   WHICH says which register set corelow suspects this is:
+     0 --- the general-purpose register set
+     2 --- the floating-point register set
+
+   IGNORE is unused.  */
 
 static void
-fetch_core_registers (core_reg_sect, core_reg_size, which, ignore)
-     char *core_reg_sect;
-     unsigned core_reg_size;
-     int which;
-     CORE_ADDR ignore;		/* reg addr, unused in this version */
+fetch_core_registers (char *core_reg_sect, unsigned core_reg_size,
+		      int which, CORE_ADDR ignore)
 {
 
   if (which == 0)
@@ -314,7 +322,7 @@ fetch_core_registers (core_reg_sect, core_reg_size, which, ignore)
 }
 
 int
-kernel_u_size ()
+kernel_u_size (void)
 {
   return (sizeof (struct user));
 }
@@ -325,13 +333,15 @@ kernel_u_size ()
 
 static struct core_fns sparc_core_fns =
 {
-  bfd_target_unknown_flavour,
-  fetch_core_registers,
-  NULL
+  bfd_target_unknown_flavour,		/* core_flavour */
+  default_check_format,			/* check_format */
+  default_core_sniffer,			/* core_sniffer */
+  fetch_core_registers,			/* core_read_registers */
+  NULL					/* next */
 };
 
 void
-_initialize_core_sparc ()
+_initialize_core_sparc (void)
 {
   add_core_fns (&sparc_core_fns);
 }

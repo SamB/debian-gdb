@@ -1,5 +1,5 @@
 /* IBM PowerPC native-dependent macros for GDB, the GNU debugger.
-   Copyright 1995 Free Software Foundation, Inc.
+   Copyright 1995, 2000 Free Software Foundation, Inc.
 
 This file is part of GDB.
 
@@ -18,28 +18,16 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  */
 
 #ifndef NM_LINUX_H
+
+#include "nm-linux.h"
+
 #define NM_LINUX_H
 
 /* Return sizeof user struct to callers in less machine dependent routines */
 
 #define KERNEL_U_SIZE kernel_u_size()
-extern int kernel_u_size PARAMS ((void));
+extern int kernel_u_size (void);
 
-/* Tell gdb that we can attach and detach other processes */
-#define ATTACH_DETACH
-
-#define U_REGS_OFFSET 0
-
-#define REGISTER_U_ADDR(addr, blockend, regno) \
-        (addr) = ppc_register_u_addr ((blockend),(regno));
-
-/* No <sys/reg.h> */
-
-#define NO_SYS_REG_H
-
-#ifdef HAVE_LINK_H
-#include "solib.h"		/* Support for shared libraries. */
-#define SVR4_SHARED_LIBS
-#endif
+#define FETCH_INFERIOR_REGISTERS
 
 #endif /* #ifndef NM_LINUX_H */

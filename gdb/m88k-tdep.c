@@ -1,5 +1,6 @@
 /* Target-machine dependent code for Motorola 88000 series, for GDB.
-   Copyright 1988, 1990, 1991, 1994, 1995 Free Software Foundation, Inc.
+   Copyright 1988, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 2000,
+   2001 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -26,6 +27,7 @@
 #include "symtab.h"
 #include "setjmp.h"
 #include "value.h"
+#include "regcache.h"
 
 /* Size of an instruction */
 #define	BYTES_PER_88K_INSN	4
@@ -37,6 +39,19 @@ void frame_find_saved_regs ();
 
 int target_is_m88110 = 0;
 
+/* The type of a register.  */
+struct type *
+m88k_register_type (int regnum)
+{
+  if (regnum >= XFP_REGNUM)
+    return builtin_type_m88110_ext;
+  else if (regnum == PC_REGNUM || regnum == FP_REGNUM || regnum == SP_REGNUM)
+    return builtin_type_void_func_ptr;
+  else
+    return builtin_type_int32;
+}
+
+
 /* The m88k kernel aligns all instructions on 4-byte boundaries.  The
    kernel also uses the least significant two bits for its own hocus
    pocus.  When gdb receives an address from the kernel, it needs to
@@ -45,8 +60,7 @@ int target_is_m88110 = 0;
    of an instruction.  Shrug.  */
 
 CORE_ADDR
-m88k_addr_bits_remove (addr)
-     CORE_ADDR addr;
+m88k_addr_bits_remove (CORE_ADDR addr)
 {
   return ((addr) & ~3);
 }
@@ -60,8 +74,7 @@ m88k_addr_bits_remove (addr)
    the function prologue to determine the caller's sp value, and return it.  */
 
 CORE_ADDR
-frame_chain (thisframe)
-     struct frame_info *thisframe;
+frame_chain (struct frame_info *thisframe)
 {
 
   frame_find_saved_regs (thisframe, (struct frame_saved_regs *) 0);
@@ -75,8 +88,7 @@ frame_chain (thisframe)
 }
 
 int
-frameless_function_invocation (frame)
-     struct frame_info *frame;
+frameless_function_invocation (struct frame_info *frame)
 {
 
   frame_find_saved_regs (frame, (struct frame_saved_regs *) 0);
@@ -90,9 +102,7 @@ frameless_function_invocation (frame)
 }
 
 void
-init_extra_frame_info (fromleaf, frame)
-     int fromleaf;
-     struct frame_info *frame;
+init_extra_frame_info (int fromleaf, struct frame_info *frame)
 {
   frame->fsr = 0;		/* Not yet allocated */
   frame->args_pointer = 0;	/* Unknown */
@@ -212,9 +222,7 @@ struct prologue_insns prologue_insn_tbl[] =
    is stored at 'pword1'.  */
 
 CORE_ADDR
-next_insn (memaddr, pword1)
-     unsigned long *pword1;
-     CORE_ADDR memaddr;
+next_insn (CORE_ADDR memaddr, unsigned long *pword1)
 {
   *pword1 = read_memory_integer (memaddr, BYTES_PER_88K_INSN);
   return memaddr + BYTES_PER_88K_INSN;
@@ -223,9 +231,7 @@ next_insn (memaddr, pword1)
 /* Read a register from frames called by us (or from the hardware regs).  */
 
 static int
-read_next_frame_reg (frame, regno)
-     struct frame_info *frame;
-     int regno;
+read_next_frame_reg (struct frame_info *frame, int regno)
 {
   for (; frame; frame = frame->next)
     {
@@ -247,16 +253,13 @@ read_next_frame_reg (frame, regno)
    to reflect the offsets of the arg pointer and the locals pointer.  */
 
 static CORE_ADDR
-examine_prologue (ip, limit, frame_sp, fsr, fi)
-     register CORE_ADDR ip;
-     register CORE_ADDR limit;
-     CORE_ADDR frame_sp;
-     struct frame_saved_regs *fsr;
-     struct frame_info *fi;
+examine_prologue (register CORE_ADDR ip, register CORE_ADDR limit,
+		  CORE_ADDR frame_sp, struct frame_saved_regs *fsr,
+		  struct frame_info *fi)
 {
   register CORE_ADDR next_ip;
   register int src;
-  unsigned int insn;
+  unsigned long insn;
   int size, offset;
   char must_adjust[32];		/* If set, must adjust offsets in fsr */
   int sp_offset = -1;		/* -1 means not set (valid must be mult of 8) */
@@ -399,7 +402,7 @@ end_of_prologue_found:
   /* (we hope...) */
   if (fsr->regs[SP_REGNUM] != 0
       && fsr->regs[SP_REGNUM] != frame_sp - sp_offset)
-    fprintf_unfiltered (gdb_stderr, "Bad saved SP value %x != %x, offset %x!\n",
+    fprintf_unfiltered (gdb_stderr, "Bad saved SP value %lx != %lx, offset %x!\n",
 			fsr->regs[SP_REGNUM],
 			frame_sp - sp_offset, sp_offset);
 
@@ -413,8 +416,7 @@ end_of_prologue_found:
    prologue.  */
 
 CORE_ADDR
-m88k_skip_prologue (ip)
-CORE_ADDR (ip);
+m88k_skip_prologue (CORE_ADDR ip)
 {
   struct frame_saved_regs saved_regs_dummy;
   struct symtab_and_line sal;
@@ -437,9 +439,7 @@ CORE_ADDR (ip);
    fairly expensive.  */
 
 void
-frame_find_saved_regs (fi, fsr)
-     struct frame_info *fi;
-     struct frame_saved_regs *fsr;
+frame_find_saved_regs (struct frame_info *fi, struct frame_saved_regs *fsr)
 {
   register struct frame_saved_regs *cache_fsr;
   CORE_ADDR ip;
@@ -487,8 +487,7 @@ frame_find_saved_regs (fi, fsr)
    argument pointer, so this is the same as frame_args_address().  */
 
 CORE_ADDR
-frame_locals_address (fi)
-     struct frame_info *fi;
+frame_locals_address (struct frame_info *fi)
 {
   struct frame_saved_regs fsr;
 
@@ -506,8 +505,7 @@ frame_locals_address (fi)
    described by FI.  Returns 0 if the address is unknown.  */
 
 CORE_ADDR
-frame_args_address (fi)
-     struct frame_info *fi;
+frame_args_address (struct frame_info *fi)
 {
   struct frame_saved_regs fsr;
 
@@ -527,8 +525,7 @@ frame_args_address (fi)
    just use the register SRP_REGNUM itself.  */
 
 CORE_ADDR
-frame_saved_pc (frame)
-     struct frame_info *frame;
+frame_saved_pc (struct frame_info *frame)
 {
   return read_next_frame_reg (frame, SRP_REGNUM);
 }
@@ -537,9 +534,7 @@ frame_saved_pc (frame)
 #define DUMMY_FRAME_SIZE 192
 
 static void
-write_word (sp, word)
-     CORE_ADDR sp;
-     ULONGEST word;
+write_word (CORE_ADDR sp, ULONGEST word)
 {
   register int len = REGISTER_SIZE;
   char buffer[MAX_REGISTER_RAW_SIZE];
@@ -549,7 +544,7 @@ write_word (sp, word)
 }
 
 void
-m88k_push_dummy_frame ()
+m88k_push_dummy_frame (void)
 {
   register CORE_ADDR sp = read_register (SP_REGNUM);
   register int rn;
@@ -583,17 +578,15 @@ m88k_push_dummy_frame ()
 }
 
 void
-pop_frame ()
+pop_frame (void)
 {
   register struct frame_info *frame = get_current_frame ();
-  register CORE_ADDR fp;
   register int regnum;
   struct frame_saved_regs fsr;
 
-  fp = FRAME_FP (frame);
   get_frame_saved_regs (frame, &fsr);
 
-  if (PC_IN_CALL_DUMMY (read_pc (), read_register (SP_REGNUM), FRAME_FP (fi)))
+  if (PC_IN_CALL_DUMMY (read_pc (), read_register (SP_REGNUM), frame->frame))
     {
       /* FIXME: I think get_frame_saved_regs should be handling this so
          that we can deal with the saved registers properly (e.g. frame
@@ -635,7 +628,7 @@ pop_frame ()
 }
 
 void
-_initialize_m88k_tdep ()
+_initialize_m88k_tdep (void)
 {
   tm_print_insn = print_insn_m88k;
 }

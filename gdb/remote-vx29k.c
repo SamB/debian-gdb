@@ -1,5 +1,4 @@
 /* Am29k-dependent portions of the RPC protocol
-   used with a VxWorks target 
 
    Contributed by Wind River Systems.
 
@@ -26,16 +25,15 @@
 #include "vx-share/regPacket.h"
 #include "frame.h"
 #include "inferior.h"
-#include "wait.h"
 #include "target.h"
 #include "gdbcore.h"
 #include "command.h"
 #include "symtab.h"
 #include "symfile.h"		/* for struct complaint */
+#include "regcache.h"
 
 #include "gdb_string.h"
 #include <errno.h>
-#include <signal.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/time.h>
@@ -72,8 +70,7 @@ extern void net_write_registers ();
    it is ignored.  FIXME look at regno to improve efficiency.  */
 
 void
-vx_read_register (regno)
-     int regno;
+vx_read_register (int regno)
 {
   char am29k_greg_packet[AM29K_GREG_PLEN];
   char am29k_fpreg_packet[AM29K_FPREG_PLEN];
@@ -136,8 +133,7 @@ vx_read_register (regno)
    it is ignored.  FIXME look at regno to improve efficiency.  */
 
 void
-vx_write_register (regno)
-     int regno;
+vx_write_register (int regno)
 {
   char am29k_greg_packet[AM29K_GREG_PLEN];
   char am29k_fpreg_packet[AM29K_FPREG_PLEN];
@@ -174,12 +170,10 @@ vx_write_register (regno)
    obtain the frame pointer (lr1) contents, we must add 4 bytes.
    Note : may be we should modify init_frame_info() to get the frame pointer
    and store it into the frame_info struct rather than reading its
-   contents when FRAME_CHAIN_VALID is invoked. */
+   contents when FRAME_CHAIN_VALID is invoked.  THISFRAME is unused.  */
 
 int
-vx29k_frame_chain_valid (chain, thisframe)
-     CORE_ADDR chain;
-     struct frame_info *thisframe;	/* not used here */
+vx29k_frame_chain_valid (CORE_ADDR chain, struct frame_info *thisframe)
 {
   int fp_contents;
 

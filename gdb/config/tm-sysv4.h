@@ -1,5 +1,6 @@
 /* Macro definitions for GDB on all SVR4 target systems.
-   Copyright 1991, 1992, 1993, 1994 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1996, 1997, 2000
+   Free Software Foundation, Inc.
    Written by Fred Fish at Cygnus Support (fnf@cygnus.com).
 
    This file is part of GDB.
@@ -28,7 +29,7 @@
    (e.g. on Irix5).  */
 
 #define IN_SOLIB_CALL_TRAMPOLINE(pc, name) in_plt_section((pc), (name))
-extern int in_plt_section PARAMS ((CORE_ADDR, char *));
+extern int in_plt_section (CORE_ADDR, char *);
 
 /* If PC is in a shared library trampoline code, return the PC
    where the function itself actually starts.  If not, return 0.  */

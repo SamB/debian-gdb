@@ -1,7 +1,0 @@
-#! /bin/sh
-
-set -e
-
-install-info --quiet --remove gdb
-install-info --quiet --remove gdbint
-install-info --quiet --remove stabs

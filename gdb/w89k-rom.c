@@ -1,7 +1,7 @@
 /* Remote target glue for the WinBond ROM monitor running on the "Cougar"
    W89k eval board.
 
-   Copyright 1995 Free Software Foundation, Inc.
+   Copyright 1995, 1998, 2000, 2001 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -26,9 +26,10 @@
 #include "monitor.h"
 #include "serial.h"
 #include "xmodem.h"
+#include "regcache.h"
 
 
-static void w89k_open PARAMS ((char *args, int from_tty));
+static void w89k_open (char *args, int from_tty);
 
 /*
  * this array of registers need to match the indexes used by GDB. The
@@ -50,11 +51,7 @@ static char *w89k_regnames[NUM_REGS] =
 };
 
 static void
-w89k_supply_register (regname, regnamelen, val, vallen)
-     char *regname;
-     int regnamelen;
-     char *val;
-     int vallen;
+w89k_supply_register (char *regname, int regnamelen, char *val, int vallen)
 {
   int numregs;
   int regno;
@@ -163,10 +160,7 @@ static int hashmark = 1;	/* flag set by "set hash" */
 extern struct monitor_ops w89k_cmds;	/* fwd decl */
 
 static void
-w89k_load (desc, file, hashmark)
-     serial_t desc;
-     char *file;
-     int hashmark;
+w89k_load (struct serial *desc, char *file, int hashmark)
 {
   bfd *abfd;
   asection *s;
@@ -296,15 +290,13 @@ init_w89k_cmds (void)
 }				/* init_w89k_cmds */
 
 static void
-w89k_open (args, from_tty)
-     char *args;
-     int from_tty;
+w89k_open (char *args, int from_tty)
 {
   monitor_open (args, &w89k_cmds, from_tty);
 }
 
 void
-_initialize_w89k ()
+_initialize_w89k (void)
 {
   init_w89k_cmds ();
   init_monitor_ops (&w89k_ops);

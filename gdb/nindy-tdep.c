@@ -1,5 +1,6 @@
 /* Target-machine dependent code for the NINDY monitor running on the Intel 960
-   Copyright (C) 1991 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 2000
+   Free Software Foundation, Inc.
    Contributed by Intel Corporation.
 
    This file is part of GDB.
@@ -34,9 +35,7 @@
    they display this frame.  */
 
 int
-nindy_frame_chain_valid (chain, curframe)
-     CORE_ADDR chain;
-     struct frame_info *curframe;
+nindy_frame_chain_valid (CORE_ADDR chain, struct frame_info *curframe)
 {
   struct symbol *sym;
   struct minimal_symbol *msymbol;

@@ -1,5 +1,6 @@
 /* Native-dependent code for SVR4 Unix running on i386's, for GDB.
-   Copyright 1988, 1989, 1991, 1992, 1996, 1998 Free Software Foundation, Inc.
+   Copyright 1988, 1989, 1991, 1992, 1996, 1997, 1998, 1999, 2000, 2001
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,15 +22,20 @@
 #include "defs.h"
 #include "value.h"
 #include "inferior.h"
+#include "regcache.h"
 
 #ifdef HAVE_SYS_REG_H
 #include <sys/reg.h>
 #endif
+#include "i387-nat.h"
 
 
 #ifdef HAVE_SYS_PROCFS_H
 
 #include <sys/procfs.h>
+
+/* Prototypes for supply_gregset etc. */
+#include "gregset.h"
 
 /*  The /proc interface divides the target machine's register set up into
    two different sets, the general register set (gregset) and the floating
@@ -89,13 +95,13 @@ static int regmap[] =
 
 /* Prototypes for local functions */
 
-void fill_gregset PARAMS ((gregset_t *, int));
+void fill_gregset (gregset_t *, int);
 
-void supply_gregset PARAMS ((gregset_t *));
+void supply_gregset (gregset_t *);
 
-void supply_fpregset PARAMS ((fpregset_t *));
+void supply_fpregset (fpregset_t *);
 
-void fill_fpregset PARAMS ((fpregset_t *, int));
+void fill_fpregset (fpregset_t *, int);
 
 
 /*  FIXME:  These routine absolutely depends upon (NUM_REGS - NUM_FREGS)
@@ -109,8 +115,7 @@ void fill_fpregset PARAMS ((fpregset_t *, int));
    register values. */
 
 void
-supply_gregset (gregsetp)
-     gregset_t *gregsetp;
+supply_gregset (gregset_t *gregsetp)
 {
   register int regi;
   register greg_t *regp = (greg_t *) gregsetp;
@@ -123,9 +128,7 @@ supply_gregset (gregsetp)
 }
 
 void
-fill_gregset (gregsetp, regno)
-     gregset_t *gregsetp;
-     int regno;
+fill_gregset (gregset_t *gregsetp, int regno)
 {
   int regi;
   register greg_t *regp = (greg_t *) gregsetp;
@@ -142,17 +145,24 @@ fill_gregset (gregsetp, regno)
 
 #endif /* HAVE_GREGSET_T */
 
-#if defined (FP0_REGNUM) && defined (HAVE_FPREGSET_T)
+#if defined (HAVE_FPREGSET_T)
 
 /*  Given a pointer to a floating point register set in /proc format
    (fpregset_t *), unpack the register contents and supply them as gdb's
    idea of the current floating point register values. */
 
+/* FIXME: Assumes that fpregsetp contains an i387 FSAVE area. */
+#if !defined(FPREGSET_FSAVE_OFFSET)
+#define FPREGSET_FSAVE_OFFSET	0
+#endif
+
 void
-supply_fpregset (fpregsetp)
-     fpregset_t *fpregsetp;
+supply_fpregset (fpregset_t *fpregsetp)
 {
-  /* FIXME: see m68k-tdep.c for an example, for the m68k. */
+  if (NUM_FREGS == 0)
+    return;
+
+  i387_supply_fsave ((char *) fpregsetp + FPREGSET_FSAVE_OFFSET);
 }
 
 /*  Given a pointer to a floating point register set in /proc format
@@ -161,13 +171,14 @@ supply_fpregset (fpregsetp)
    them all. */
 
 void
-fill_fpregset (fpregsetp, regno)
-     fpregset_t *fpregsetp;
-     int regno;
+fill_fpregset (fpregset_t *fpregsetp, int regno)
 {
-  /* FIXME: see m68k-tdep.c for an example, for the m68k. */
+  if (NUM_FREGS == 0)
+    return;
+
+  i387_fill_fsave ((char *) fpregsetp + FPREGSET_FSAVE_OFFSET, regno);
 }
 
-#endif /* defined (FP0_REGNUM) && defined (HAVE_FPREGSET_T) */
+#endif /* defined (HAVE_FPREGSET_T) */
 
 #endif /* HAVE_SYS_PROCFS_H */

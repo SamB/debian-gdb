@@ -1,5 +1,5 @@
 /* Serial interface for a pipe to a separate program
-   Copyright 1999 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions.
 
@@ -24,18 +24,18 @@
 #include "serial.h"
 #include "ser-unix.h"
 
+#include "gdb_vfork.h"
+
 #include <sys/types.h>
-#ifdef HAVE_SYS_WAIT_H
-#include <sys/wait.h>
-#endif
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <fcntl.h>
+#include "gdb_string.h"
 
-#include "signals.h"
+#include <signal.h>
 
-static int pipe_open (serial_t scb, const char *name);
-static void pipe_close (serial_t scb);
+static int pipe_open (struct serial *scb, const char *name);
+static void pipe_close (struct serial *scb);
 
 extern void _initialize_ser_pipe (void);
 
@@ -47,9 +47,9 @@ struct pipe_state
 /* Open up a raw pipe */
 
 static int
-pipe_open (serial_t scb, const char *name)
+pipe_open (struct serial *scb, const char *name)
 {
-#if !defined(O_NONBLOCK) || !defined(F_GETFL) || !defined(F_SETFL) || !HAVE_SOCKETPAIR
+#if !HAVE_SOCKETPAIR
   return -1;
 #else
   struct pipe_state *state;
@@ -65,6 +65,10 @@ pipe_open (serial_t scb, const char *name)
   if (socketpair (AF_UNIX, SOCK_STREAM, 0, pdes) < 0)
     return -1;
 
+  /* Create the child process to run the command in.  Note that the
+     apparent call to vfork() below *might* actually be a call to
+     fork() due to the fact that autoconf will ``#define vfork fork''
+     on certain platforms.  */
   pid = vfork ();
   
   /* Error. */
@@ -106,17 +110,6 @@ pipe_open (serial_t scb, const char *name)
   scb->fd = pdes[0];
   scb->state = state;
 
-  /* Make it non-blocking */
-  {
-    int flags = fcntl (scb->fd, F_GETFL, 0);
-    if (fcntl (scb->fd, F_SETFL, flags | O_NONBLOCK) < 0)
-      {
-	perror ("ser-pipe");
-	pipe_close (scb);
-	return -1;
-      }
-  }
-
   /* If we don't do this, GDB simply exits when the remote side dies.  */
   signal (SIGPIPE, SIG_IGN);
   return 0;
@@ -124,7 +117,7 @@ pipe_open (serial_t scb, const char *name)
 }
 
 static void
-pipe_close (serial_t scb)
+pipe_close (struct serial *scb)
 {
   struct pipe_state *state = scb->state;
   if (state != NULL)
@@ -132,7 +125,7 @@ pipe_close (serial_t scb)
       int pid = state->pid;
       close (scb->fd);
       scb->fd = -1;
-      free (state);
+      xfree (state);
       scb->state = NULL;
       kill (pid, SIGTERM);
       /* Might be useful to check that the child does die. */
@@ -153,7 +146,7 @@ _initialize_ser_pipe (void)
   ops->readchar = ser_unix_readchar;
   ops->write = ser_unix_write;
   ops->flush_output = ser_unix_nop_flush_output;
-  ops->flush_input = ser_unix_nop_flush_input;
+  ops->flush_input = ser_unix_flush_input;
   ops->send_break = ser_unix_nop_send_break;
   ops->go_raw = ser_unix_nop_raw;
   ops->get_tty_state = ser_unix_nop_get_tty_state;

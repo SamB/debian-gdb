@@ -1,5 +1,5 @@
 /* Parameters for execution on a Motorola MCore.
-   Copyright (C) 1995 Free Software Foundation, Inc.
+   Copyright 1995, 1999, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,8 +18,7 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA. */
 
-/* The mcore is big endian */
-#define TARGET_BYTE_ORDER_DEFAULT BIG_ENDIAN
+#include "regcache.h"
 
 /* All registers are 32 bits */
 #define REGISTER_SIZE 4
@@ -81,7 +80,7 @@ extern void mcore_init_extra_frame_info (struct frame_info *fi);
 
 extern CORE_ADDR mcore_frame_chain (struct frame_info *fi);
 #define FRAME_CHAIN(FI) mcore_frame_chain ((FI))
-#define FRAME_CHAIN_VALID(FP, FI) generic_frame_chain_valid ((FP), (FI))
+#define FRAME_CHAIN_VALID(FP, FI) generic_file_frame_chain_valid ((FP), (FI))
 
 extern CORE_ADDR mcore_frame_saved_pc (struct frame_info *);
 #define FRAME_SAVED_PC(FI) (mcore_frame_saved_pc ((FI)))
@@ -101,7 +100,7 @@ extern CORE_ADDR mcore_extract_struct_value_address (char *regbuf);
     mcore_extract_struct_value_address (REGBUF)
 
 extern CORE_ADDR mcore_skip_prologue (CORE_ADDR pc);
-#define SKIP_PROLOGUE(PC) (PC) = mcore_skip_prologue ((PC))
+#define SKIP_PROLOGUE(PC) mcore_skip_prologue (PC)
 
 #define FRAME_ARGS_SKIP 0
 extern CORE_ADDR mcore_frame_args_address (struct frame_info *fi);
@@ -124,13 +123,13 @@ extern void mcore_pop_frame (struct frame_info *fi);
 #define SIZEOF_CALL_DUMMY_WORDS      0
 #define SAVE_DUMMY_FRAME_TOS(SP)     generic_save_dummy_frame_tos (SP)
 
-extern CORE_ADDR mcore_push_return_address PARAMS ((CORE_ADDR, CORE_ADDR));
+extern CORE_ADDR mcore_push_return_address (CORE_ADDR, CORE_ADDR);
 #define PUSH_RETURN_ADDRESS(PC, SP)  mcore_push_return_address (PC, SP)
 
 #define PUSH_DUMMY_FRAME	generic_push_dummy_frame ()
 
-extern CORE_ADDR mcore_push_arguments PARAMS ((int, struct value **, CORE_ADDR,
-					       unsigned char, CORE_ADDR));
+extern CORE_ADDR mcore_push_arguments (int, struct value **, CORE_ADDR,
+				       unsigned char, CORE_ADDR);
 #define PUSH_ARGUMENTS(NARGS, ARGS, SP, STRUCT_RETURN, STRUCT_ADDR) \
   (SP) = mcore_push_arguments (NARGS, ARGS, SP, STRUCT_RETURN, STRUCT_ADDR)
 
@@ -149,12 +148,9 @@ extern use_struct_convention_fn mcore_use_struct_convention;
     generic_get_saved_register (raw_buffer, optimized, addrp, frame, regnum, lval)
 
 /* Cons up virtual frame pointer for trace */
-extern void mcore_virtual_frame_pointer PARAMS ((CORE_ADDR, long *, long *));
+extern void mcore_virtual_frame_pointer (CORE_ADDR, int *, LONGEST *);
 #define TARGET_VIRTUAL_FRAME_POINTER(PC, REGP, OFFP) \
 	mcore_virtual_frame_pointer ((PC), (REGP), (OFFP))
-
-/* MCore can be bi-endian. */
-#define TARGET_BYTE_ORDER_SELECTABLE_P 1
 
 /* For PE, gcc will tell us what th real type of
    arguments are when it promotes arguments. */

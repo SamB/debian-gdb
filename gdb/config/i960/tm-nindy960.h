@@ -1,5 +1,5 @@
 /* Parameters for Intel 960 running NINDY monitor, for GDB, the GNU debugger.
-   Copyright (C) 1990-1991 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1996, 1999, 2000 Free Software Foundation, Inc.
    Contributed by Intel Corporation and Cygnus Support.
 
    This file is part of GDB.
@@ -60,13 +60,18 @@ extern char *nindy_ttyname;	/* Name of serial port to talk to nindy */
 /* If specified on the command line, open tty for talking to nindy,
    and download the executable file if one was specified.  */
 
-#define	ADDITIONAL_OPTION_HANDLER	\
-	if (!SET_TOP_LEVEL () && nindy_ttyname) {		\
-	  nindy_open (nindy_ttyname, !batch);			\
-	  if (!SET_TOP_LEVEL () && execarg) {			\
-		target_load (execarg, !batch);			\
-	  }							\
-	}
+extern void nindy_open (char *name, int from_tty);
+#define	ADDITIONAL_OPTION_HANDLER					\
+	if (nindy_ttyname != NULL)					\
+          {								\
+            if (catch_command_errors (nindy_open, nindy_ttyname,	\
+				      !batch, RETURN_MASK_ALL))		\
+	      {								\
+                if (execarg != NULL)					\
+                  catch_command_errors (target_load, execarg, !batch,	\
+					RETURN_MASK_ALL);		\
+	      }								\
+	  }
 
 /* If configured for i960 target, we take control before main loop
    and demand that we configure for a nindy target.  */
@@ -84,7 +89,7 @@ extern void
    since it differs between NINDY and VxWorks, the two currently supported
    targets types.  */
 
-extern int nindy_frame_chain_valid PARAMS ((CORE_ADDR, struct frame_info *));
+extern int nindy_frame_chain_valid (CORE_ADDR, struct frame_info *);
 #define	FRAME_CHAIN_VALID(chain, thisframe) nindy_frame_chain_valid (chain, thisframe)
 
 extern int
@@ -99,7 +104,3 @@ extern int
  */
 
 #define DECR_PC_AFTER_BREAK 0
-
-#undef REGISTER_CONVERT_TO_VIRTUAL
-#undef REGISTER_CONVERT_TO_RAW
-#undef REGISTER_CONVERTIBLE

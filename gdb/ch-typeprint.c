@@ -1,5 +1,6 @@
 /* Support for printing Chill types for GDB, the GNU debugger.
-   Copyright 1986, 1988, 1989, 1991 Free Software Foundation, Inc.
+   Copyright 1986, 1988, 1989, 1991, 1992, 1993, 1994, 1995, 2000
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -27,26 +28,18 @@
 #include "value.h"
 #include "gdbcore.h"
 #include "target.h"
-#include "command.h"
-#include "gdbcmd.h"
 #include "language.h"
-#include "demangle.h"
 #include "ch-lang.h"
 #include "typeprint.h"
 
 #include "gdb_string.h"
 #include <errno.h>
 
-static void
-chill_type_print_base PARAMS ((struct type *, GDB_FILE *, int, int));
+static void chill_type_print_base (struct type *, struct ui_file *, int, int);
 
 void
-chill_print_type (type, varstring, stream, show, level)
-     struct type *type;
-     char *varstring;
-     GDB_FILE *stream;
-     int show;
-     int level;
+chill_print_type (struct type *type, char *varstring, struct ui_file *stream,
+		  int show, int level)
 {
   if (varstring != NULL && *varstring != '\0')
     {
@@ -69,11 +62,8 @@ chill_print_type (type, varstring, stream, show, level)
    We increase it for some recursive calls.  */
 
 static void
-chill_type_print_base (type, stream, show, level)
-     struct type *type;
-     GDB_FILE *stream;
-     int show;
-     int level;
+chill_type_print_base (struct type *type, struct ui_file *stream, int show,
+		       int level)
 {
   register int len;
   register int i;
@@ -217,7 +207,7 @@ chill_type_print_base (type, stream, show, level)
 	  fprintf_filtered (stream, "(\n");
 	  if ((TYPE_NFIELDS (type) == 0) && (TYPE_NFN_FIELDS (type) == 0))
 	    {
-	      if (TYPE_FLAGS (type) & TYPE_FLAG_STUB)
+	      if (TYPE_STUB (type))
 		{
 		  fprintfi_filtered (level + 4, stream, "<incomplete type>\n");
 		}

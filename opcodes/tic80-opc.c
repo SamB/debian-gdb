@@ -1,5 +1,5 @@
 /* Opcode table for TI TMS320C80 (MVP).
-   Copyright 1996, 1999 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 2000 Free Software Foundation, Inc.
 
 This file is part of GDB, GAS, and the GNU binutils.
 
@@ -19,7 +19,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA.  */
 
 #include <stdio.h>
-#include "ansidecl.h"
+#include "sysdep.h"
 #include "opcode/tic80.h"
 
 /* This file holds various tables for the TMS320C80 (MVP).

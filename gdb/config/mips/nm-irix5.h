@@ -1,6 +1,6 @@
 /* Definitions for native support of irix5.
 
-   Copyright (C) 1993, 1998 Free Software Foundation, Inc.
+   Copyright 1993, 1996, 1998, 1999, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,22 +24,24 @@
 
 #define TARGET_HAS_HARDWARE_WATCHPOINTS
 
-/* Temporary new watchpoint stuff */
-#define TARGET_CAN_USE_HARDWARE_WATCHPOINT(type, cnt, ot) \
-	((type) == bp_hardware_watchpoint)
+#define TARGET_CAN_USE_HARDWARE_WATCHPOINT(type, cnt, ot) 1
 
 /* When a hardware watchpoint fires off the PC will be left at the
    instruction which caused the watchpoint.  It will be necessary for
    GDB to step over the watchpoint. */
 
 #define STOPPED_BY_WATCHPOINT(W) \
-  procfs_stopped_by_watchpoint(inferior_pid)
-extern int procfs_stopped_by_watchpoint PARAMS ((int));
+     procfs_stopped_by_watchpoint(inferior_ptid)
+extern int procfs_stopped_by_watchpoint (ptid_t);
 
 #define HAVE_NONSTEPPABLE_WATCHPOINT
 
 /* Use these macros for watchpoint insertion/deletion.  */
 /* type can be 0: write watch, 1: read watch, 2: access watch (read/write) */
-#define target_insert_watchpoint(addr, len, type) procfs_set_watchpoint (inferior_pid, addr, len, 2)
-#define target_remove_watchpoint(addr, len, type) procfs_set_watchpoint (inferior_pid, addr, 0, 0)
-extern int procfs_set_watchpoint PARAMS ((int, CORE_ADDR, int, int));
+#define target_insert_watchpoint(ADDR, LEN, TYPE) \
+     procfs_set_watchpoint (inferior_ptid, ADDR, LEN, TYPE, 0)
+#define target_remove_watchpoint(ADDR, LEN, TYPE) \
+     procfs_set_watchpoint (inferior_ptid, ADDR, 0, 0, 0)
+extern int procfs_set_watchpoint (ptid_t, CORE_ADDR, int, int, int);
+
+#define TARGET_REGION_SIZE_OK_FOR_HW_WATCHPOINT(SIZE) 1

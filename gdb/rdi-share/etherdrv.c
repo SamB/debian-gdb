@@ -8,8 +8,8 @@
 
 /* -*-C-*-
  *
- * $Revision: 1.6 $
- *     $Date: 1998/04/16 20:14:51 $
+ * $Revision: 1.9 $
+ *     $Date: 2000/01/04 15:24:18 $
  *
  *
  * etherdrv.c - Ethernet Driver for Angel.
@@ -71,7 +71,7 @@
 
 #include "hsys.h"
 #include "devices.h"
-#include "endian.h"
+#include "angel_endian.h"
 #include "buffers.h"
 #include "hostchan.h"
 #include "params.h"
@@ -266,9 +266,12 @@ static int open_socket(void)
 static void fetch_ports(void)
 {
     int i;
-    const char ctrlpacket[] = CTRL_MAGIC;
-        CtrlResponse response;
+    char ctrlpacket[10];
+    CtrlResponse response;
 
+    memset (ctrlpacket, 0, 10);
+    strcpy (ctrlpacket, CTRL_MAGIC);
+    memset (response, 0, sizeof(CtrlResponse));
     /*
      * we will try 3 times to elicit a response from the target
      */
@@ -282,6 +285,10 @@ static void fetch_ports(void)
          * port on the remote target
          */
         ia->sin_port = htons(CTRL_PORT);
+#ifdef DEBUG
+	printf("CTLR_PORT=0x%04x  sin_port=0x%04x\n");
+#endif
+
         if (sendto(sock, ctrlpacket, sizeof(ctrlpacket), 0,
                        (struct sockaddr *)ia, sizeof(*ia)) < 0)
         {

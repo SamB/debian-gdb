@@ -1,4 +1,5 @@
-# Copyright (C) 1992, 1994, 1997, 1998 Free Software Foundation, Inc.
+# Copyright 1992, 1994, 1995, 1996, 1997, 1998, 1999, 2000
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -62,6 +63,11 @@ proc initialize {} {
     global decimal
     global srcfile
     global wp_set
+
+    # Disable hardware watchpoints if necessary.
+    if [target_info exists gdb,no_hardware_watchpoints] {
+	gdb_test "set can-use-hw-watchpoints 0" "" ""
+    }
 
     if [gdb_test "break marker1" "Breakpoint 1 at $hex: file .*$srcfile, line $decimal.*" "set breakpoint at marker1" ] { 
       return 0; 
@@ -233,21 +239,36 @@ Continuing.*\[Ww\]atchpoint.*ival3.*Old value = -1.*New value = 0.*ival3 = count
 	eof { fail "watchpoint hit, first time (eof)" ; return }
     }
 
+    # Check that the hit count is reported correctly
+    gdb_test "info break" ".*watchpoint\[ \t\]+keep\[ \t\]+y\[ \t\]+ival3\r\n\[ \t]+breakpoint already hit 1 time.*" "Watchpoint hit count is 1"
+
     gdb_test "delete \$func1_breakpoint_number" ""
 
     # Continue until the next change, from 0 to 1.
     gdb_test "cont" "Continuing.*\[Ww\]atchpoint.*ival3.*Old value = 0.*New value = 1.*ival3 = count; ival4 = count;.*" "watchpoint hit, second time"
 
+    # Check that the hit count is reported correctly
+    gdb_test "info break" ".*watchpoint\[ \t\]+keep\[ \t\]+y\[ \t\]+ival3\r\n\[ \t]+breakpoint already hit 2 times.*" "Watchpoint hit count is 2"
+
     # Continue until the next change, from 1 to 2.
     gdb_test "cont" "Continuing.*\[Ww\]atchpoint.*ival3.*Old value = 1.*New value = 2.*ival3 = count; ival4 = count;.*" "watchpoint hit, third time"
+
+    # Check that the hit count is reported correctly
+    gdb_test "info break" ".*watchpoint\[ \t\]+keep\[ \t\]+y\[ \t\]+ival3\r\n\[ \t]+breakpoint already hit 3 times.*" "Watchpoint hit count is 3"
     
     # Continue until the next change, from 2 to 3.
     gdb_test "cont" "Continuing.*\[Ww\]atchpoint.*ival3.*Old value = 2.*New value = 3.*ival3 = count; ival4 = count;.*" "watchpoint hit, fourth time"
+
+    # Check that the hit count is reported correctly
+    gdb_test "info break" ".*watchpoint\[ \t\]+keep\[ \t\]+y\[ \t\]+ival3\r\n\[ \t]+breakpoint already hit 4 times.*" "Watchpoint hit count is 4"
 
     # Continue until the next change, from 3 to 4.
     # Note that this one is outside the loop.
 
     gdb_test "cont" "Continuing.*\[Ww\]atchpoint.*ival3.*Old value = 3.*New value = 4.*ival3 = count; ival4 = count;.*" "watchpoint hit, fifth time"
+
+    # Check that the hit count is reported correctly
+    gdb_test "info break" ".*watchpoint\[ \t\]+keep\[ \t\]+y\[ \t\]+ival3\r\n\[ \t]+breakpoint already hit 5 times.*" "Watchpoint hit count is 5"
 
     # Continue until we hit the finishing marker function.
     # Make sure we hit no more watchpoints.
@@ -361,6 +382,7 @@ proc test_stepping {} {
 	# This doesn't occur if the call dummy starts with a call,
 	# because we are out of the dummy by the first time the inferior
 	# stops.
+	clear_xfail "arm*-*-*"
 	clear_xfail "d10v*-*-*"
 	clear_xfail "m68*-*-*"
 	clear_xfail "i*86*-*-*"
@@ -388,8 +410,10 @@ proc test_stepping {} {
 
 	send_gdb "finish\n"
 	gdb_expect {
-	    -re "Run.*exit from.*marker1.* at" { }
-	    default { fail "finish from marker1" ; return }
+	    -re "Run.*exit from.*marker1.* at" {
+		pass "finish from marker1"
+	    }
+	    default { fail "finish from marker1 (timeout)" ; return }
 	}
 
 	gdb_expect {
@@ -398,12 +422,12 @@ proc test_stepping {} {
 		exp_continue
 	    }
 	    -re "func1 \\(\\);.*$gdb_prompt $" {
-		pass "finish from marker1"
+		pass "back at main from marker1"
 	    }
 	    -re ".*$gdb_prompt $" {
-		fail "finish from marker1"
+		fail "back at main from marker1"
 	    }
-	    default { fail "finish from marker1" ; return }
+	    default { fail "back at main from marker1 (timeout)" ; return }
 	}
 
 	gdb_test "next" "for \\(count = 0.*" "next to `for' in watchpoint.exp"
@@ -431,7 +455,7 @@ proc test_stepping {} {
 	    -re ".*$gdb_prompt $" {
 		fail "until out of loop"
 	    }
-	    default { fail "until out of loop" ; return }
+	    default { fail "until out of loop (timeout)" ; return }
 	}
 
 	gdb_test "step" "ival2 = count.*" "step to ival2 assignment"
@@ -442,9 +466,9 @@ proc test_stepping {} {
 proc test_watchpoint_triggered_in_syscall {} {
     global gdb_prompt
 
-    if [target_info exists gdb,noinferiorio] {
-	verbose "Skipping test_watchpoint_triggered_in_syscall due to noinferiorio"
-	return
+    # These tests won't work without printf support.
+    if [gdb_skip_stdio_test "watchpoints triggered in syscall"] {
+	return;
     }
     # Run until we get to the first marker function.
     set x 0
@@ -629,6 +653,7 @@ gdb_exit
 gdb_start
 gdb_reinitialize_dir $srcdir/$subdir
 gdb_load $binfile
+set prev_timeout $timeout
 set timeout 600	
 verbose "Timeout now 600 sec.\n"
 
@@ -774,3 +799,7 @@ if [initialize] then {
       }
     }
 }
+
+# Restore old timeout
+set timeout $prev_timeout
+verbose "Timeout now $timeout sec.\n"

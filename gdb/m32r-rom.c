@@ -1,6 +1,7 @@
 /* Remote debugging interface to m32r and mon2000 ROM monitors for GDB, 
    the GNU debugger.
-   Copyright 1996 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001
+   Free Software Foundation, Inc.
 
    Adapted by Michael Snyder of Cygnus Support.
 
@@ -37,10 +38,10 @@
 #include "objfiles.h"		/* for ALL_OBJFILES etc. */
 #include "inferior.h"		/* for write_pc() */
 #include <ctype.h>
+#include "regcache.h"
 
-extern void report_transfer_performance PARAMS ((unsigned long, time_t, time_t));
+extern void report_transfer_performance (unsigned long, time_t, time_t);
 
-#ifndef _MSC_VER
 /*
  * All this stuff just to get my host computer's IP address!
  */
@@ -49,7 +50,6 @@ extern void report_transfer_performance PARAMS ((unsigned long, time_t, time_t))
 #include <netinet/in.h>		/* for struct in_addr */
 #if 1
 #include <arpa/inet.h>		/* for inet_ntoa */
-#endif
 #endif
 
 static char *board_addr;	/* user-settable IP address for M32R-EVA */
@@ -62,11 +62,9 @@ static char *download_path;	/* user-settable path for SREC files     */
  */
 
 static void
-m32r_load_section (abfd, s, data_count)
-     bfd *abfd;
-     asection *s;
-     unsigned int *data_count;
+m32r_load_section (bfd *abfd, asection *s, void *obj)
 {
+  unsigned int *data_count = obj;
   if (s->flags & SEC_LOAD)
     {
       bfd_size_type section_size = bfd_section_size (abfd, s);
@@ -95,8 +93,7 @@ m32r_load_section (abfd, s, data_count)
 }
 
 static int
-m32r_load_1 (dummy)
-     void *dummy;
+m32r_load_1 (void *dummy)
 {
   int data_count = 0;
 
@@ -109,11 +106,8 @@ m32r_load_1 (dummy)
  */
 
 static void
-m32r_load (filename, from_tty)
-     char *filename;
-     int from_tty;
+m32r_load (char *filename, int from_tty)
 {
-  extern int inferior_pid;
   bfd *abfd;
   asection *s;
   unsigned int i, data_count = 0;
@@ -169,7 +163,7 @@ m32r_load (filename, from_tty)
   if (exec_bfd)
     write_pc (bfd_get_start_address (exec_bfd));
 
-  inferior_pid = 0;		/* No process now */
+  inferior_ptid = null_ptid;	/* No process now */
 
   /* This is necessary because many things were based on the PC at the
      time that we attached to the monitor, which is no longer valid
@@ -182,15 +176,13 @@ m32r_load (filename, from_tty)
 }
 
 static void
-m32r_load_gen (filename, from_tty)
-     char *filename;
-     int from_tty;
+m32r_load_gen (char *filename, int from_tty)
 {
   generic_load (filename, from_tty);
 }
 
-static void m32r_open PARAMS ((char *args, int from_tty));
-static void mon2000_open PARAMS ((char *args, int from_tty));
+static void m32r_open (char *args, int from_tty);
+static void mon2000_open (char *args, int from_tty);
 
 /* This array of registers needs to match the indexes used by GDB. The
    whole reason this exists is because the various ROM monitors use
@@ -204,11 +196,7 @@ static char *m32r_regnames[] =
 };
 
 static void
-m32r_supply_register (regname, regnamelen, val, vallen)
-     char *regname;
-     int regnamelen;
-     char *val;
-     int vallen;
+m32r_supply_register (char *regname, int regnamelen, char *val, int vallen)
 {
   int regno;
   int num_regs = sizeof (m32r_regnames) / sizeof (m32r_regnames[0]);
@@ -337,9 +325,7 @@ init_m32r_cmds (void)
 }				/* init_m32r_cmds */
 
 static void
-m32r_open (args, from_tty)
-     char *args;
-     int from_tty;
+m32r_open (char *args, int from_tty)
 {
   monitor_open (args, &m32r_cmds, from_tty);
 }
@@ -399,22 +385,16 @@ init_mon2000_cmds (void)
 }				/* init_mon2000_cmds */
 
 static void
-mon2000_open (args, from_tty)
-     char *args;
-     int from_tty;
+mon2000_open (char *args, int from_tty)
 {
   monitor_open (args, &mon2000_cmds, from_tty);
 }
-
-#ifndef _MSC_VER
 
 /* Function: set_board_address
    Tell the BootOne monitor what it's ethernet IP address is. */
 
 static void
-m32r_set_board_address (args, from_tty)
-     char *args;
-     int from_tty;
+m32r_set_board_address (char *args, int from_tty)
 {
   int resp_len;
   char buf[1024];
@@ -433,9 +413,7 @@ m32r_set_board_address (args, from_tty)
    Tell the BootOne monitor what gdb's ethernet IP address is. */
 
 static void
-m32r_set_server_address (args, from_tty)
-     char *args;
-     int from_tty;
+m32r_set_server_address (char *args, int from_tty)
 {
   int resp_len;
   char buf[1024];
@@ -454,9 +432,7 @@ m32r_set_server_address (args, from_tty)
    Tell the BootOne monitor the default path for downloadable SREC files. */
 
 static void
-m32r_set_download_path (args, from_tty)
-     char *args;
-     int from_tty;
+m32r_set_download_path (char *args, int from_tty)
 {
   int resp_len;
   char buf[1024];
@@ -472,14 +448,11 @@ m32r_set_download_path (args, from_tty)
 }
 
 static void
-m32r_upload_command (args, from_tty)
-     char *args;
-     int from_tty;
+m32r_upload_command (char *args, int from_tty)
 {
   bfd *abfd;
   asection *s;
   time_t start_time, end_time;	/* for timing of download */
-  extern int inferior_pid;
   int resp_len, data_count = 0;
   char buf[1024];
   struct hostent *hostent;
@@ -503,7 +476,7 @@ m32r_upload_command (args, from_tty)
 	error ("Please use 'set board-address' to set the M32R-EVA board's IP address.");
       if (strchr (myIPaddress, '('))
 	*(strchr (myIPaddress, '(')) = '\0';	/* delete trailing junk */
-      board_addr = strsave (myIPaddress);
+      board_addr = xstrdup (myIPaddress);
     }
   if (server_addr == 0)
     {
@@ -531,7 +504,7 @@ m32r_upload_command (args, from_tty)
   if (args[0] != '/' && download_path == 0)
     {
       if (current_directory)
-	download_path = strsave (current_directory);
+	download_path = xstrdup (current_directory);
       else
 	error ("Need to know default download path (use 'set download-path')");
     }
@@ -586,7 +559,7 @@ m32r_upload_command (args, from_tty)
       report_transfer_performance (data_count, start_time, end_time);
       printf_filtered ("Start address 0x%lx\n", bfd_get_start_address (abfd));
     }
-  inferior_pid = 0;		/* No process now */
+  inferior_ptid = null_ptid;	/* No process now */
 
   /* This is necessary because many things were based on the PC at the
      time that we attached to the monitor, which is no longer valid
@@ -598,10 +571,8 @@ m32r_upload_command (args, from_tty)
   clear_symtab_users ();
 }
 
-#endif /* ! _MSC_VER */
-
 void
-_initialize_m32r_rom ()
+_initialize_m32r_rom (void)
 {
   /* Initialize m32r RevC monitor target */
   init_m32r_cmds ();
@@ -627,7 +598,6 @@ Specify the serial device it is connected to (e.g. /dev/ttya).";
   mon2000_ops.to_open = mon2000_open;
   add_target (&mon2000_ops);
 
-#ifndef _MSC_VER
   add_show_from_set
     (add_set_cmd ("download-path", class_obscure, var_string,
 		  (char *) &download_path,
@@ -653,5 +623,4 @@ Specify the serial device it is connected to (e.g. /dev/ttya).";
       "Upload the srec file via the monitor's Ethernet upload capability.");
 
   add_com ("tload", class_obscure, m32r_load, "test upload command.");
-#endif
 }

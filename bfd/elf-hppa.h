@@ -1,5 +1,5 @@
 /* Common code for PA ELF implementations.
-   Copyright (C) 1999 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
 
 This file is part of BFD, the Binary File Descriptor library.
 
@@ -28,6 +28,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #if ARCH_SIZE == 64
 #define ELF_R_TYPE(X)   ELF64_R_TYPE(X)
 #define ELF_R_SYM(X)   ELF64_R_SYM(X)
+#define elf_hppa_internal_shdr Elf64_Internal_Shdr
+#define elf_hppa_reloc_final_type elf64_hppa_reloc_final_type
 #define _bfd_elf_hppa_gen_reloc_type _bfd_elf64_hppa_gen_reloc_type
 #define elf_hppa_relocate_section elf64_hppa_relocate_section
 #define bfd_elf_bfd_final_link bfd_elf64_bfd_final_link
@@ -36,14 +38,53 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #if ARCH_SIZE == 32
 #define ELF_R_TYPE(X)   ELF32_R_TYPE(X)
 #define ELF_R_SYM(X)   ELF32_R_SYM(X)
+#define elf_hppa_internal_shdr Elf32_Internal_Shdr
+#define elf_hppa_reloc_final_type elf32_hppa_reloc_final_type
 #define _bfd_elf_hppa_gen_reloc_type _bfd_elf32_hppa_gen_reloc_type
 #define elf_hppa_relocate_section elf32_hppa_relocate_section
 #define bfd_elf_bfd_final_link bfd_elf32_bfd_final_link
 #define elf_hppa_final_link elf32_hppa_final_link
 #endif
 
-static boolean
-elf_hppa_relocate_section
+static void elf_hppa_info_to_howto
+  PARAMS ((bfd *, arelent *, Elf_Internal_Rela *));
+
+static void elf_hppa_info_to_howto_rel
+  PARAMS ((bfd *, arelent *, Elf_Internal_Rel *));
+
+static reloc_howto_type * elf_hppa_reloc_type_lookup
+  PARAMS ((bfd *, bfd_reloc_code_real_type));
+
+static boolean elf_hppa_is_local_label_name
+  PARAMS ((bfd *, const char *));
+
+static boolean elf_hppa_fake_sections
+  PARAMS ((bfd *abfd, elf_hppa_internal_shdr *, asection *));
+
+static void elf_hppa_final_write_processing
+  PARAMS ((bfd *, boolean));
+
+#if ARCH_SIZE == 64
+static boolean elf_hppa_add_symbol_hook
+  PARAMS ((bfd *, struct bfd_link_info *, const Elf_Internal_Sym *,
+	   const char **, flagword *, asection **, bfd_vma *));
+
+static boolean elf_hppa_unmark_useless_dynamic_symbols
+  PARAMS ((struct elf_link_hash_entry *, PTR));
+
+static boolean elf_hppa_remark_useless_dynamic_symbols
+  PARAMS ((struct elf_link_hash_entry *, PTR));
+
+static boolean elf_hppa_is_dynamic_loader_symbol
+  PARAMS ((const char *));
+
+static void elf_hppa_record_segment_addrs
+  PARAMS ((bfd *, asection *, PTR));
+
+static boolean elf_hppa_final_link
+  PARAMS ((bfd *, struct bfd_link_info *));
+
+static boolean elf_hppa_relocate_section
   PARAMS ((bfd *, struct bfd_link_info *, bfd *, asection *,
            bfd_byte *, Elf_Internal_Rela *, Elf_Internal_Sym *, asection **));
 
@@ -53,326 +94,530 @@ static bfd_reloc_status_type elf_hppa_final_link_relocate
            asection *, struct elf_link_hash_entry *,
 	   struct elf64_hppa_dyn_hash_entry *));
 
-static unsigned long elf_hppa_relocate_insn
-  PARAMS ((unsigned long, long, unsigned long));
-
-static boolean elf_hppa_add_symbol_hook
-  PARAMS ((bfd *, struct bfd_link_info *, const Elf_Internal_Sym *,
-	   const char **, flagword *, asection **, bfd_vma *));
-
-static boolean elf_hppa_final_link
-  PARAMS ((bfd *, struct bfd_link_info *));
-
-static boolean elf_hppa_unmark_useless_dynamic_symbols
-  PARAMS ((struct elf_link_hash_entry *, PTR));
-
-static boolean elf_hppa_remark_useless_dynamic_symbols
-  PARAMS ((struct elf_link_hash_entry *, PTR));
-
-static void elf_hppa_record_segment_addrs
-  PARAMS ((bfd *, asection *, PTR));
+static int elf_hppa_relocate_insn
+  PARAMS ((int, int, unsigned int));
+#endif
 
 /* ELF/PA relocation howto entries.  */
 
 static reloc_howto_type elf_hppa_howto_table[ELF_HOWTO_TABLE_SIZE] =
 {
-  {R_PARISC_NONE, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_NONE"},
+  { R_PARISC_NONE, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_NONE", false, 0, 0, false },
 
   /* The values in DIR32 are to placate the check in
      _bfd_stab_section_find_nearest_line.  */
-  {R_PARISC_DIR32, 0, 2, 32, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DIR32", false, 0, 0xffffffff, false},
-  {R_PARISC_DIR21L, 0, 0, 21, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DIR21L"},
-  {R_PARISC_DIR17R, 0, 0, 17, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DIR17R"},
-  {R_PARISC_DIR17F, 0, 0, 17, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DIR17F"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_DIR14R, 0, 0, 14, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DIR14R"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_PCREL32, 0, 0, 32, true, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PCREL32"},
-
-  {R_PARISC_PCREL21L, 0, 0, 21, true, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PCREL21L"},
-  {R_PARISC_PCREL17R, 0, 0, 17, true, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PCREL17R"},
-  {R_PARISC_PCREL17F, 0, 0, 17, true, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PCREL17F"},
-  {R_PARISC_PCREL17C, 0, 0, 17, true, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PCREL17C"},
-  {R_PARISC_PCREL14R, 0, 0, 14, true, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PCREL14R"},
-  {R_PARISC_PCREL14F, 0, 0, 14, true, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PCREL14F"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_DPREL21L, 0, 0, 21, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DPREL21L"},
-  {R_PARISC_DPREL14WR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DPREL14WR"},
-
-  {R_PARISC_DPREL14DR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DPREL14DR"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_DPREL14R, 0, 0, 14, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DPREL14R"},
-  {R_PARISC_DPREL14F, 0, 0, 14, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DPREL14F"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_DLTREL21L, 0, 0, 21, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DLTREL21L"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-
-  {R_PARISC_DLTREL14R, 0, 0, 14, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DLTREL14R"},
-  {R_PARISC_DLTREL14F, 0, 0, 14, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DLTREL14F"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_DLTIND21L, 0, 0, 21, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DLTIND21L"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_DLTIND14R, 0, 0, 14, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DLTIND14R"},
-  {R_PARISC_DLTIND14F, 0, 0, 14, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DLTIND14F"},
-
-  {R_PARISC_SETBASE, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_SETBASE"},
-  {R_PARISC_SECREL32, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_SECREL32"},
-  {R_PARISC_BASEREL21L, 0, 0, 21, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_BASEREL21L"},
-  {R_PARISC_BASEREL17R, 0, 0, 17, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_BASEREL17R"},
-  {R_PARISC_BASEREL17F, 0, 0, 17, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_BASEREL17F"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_BASEREL14R, 0, 0, 14, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_BASEREL14R"},
-  {R_PARISC_BASEREL14F, 0, 0, 14, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_BASEREL14F"},
-  {R_PARISC_SEGBASE, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_SEGBASE"},
-  {R_PARISC_SEGREL32, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_SEGREL32"},
-
-  {R_PARISC_PLTOFF21L, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PLTOFF21L"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_PLTOFF14R, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PLTOFF14R"},
-  {R_PARISC_PLTOFF14F, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PLTOFF14F"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_LTOFF_FPTR32, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF_FPTR32"},
-  {R_PARISC_LTOFF_FPTR21L, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF_FPTR21L"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_LTOFF_FPTR14R, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF_FPTR14R"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_FPTR64, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_FPTR64"},
-  {R_PARISC_PLABEL32, 0, 0, 32, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PLABEL32"},
-  {R_PARISC_PLABEL21L, 0, 0, 21, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PLABEL21L"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-
-  {R_PARISC_PLABEL14R, 0, 0, 14, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PLABEL14R"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_PCREL64, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PCREL64"},
-  {R_PARISC_PCREL22C, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PCREL22C"},
-  {R_PARISC_PCREL22F, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PCREL22F"},
-  {R_PARISC_PCREL14WR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PCREL14WR"},
-  {R_PARISC_PCREL14DR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PCREL14DR"},
-  {R_PARISC_PCREL16F, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PCREL16F"},
-  {R_PARISC_PCREL16WF, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PCREL16WF"},
-  {R_PARISC_PCREL16DF, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PCREL16DF"},
-
-  {R_PARISC_DIR64, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DIR64"},
-  {R_PARISC_NONE, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_NONE"},
-  {R_PARISC_NONE, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_NONE"},
-  {R_PARISC_DIR14WR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DIR14WR"},
-  {R_PARISC_DIR14DR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DIR14DR"},
-  {R_PARISC_DIR16F, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DIR16F"},
-  {R_PARISC_DIR16WF, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DIR16WF"},
-  {R_PARISC_DIR16DF, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DIR16DF"},
-  {R_PARISC_GPREL64, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_GPREL64"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_DLTREL14WR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DLTREL14WR"},
-  {R_PARISC_DLTREL14DR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DLTREL14DR"},
-  {R_PARISC_GPREL16F, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_GPREL16F"},
-  {R_PARISC_GPREL16WF, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_GPREL16WF"},
-  {R_PARISC_GPREL16DF, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_GPREL16DF"},
-  {R_PARISC_LTOFF64, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF64"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_DLTIND14WR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DLTIND14WR"},
-
-  {R_PARISC_DLTIND14DR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_DLTIND14DR"},
-  {R_PARISC_LTOFF16F, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF16F"},
-  {R_PARISC_LTOFF16WF, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF16DF"},
-  {R_PARISC_LTOFF16DF, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF16DF"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_BASEREL14WR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_BSEREL14WR"},
-  {R_PARISC_BASEREL14DR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_BASEREL14DR"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_SEGREL64, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_SEGREL64"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_PLTOFF14WR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PLTOFF14WR"},
-  {R_PARISC_PLTOFF14DR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PLTOFF14DR"},
-  {R_PARISC_PLTOFF16F, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PLTOFF16F"},
-  {R_PARISC_PLTOFF16WF, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PLTOFF16WF"},
-  {R_PARISC_PLTOFF16DF, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_PLTOFF16DF"},
-
-  {R_PARISC_LTOFF_FPTR64, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_LTOFF_FPTR14WR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF_FPTR14WR"},
-  {R_PARISC_LTOFF_FPTR14DR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF_FPTR14DR"},
-  {R_PARISC_LTOFF_FPTR16F, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF_FPTR16F"},
-  {R_PARISC_LTOFF_FPTR16WF, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF_FPTR16WF"},
-  {R_PARISC_LTOFF_FPTR16DF, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_COPY, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_COPY"},
-  {R_PARISC_IPLT, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_IPLT"},
-
-  {R_PARISC_EPLT, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_EPLT"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_TPREL32, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_TPREL32"},
-  {R_PARISC_TPREL21L, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_TPREL21L"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_TPREL14R, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_TPREL14R"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_LTOFF_TP21L, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF_TP21L"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_LTOFF_TP14R, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_LTOFF_TP14F, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF_TP14F"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_TPREL64, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_TPREL64"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_TPREL14WR, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_TPREL14WR"},
-
-  {R_PARISC_TPREL14DR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_TPREL14DR"},
-  {R_PARISC_TPREL16F, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_TPREL16F"},
-  {R_PARISC_TPREL16WF, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_TPREL16WF"},
-  {R_PARISC_TPREL16DF, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_TPREL16DF"},
-  {R_PARISC_LTOFF_TP64, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF_TP64"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED"},
-  {R_PARISC_LTOFF_TP14WR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF_TP14WR"},
-  {R_PARISC_LTOFF_TP14DR, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF_TP14DR"},
-  {R_PARISC_LTOFF_TP16F, 0, 0, 0, false, 0, complain_overflow_dont, NULL, "R_PARISC_LTOFF_TP16F"},
-
-  {R_PARISC_LTOFF_TP16WF, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF_TP16WF"},
-  {R_PARISC_LTOFF_TP16DF, 0, 0, 0, false, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_PARISC_LTOFF_TP16DF"},
+  { R_PARISC_DIR32, 0, 2, 32, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DIR32", false, 0, 0xffffffff, false },
+  { R_PARISC_DIR21L, 0, 0, 21, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DIR21L", false, 0, 0, false },
+  { R_PARISC_DIR17R, 0, 0, 17, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DIR17R", false, 0, 0, false },
+  { R_PARISC_DIR17F, 0, 0, 17, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DIR17F", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_DIR14R, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DIR14R", false, 0, 0, false },
+  { R_PARISC_DIR14F, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DIR14F", false, 0, 0, false },
+  /* 8 */
+  { R_PARISC_PCREL12F, 0, 0, 12, true, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PCREL12F", false, 0, 0, false },
+  { R_PARISC_PCREL32, 0, 0, 32, true, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PCREL32", false, 0, 0, false },
+  { R_PARISC_PCREL21L, 0, 0, 21, true, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PCREL21L", false, 0, 0, false },
+  { R_PARISC_PCREL17R, 0, 0, 17, true, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PCREL17R", false, 0, 0, false },
+  { R_PARISC_PCREL17F, 0, 0, 17, true, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PCREL17F", false, 0, 0, false },
+  { R_PARISC_PCREL17C, 0, 0, 17, true, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PCREL17C", false, 0, 0, false },
+  { R_PARISC_PCREL14R, 0, 0, 14, true, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PCREL14R", false, 0, 0, false },
+  { R_PARISC_PCREL14F, 0, 0, 14, true, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PCREL14F", false, 0, 0, false },
+  /* 16 */
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_DPREL21L, 0, 0, 21, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DPREL21L", false, 0, 0, false },
+  { R_PARISC_DPREL14WR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DPREL14WR", false, 0, 0, false },
+  { R_PARISC_DPREL14DR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DPREL14DR", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_DPREL14R, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DPREL14R", false, 0, 0, false },
+  { R_PARISC_DPREL14F, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DPREL14F", false, 0, 0, false },
+  /* 24 */
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_DLTREL21L, 0, 0, 21, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DLTREL21L", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_DLTREL14R, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DLTREL14R", false, 0, 0, false },
+  { R_PARISC_DLTREL14F, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DLTREL14F", false, 0, 0, false },
+  /* 32 */
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_DLTIND21L, 0, 0, 21, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DLTIND21L", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_DLTIND14R, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DLTIND14R", false, 0, 0, false },
+  { R_PARISC_DLTIND14F, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DLTIND14F", false, 0, 0, false },
+  /* 40 */
+  { R_PARISC_SETBASE, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_SETBASE", false, 0, 0, false },
+  { R_PARISC_SECREL32, 0, 0, 32, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_SECREL32", false, 0, 0, false },
+  { R_PARISC_BASEREL21L, 0, 0, 21, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_BASEREL21L", false, 0, 0, false },
+  { R_PARISC_BASEREL17R, 0, 0, 17, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_BASEREL17R", false, 0, 0, false },
+  { R_PARISC_BASEREL17F, 0, 0, 17, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_BASEREL17F", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_BASEREL14R, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_BASEREL14R", false, 0, 0, false },
+  { R_PARISC_BASEREL14F, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_BASEREL14F", false, 0, 0, false },
+  /* 48 */
+  { R_PARISC_SEGBASE, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_SEGBASE", false, 0, 0, false },
+  { R_PARISC_SEGREL32, 0, 0, 32, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_SEGREL32", false, 0, 0, false },
+  { R_PARISC_PLTOFF21L, 0, 0, 21, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PLTOFF21L", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_PLTOFF14R, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PLTOFF14R", false, 0, 0, false },
+  { R_PARISC_PLTOFF14F, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PLTOFF14F", false, 0, 0, false },
+  /* 56 */
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_LTOFF_FPTR32, 0, 0, 32, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF_FPTR32", false, 0, 0, false },
+  { R_PARISC_LTOFF_FPTR21L, 0, 0, 21, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF_FPTR21L", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_LTOFF_FPTR14R, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF_FPTR14R", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  /* 64 */
+  { R_PARISC_FPTR64, 0, 0, 64, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_FPTR64", false, 0, 0, false },
+  { R_PARISC_PLABEL32, 0, 0, 32, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PLABEL32", false, 0, 0, false },
+  { R_PARISC_PLABEL21L, 0, 0, 21, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PLABEL21L", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_PLABEL14R, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PLABEL14R", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  /* 72 */
+  { R_PARISC_PCREL64, 0, 0, 64, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PCREL64", false, 0, 0, false },
+  { R_PARISC_PCREL22C, 0, 0, 22, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PCREL22C", false, 0, 0, false },
+  { R_PARISC_PCREL22F, 0, 0, 22, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PCREL22F", false, 0, 0, false },
+  { R_PARISC_PCREL14WR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PCREL14WR", false, 0, 0, false },
+  { R_PARISC_PCREL14DR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PCREL14DR", false, 0, 0, false },
+  { R_PARISC_PCREL16F, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PCREL16F", false, 0, 0, false },
+  { R_PARISC_PCREL16WF, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PCREL16WF", false, 0, 0, false },
+  { R_PARISC_PCREL16DF, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PCREL16DF", false, 0, 0, false },
+  /* 80 */
+  { R_PARISC_DIR64, 0, 0, 64, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DIR64", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_DIR14WR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DIR14WR", false, 0, 0, false },
+  { R_PARISC_DIR14DR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DIR14DR", false, 0, 0, false },
+  { R_PARISC_DIR16F, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DIR16F", false, 0, 0, false },
+  { R_PARISC_DIR16WF, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DIR16WF", false, 0, 0, false },
+  { R_PARISC_DIR16DF, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DIR16DF", false, 0, 0, false },
+  /* 88 */
+  { R_PARISC_GPREL64, 0, 0, 64, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_GPREL64", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_DLTREL14WR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DLTREL14WR", false, 0, 0, false },
+  { R_PARISC_DLTREL14DR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DLTREL14DR", false, 0, 0, false },
+  { R_PARISC_GPREL16F, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_GPREL16F", false, 0, 0, false },
+  { R_PARISC_GPREL16WF, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_GPREL16WF", false, 0, 0, false },
+  { R_PARISC_GPREL16DF, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_GPREL16DF", false, 0, 0, false },
+  /* 96 */
+  { R_PARISC_LTOFF64, 0, 0, 64, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF64", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_DLTIND14WR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DLTIND14WR", false, 0, 0, false },
+  { R_PARISC_DLTIND14DR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_DLTIND14DR", false, 0, 0, false },
+  { R_PARISC_LTOFF16F, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF16F", false, 0, 0, false },
+  { R_PARISC_LTOFF16WF, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF16DF", false, 0, 0, false },
+  { R_PARISC_LTOFF16DF, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF16DF", false, 0, 0, false },
+  /* 104 */
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_BASEREL14WR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_BASEREL14WR", false, 0, 0, false },
+  { R_PARISC_BASEREL14DR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_BASEREL14DR", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  /* 112 */
+  { R_PARISC_SEGREL64, 0, 0, 64, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_SEGREL64", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_PLTOFF14WR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PLTOFF14WR", false, 0, 0, false },
+  { R_PARISC_PLTOFF14DR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PLTOFF14DR", false, 0, 0, false },
+  { R_PARISC_PLTOFF16F, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PLTOFF16F", false, 0, 0, false },
+  { R_PARISC_PLTOFF16WF, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PLTOFF16WF", false, 0, 0, false },
+  { R_PARISC_PLTOFF16DF, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_PLTOFF16DF", false, 0, 0, false },
+  /* 120 */
+  { R_PARISC_LTOFF_FPTR64, 0, 0, 64, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_LTOFF_FPTR14WR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF_FPTR14WR", false, 0, 0, false },
+  { R_PARISC_LTOFF_FPTR14DR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF_FPTR14DR", false, 0, 0, false },
+  { R_PARISC_LTOFF_FPTR16F, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF_FPTR16F", false, 0, 0, false },
+  { R_PARISC_LTOFF_FPTR16WF, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF_FPTR16WF", false, 0, 0, false },
+  { R_PARISC_LTOFF_FPTR16DF, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  /* 128 */
+  { R_PARISC_COPY, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_COPY", false, 0, 0, false },
+  { R_PARISC_IPLT, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_IPLT", false, 0, 0, false },
+  { R_PARISC_EPLT, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_EPLT", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  /* 136 */
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  /* 144 */
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  /* 152 */
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_TPREL32, 0, 0, 32, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_TPREL32", false, 0, 0, false },
+  { R_PARISC_TPREL21L, 0, 0, 21, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_TPREL21L", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_TPREL14R, 0, 0, 14, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_TPREL14R", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  /* 160 */
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_LTOFF_TP21L, 0, 0, 21, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF_TP21L", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_LTOFF_TP14R, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_LTOFF_TP14F, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF_TP14F", false, 0, 0, false },
+  /* 168 */
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  /* 176 */
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  /* 184 */
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  /* 192 */
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  /* 200 */
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  /* 208 */
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  /* 216 */
+  { R_PARISC_TPREL64, 0, 0, 64, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_TPREL64", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_TPREL14WR, 0, 0, 14, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_TPREL14WR", false, 0, 0, false },
+  { R_PARISC_TPREL14DR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_TPREL14DR", false, 0, 0, false },
+  { R_PARISC_TPREL16F, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_TPREL16F", false, 0, 0, false },
+  { R_PARISC_TPREL16WF, 0, 0, 16, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_TPREL16WF", false, 0, 0, false },
+  { R_PARISC_TPREL16DF, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_TPREL16DF", false, 0, 0, false },
+  /* 224 */
+  { R_PARISC_LTOFF_TP64, 0, 0, 64, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF_TP64", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_UNIMPLEMENTED, 0, 0, 0, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_UNIMPLEMENTED", false, 0, 0, false },
+  { R_PARISC_LTOFF_TP14WR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF_TP14WR", false, 0, 0, false },
+  { R_PARISC_LTOFF_TP14DR, 0, 0, 14, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF_TP14DR", false, 0, 0, false },
+  { R_PARISC_LTOFF_TP16F, 0, 0, 16, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF_TP16F", false, 0, 0, false },
+  { R_PARISC_LTOFF_TP16WF, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF_TP16WF", false, 0, 0, false },
+  { R_PARISC_LTOFF_TP16DF, 0, 0, 16, false, 0, complain_overflow_bitfield,
+    bfd_elf_generic_reloc, "R_PARISC_LTOFF_TP16DF", false, 0, 0, false },
+  /* 232 */
+  { R_PARISC_GNU_VTENTRY, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_GNU_VTENTRY", false, 0, 0, false },
+  { R_PARISC_GNU_VTINHERIT, 0, 0, 0, false, 0, complain_overflow_dont,
+    bfd_elf_generic_reloc, "R_PARISC_GNU_VTINHERIT", false, 0, 0, false },
 };
 
 #define OFFSET_14R_FROM_21L 4
 #define OFFSET_14F_FROM_21L 5
 
-/* Return one (or more) BFD relocations which implement the base
-   relocation with modifications based on format and field.  */
+/* Return the final relocation type for the given base type, instruction
+   format, and field selector.  */
 
-elf_hppa_reloc_type **
-_bfd_elf_hppa_gen_reloc_type (abfd, base_type, format, field, ignore, sym)
+elf_hppa_reloc_type
+elf_hppa_reloc_final_type (abfd, base_type, format, field)
      bfd *abfd;
      elf_hppa_reloc_type base_type;
      int format;
-     int field;
-     int ignore;
-     asymbol *sym;
+     unsigned int field;
 {
-  elf_hppa_reloc_type *finaltype;
-  elf_hppa_reloc_type **final_types;
-
-  /* Allocate slots for the BFD relocation.  */
-  final_types = ((elf_hppa_reloc_type **)
-		 bfd_alloc (abfd, sizeof (elf_hppa_reloc_type *) * 2));
-  if (final_types == NULL)
-    return NULL;
-
-  /* Allocate space for the relocation itself.  */
-  finaltype = ((elf_hppa_reloc_type *)
-	       bfd_alloc (abfd, sizeof (elf_hppa_reloc_type)));
-  if (finaltype == NULL)
-    return NULL;
-
-  /* Some reasonable defaults.  */
-  final_types[0] = finaltype;
-  final_types[1] = NULL;
-
-#define final_type finaltype[0]
-
-  final_type = base_type;
+  elf_hppa_reloc_type final_type = base_type;
 
   /* Just a tangle of nested switch statements to deal with the braindamage
      that a different field selector means a completely different relocation
@@ -390,8 +635,12 @@ _bfd_elf_hppa_gen_reloc_type (abfd, base_type, format, field, ignore, sym)
 	case 14:
 	  switch (field)
 	    {
+	    case e_fsel:
+	      final_type = R_PARISC_DIR14F;
+	      break;
 	    case e_rsel:
 	    case e_rrsel:
+	    case e_rdsel:
 	      final_type = R_PARISC_DIR14R;
 	      break;
 	    case e_rtsel:
@@ -407,7 +656,7 @@ _bfd_elf_hppa_gen_reloc_type (abfd, base_type, format, field, ignore, sym)
 	      final_type = R_PARISC_PLABEL14R;
 	      break;
 	    default:
-	      return NULL;
+	      return R_PARISC_NONE;
 	    }
 	  break;
 
@@ -419,10 +668,11 @@ _bfd_elf_hppa_gen_reloc_type (abfd, base_type, format, field, ignore, sym)
 	      break;
 	    case e_rsel:
 	    case e_rrsel:
+	    case e_rdsel:
 	      final_type = R_PARISC_DIR17R;
 	      break;
 	    default:
-	      return NULL;
+	      return R_PARISC_NONE;
 	    }
 	  break;
 
@@ -431,6 +681,9 @@ _bfd_elf_hppa_gen_reloc_type (abfd, base_type, format, field, ignore, sym)
 	    {
 	    case e_lsel:
 	    case e_lrsel:
+	    case e_ldsel:
+	    case e_nlsel:
+	    case e_nlrsel:
 	      final_type = R_PARISC_DIR21L;
 	      break;
 	    case e_ltsel:
@@ -443,7 +696,7 @@ _bfd_elf_hppa_gen_reloc_type (abfd, base_type, format, field, ignore, sym)
 	      final_type = R_PARISC_PLABEL21L;
 	      break;
 	    default:
-	      return NULL;
+	      return R_PARISC_NONE;
 	    }
 	  break;
 
@@ -462,7 +715,7 @@ _bfd_elf_hppa_gen_reloc_type (abfd, base_type, format, field, ignore, sym)
 	      final_type = R_PARISC_PLABEL32;
 	      break;
 	    default:
-	      return NULL;
+	      return R_PARISC_NONE;
 	    }
 	  break;
 
@@ -476,15 +729,14 @@ _bfd_elf_hppa_gen_reloc_type (abfd, base_type, format, field, ignore, sym)
 	      final_type = R_PARISC_FPTR64;
 	      break;
 	    default:
-	      return NULL;
+	      return R_PARISC_NONE;
 	    }
 	  break;
 
 	default:
-	  return NULL;
+	  return R_PARISC_NONE;
 	}
       break;
-
 
     case R_HPPA_GOTOFF:
       switch (format)
@@ -494,49 +746,69 @@ _bfd_elf_hppa_gen_reloc_type (abfd, base_type, format, field, ignore, sym)
 	    {
 	    case e_rsel:
 	    case e_rrsel:
+	    case e_rdsel:
+	      /* R_PARISC_DLTREL14R for elf64, R_PARISC_DPREL14R for elf32  */
 	      final_type = base_type + OFFSET_14R_FROM_21L;
 	      break;
 	    case e_fsel:
+	      /* R_PARISC_DLTREL14F for elf64, R_PARISC_DPREL14F for elf32  */
 	      final_type = base_type + OFFSET_14F_FROM_21L;
 	      break;
 	    default:
-	      return NULL;
+	      return R_PARISC_NONE;
 	    }
 	  break;
 
 	case 21:
 	  switch (field)
 	    {
-	    case e_lrsel:
 	    case e_lsel:
+	    case e_lrsel:
+	    case e_ldsel:
+	    case e_nlsel:
+	    case e_nlrsel:
+	      /* R_PARISC_DLTREL21L for elf64, R_PARISC_DPREL21L for elf32  */
 	      final_type = base_type;
 	      break;
 	    default:
-	      return NULL;
+	      return R_PARISC_NONE;
 	    }
 	  break;
 
 	default:
-	  return NULL;
+	  return R_PARISC_NONE;
 	}
       break;
-
 
     case R_HPPA_PCREL_CALL:
       switch (format)
 	{
+	case 12:
+	  switch (field)
+	    {
+	    case e_fsel:
+	      final_type = R_PARISC_PCREL12F;
+	      break;
+	    default:
+	      return R_PARISC_NONE;
+	    }
+	  break;
+
 	case 14:
+	  /* Contrary to appearances, these are not calls of any sort.
+	     Rather, they are loads/stores with a pcrel reloc.  */
 	  switch (field)
 	    {
 	    case e_rsel:
 	    case e_rrsel:
+	    case e_rdsel:
 	      final_type = R_PARISC_PCREL14R;
 	      break;
 	    case e_fsel:
 	      final_type = R_PARISC_PCREL14F;
 	      break;
 	    default:
-	      return NULL;
+	      return R_PARISC_NONE;
 	    }
 	  break;
 
@@ -545,13 +817,29 @@ _bfd_elf_hppa_gen_reloc_type (abfd, base_type, format, field, ignore, sym)
 	    {
 	    case e_rsel:
 	    case e_rrsel:
+	    case e_rdsel:
 	      final_type = R_PARISC_PCREL17R;
 	      break;
 	    case e_fsel:
 	      final_type = R_PARISC_PCREL17F;
 	      break;
 	    default:
-	      return NULL;
+	      return R_PARISC_NONE;
+	    }
+	  break;
+
+	case 21:
+	  switch (field)
+	    {
+	    case e_lsel:
+	    case e_lrsel:
+	    case e_ldsel:
+	    case e_nlsel:
+	    case e_nlrsel:
+	      final_type = R_PARISC_PCREL21L;
+	      break;
+	    default:
+	      return R_PARISC_NONE;
 	    }
 	  break;
 
@@ -562,35 +850,61 @@ _bfd_elf_hppa_gen_reloc_type (abfd, base_type, format, field, ignore, sym)
 	      final_type = R_PARISC_PCREL22F;
 	      break;
 	    default:
-	      return NULL;
-	    }
-	  break;
-
-	case 21:
-	  switch (field)
-	    {
-	    case e_lsel:
-	    case e_lrsel:
-	      final_type = R_PARISC_PCREL21L;
-	      break;
-	    default:
-	      return NULL;
+	      return R_PARISC_NONE;
 	    }
 	  break;
 
 	default:
-	  return NULL;
+	  return R_PARISC_NONE;
 	}
       break;
 
+    case R_PARISC_GNU_VTENTRY:
+    case R_PARISC_GNU_VTINHERIT:
     case R_PARISC_SEGREL32:
     case R_PARISC_SEGBASE:
       /* The defaults are fine for these cases.  */
       break;
 
     default:
-      return NULL;
+      return R_PARISC_NONE;
     }
+
+  return final_type;
+}
+
+/* Return one (or more) BFD relocations which implement the base
+   relocation with modifications based on format and field.  */
+
+elf_hppa_reloc_type **
+_bfd_elf_hppa_gen_reloc_type (abfd, base_type, format, field, ignore, sym)
+     bfd *abfd;
+     elf_hppa_reloc_type base_type;
+     int format;
+     unsigned int field;
+     int ignore ATTRIBUTE_UNUSED;
+     asymbol *sym ATTRIBUTE_UNUSED;
+{
+  elf_hppa_reloc_type *finaltype;
+  elf_hppa_reloc_type **final_types;
+  bfd_size_type amt = sizeof (elf_hppa_reloc_type *) * 2;
+
+  /* Allocate slots for the BFD relocation.  */
+  final_types = (elf_hppa_reloc_type **) bfd_alloc (abfd, amt);
+  if (final_types == NULL)
+    return NULL;
+
+  /* Allocate space for the relocation itself.  */
+  amt = sizeof (elf_hppa_reloc_type);
+  finaltype = (elf_hppa_reloc_type *) bfd_alloc (abfd, amt);
+  if (finaltype == NULL)
+    return NULL;
+
+  /* Some reasonable defaults.  */
+  final_types[0] = finaltype;
+  final_types[1] = NULL;
+
+  *finaltype = elf_hppa_reloc_final_type (abfd, base_type, format, field);
 
   return final_types;
 }
@@ -599,7 +913,7 @@ _bfd_elf_hppa_gen_reloc_type (abfd, base_type, format, field, ignore, sym)
 
 static void
 elf_hppa_info_to_howto (abfd, bfd_reloc, elf_reloc)
-     bfd *abfd;
+     bfd *abfd ATTRIBUTE_UNUSED;
      arelent *bfd_reloc;
      Elf_Internal_Rela *elf_reloc;
 {
@@ -612,7 +926,7 @@ elf_hppa_info_to_howto (abfd, bfd_reloc, elf_reloc)
 
 static void
 elf_hppa_info_to_howto_rel (abfd, bfd_reloc, elf_reloc)
-     bfd *abfd;
+     bfd *abfd ATTRIBUTE_UNUSED;
      arelent *bfd_reloc;
      Elf_Internal_Rel *elf_reloc;
 {
@@ -626,7 +940,7 @@ elf_hppa_info_to_howto_rel (abfd, bfd_reloc, elf_reloc)
 
 static reloc_howto_type *
 elf_hppa_reloc_type_lookup (abfd, code)
-     bfd *abfd;
+     bfd *abfd ATTRIBUTE_UNUSED;
      bfd_reloc_code_real_type code;
 {
   if ((int) code < (int) R_PARISC_UNIMPLEMENTED)
@@ -637,10 +951,68 @@ elf_hppa_reloc_type_lookup (abfd, code)
   return NULL;
 }
 
+/* Return true if SYM represents a local label symbol.  */
+
+static boolean
+elf_hppa_is_local_label_name (abfd, name)
+     bfd *abfd ATTRIBUTE_UNUSED;
+     const char *name;
+{
+  if (name[0] == 'L' && name[1] == '$')
+    return 1;
+  return _bfd_elf_is_local_label_name (abfd, name);
+}
+
+/* Set the correct type for an ELF section.  We do this by the
+   section name, which is a hack, but ought to work.  */
+
+static boolean
+elf_hppa_fake_sections (abfd, hdr, sec)
+     bfd *abfd;
+     elf_hppa_internal_shdr *hdr;
+     asection *sec;
+{
+  register const char *name;
+
+  name = bfd_get_section_name (abfd, sec);
+
+  if (strcmp (name, ".PARISC.unwind") == 0)
+    {
+      int indx;
+      asection *asec;
+#if ARCH_SIZE == 64
+      hdr->sh_type = SHT_LOPROC + 1;
+#else
+      hdr->sh_type = 1;
+#endif
+      /* ?!? How are unwinds supposed to work for symbols in arbitrary
+	 sections?  Or what if we have multiple .text sections in a single
+	 .o file?  HP really messed up on this one.
+
+	 Ugh.  We can not use elf_section_data (sec)->this_idx at this
+	 point because it is not initialized yet.
+
+	 So we (gasp) recompute it here.  Hopefully nobody ever changes the
+	 way sections are numbered in elf.c!  */
+      for (asec = abfd->sections, indx = 1; asec; asec = asec->next, indx++)
+	{
+	  if (asec->name && strcmp (asec->name, ".text") == 0)
+	    {
+	      hdr->sh_info = indx;
+	      break;
+	    }
+	}
+
+      /* I have no idea if this is really necessary or what it means.  */
+      hdr->sh_entsize = 4;
+    }
+  return true;
+}
+
 static void
 elf_hppa_final_write_processing (abfd, linker)
      bfd *abfd;
-     boolean linker;
+     boolean linker ATTRIBUTE_UNUSED;
 {
   int mach = bfd_get_mach (abfd);
 
@@ -665,58 +1037,7 @@ elf_hppa_final_write_processing (abfd, linker)
 				      | EF_PARISC_TRAPNIL);
 }
 
-/* Return true if SYM represents a local label symbol.  */
-
-static boolean
-elf_hppa_is_local_label_name (abfd, name)
-     bfd *abfd ATTRIBUTE_UNUSED;
-     const char *name;
-{
-  return (name[0] == 'L' && name[1] == '$');
-}
-
-/* Set the correct type for an ELF section.  We do this by the
-   section name, which is a hack, but ought to work.  */
-
-static boolean
-elf_hppa_fake_sections (abfd, hdr, sec)
-     bfd *abfd;
-     Elf64_Internal_Shdr *hdr;
-     asection *sec;
-{
-  register const char *name;
-
-  name = bfd_get_section_name (abfd, sec);
-
-  if (strcmp (name, ".PARISC.unwind") == 0)
-    {
-      int indx;
-      asection *sec;
-      hdr->sh_type = SHT_LOPROC + 1;
-      /* ?!? How are unwinds supposed to work for symbols in arbitrary
-	 sections?  Or what if we have multiple .text sections in a single
-	 .o file?  HP really messed up on this one.
-
-	 Ugh.  We can not use elf_section_data (sec)->this_idx at this
-	 point because it is not initialized yet.
-
-	 So we (gasp) recompute it here.  Hopefully nobody ever changes the
-	 way sections are numbered in elf.c!  */
-      for (sec = abfd->sections, indx = 1; sec; sec = sec->next, indx++)
-	{
-	  if (sec->name && strcmp (sec->name, ".text") == 0)
-	    {
-	      hdr->sh_info = indx;
-	      break;
-	    }
-	}
-
-      /* I have no idea if this is really necessary or what it means.  */
-      hdr->sh_entsize = 4;
-    }
-  return true;
-}
-
+#if ARCH_SIZE == 64
 /* Hook called by the linker routine which adds symbols from an object
    file.  HP's libraries define symbols with HP specific section
    indices, which we have to handle.  */
@@ -758,15 +1079,18 @@ elf_hppa_unmark_useless_dynamic_symbols (h, data)
 {
   struct bfd_link_info *info = (struct bfd_link_info *)data;
 
+  if (h->root.type == bfd_link_hash_warning)
+    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+
   /* If we are not creating a shared library, and this symbol is
      referenced by a shared library but is not defined anywhere, then
      the generic code will warn that it is undefined.
 
      This behavior is undesirable on HPs since the standard shared
-     libraries contain reerences to undefined symbols.
+     libraries contain references to undefined symbols.
 
      So we twiddle the flags associated with such symbols so that they
-     will not trigger the warning.  ?!? FIXME.  This is horribly fraglie.
+     will not trigger the warning.  ?!? FIXME.  This is horribly fragile.
 
      Ultimately we should have better controls over the generic ELF BFD
      linker code.  */
@@ -784,13 +1108,15 @@ elf_hppa_unmark_useless_dynamic_symbols (h, data)
   return true;
 }
 
-
 static boolean
 elf_hppa_remark_useless_dynamic_symbols (h, data)
      struct elf_link_hash_entry *h;
      PTR data;
 {
   struct bfd_link_info *info = (struct bfd_link_info *)data;
+
+  if (h->root.type == bfd_link_hash_warning)
+    h = (struct elf_link_hash_entry *) h->root.u.i.link;
 
   /* If we are not creating a shared library, and this symbol is
      referenced by a shared library but is not defined anywhere, then
@@ -819,6 +1145,23 @@ elf_hppa_remark_useless_dynamic_symbols (h, data)
   return true;
 }
 
+static boolean
+elf_hppa_is_dynamic_loader_symbol (name)
+     const char * name;
+{
+  return (! strcmp (name, "__CPU_REVISION")
+	  || ! strcmp (name, "__CPU_KEYBITS_1")
+	  || ! strcmp (name, "__SYSTEM_ID_D")
+	  || ! strcmp (name, "__FPU_MODEL")
+	  || ! strcmp (name, "__FPU_REVISION")
+	  || ! strcmp (name, "__ARGC")
+	  || ! strcmp (name, "__ARGV")
+	  || ! strcmp (name, "__ENVP")
+	  || ! strcmp (name, "__TLS_SIZE_D")
+	  || ! strcmp (name, "__LOAD_INFO")
+	  || ! strcmp (name, "__systab"));
+}
+
 /* Record the lowest address for the data and text segments.  */
 static void
 elf_hppa_record_segment_addrs (abfd, section, data)
@@ -828,18 +1171,18 @@ elf_hppa_record_segment_addrs (abfd, section, data)
 {
   struct elf64_hppa_link_hash_table *hppa_info;
   bfd_vma value;
- 
+
   hppa_info = (struct elf64_hppa_link_hash_table *)data;
 
   value = section->vma - section->filepos;
 
-  if ((section->flags & (SEC_ALLOC | SEC_LOAD | SEC_READONLY)
+  if (((section->flags & (SEC_ALLOC | SEC_LOAD | SEC_READONLY))
        == (SEC_ALLOC | SEC_LOAD | SEC_READONLY))
       && value < hppa_info->text_segment_base)
     hppa_info->text_segment_base = value;
-  else if ((section->flags & (SEC_ALLOC | SEC_LOAD | SEC_READONLY)
-       == (SEC_ALLOC | SEC_LOAD))
-      && value < hppa_info->data_segment_base)
+  else if (((section->flags & (SEC_ALLOC | SEC_LOAD | SEC_READONLY))
+	    == (SEC_ALLOC | SEC_LOAD))
+	   && value < hppa_info->data_segment_base)
     hppa_info->data_segment_base = value;
 }
 
@@ -855,14 +1198,12 @@ elf_hppa_final_link (abfd, info)
      struct bfd_link_info *info;
 {
   boolean retval;
+  struct elf64_hppa_link_hash_table *hppa_info = elf64_hppa_hash_table (info);
 
   if (! info->relocateable)
     {
       struct elf_link_hash_entry *gp;
       bfd_vma gp_val;
-      struct elf64_hppa_link_hash_table *hppa_info;
-
-      hppa_info = elf64_hppa_hash_table (info);
 
       /* The linker script defines a value for __gp iff it was referenced
 	 by one of the objects being linked.  First try to find the symbol
@@ -877,7 +1218,7 @@ elf_hppa_final_link (abfd, info)
 	  /* Adjust the value of __gp as we may want to slide it into the
 	     .plt section so that the stubs can access PLT entries without
 	     using an addil sequence.  */
-	  gp->root.u.def.value += elf64_hppa_hash_table (info)->gp_offset;
+	  gp->root.u.def.value += hppa_info->gp_offset;
 
 	  gp_val = (gp->root.u.def.section->output_section->vma
 		    + gp->root.u.def.section->output_offset
@@ -886,7 +1227,6 @@ elf_hppa_final_link (abfd, info)
       else
 	{
 	  asection *sec;
-  
 
 	  /* First look for a .plt section.  If found, then __gp is the
 	     address of the .plt + gp_offset.
@@ -919,10 +1259,10 @@ elf_hppa_final_link (abfd, info)
     }
 
   /* We need to know the base of the text and data segments so that we
-     can perform SEGREL relocations.  We will recore the base addresses
+     can perform SEGREL relocations.  We will record the base addresses
      when we encounter the first SEGREL relocation.  */
-  elf64_hppa_hash_table (info)->text_segment_base = (bfd_vma)-1;
-  elf64_hppa_hash_table (info)->data_segment_base = (bfd_vma)-1;
+  hppa_info->text_segment_base = (bfd_vma)-1;
+  hppa_info->data_segment_base = (bfd_vma)-1;
 
   /* HP's shared libraries have references to symbols that are not
      defined anywhere.  The generic ELF BFD linker code will complaim
@@ -981,7 +1321,7 @@ elf_hppa_relocate_section (output_bfd, info, input_bfd, input_section,
       bfd_vma relocation;
       bfd_reloc_status_type r;
       const char *sym_name;
-      char *dyn_name;
+      const char *dyn_name;
       char *dynh_buf = NULL;
       size_t dynh_buflen = 0;
       struct elf64_hppa_dyn_hash_entry *dyn_h = NULL;
@@ -1023,14 +1363,11 @@ elf_hppa_relocate_section (output_bfd, info, input_bfd, input_section,
 	  /* This is a local symbol.  */
 	  sym = local_syms + r_symndx;
 	  sym_sec = local_sections[r_symndx];
-	  relocation = ((ELF_ST_TYPE (sym->st_info) == STT_SECTION
-			   ? 0 : sym->st_value)
-			 + sym_sec->output_offset
-			 + sym_sec->output_section->vma);
+	  relocation = _bfd_elf_rela_local_sym (output_bfd, sym, sym_sec, rel);
 
 	  /* If this symbol has an entry in the PA64 dynamic hash
 	     table, then get it.  */
-	  dyn_name = get_dyn_name (input_bfd, h, rel,
+	  dyn_name = get_dyn_name (input_section, h, rel,
 				   &dynh_buf, &dynh_buflen);
 	  dyn_h = elf64_hppa_dyn_hash_lookup (&hppa_info->dyn_hash_table,
 					      dyn_name, false, false);
@@ -1053,7 +1390,7 @@ elf_hppa_relocate_section (output_bfd, info, input_bfd, input_section,
 
 	      /* If this symbol has an entry in the PA64 dynamic hash
 		 table, then get it.  */
-	      dyn_name = get_dyn_name (input_bfd, h, rel,
+	      dyn_name = get_dyn_name (input_section, h, rel,
 				       &dynh_buf, &dynh_buflen);
 	      dyn_h = elf64_hppa_dyn_hash_lookup (&hppa_info->dyn_hash_table,
 						  dyn_name, false, false);
@@ -1065,7 +1402,7 @@ elf_hppa_relocate_section (output_bfd, info, input_bfd, input_section,
 		{
 		  (*_bfd_error_handler)
 		    (_("%s: warning: unresolvable relocation against symbol `%s' from %s section"),
-		     bfd_get_filename (input_bfd), h->root.root.string,
+		     bfd_archive_filename (input_bfd), h->root.root.string,
 		     bfd_get_section_name (input_bfd, input_section));
 		  relocation = 0;
 		}
@@ -1079,11 +1416,17 @@ elf_hppa_relocate_section (output_bfd, info, input_bfd, input_section,
 		relocation = 0;
 	    }
 	  /* Allow undefined symbols in shared libraries.  */
-          else if (info->shared && !info->symbolic && !info->no_undefined)
+          else if (info->shared && !info->no_undefined
+		   && ELF_ST_VISIBILITY (h->other) == STV_DEFAULT)
 	    {
+	      if (info->symbolic)
+		(*info->callbacks->undefined_symbol)
+		  (info, h->root.root.string, input_bfd,
+		   input_section, rel->r_offset, false);
+
 	      /* If this symbol has an entry in the PA64 dynamic hash
 		 table, then get it.  */
-	      dyn_name = get_dyn_name (input_bfd, h, rel,
+	      dyn_name = get_dyn_name (input_section, h, rel,
 				       &dynh_buf, &dynh_buflen);
 	      dyn_h = elf64_hppa_dyn_hash_lookup (&hppa_info->dyn_hash_table,
 						  dyn_name, false, false);
@@ -1092,7 +1435,7 @@ elf_hppa_relocate_section (output_bfd, info, input_bfd, input_section,
 		{
 		  (*_bfd_error_handler)
 		    (_("%s: warning: unresolvable relocation against symbol `%s' from %s section"),
-		     bfd_get_filename (input_bfd), h->root.root.string,
+		     bfd_archive_filename (input_bfd), h->root.root.string,
 		     bfd_get_section_name (input_bfd, input_section));
 		  relocation = 0;
 		}
@@ -1102,11 +1445,17 @@ elf_hppa_relocate_section (output_bfd, info, input_bfd, input_section,
 	    relocation = 0;
 	  else
 	    {
-	      if (!((*info->callbacks->undefined_symbol)
-		    (info, h->root.root.string, input_bfd,
-		     input_section, rel->r_offset)))
-		return false;
-	      break;
+	      /* Ignore dynamic loader defined symbols.  */
+	      if (elf_hppa_is_dynamic_loader_symbol (h->root.root.string))
+		relocation = 0;
+	      else
+		{
+		  if (!((*info->callbacks->undefined_symbol)
+			(info, h->root.root.string, input_bfd,
+			 input_section, rel->r_offset, true)))
+		    return false;
+		  break;
+		}
 	    }
 	}
 
@@ -1148,15 +1497,14 @@ elf_hppa_relocate_section (output_bfd, info, input_bfd, input_section,
   return true;
 }
 
-
 /* Compute the value for a relocation (REL) during a final link stage,
-   then insert the value into the proper location in CONTENTS. 
+   then insert the value into the proper location in CONTENTS.
 
    VALUE is a tentative value for the relocation and may be overridden
    and modified here based on the specific relocation to be performed.
 
    For example we do conversions for PC-relative branches in this routine
-   or redirection of calls to external routines to stubs. 
+   or redirection of calls to external routines to stubs.
 
    The work of actually applying the relocation is left to a helper
    routine in an attempt to reduce the complexity and size of this
@@ -1174,15 +1522,14 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
      bfd_vma value;
      struct bfd_link_info *info;
      asection *sym_sec;
-     struct elf_link_hash_entry *h;
+     struct elf_link_hash_entry *h ATTRIBUTE_UNUSED;
      struct elf64_hppa_dyn_hash_entry *dyn_h;
 {
-  unsigned long insn;
+  int insn;
   bfd_vma offset = rel->r_offset;
-  bfd_vma addend = rel->r_addend;
+  bfd_signed_vma addend = rel->r_addend;
   reloc_howto_type *howto = elf_hppa_howto_table + ELF_R_TYPE (rel->r_info);
-  unsigned long r_type = howto->type;
-  unsigned long r_field = e_fsel;
+  unsigned int r_type = howto->type;
   bfd_byte *hit_data = contents + offset;
   struct elf64_hppa_link_hash_table *hppa_info = elf64_hppa_hash_table (info);
 
@@ -1192,6 +1539,12 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
     {
     case R_PARISC_NONE:
       break;
+
+    /* Basic function call support.  I'm not entirely sure if PCREL14F is
+       actually needed or even handled correctly.
+
+       Note for a call to a function defined in another dynamic library
+       we want to redirect the call to a stub.  */
 
     /* Random PC relative relocs.  */
     case R_PARISC_PCREL21L:
@@ -1203,70 +1556,62 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
     case R_PARISC_PCREL16WF:
     case R_PARISC_PCREL16DF:
       {
-	if (r_type == R_PARISC_PCREL21L)
-	  r_field = e_lsel;
-	else if (r_type == R_PARISC_PCREL14F
-		 || r_type == R_PARISC_PCREL16F
-		 || r_type == R_PARISC_PCREL16WF
-		 || r_type == R_PARISC_PCREL16DF)
-	  r_field = e_fsel;
-	else
-	  r_field = e_rsel;
-
 	/* If this is a call to a function defined in another dynamic
 	   library, then redirect the call to the local stub for this
 	   function.  */
 	if (sym_sec == NULL || sym_sec->output_section == NULL)
 	  value = (dyn_h->stub_offset + hppa_info->stub_sec->output_offset
 		   + hppa_info->stub_sec->output_section->vma);
-  
+
 	/* Turn VALUE into a proper PC relative address.  */
 	value -= (offset + input_section->output_offset
 		  + input_section->output_section->vma);
 
 	/* Adjust for any field selectors.  */
-	value = hppa_field_adjust (value, -8 + addend, r_field);
+	if (r_type == R_PARISC_PCREL21L)
+	  value = hppa_field_adjust (value, -8 + addend, e_lsel);
+	else if (r_type == R_PARISC_PCREL14F
+		 || r_type == R_PARISC_PCREL16F
+		 || r_type == R_PARISC_PCREL16WF
+		 || r_type == R_PARISC_PCREL16DF)
+	  value = hppa_field_adjust (value, -8 + addend, e_fsel);
+	else
+	  value = hppa_field_adjust (value, -8 + addend, e_rsel);
 
 	/* Apply the relocation to the given instruction.  */
-	insn = elf_hppa_relocate_insn (insn, value, r_type);
+	insn = elf_hppa_relocate_insn (insn, (int) value, r_type);
 	break;
       }
 
-    /* Basic function call support.  I'm not entirely sure if PCREL14F is
-       actually needed or even handled correctly.
-
-       Note for a call to a function defined in another dynamic library
-       we want to redirect the call to a stub.  */
+    case R_PARISC_PCREL12F:
     case R_PARISC_PCREL22F:
     case R_PARISC_PCREL17F:
     case R_PARISC_PCREL22C:
     case R_PARISC_PCREL17C:
     case R_PARISC_PCREL17R:
       {
-	if (r_type == R_PARISC_PCREL17R)
-	  r_field = e_rsel;
-	else
-	  r_field = e_fsel;
-
 	/* If this is a call to a function defined in another dynamic
 	   library, then redirect the call to the local stub for this
 	   function.  */
 	if (sym_sec == NULL || sym_sec->output_section == NULL)
 	  value = (dyn_h->stub_offset + hppa_info->stub_sec->output_offset
 		   + hppa_info->stub_sec->output_section->vma);
-  
+
 	/* Turn VALUE into a proper PC relative address.  */
 	value -= (offset + input_section->output_offset
 		  + input_section->output_section->vma);
 
 	/* Adjust for any field selectors.  */
-	value = hppa_field_adjust (value, -8 + addend, e_fsel);
+	if (r_type == R_PARISC_PCREL17R)
+	  value = hppa_field_adjust (value, -8 + addend, e_rsel);
+	else
+	  value = hppa_field_adjust (value, -8 + addend, e_fsel);
 
 	/* All branches are implicitly shifted by 2 places.  */
 	value >>= 2;
 
 	/* Apply the relocation to the given instruction.  */
-	insn = elf_hppa_relocate_insn (insn, value, r_type);
+	insn = elf_hppa_relocate_insn (insn, (int) value, r_type);
 	break;
       }
 
@@ -1296,22 +1641,18 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
     case R_PARISC_LTOFF16DF:
       {
 	/* If this relocation was against a local symbol, then we still
-	   have not set up the DLT entry (it's not convienent to do so
+	   have not set up the DLT entry (it's not convenient to do so
 	   in the "finalize_dlt" routine because it is difficult to get
 	   to the local symbol's value).
 
 	   So, if this is a local symbol (h == NULL), then we need to
-	   fill in its DLT entry. 
+	   fill in its DLT entry.
 
 	   Similarly we may still need to set up an entry in .opd for
 	   a local function which had its address taken.  */
 	if (dyn_h->h == NULL)
 	  {
-	    bfd_put_64 (hppa_info->dlt_sec->owner,
-			value,
-			hppa_info->dlt_sec->contents + dyn_h->dlt_offset);
-
-	    /* Now handle .opd creation if needed.  */
+	    /* Now do .opd creation if needed.  */
 	    if (r_type == R_PARISC_LTOFF_FPTR14R
 		|| r_type == R_PARISC_LTOFF_FPTR14DR
 		|| r_type == R_PARISC_LTOFF_FPTR14WR
@@ -1325,7 +1666,7 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 			0, 16);
 
 		/* The next word is the address of the function.  */
-		bfd_put_64 (hppa_info->opd_sec->owner, value,
+		bfd_put_64 (hppa_info->opd_sec->owner, value + addend,
 			    (hppa_info->opd_sec->contents
 			     + dyn_h->opd_offset + 16));
 
@@ -1335,7 +1676,17 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 		bfd_put_64 (hppa_info->opd_sec->owner, value,
 			    (hppa_info->opd_sec->contents
 			     + dyn_h->opd_offset + 24));
+
+		/* The DLT value is the address of the .opd entry.  */
+		value = (dyn_h->opd_offset
+			 + hppa_info->opd_sec->output_offset
+			 + hppa_info->opd_sec->output_section->vma);
+		addend = 0;
 	      }
+
+	    bfd_put_64 (hppa_info->dlt_sec->owner,
+			value + addend,
+			hppa_info->dlt_sec->contents + dyn_h->dlt_offset);
 	  }
 
 	/* We want the value of the DLT offset for this symbol, not
@@ -1347,14 +1698,13 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 		 + hppa_info->dlt_sec->output_section->vma);
 	value -= _bfd_get_gp_value (output_bfd);
 
-
 	/* All DLTIND relocations are basically the same at this point,
 	   except that we need different field selectors for the 21bit
 	   version vs the 14bit versions.  */
 	if (r_type == R_PARISC_DLTIND21L
 	    || r_type == R_PARISC_LTOFF_FPTR21L
 	    || r_type == R_PARISC_LTOFF_TP21L)
-	  value = hppa_field_adjust (value, addend, e_lrsel);
+	  value = hppa_field_adjust (value, 0, e_lsel);
 	else if (r_type == R_PARISC_DLTIND14F
 		 || r_type == R_PARISC_LTOFF_FPTR16F
 		 || r_type == R_PARISC_LTOFF_FPTR16WF
@@ -1365,11 +1715,11 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 		 || r_type == R_PARISC_LTOFF_TP16F
 		 || r_type == R_PARISC_LTOFF_TP16WF
 		 || r_type == R_PARISC_LTOFF_TP16DF)
-	  value = hppa_field_adjust (value, addend, e_fsel);
+	  value = hppa_field_adjust (value, 0, e_fsel);
 	else
-	  value = hppa_field_adjust (value, addend, e_rrsel);
+	  value = hppa_field_adjust (value, 0, e_rsel);
 
-	insn = elf_hppa_relocate_insn (insn, value, r_type);
+	insn = elf_hppa_relocate_insn (insn, (int) value, r_type);
 	break;
       }
 
@@ -1406,7 +1756,7 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 	else
 	  value = hppa_field_adjust (value, addend, e_rrsel);
 
-	insn = elf_hppa_relocate_insn (insn, value, r_type);
+	insn = elf_hppa_relocate_insn (insn, (int) value, r_type);
 	break;
       }
 
@@ -1414,6 +1764,7 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
     case R_PARISC_DIR17R:
     case R_PARISC_DIR17F:
     case R_PARISC_DIR14R:
+    case R_PARISC_DIR14F:
     case R_PARISC_DIR14WR:
     case R_PARISC_DIR14DR:
     case R_PARISC_DIR16F:
@@ -1421,19 +1772,28 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
     case R_PARISC_DIR16DF:
       {
 	/* All DIR relocations are basically the same at this point,
-	   except that we need different field selectors for the 21bit
-	   version vs the 14bit versions.  */
+	   except that branch offsets need to be divided by four, and
+	   we need different field selectors.  Note that we don't
+	   redirect absolute calls to local stubs.  */
+
 	if (r_type == R_PARISC_DIR21L)
 	  value = hppa_field_adjust (value, addend, e_lrsel);
 	else if (r_type == R_PARISC_DIR17F
 		 || r_type == R_PARISC_DIR16F
 		 || r_type == R_PARISC_DIR16WF
-		 || r_type == R_PARISC_DIR16DF)
+		 || r_type == R_PARISC_DIR16DF
+		 || r_type == R_PARISC_DIR14F)
 	  value = hppa_field_adjust (value, addend, e_fsel);
 	else
 	  value = hppa_field_adjust (value, addend, e_rrsel);
 
-	insn = elf_hppa_relocate_insn (insn, value, r_type);
+	if (r_type == R_PARISC_DIR17R || r_type == R_PARISC_DIR17F)
+	  {
+	    /* All branches are implicitly shifted by 2 places.  */
+	    value >>= 2;
+	  }
+
+	insn = elf_hppa_relocate_insn (insn, (int) value, r_type);
 	break;
       }
 
@@ -1468,7 +1828,7 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 	else
 	  value = hppa_field_adjust (value, addend, e_rrsel);
 
-	insn = elf_hppa_relocate_insn (insn, value, r_type);
+	insn = elf_hppa_relocate_insn (insn, (int) value, r_type);
 	break;
       }
 
@@ -1482,7 +1842,7 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 	    memset (hppa_info->opd_sec->contents + dyn_h->opd_offset, 0, 16);
 
 	    /* The next word is the address of the function.  */
-	    bfd_put_64 (hppa_info->opd_sec->owner, value,
+	    bfd_put_64 (hppa_info->opd_sec->owner, value + addend,
 			(hppa_info->opd_sec->contents
 			 + dyn_h->opd_offset + 16));
 
@@ -1491,6 +1851,15 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 		      (hppa_info->opd_sec->output_section->owner);
 	    bfd_put_64 (hppa_info->opd_sec->owner, value,
 			hppa_info->opd_sec->contents + dyn_h->opd_offset + 24);
+
+	    /* The DLT value is the address of the .opd entry.  */
+	    value = (dyn_h->opd_offset
+		     + hppa_info->opd_sec->output_offset
+		     + hppa_info->opd_sec->output_section->vma);
+
+	    bfd_put_64 (hppa_info->dlt_sec->owner,
+			value,
+			hppa_info->dlt_sec->contents + dyn_h->dlt_offset);
 	  }
 
 	/* We want the value of the DLT offset for this symbol, not
@@ -1516,7 +1885,7 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 	    memset (hppa_info->opd_sec->contents + dyn_h->opd_offset, 0, 16);
 
 	    /* The next word is the address of the function.  */
-	    bfd_put_64 (hppa_info->opd_sec->owner, value,
+	    bfd_put_64 (hppa_info->opd_sec->owner, value + addend,
 			(hppa_info->opd_sec->contents
 			 + dyn_h->opd_offset + 16));
 
@@ -1525,6 +1894,15 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 		      (hppa_info->opd_sec->output_section->owner);
 	    bfd_put_64 (hppa_info->opd_sec->owner, value,
 			hppa_info->opd_sec->contents + dyn_h->opd_offset + 24);
+
+	    /* The DLT value is the address of the .opd entry.  */
+	    value = (dyn_h->opd_offset
+		     + hppa_info->opd_sec->output_offset
+		     + hppa_info->opd_sec->output_section->vma);
+
+	    bfd_put_64 (hppa_info->dlt_sec->owner,
+			value,
+			hppa_info->dlt_sec->contents + dyn_h->dlt_offset);
 	  }
 
 	/* We want the value of the DLT offset for this symbol, not
@@ -1551,7 +1929,6 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
       /* Subtract out the global pointer value to make value a DLT
 	 relative address.  */
       value -= _bfd_get_gp_value (output_bfd);
-      value += addend;
 
       bfd_put_64 (input_bfd, value + addend, hit_data);
       return bfd_reloc_ok;
@@ -1577,14 +1954,14 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 	if (sym_sec == NULL || sym_sec->output_section == NULL)
 	  value = (dyn_h->stub_offset + hppa_info->stub_sec->output_offset
 		   + hppa_info->stub_sec->output_section->vma);
-  
+
 	/* Turn VALUE into a proper PC relative address.  */
 	value -= (offset + input_section->output_offset
 		  + input_section->output_section->vma);
 
 	value += addend;
 	value -= 8;
-	bfd_put_64 (input_bfd, value, hit_data);
+	bfd_put_32 (input_bfd, value, hit_data);
 	return bfd_reloc_ok;
       }
 
@@ -1596,8 +1973,7 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 	if (sym_sec == NULL || sym_sec->output_section == NULL)
 	  value = (dyn_h->stub_offset + hppa_info->stub_sec->output_offset
 		   + hppa_info->stub_sec->output_section->vma);
-  
-  
+
 	/* Turn VALUE into a proper PC relative address.  */
 	value -= (offset + input_section->output_offset
 		  + input_section->output_section->vma);
@@ -1607,7 +1983,6 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 	bfd_put_64 (input_bfd, value, hit_data);
 	return bfd_reloc_ok;
       }
-
 
     case R_PARISC_FPTR64:
       {
@@ -1619,7 +1994,7 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 	    memset (hppa_info->opd_sec->contents + dyn_h->opd_offset, 0, 16);
 
 	    /* The next word is the address of the function.  */
-	    bfd_put_64 (hppa_info->opd_sec->owner, value,
+	    bfd_put_64 (hppa_info->opd_sec->owner, value + addend,
 			(hppa_info->opd_sec->contents
 			 + dyn_h->opd_offset + 16));
 
@@ -1635,15 +2010,14 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 	value = (dyn_h->opd_offset
 		 + hppa_info->opd_sec->output_offset
 		 + hppa_info->opd_sec->output_section->vma);
-	       
-	bfd_put_64 (input_bfd, value + addend, hit_data);
+
+	bfd_put_64 (input_bfd, value, hit_data);
 	return bfd_reloc_ok;
       }
 
     case R_PARISC_SECREL32:
       bfd_put_32 (input_bfd,
-		  (value + addend
-		   - sym_sec->output_section->vma),
+		  value + addend - sym_sec->output_section->vma,
 		  hit_data);
       return bfd_reloc_ok;
 
@@ -1654,7 +2028,7 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 	   the segment base values.  */
 	if (hppa_info->text_segment_base == (bfd_vma) -1)
 	  bfd_map_over_sections (output_bfd, elf_hppa_record_segment_addrs,
-				 elf64_hppa_hash_table (info));
+				 hppa_info);
 
 	/* VALUE holds the absolute address.  We want to include the
 	   addend, then turn it into a segment relative address.
@@ -1675,7 +2049,6 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
 	  bfd_put_64 (input_bfd, value, hit_data);
         return bfd_reloc_ok;
       }
-      
 
     /* Something we don't know how to handle.  */
     default:
@@ -1683,8 +2056,8 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
     }
 
   /* Update the instruction word.  */
-  bfd_put_32 (input_bfd, insn, hit_data);
-  return (bfd_reloc_ok);
+  bfd_put_32 (input_bfd, (bfd_vma) insn, hit_data);
+  return bfd_reloc_ok;
 }
 
 /* Relocate the given INSN.  VALUE should be the actual value we want
@@ -1693,62 +2066,32 @@ elf_hppa_final_link_relocate (rel, input_bfd, output_bfd,
    Instead this routine is meant to handle the bit manipulations needed
    to insert the relocation into the given instruction.  */
 
-static unsigned long
+static int
 elf_hppa_relocate_insn (insn, sym_value, r_type)
-     unsigned long insn;
-     long sym_value;
-     unsigned long r_type;
+     int insn;
+     int sym_value;
+     unsigned int r_type;
 {
   switch (r_type)
     {
-    /* This is any 22bit branch.  In PA2.0 syntax it corresponds to
+    /* This is any 22 bit branch.  In PA2.0 syntax it corresponds to
        the "B" instruction.  */
     case R_PARISC_PCREL22F:
     case R_PARISC_PCREL22C:
-      {
-	unsigned int w3, w2, w1, w;
+      return (insn & ~0x3ff1ffd) | re_assemble_22 (sym_value);
 
-	/* These are 22 bit branches.  Mask off bits we do not care
-	   about.  */
-	sym_value &= 0x3fffff;
+      /* This is any 12 bit branch.  */
+    case R_PARISC_PCREL12F:
+      return (insn & ~0x1ffd) | re_assemble_12 (sym_value);
 
-	/* Now extract the W1, W2, W3 and W fields from the value.  */
-	dis_assemble_22 (sym_value, &w3, &w1, &w2, &w);
-
-	/* Mask out bits for the value in the instruction.  */
-	insn &= 0xfc00e002;
-
-	/* Insert the bits for the W1, W2 and W fields into the
-	   instruction.  */
-	insn |= (w3 << 21) | (w2 << 2) | (w1 << 16) | w;
-	return insn;
-       }
-
-    /* This is any 17bit branch.  In PA2.0 syntax it also corresponds to
-       the "B" instruction as well as BE.  */
+    /* This is any 17 bit branch.  In PA2.0 syntax it also corresponds
+       to the "B" instruction as well as BE.  */
     case R_PARISC_PCREL17F:
     case R_PARISC_DIR17F:
     case R_PARISC_DIR17R:
     case R_PARISC_PCREL17C:
     case R_PARISC_PCREL17R:
-      {
-	unsigned int w2, w1, w;
-
-	/* These are 17 bit branches.  Mask off bits we do not care
-	   about.  */
-	sym_value &= 0x1ffff;
-
-	/* Now extract the W1, W2 and W fields from the value.  */
-	dis_assemble_17 (sym_value, &w1, &w2, &w);
-
-	/* Mask out bits for the value in the instruction.  */
-	insn &= 0xffe0e002;
-
-	/* Insert the bits for the W1, W2 and W fields into the
-	   instruction.  */
-	insn |= (w2 << 2) | (w1 << 16) | w;
-	return insn;
-      }
+      return (insn & ~0x1f1ffd) | re_assemble_17 (sym_value);
 
     /* ADDIL or LDIL instructions.  */
     case R_PARISC_DLTREL21L:
@@ -1759,20 +2102,9 @@ elf_hppa_relocate_insn (insn, sym_value, r_type)
     case R_PARISC_DPREL21L:
     case R_PARISC_PLTOFF21L:
     case R_PARISC_DIR21L:
-      {
-        int w;
+      return (insn & ~0x1fffff) | re_assemble_21 (sym_value);
 
-	/* Mask off bits in INSN we do not want.  */
-	insn &= 0xffe00000;
-
-	/* Turn the 21bit value into the proper format.  */
-	dis_assemble_21 (sym_value, &w);
-
-	/* And insert the proper bits into INSN.  */
-        return insn | w;
-      }
-
-    /* LDO and integer loads/stores with 14bit displacements.  */
+    /* LDO and integer loads/stores with 14 bit displacements.  */
     case R_PARISC_DLTREL14R:
     case R_PARISC_DLTREL14F:
     case R_PARISC_DLTIND14R:
@@ -1792,22 +2124,12 @@ elf_hppa_relocate_insn (insn, sym_value, r_type)
     case R_PARISC_PLTOFF14F:
     case R_PARISC_PLTOFF16F:
     case R_PARISC_DIR14R:
+    case R_PARISC_DIR14F:
     case R_PARISC_DIR16F:
     case R_PARISC_LTOFF16F:
-      {
-        int w;
+      return (insn & ~0x3fff) | low_sign_unext (sym_value, 14);
 
-	/* Mask off bits in INSN we do not want.  */
-	insn &= 0xffffc000;
-
-	/* Turn the 14bit value into the proper format.  */
-	low_sign_unext (sym_value, 14, &w);
-
-	/* And insert the proper bits into INSN.  */
-        return insn | w;
-      }
-
-    /* Doubleword loads and stores with a 14bit displacement.  */
+    /* Doubleword loads and stores with a 14 bit displacement.  */
     case R_PARISC_DLTREL14DR:
     case R_PARISC_DLTIND14DR:
     case R_PARISC_LTOFF_FPTR14DR:
@@ -1823,22 +2145,8 @@ elf_hppa_relocate_insn (insn, sym_value, r_type)
     case R_PARISC_DIR14DR:
     case R_PARISC_DIR16DF:
     case R_PARISC_LTOFF16DF:
-      {
-	/* Mask off bits in INSN we do not want.  */
-	insn &= 0xffffc00e;
-
-	/* The sign bit at 14 moves into bit zero in the destination.  */
-        insn |= ((sym_value & 0x2000) >> 13);
-
-	/* Turn off the bits in sym_value we do not care about.  */
-	sym_value &= 0x1ff8;
-
-	/* Now shift it one bit position left so that it lines up with the
-	   destination field in INSN.  */
-	sym_value <<= 1;
-
-	return insn | sym_value;
-      }
+      return (insn & ~0x3ff1) | (((sym_value & 0x2000) >> 13)
+				 | ((sym_value & 0x1ff8) << 1));
 
     /* Floating point single word load/store instructions.  */
     case R_PARISC_DLTREL14WR:
@@ -1856,24 +2164,11 @@ elf_hppa_relocate_insn (insn, sym_value, r_type)
     case R_PARISC_DIR16WF:
     case R_PARISC_DIR14WR:
     case R_PARISC_LTOFF16WF:
-      {
-	/* Mask off bits in INSN we do not want.  */
-	insn &= 0xffffc006;
-
-	/* The sign bit at 14 moves into bit zero in the destination.  */
-        insn |= ((sym_value & 0x2000) >> 13);
-
-	/* Turn off the bits in sym_value we do not care about.  */
-	sym_value &= 0x1ffc;
-
-	/* Now shift it one bit position left so that it lines up with the
-	   destination field in INSN.  */
-	sym_value <<= 1;
-
-	return insn | sym_value;
-      }
+      return (insn & ~0x3ff9) | (((sym_value & 0x2000) >> 13)
+				 | ((sym_value & 0x1ffc) << 1));
 
     default:
       return insn;
     }
 }
+#endif

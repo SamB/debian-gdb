@@ -1,5 +1,5 @@
 /* Parameters for hosting on an HPPA PA-RISC machine, running BSD, for GDB.
-   Copyright 1991, 1992 Free Software Foundation, Inc. 
+   Copyright 1991, 1992, 1993, 1996, 1998 Free Software Foundation, Inc.
 
    Contributed by the Center for Software Science at the
    University of Utah (pa-gdb-bugs@cs.utah.edu).
@@ -20,9 +20,5 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
-
-/* This is a big-endian host.  */
-
-#define	HOST_BYTE_ORDER	BIG_ENDIAN
 
 #include "pa/xm-pa.h"

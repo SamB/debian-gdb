@@ -30,7 +30,6 @@
 #ifdef HAVE_SYS_PARAM_H
 #include <sys/param.h>
 #endif
-#include "wait.h"
 #include "ansidecl.h"
 #include "bfd.h"
 #include "callback.h"
@@ -53,9 +52,9 @@ static char *myname;
    by gdb.  */
 void sim_set_simcache_size PARAMS ((int));
 
-#define X(op, size)  op*4+size
+#define X(op, size)  op * 4 + size
 
-#define SP (h8300hmode ? SL:SW)
+#define SP (h8300hmode ? SL : SW)
 #define SB 0
 #define SW 1
 #define SL 2
@@ -74,15 +73,15 @@ void sim_set_simcache_size PARAMS ((int));
 
 #include "inst.h"
 
-/* The rate at which to call the host's poll_quit callback. */
+/* The rate at which to call the host's poll_quit callback.  */
 
 #define POLL_QUIT_INTERVAL 0x80000
 
 #define LOW_BYTE(x) ((x) & 0xff)
-#define HIGH_BYTE(x) (((x)>>8) & 0xff)
-#define P(X,Y) ((X<<8) | Y)
+#define HIGH_BYTE(x) (((x) >> 8) & 0xff)
+#define P(X,Y) ((X << 8) | Y)
 
-#define BUILDSR()   cpu.ccr = (N << 3) | (Z << 2) | (V<<1) | C;
+#define BUILDSR()   cpu.ccr = (N << 3) | (Z << 2) | (V << 1) | C;
 
 #define GETSR()		    \
   c = (cpu.ccr >> 0) & 1;\
@@ -91,7 +90,7 @@ void sim_set_simcache_size PARAMS ((int));
   n = (cpu.ccr >> 3) & 1;
 
 #ifdef __CHAR_IS_SIGNED__
-#define SEXTCHAR(x) ((char)(x))
+#define SEXTCHAR(x) ((char) (x))
 #endif
 
 #ifndef SEXTCHAR
@@ -100,7 +99,7 @@ void sim_set_simcache_size PARAMS ((int));
 
 #define UEXTCHAR(x) ((x) & 0xff)
 #define UEXTSHORT(x) ((x) & 0xffff)
-#define SEXTSHORT(x) ((short)(x))
+#define SEXTSHORT(x) ((short) (x))
 
 static cpu_state_type cpu;
 
@@ -108,7 +107,6 @@ int h8300hmode = 0;
 int h8300smode = 0;
 
 static int memory_size;
-
 
 static int
 get_now ()
@@ -124,7 +122,6 @@ now_persec ()
 {
   return 1;
 }
-
 
 static int
 bitfrom (x)
@@ -142,8 +139,7 @@ bitfrom (x)
     }
 }
 
-static
-unsigned int
+static unsigned int
 lvalue (x, rn)
 {
   switch (x / 4)
@@ -156,8 +152,8 @@ lvalue (x, rn)
       return X (OP_REG, SP);
 
     case OP_MEM:
-
       return X (OP_MEM, SP);
+
     default:
       abort ();
     }
@@ -174,20 +170,19 @@ decode (addr, data, dst)
   int rd = 0;
   int rdisp = 0;
   int abs = 0;
-  int plen = 0;
   int bit = 0;
-
-  struct h8_opcode *q = h8_opcodes;
+  int plen = 0;
+  struct h8_opcode *q;
   int size = 0;
+
   dst->dst.type = -1;
   dst->src.type = -1;
-  /* Find the exact opcode/arg combo */
-  while (q->name)
-    {
-      op_type *nib;
-      unsigned int len = 0;
 
-      nib = q->data.nib;
+  /* Find the exact opcode/arg combo.  */
+  for (q = h8_opcodes; q->name; q++)
+    {
+      op_type *nib = q->data.nib;
+      unsigned int len = 0;
 
       while (1)
 	{
@@ -207,40 +202,40 @@ decode (addr, data, dst)
 		{
 		  if (!(((int) thisnib & 0x8) != 0))
 		    goto fail;
-		  looking_for = (op_type) ((int) looking_for & ~(int)
-					   B31);
+
+		  looking_for = (op_type) ((int) looking_for & ~(int) B31);
 		  thisnib &= 0x7;
 		}
+
 	      if ((int) looking_for & (int) B30)
 		{
 		  if (!(((int) thisnib & 0x8) == 0))
 		    goto fail;
+
 		  looking_for = (op_type) ((int) looking_for & ~(int) B30);
 		}
+
 	      if (looking_for & DBIT)
 		{
-		  if ((looking_for & 5) != (thisnib & 5))
+		  /* Exclude adds/subs by looking at bit 0 and 2, and
+                     make sure the operand size, either w or l,
+                     matches by looking at bit 1.  */
+		  if ((looking_for & 7) != (thisnib & 7))
 		    goto fail;
+
 		  abs = (thisnib & 0x8) ? 2 : 1;
 		}
 	      else if (looking_for & (REG | IND | INC | DEC))
 		{
 		  if (looking_for & REG)
 		    {
-		      /*
-		       * Can work out size from the
-		       * register
-		       */
+		      /* Can work out size from the register.  */
 		      size = bitfrom (looking_for);
 		    }
 		  if (looking_for & SRC)
-		    {
-		      rs = thisnib;
-		    }
+		    rs = thisnib;
 		  else
-		    {
-		      rd = thisnib;
-		    }
+		    rd = thisnib;
 		}
 	      else if (looking_for & L_16)
 		{
@@ -253,10 +248,7 @@ decode (addr, data, dst)
 		}
 	      else if (looking_for & ABSJMP)
 		{
-		  abs =
-		    (data[1] << 16)
-		    | (data[2] << 8)
-		    | (data[3]);
+		  abs = (data[1] << 16) | (data[2] << 8) | (data[3]);
 		}
 	      else if (looking_for & MEMIND)
 		{
@@ -265,6 +257,7 @@ decode (addr, data, dst)
 	      else if (looking_for & L_32)
 		{
 		  int i = len >> 1;
+
 		  abs = (data[i] << 24)
 		    | (data[i + 1] << 16)
 		    | (data[i + 2] << 8)
@@ -275,12 +268,13 @@ decode (addr, data, dst)
 	      else if (looking_for & L_24)
 		{
 		  int i = len >> 1;
+
 		  abs = (data[i] << 16) | (data[i + 1] << 8) | (data[i + 2]);
 		  plen = 24;
 		}
 	      else if (looking_for & IGNORE)
 		{
-		  /* nothing to do */
+		  ;
 		}
 	      else if (looking_for & DISPREG)
 		{
@@ -299,6 +293,8 @@ decode (addr, data, dst)
 		    case 0:
 		      abs = 1;
 		      break;
+		    default:
+		      goto fail;
 		    }
 		}
 	      else if (looking_for & L_8)
@@ -313,9 +309,9 @@ decode (addr, data, dst)
 		    {
 		      plen = 8;
 		      abs = h8300hmode ? ~0xff0000ff : ~0xffff00ff;
-		      abs |= data[len >> 1] & 0xff ;
+		      abs |= data[len >> 1] & 0xff;
 		    }
-		   else
+		  else
 		    {
 		      abs = data[len >> 1] & 0xff;
 		    }
@@ -330,7 +326,7 @@ decode (addr, data, dst)
 		{
 		  dst->op = q;
 
-		  /* Fill in the args */
+		  /* Fill in the args.  */
 		  {
 		    op_type *args = q->args.nib;
 		    int hadone = 0;
@@ -342,15 +338,11 @@ decode (addr, data, dst)
 			ea_type *p;
 
 			if (x & DST)
-			  {
-			    p = &(dst->dst);
-			  }
+			  p = &(dst->dst);
 			else
-			  {
-			    p = &(dst->src);
-			  }
+			  p = &(dst->src);
 
-			if (x & (L_3))
+			if (x & L_3)
 			  {
 			    p->type = X (OP_IMM, size);
 			    p->literal = bit;
@@ -362,8 +354,8 @@ decode (addr, data, dst)
 			  }
 			else if (x & REG)
 			  {
-			    /* Reset the size, some
-			       ops (like mul) have two sizes */
+			    /* Reset the size.
+			       Some ops (like mul) have two sizes.  */
 
 			    size = bitfrom (x);
 			    p->type = X (OP_REG, size);
@@ -425,12 +417,9 @@ decode (addr, data, dst)
 		      }
 		  }
 
-		  /*
-		     * But a jmp or a jsr gets
-		     * automagically lvalued, since we
-		     * branch to their address not their
-		     * contents
-		   */
+		  /* But a jmp or a jsr gets automagically lvalued,
+		     since we branch to their address not their
+		     contents.  */
 		  if (q->how == O (O_JSR, SB)
 		      || q->how == O (O_JMP, SB))
 		    {
@@ -443,7 +432,7 @@ decode (addr, data, dst)
 		  dst->opcode = q->how;
 		  dst->cycles = q->time;
 
-		  /* And a jsr to 0xc4 is turned into a magic trap */
+		  /* And a jsr to 0xc4 is turned into a magic trap.  */
 
 		  if (dst->opcode == O (O_JSR, SB))
 		    {
@@ -457,9 +446,7 @@ decode (addr, data, dst)
 		  return;
 		}
 	      else
-		{
-		  printf ("Dont understand %x \n", looking_for);
-		}
+		printf ("Don't understand %x \n", looking_for);
 	    }
 
 	  len++;
@@ -467,20 +454,19 @@ decode (addr, data, dst)
 	}
 
     fail:
-      q++;
+      ;
     }
 
+  /* Fell off the end.  */
   dst->opcode = O (O_ILL, SB);
 }
-
 
 static void
 compile (pc)
 {
   int idx;
 
-  /* find the next cache entry to use */
-
+  /* Find the next cache entry to use.  */
   idx = cpu.cache_top + 1;
   cpu.compiles++;
   if (idx >= cpu.csize)
@@ -489,16 +475,16 @@ compile (pc)
     }
   cpu.cache_top = idx;
 
-  /* Throw away its old meaning */
+  /* Throw away its old meaning.  */
   cpu.cache_idx[cpu.cache[idx].oldpc] = 0;
 
-  /* set to new address */
+  /* Set to new address.  */
   cpu.cache[idx].oldpc = pc;
 
-  /* fill in instruction info */
+  /* Fill in instruction info.  */
   decode (pc, cpu.memory + pc, cpu.cache + idx);
 
-  /* point to new cache entry */
+  /* Point to new cache entry.  */
   cpu.cache_idx[pc] = idx;
 }
 
@@ -628,8 +614,7 @@ fetch (arg, n)
 }
 
 
-static
-void
+static void
 store (arg, n)
      ea_type *arg;
      int n;
@@ -705,8 +690,7 @@ static union
 
 littleendian;
 
-static
-void
+static void
 init_pointers ()
 {
   static int init;
@@ -726,7 +710,7 @@ init_pointers ()
       cpu.cache_idx = (unsigned short *) calloc (sizeof (short), memory_size);
       cpu.eightbit = (unsigned char *) calloc (sizeof (char), 256);
 
-      /* `msize' must be a power of two */
+      /* `msize' must be a power of two.  */
       if ((memory_size & (memory_size - 1)) != 0)
 	abort ();
       cpu.mask = memory_size - 1;
@@ -773,7 +757,7 @@ init_pointers ()
 
       lreg[8] = &cpu.regs[8];
 
-      /* initialize the seg registers */
+      /* Initialize the seg registers.  */
       if (!cpu.cache)
 	sim_set_simcache_size (CSIZE);
     }
@@ -839,8 +823,9 @@ mop (code, bsize, sign)
     {
       SET_L_REG (code->dst.reg, result);
     }
-/*  return ((n==1) << 1) | (nz==1); */
-
+#if 0
+  return ((n == 1) << 1) | (nz == 1);
+#endif
 }
 
 #define ONOT(name, how) \
@@ -1370,32 +1355,17 @@ sim_resume (sd, step, siggnal)
 	  cpu.exception = SIGILL;
 	  goto end;
 	case O (O_SLEEP, SN):
-	  /* The format of r0 is defined by devo/include/wait.h.  */
-#if 0 /* FIXME: Ugh.  A breakpoint is the sleep insn.  */
-	  if (WIFEXITED (cpu.regs[0]))
-	    {
-	      cpu.state = SIM_STATE_EXITED;
-	      cpu.exception = WEXITSTATUS (cpu.regs[0]);
-	    }
-	  else if (WIFSTOPPED (cpu.regs[0]))
-	    {
-	      cpu.state = SIM_STATE_STOPPED;
-	      cpu.exception = WSTOPSIG (cpu.regs[0]);
-	    }
-	  else
-	    {
-	      cpu.state = SIM_STATE_SIGNALLED;
-	      cpu.exception = WTERMSIG (cpu.regs[0]);
-	    }
-#else
 	  /* FIXME: Doesn't this break for breakpoints when r0
 	     contains just the right (er, wrong) value?  */
 	  cpu.state = SIM_STATE_STOPPED;
-	  if (! WIFEXITED (cpu.regs[0]) && WIFSIGNALED (cpu.regs[0]))
+	  /* The format of r0 is defined by target newlib.  Expand
+             the macros here instead of looking for .../sys/wait.h.  */
+#define SIM_WIFEXITED(v) (((v) & 0xff) == 0)
+#define SIM_WIFSIGNALED(v) (((v) & 0x7f) > 0 && (((v) & 0x7f) < 0x7f))
+  	  if (! SIM_WIFEXITED (cpu.regs[0]) && SIM_WIFSIGNALED (cpu.regs[0])) 
 	    cpu.exception = SIGILL;
 	  else
 	    cpu.exception = SIGTRAP;
-#endif
 	  goto end;
 	case O (O_BPT, SN):
 	  cpu.state = SIM_STATE_STOPPED;
@@ -1419,8 +1389,9 @@ sim_resume (sd, step, siggnal)
 	  OBITOP (O_BXOR, 1, 0, c = (ea & m) != C);
 	  OBITOP (O_BIXOR, 1, 0, c = !(ea & m) != C);
 
-
-#define MOP(bsize, signed) mop(code, bsize,signed); goto next;
+#define MOP(bsize, signed)			\
+  mop (code, bsize, signed);			\
+  goto next;
 
 	case O (O_MULS, SB):
 	  MOP (1, 1);
@@ -1442,8 +1413,8 @@ sim_resume (sd, step, siggnal)
 	    ea = GET_B_REG (code->src.reg);
 	    if (ea)
 	      {
-		tmp = (unsigned)rd % ea;
-		rd = (unsigned)rd / ea;
+		tmp = (unsigned) rd % ea;
+		rd = (unsigned) rd / ea;
 	      }
 	    SET_W_REG (code->dst.reg, (rd & 0xff) | (tmp << 8));
 	    n = ea & 0x80;
@@ -1459,8 +1430,8 @@ sim_resume (sd, step, siggnal)
 	    nz = ea & 0xffff;
 	    if (ea)
 	      {
-		tmp = (unsigned)rd % ea;
-		rd = (unsigned)rd / ea;
+		tmp = (unsigned) rd % ea;
+		rd = (unsigned) rd / ea;
 	      }
 	    SET_L_REG (code->dst.reg, (rd & 0xffff) | (tmp << 16));
 	    goto next;
@@ -1726,7 +1697,10 @@ sim_resume (sd, step, siggnal)
 
     end:
       ;
-      /*      if (cpu.regs[8] ) abort(); */
+#if 0
+      if (cpu.regs[8])
+	abort ();
+#endif
 
       if (--poll_count < 0)
 	{
@@ -1741,7 +1715,7 @@ sim_resume (sd, step, siggnal)
   cpu.ticks += get_now () - tick_start;
   cpu.cycles += cycles;
   cpu.insts += insts;
-  
+
   cpu.pc = pc;
   BUILDSR ();
   cpu.mask = oldmask;
@@ -1752,7 +1726,7 @@ int
 sim_trace (sd)
      SIM_DESC sd;
 {
-  /* FIXME: unfinished */
+  /* FIXME: Unfinished.  */
   abort ();
 }
 
@@ -1810,7 +1784,7 @@ sim_read (sd, addr, buffer, size)
 
 #define SP_REGNUM       R7_REGNUM	/* Contains address of top of stack */
 #define FP_REGNUM       R6_REGNUM	/* Contains address of executing
-					   * stack frame */
+					 * stack frame */
 
 #define CCR_REGNUM      8	/* Contains processor status */
 #define PC_REGNUM       9	/* Contains program counter */
@@ -2020,8 +1994,8 @@ sim_info (sd, verbose)
 #endif
 }
 
-/* Indicate whether the cpu is an h8/300 or h8/300h.
-   FLAG is non-zero for the h8/300h.  */
+/* Indicate whether the cpu is an H8/300 or H8/300H.
+   FLAG is non-zero for the H8/300H.  */
 
 void
 set_h8300h (flag)
@@ -2029,7 +2003,7 @@ set_h8300h (flag)
 {
   /* FIXME: Much of the code in sim_load can be moved to sim_open.
      This function being replaced by a sim_open:ARGV configuration
-     option */
+     option.  */
   h8300hmode = flag;
 }
 
@@ -2040,12 +2014,12 @@ sim_open (kind, ptr, abfd, argv)
      struct _bfd *abfd;
      char **argv;
 {
-  /* FIXME: Much of the code in sim_load can be moved here */
+  /* FIXME: Much of the code in sim_load can be moved here.  */
 
   sim_kind = kind;
   myname = argv[0];
   sim_callback = ptr;
-  /* fudge our descriptor */
+  /* Fudge our descriptor.  */
   return (SIM_DESC) 1;
 }
 
@@ -2054,7 +2028,7 @@ sim_close (sd, quitting)
      SIM_DESC sd;
      int quitting;
 {
-  /* nothing to do */
+  /* Nothing to do.  */
 }
 
 /* Called by gdb to load a program into memory.  */
@@ -2068,10 +2042,10 @@ sim_load (sd, prog, abfd, from_tty)
 {
   bfd *prog_bfd;
 
-  /* FIXME: The code below that sets a specific variant of the h8/300
-     being simulated should be moved to sim_open(). */
+  /* FIXME: The code below that sets a specific variant of the H8/300
+     being simulated should be moved to sim_open().  */
 
-  /* See if the file is for the h8/300 or h8/300h.  */
+  /* See if the file is for the H8/300 or H8/300H.  */
   /* ??? This may not be the most efficient way.  The z8k simulator
      does this via a different mechanism (INIT_EXTRA_SYMTAB_INFO).  */
   if (abfd != NULL)
@@ -2082,7 +2056,7 @@ sim_load (sd, prog, abfd, from_tty)
     {
       /* Set the cpu type.  We ignore failure from bfd_check_format
 	 and bfd_openr as sim_load_file checks too.  */
-      if (bfd_check_format (prog_bfd, bfd_object)) 
+      if (bfd_check_format (prog_bfd, bfd_object))
 	{
 	  unsigned long mach = bfd_get_mach (prog_bfd);
 	  set_h8300h (mach == bfd_mach_h8300h
@@ -2098,11 +2072,11 @@ sim_load (sd, prog, abfd, from_tty)
      simulator memory.
 
      The problem is when we do that, we don't know whether we're
-     debugging an h8/300 or h8/300h program.
+     debugging an H8/300 or H8/300H program.
 
      This is the first point at which we can make that determination,
      so we just reallocate memory now; this will also allow us to handle
-     switching between h8/300 and h8/300h programs without exiting
+     switching between H8/300 and H8/300H programs without exiting
      gdb.  */
   if (h8300hmode)
     memory_size = H8300H_MSIZE;
@@ -2120,7 +2094,7 @@ sim_load (sd, prog, abfd, from_tty)
   cpu.cache_idx = (unsigned short *) calloc (sizeof (short), memory_size);
   cpu.eightbit = (unsigned char *) calloc (sizeof (char), 256);
 
-  /* `msize' must be a power of two */
+  /* `msize' must be a power of two.  */
   if ((memory_size & (memory_size - 1)) != 0)
     abort ();
   cpu.mask = memory_size - 1;

@@ -1,5 +1,7 @@
 /* Remote target glue for the SPARC Sparclet ROM monitor.
-   Copyright 1995, 1996 Free Software Foundation, Inc.
+
+   Copyright 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002 Free
+   Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -27,13 +29,14 @@
 #include "srec.h"
 #include "symtab.h"
 #include "symfile.h"		/* for generic_load */
+#include "regcache.h"
 #include <time.h>
 
-extern void report_transfer_performance PARAMS ((unsigned long, time_t, time_t));
+extern void report_transfer_performance (unsigned long, time_t, time_t);
 
 static struct target_ops sparclet_ops;
 
-static void sparclet_open PARAMS ((char *args, int from_tty));
+static void sparclet_open (char *args, int from_tty);
 
 /* This array of registers need to match the indexes used by GDB.
    This exists because the various ROM monitors use different strings
@@ -61,7 +64,32 @@ static void sparclet_open PARAMS ((char *args, int from_tty));
 
 /* is wim part of psr?? */
 /* monitor wants lower case */
-static char *sparclet_regnames[NUM_REGS] = REGISTER_NAMES;
+static char *sparclet_regnames[] = {
+  "g0", "g1", "g2", "g3", "g4", "g5", "g6", "g7", 
+  "o0", "o1", "o2", "o3", "o4", "o5", "o6", "o7", 
+  "l0", "l1", "l2", "l3", "l4", "l5", "l6", "l7", 
+  "i0", "i1", "i2", "i3", "i4", "i5", "i6", "i7", 
+
+  "", "", "", "", "", "", "", "", /* no FPU regs */
+  "", "", "", "", "", "", "", "", 
+  "", "", "", "", "", "", "", "", 
+  "", "", "", "", "", "", "", "", 
+				  /* no CPSR, FPSR */
+  "y", "psr", "wim", "tbr", "pc", "npc", "", "", 
+
+  "ccsr", "ccpr", "cccrcr", "ccor", "ccobr", "ccibr", "ccir", "", 
+
+  /*       ASR15                 ASR19 (don't display them) */  
+  "asr1",  "", "asr17", "asr18", "", "asr20", "asr21", "asr22", 
+/*
+  "awr0",  "awr1",  "awr2",  "awr3",  "awr4",  "awr5",  "awr6",  "awr7",  
+  "awr8",  "awr9",  "awr10", "awr11", "awr12", "awr13", "awr14", "awr15", 
+  "awr16", "awr17", "awr18", "awr19", "awr20", "awr21", "awr22", "awr23", 
+  "awr24", "awr25", "awr26", "awr27", "awr28", "awr29", "awr30", "awr31", 
+  "apsr",
+ */
+};
+
 
 
 /* Function: sparclet_supply_register
@@ -72,20 +100,13 @@ static char *sparclet_regnames[NUM_REGS] = REGISTER_NAMES;
    actually do anything, GDB will request the registers individually.  */
 
 static void
-sparclet_supply_register (regname, regnamelen, val, vallen)
-     char *regname;
-     int regnamelen;
-     char *val;
-     int vallen;
+sparclet_supply_register (char *regname, int regnamelen, char *val, int vallen)
 {
   return;
 }
 
 static void
-sparclet_load (desc, file, hashmark)
-     serial_t desc;
-     char *file;
-     int hashmark;
+sparclet_load (struct serial *desc, char *file, int hashmark)
 {
   bfd *abfd;
   asection *s;
@@ -153,7 +174,7 @@ sparclet_load (desc, file, hashmark)
 
 	    bfd_get_section_contents (abfd, s, buf, i, numbytes);
 
-	    SERIAL_WRITE (desc, buf, numbytes);
+	    serial_write (desc, buf, numbytes);
 
 	    if (hashmark)
 	      {
@@ -184,7 +205,7 @@ sparclet_load (desc, file, hashmark)
   pop_target ();
   push_remote_target (monitor_get_dev_name (), 1);
 
-  return_to_top_level (RETURN_QUIT);
+  throw_exception (RETURN_QUIT);
 }
 
 /* Define the monitor command strings. Since these are passed directly
@@ -261,15 +282,13 @@ init_sparclet_cmds (void)
 };
 
 static void
-sparclet_open (args, from_tty)
-     char *args;
-     int from_tty;
+sparclet_open (char *args, int from_tty)
 {
   monitor_open (args, &sparclet_cmds, from_tty);
 }
 
 void
-_initialize_sparclet ()
+_initialize_sparclet (void)
 {
   int i;
   init_sparclet_cmds ();

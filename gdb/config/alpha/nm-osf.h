@@ -1,5 +1,5 @@
 /* Native definitions for alpha running OSF/1.
-   Copyright (C) 1993, 1994 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1995, 1998, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,8 +25,7 @@
    This routine returns true on success */
 
 #define GET_LONGJMP_TARGET(ADDR) get_longjmp_target(ADDR)
-extern int
-get_longjmp_target PARAMS ((CORE_ADDR *));
+extern int get_longjmp_target (CORE_ADDR *);
 
 /* ptrace register ``addresses'' are absolute.  */
 

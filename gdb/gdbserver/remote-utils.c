@@ -1,5 +1,7 @@
 /* Remote utility routines for the remote server for GDB.
-   Copyright (C) 1986, 1989, 1993 Free Software Foundation, Inc.
+   Copyright 1986, 1989, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
+   2002
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -31,8 +33,11 @@
 #include <sys/ioctl.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <sys/time.h>
+#include <unistd.h>
 
 int remote_debug = 0;
+struct ui_file *gdb_stdlog;
 
 static int remote_desc;
 
@@ -40,11 +45,10 @@ static int remote_desc;
    NAME is the filename used for communication.  */
 
 void
-remote_open (name)
-     char *name;
+remote_open (char *name)
 {
   int save_fcntl_flags;
-
+  
   if (!strchr (name, ':'))
     {
       remote_desc = open (name, O_RDWR);
@@ -61,7 +65,7 @@ remote_open (name)
 	termios.c_lflag = 0;
 	termios.c_cflag &= ~(CSIZE | PARENB);
 	termios.c_cflag |= CLOCAL | CS8;
-	termios.c_cc[VMIN] = 0;
+	termios.c_cc[VMIN] = 1;
 	termios.c_cc[VTIME] = 0;
 
 	tcsetattr (remote_desc, TCSANOW, &termios);
@@ -78,7 +82,7 @@ remote_open (name)
 	termio.c_lflag = 0;
 	termio.c_cflag &= ~(CSIZE | PARENB);
 	termio.c_cflag |= CLOCAL | CS8;
-	termio.c_cc[VMIN] = 0;
+	termio.c_cc[VMIN] = 1;
 	termio.c_cc[VTIME] = 0;
 
 	ioctl (remote_desc, TCSETA, &termio);
@@ -95,7 +99,7 @@ remote_open (name)
       }
 #endif
 
-
+      fprintf (stderr, "Remote debugging using %s\n", name);
     }
   else
     {
@@ -103,7 +107,6 @@ remote_open (name)
       int port;
       struct sockaddr_in sockaddr;
       int tmp;
-      struct protoent *protoent;
       int tmp_desc;
 
       port_str = strchr (name, ':');
@@ -132,10 +135,6 @@ remote_open (name)
       if (remote_desc == -1)
 	perror_with_name ("Accept failed");
 
-      protoent = getprotobyname ("tcp");
-      if (!protoent)
-	perror_with_name ("getprotobyname");
-
       /* Enable TCP keep alive process. */
       tmp = 1;
       setsockopt (tmp_desc, SOL_SOCKET, SO_KEEPALIVE, (char *) &tmp, sizeof (tmp));
@@ -143,25 +142,31 @@ remote_open (name)
       /* Tell TCP not to delay small packets.  This greatly speeds up
          interactive response. */
       tmp = 1;
-      setsockopt (remote_desc, protoent->p_proto, TCP_NODELAY,
+      setsockopt (remote_desc, IPPROTO_TCP, TCP_NODELAY,
 		  (char *) &tmp, sizeof (tmp));
 
       close (tmp_desc);		/* No longer need this */
 
       signal (SIGPIPE, SIG_IGN);	/* If we don't do this, then gdbserver simply
 					   exits when the remote side dies.  */
+
+      /* Convert IP address to string.  */
+      fprintf (stderr, "Remote debugging from host %s\n", 
+         inet_ntoa (sockaddr.sin_addr));
     }
 
 #if defined(F_SETFL) && defined (FASYNC)
   save_fcntl_flags = fcntl (remote_desc, F_GETFL, 0);
   fcntl (remote_desc, F_SETFL, save_fcntl_flags | FASYNC);
+#if defined (F_SETOWN)
+  fcntl (remote_desc, F_SETOWN, getpid ());
+#endif
+#endif
   disable_async_io ();
-#endif /* FASYNC */
-  fprintf (stderr, "Remote debugging using %s\n", name);
 }
 
 void
-remote_close ()
+remote_close (void)
 {
   close (remote_desc);
 }
@@ -169,8 +174,7 @@ remote_close ()
 /* Convert hex digit A to a number.  */
 
 static int
-fromhex (a)
-     int a;
+fromhex (int a)
 {
   if (a >= '0' && a <= '9')
     return a - '0';
@@ -178,13 +182,13 @@ fromhex (a)
     return a - 'a' + 10;
   else
     error ("Reply contains invalid hex digit");
+  return 0;
 }
 
 /* Convert number NIB to a hex digit.  */
 
 static int
-tohex (nib)
-     int nib;
+tohex (int nib)
 {
   if (nib < 10)
     return '0' + nib;
@@ -196,15 +200,16 @@ tohex (nib)
    The data of the packet is in BUF.  Returns >= 0 on success, -1 otherwise. */
 
 int
-putpkt (buf)
-     char *buf;
+putpkt (char *buf)
 {
   int i;
   unsigned char csum = 0;
-  char buf2[2000];
+  char *buf2;
   char buf3[1];
   int cnt = strlen (buf);
   char *p;
+
+  buf2 = malloc (PBUFSIZ);
 
   /* Copy the packet into buffer BUF2, encapsulating it
      and giving it a checksum.  */
@@ -247,11 +252,13 @@ putpkt (buf)
 	  else
 	    perror ("putpkt(read)");
 
+	  free (buf2);
 	  return -1;
 	}
     }
   while (buf3[0] != '+');
 
+  free (buf2);
   return 1;			/* Success! */
 }
 
@@ -261,30 +268,41 @@ putpkt (buf)
    will cause us to send a SIGINT to the child.  */
 
 static void
-input_interrupt ()
+input_interrupt (int unused)
 {
-  int cc;
-  char c;
+  fd_set readset;
+  struct timeval immediate = { 0, 0 };
 
-  cc = read (remote_desc, &c, 1);
+  /* Protect against spurious interrupts.  This has been observed to
+     be a problem under NetBSD 1.4 and 1.5.  */
 
-  if (cc != 1 || c != '\003')
+  FD_ZERO (&readset);
+  FD_SET (remote_desc, &readset);
+  if (select (remote_desc + 1, &readset, 0, 0, &immediate) > 0)
     {
-      fprintf (stderr, "input_interrupt, cc = %d c = %d\n", cc, c);
-      return;
-    }
+      int cc;
+      char c;
+      
+      cc = read (remote_desc, &c, 1);
 
-  kill (inferior_pid, SIGINT);
+      if (cc != 1 || c != '\003')
+	{
+	  fprintf (stderr, "input_interrupt, cc = %d c = %d\n", cc, c);
+	  return;
+	}
+      
+      kill (inferior_pid, SIGINT);
+    }
 }
 
 void
-enable_async_io ()
+enable_async_io (void)
 {
   signal (SIGIO, input_interrupt);
 }
 
 void
-disable_async_io ()
+disable_async_io (void)
 {
   signal (SIGIO, SIG_IGN);
 }
@@ -292,7 +310,7 @@ disable_async_io ()
 /* Returns next char from remote GDB.  -1 if error.  */
 
 static int
-readchar ()
+readchar (void)
 {
   static char buf[BUFSIZ];
   static int bufcnt = 0;
@@ -322,8 +340,7 @@ readchar ()
    and store it in BUF.  Returns length of packet, or negative if error. */
 
 int
-getpkt (buf)
-     char *buf;
+getpkt (char *buf)
 {
   char *bp;
   unsigned char csum, c1, c2;
@@ -379,8 +396,7 @@ getpkt (buf)
 }
 
 void
-write_ok (buf)
-     char *buf;
+write_ok (char *buf)
 {
   buf[0] = 'O';
   buf[1] = 'K';
@@ -388,8 +404,7 @@ write_ok (buf)
 }
 
 void
-write_enn (buf)
-     char *buf;
+write_enn (char *buf)
 {
   buf[0] = 'E';
   buf[1] = 'N';
@@ -398,9 +413,7 @@ write_enn (buf)
 }
 
 void
-convert_int_to_ascii (from, to, n)
-     char *from, *to;
-     int n;
+convert_int_to_ascii (char *from, char *to, int n)
 {
   int nib;
   char ch;
@@ -417,9 +430,7 @@ convert_int_to_ascii (from, to, n)
 
 
 void
-convert_ascii_to_int (from, to, n)
-     char *from, *to;
-     int n;
+convert_ascii_to_int (char *from, char *to, int n)
 {
   int nib1, nib2;
   while (n--)
@@ -431,17 +442,18 @@ convert_ascii_to_int (from, to, n)
 }
 
 static char *
-outreg (regno, buf)
-     int regno;
-     char *buf;
+outreg (int regno, char *buf)
 {
-  extern char registers[];
-  int regsize = REGISTER_RAW_SIZE (regno);
+  int regsize = register_size (regno);
 
-  *buf++ = tohex (regno >> 4);
+  if ((regno >> 12) != 0)
+    *buf++ = tohex ((regno >> 12) & 0xf);
+  if ((regno >> 8) != 0)
+    *buf++ = tohex ((regno >> 8) & 0xf);
+  *buf++ = tohex ((regno >> 4) & 0xf);
   *buf++ = tohex (regno & 0xf);
   *buf++ = ':';
-  convert_int_to_ascii (&registers[REGISTER_BYTE (regno)], buf, regsize);
+  convert_int_to_ascii (register_data (regno), buf, regsize);
   buf += 2 * regsize;
   *buf++ = ';';
 
@@ -449,38 +461,30 @@ outreg (regno, buf)
 }
 
 void
-prepare_resume_reply (buf, status, signo)
-     char *buf;
-     char status;
-     unsigned char signo;
+prepare_resume_reply (char *buf, char status, unsigned char signo)
 {
-  int nib;
+  int nib, sig;
 
   *buf++ = status;
 
-  /* FIXME!  Should be converting this signal number (numbered
-     according to the signal numbering of the system we are running on)
-     to the signal numbers used by the gdb protocol (see enum target_signal
-     in gdb/target.h).  */
-  nib = ((signo & 0xf0) >> 4);
+  sig = (int)target_signal_from_host (signo);
+
+  nib = ((sig & 0xf0) >> 4);
   *buf++ = tohex (nib);
-  nib = signo & 0x0f;
+  nib = sig & 0x0f;
   *buf++ = tohex (nib);
 
   if (status == 'T')
     {
-      buf = outreg (PC_REGNUM, buf);
-      buf = outreg (FP_REGNUM, buf);
-      buf = outreg (SP_REGNUM, buf);
-#ifdef NPC_REGNUM
-      buf = outreg (NPC_REGNUM, buf);
-#endif
-#ifdef O7_REGNUM
-      buf = outreg (O7_REGNUM, buf);
-#endif
+      const char **regp = gdbserver_expedite_regs;
+      while (*regp)
+	{
+	  buf = outreg (find_regno (*regp), buf);
+	  regp ++;
+	}
 
       /* If the debugger hasn't used any thread features, don't burden it with
-         threads.  If we didn't check this, GDB 4.13 and older would choke.  */
+	 threads.  If we didn't check this, GDB 4.13 and older would choke.  */
       if (cont_thread != 0)
 	{
 	  if (old_thread_from_wait != thread_from_wait)
@@ -496,10 +500,7 @@ prepare_resume_reply (buf, status, signo)
 }
 
 void
-decode_m_packet (from, mem_addr_ptr, len_ptr)
-     char *from;
-     CORE_ADDR *mem_addr_ptr;
-     unsigned int *len_ptr;
+decode_m_packet (char *from, CORE_ADDR *mem_addr_ptr, unsigned int *len_ptr)
 {
   int i = 0, j = 0;
   char ch;
@@ -521,10 +522,8 @@ decode_m_packet (from, mem_addr_ptr, len_ptr)
 }
 
 void
-decode_M_packet (from, mem_addr_ptr, len_ptr, to)
-     char *from, *to;
-     CORE_ADDR *mem_addr_ptr;
-     unsigned int *len_ptr;
+decode_M_packet (char *from, CORE_ADDR *mem_addr_ptr, unsigned int *len_ptr,
+		 char *to)
 {
   int i = 0;
   char ch;

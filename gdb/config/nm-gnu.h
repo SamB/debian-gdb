@@ -1,6 +1,6 @@
 /* Common declarations for the GNU Hurd
 
-   Copyright (C) 1995, 1998 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 1998, 1999 Free Software Foundation, Inc.
 
    Written by Miles Bader <miles@gnu.ai.mit.edu>
 
@@ -25,9 +25,8 @@
 #include <unistd.h>
 #include <mach.h>
 #include <mach/exception.h>
+#include "regcache.h"
 
-#undef target_pid_to_str
-#define target_pid_to_str(pid) gnu_target_pid_to_str(pid)
 extern char *gnu_target_pid_to_str (int pid);
 
 /* Before storing, we need to read all the registers.  */

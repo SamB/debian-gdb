@@ -1,4 +1,7 @@
 \input texinfo
+@c Copyright 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998,
+@c 2000, 2001
+@c Free Software Foundation, Inc.
 @setfilename bfdint.info
 
 @settitle BFD Internals
@@ -18,8 +21,7 @@
 This document describes some BFD internal information which may be
 helpful when working on BFD.  It is very incomplete.
 
-This document is not updated regularly, and may be out of date.  It was
-last modified on $Date: 1998/07/23 16:38:56 $.
+This document is not updated regularly, and may be out of date.
 
 The initial version of this document was written by Ian Lance Taylor
 @email{ian@@cygnus.com}.
@@ -294,7 +296,7 @@ The target vector starts with a set of constants.
 @item name
 The name of the target vector.  This is an arbitrary string.  This is
 how the target vector is named in command line options for tools which
-use BFD, such as the @samp{-oformat} linker option.
+use BFD, such as the @samp{--oformat} linker option.
 
 @item flavour
 A general description of the type of target.  The following flavours are
@@ -333,6 +335,8 @@ VERSAdos.
 MS-DOS.
 @item bfd_target_evax_flavour
 openVMS.
+@item bfd_target_mmo_flavour
+Donald Knuth's MMIXware object format.
 @end table
 
 @item byteorder
@@ -377,7 +381,7 @@ vectors which use the same sets of functions.
 @node BFD target vector swap
 @subsection Swapping functions
 
-Every target vector has fuction pointers used for swapping information
+Every target vector has function pointers used for swapping information
 in and out of the target representation.  There are two sets of
 functions: one for data information, and one for header information.
 Each set has three sizes: 64-bit, 32-bit, and 16-bit.  Each size has
@@ -447,7 +451,7 @@ For example, the @samp{BFD_JUMP_TABLE_RELOCS} macro defines three
 functions: @samp{_get_reloc_upper_bound}, @samp{_canonicalize_reloc},
 and @samp{_bfd_reloc_type_lookup}.  A reference like
 @samp{BFD_JUMP_TABLE_RELOCS (foo)} will expand into three functions
-prefixed with @samp{foo}: @samp{foo_get_reloc_upper_found}, etc.  The
+prefixed with @samp{foo}: @samp{foo_get_reloc_upper_bound}, etc.  The
 @samp{BFD_JUMP_TABLE_RELOCS} macro will be placed such that those three
 functions initialize the appropriate fields in the BFD target vector.
 
@@ -501,7 +505,7 @@ corresponds to an actual section in an actual BFD.
 Get the contents of a section.  This is called from
 @samp{bfd_get_section_contents}.  Most targets set this to
 @samp{_bfd_generic_get_section_contents}, which does a @samp{bfd_seek}
-based on the section's @samp{filepos} field and a @samp{bfd_read}.  The
+based on the section's @samp{filepos} field and a @samp{bfd_bread}.  The
 corresponding field in the target vector is named
 @samp{_bfd_get_section_contents}.
 
@@ -634,7 +638,7 @@ always uses extended name tables anyhow.  The corresponding field in the
 target vector is named @samp{_bfd_truncate_arname}.
 
 @item _write_armap
-Write out the archive symbol table using calls to @samp{bfd_write}.
+Write out the archive symbol table using calls to @samp{bfd_bwrite}.
 This is normally called from the archive @samp{write_contents} routine.
 The corresponding field in the target vector is named @samp{write_armap}
 (no leading underscore).
@@ -908,7 +912,7 @@ target vector is named @samp{_bfd_canonicalize_dynamic_reloc}.
 BFD contains several automatically generated files.  This section
 describes them.  Some files are created at configure time, when you
 configure BFD.  Some files are created at make time, when you build
-time.  Some files are automatically rebuilt at make time, but only if
+BFD.  Some files are automatically rebuilt at make time, but only if
 you configure with the @samp{--enable-maintainer-mode} option.  Some
 files live in the object directory---the directory from which you run
 configure---and some live in the source directory.  All files that live
@@ -1289,10 +1293,13 @@ doing a link in which the output object file format is S-records.
 @item
 Using the linker to generate relocateable output in a different object
 file format is impossible in the general case, so you generally don't
-have to worry about that.  Linking input files of different object file
-formats together is quite unusual, but if you're really dedicated you
-may want to consider testing this case, both when the output object file
-format is the same as your format, and when it is different.
+have to worry about that.  The GNU linker makes sure to stop that from
+happening when an input file in a different format has relocations.
+
+Linking input files of different object file formats together is quite
+unusual, but if you're really dedicated you may want to consider testing
+this case, both when the output object file format is the same as your
+format, and when it is different.
 @end itemize
 
 @node BFD relocation codes
@@ -1606,6 +1613,10 @@ it should use the @samp{START_RELOC_NUMBERS}, @samp{RELOC_NUMBER},
 @samp{FAKE_RELOC}, @samp{EMPTY_RELOC} and @samp{END_RELOC_NUMBERS}
 macros to create a table mapping the number used to indentify a
 relocation to a name describing that relocation.
+
+While not a BFD component, you probably also want to make the binutils
+program @samp{readelf} parse your ELF objects.  For this, you need to add
+code for @code{EM_@var{cpu}} as appropriate in @file{binutils/readelf.c}.
 
 @node BFD ELF processor linker
 @subsubsection Processor specific linker support

@@ -1,3 +1,184 @@
+gdb (5.2.cvs20020401-6) unstable; urgency=medium
+
+  * More HPPA build fixes - I forgot linux-proc.o again
+    (Closes: #143707).
+  * Add support for HPPA core files, patch from Randolph Chung
+    (Closes: #137316).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun, 21 Apr 2002 10:29:40 -0400
+
+gdb (5.2.cvs20020401-5) unstable; urgency=low
+
+  * More HPPA build fixes.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Fri, 19 Apr 2002 12:43:56 -0400
+
+gdb (5.2.cvs20020401-4) unstable; urgency=medium
+
+  * Add linux-proc.o to NATDEPFILES for S/390; should fix S/390 build.
+  * Change `value_ptr' to `struct value *' in HPPA patch.  Should fix
+    HPPA build in combination with libc6 2.2.5-4.0.2.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Wed, 17 Apr 2002 00:43:32 -0400
+
+gdb (5.2.cvs20020401-3) unstable; urgency=low
+
+  * Add a patch to fix initialization on non-multi-arch targets
+    (particularly Alpha and Sparc).
+  * Enable testsuite on Alpha and Sparc.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Thu,  4 Apr 2002 21:49:24 -0500
+
+gdb (5.2.cvs20020401-2) unstable; urgency=low
+
+  * My apologies to all you autobuilders out there.  Results were worse than
+    I feared.  Testsuite is now run only on PowerPC and i386 until I can
+    clean up the results everywhere else.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Wed,  3 Apr 2002 17:24:17 -0500
+
+gdb (5.2.cvs20020401-1) unstable; urgency=low
+
+  * The "Ahhhhhhhhhhhhhhhhhh!" Release.
+  * New snapshot from CVS (post-5.2) (yes, I know 5.2 isn't out yet).
+    - Fixes crash on printing large types
+      (Closes: #111017, #130592, #131033).
+    - In one upstream patch and one pending patch, greatly improve
+      debugging with GCC 2.95.  If you've ever breakpointed the
+      beginning of a function and been frustrated when arguments
+      printed incorrectly, this release is for you!  It should fix most
+      occurances of that problem.
+  * Patches from J.H.M. Dassen to use system readline.  Slightly tweaked.
+    - [debian/rules] Build the refcard; figure out patches automatically.
+    - [debian/use-dynamic-readline.patch] Link against dynamic readline again.
+    - [debian/no-readline-docs.patch] Remove readline documentation.
+    - [debian/const-tilde_expand.patch] Bring extern declaration of tilde_expand
+      in sync with current readline headers.
+    - [debian/rules] Ensure we don't build against the local readline copy by
+      mistake; remove generated config.status files.
+  * Include gdbserver if it is built.
+  * Include a version of GDB with the TUI interface enabled
+    (Closes: #137503).
+  * Run 'make check' during build, for stabs and DWARF-2.
+  * Add --disable-gdbtk (Closes: #115429).
+  * Add a patch to prevent a hang while running the Java testsuite if
+    gcj-3.0 is installed.
+  * Include simulator in the binary package if one is built (PPC, ARM,
+    MIPS) (Closes: #123185).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Mon,  1 Apr 2002 17:17:30 -0500
+
+gdb (5.1.1-1) unstable; urgency=low
+
+  * New upstream release (Closes: #132314).
+    - Corrected manual licenses (Closes: #129311).
+  * Apply HPPA patch (Closes: #127301).
+  * Add <stdbool.h> patch to fix conflict with new ncurses.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Wed, 13 Feb 2002 16:39:32 -0500
+
+gdb (5.1-1) unstable; urgency=low
+
+  * New upstream release.
+  * All patches merged upstream, including (hopefully) everything needed
+  for S/390.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Fri,  7 Dec 2001 13:04:15 -0500
+
+gdb (5.0.cvs20011007-3) unstable; urgency=low
+
+  * Add ARM patch (committed to upstream CVS).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Wed, 31 Oct 2001 10:59:21 -0500
+
+gdb (5.0.cvs20011007-2) unstable; urgency=low
+
+  * Updated S/390 patch from Gerhard Tonn.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Mon,  8 Oct 2001 13:55:06 -0400
+
+gdb (5.0.cvs20011007-1) unstable; urgency=low
+
+  * New upstream release.
+  * Remove obsolete patches (gdb-docs, gdb-ppc-core).
+  * Add S/390 support patch.
+  * Configure for $(DEB_HOST_GNU_TYPE) (Closes: #109715).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun,  7 Oct 2001 14:06:20 -0400
+
+gdb (5.0.cvs20010729-2) unstable; urgency=low
+
+  * Fix m68k build.  Again.  (Closes: #107807).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sat, 25 Aug 2001 15:32:16 -0700
+
+gdb (5.0.cvs20010729-1) unstable; urgency=low
+
+  * Call dh_installinfo from rules file (Closes: #107119).
+  * Put info files in "Development" to match other Debian development tools.
+  * Fix malformed gdbint.info file.
+  * Use DH_COMPAT=3 to make dh_installinfo work better with wildcards,
+    and bump debhelper build dependency.
+  * Update to 5.1 release branch (Closes: #103992).
+  * Fix PowerPC core files (Re: bug #107072).
+  * Fix up patch handling in rules file a little bit.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Mon, 30 Jul 2001 13:48:27 -0700
+
+gdb (5.0.cvs20010704-1) unstable; urgency=low
+
+  * The "Independence Day" release - CVS snapshot from July 4th.
+  * New maintainer.
+  * Update build-depends (Closes: #96835, #96897).
+  * New version includes thread support - for some platforms.  I'm not going
+    to close the related bugs until I've verified it on a few more targets.
+  * Debhelperize (Closes: #97715, #97593).
+  * Add Replaces: gdb-arm for upgrades (Closes: #79992).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Thu,  5 Jul 2001 12:46:06 -0700
+
+gdb (5.0-4) unstable; urgency=low
+
+  * Made almost lintian clean:
+    - added Section: and Priority: fields in gdb binary package
+    - info files are now installed in /usr/share/info
+    - binaries get now stripped
+    - debian/copyright now refers to '/usr/share/common-licenses' for
+      full GPL license text
+    (patch by Domenico Andreoli <cavok@debian.org>)
+  * added texinfo & tetex-bin to the build-dependencies.
+
+ -- Vincent Renardias <vincent@debian.org>  Sun,  6 May 2001 21:19:16 +0200
+
+gdb (5.0-3) unstable; urgency=low
+
+  * Include upstream README & NEWS files.
+    closes: #37978 gdb documentation.
+  * s|usr/doc|usr/share/doc|g.
+    closes: #69272: gdb: docs should be in /usr/share/doc according policy.
+  * Fix description.
+
+ -- Vincent Renardias <vincent@debian.org>  Wed, 16 Aug 2000 21:58:45 +0200
+
+gdb (5.0-2) unstable; urgency=low
+
+  * Include patch to get it to work on m68k.
+    closes: #69185: gdb doesn't build on m68k.
+
+ -- Vincent Renardias <vincent@debian.org>  Wed, 16 Aug 2000 19:33:16 +0200
+
+gdb (5.0-1) unstable; urgency=low
+
+  * New upstream code.
+    (Foreign patches not re-applied for now. Will see if they
+    are necessary)
+    closes: #66221 New major upstream version (5.0) out.
+    closes: #63337 gdb: Recompilation with libncurse5 needed.
+    closes: #58450 gdb: Won't compile on PowerPC.
+    closes: #54738 gdb does not compile on i386 under current glibc.
+
+ -- Vincent Renardias <vincent@debian.org>  Sun, 13 Aug 2000 01:27:40 +0200
+
 gdb (4.18.19990928-1) unstable; urgency=low
 
   * New upstream code.

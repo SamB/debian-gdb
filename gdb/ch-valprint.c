@@ -1,5 +1,6 @@
 /* Support for printing Chill values for GDB, the GNU debugger.
-   Copyright 1986, 1988, 1989, 1991, 1992, 1993, 1994
+   Copyright 1986, 1988, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 2000, 2001
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -33,16 +34,17 @@
 #include "ch-lang.h"
 #include "annotate.h"
 
-static void
-chill_print_value_fields PARAMS ((struct type *, char *, GDB_FILE *, int, int,
-				  enum val_prettyprint, struct type **));
+static void chill_print_value_fields (struct type *, char *,
+				      struct ui_file *, int, int,
+				      enum val_prettyprint, struct type **);
 
-static void
-chill_print_type_scalar PARAMS ((struct type *, LONGEST, GDB_FILE *));
+static void chill_print_type_scalar (struct type *, LONGEST,
+				     struct ui_file *);
 
-static void
-chill_val_print_array_elements PARAMS ((struct type *, char *, CORE_ADDR, GDB_FILE *,
-				      int, int, int, enum val_prettyprint));
+static void chill_val_print_array_elements (struct type *, char *,
+					    CORE_ADDR, struct ui_file *,
+					    int, int, int,
+					    enum val_prettyprint);
 
 
 /* Print integral scalar data VAL, of type TYPE, onto stdio stream STREAM.
@@ -52,10 +54,7 @@ chill_val_print_array_elements PARAMS ((struct type *, char *, CORE_ADDR, GDB_FI
    decimal integer values. */
 
 static void
-chill_print_type_scalar (type, val, stream)
-     struct type *type;
-     LONGEST val;
-     GDB_FILE *stream;
+chill_print_type_scalar (struct type *type, LONGEST val, struct ui_file *stream)
 {
   switch (TYPE_CODE (type))
     {
@@ -98,16 +97,10 @@ chill_print_type_scalar (type, val, stream)
    element indexes (in Chill syntax). */
 
 static void
-chill_val_print_array_elements (type, valaddr, address, stream,
-				format, deref_ref, recurse, pretty)
-     struct type *type;
-     char *valaddr;
-     CORE_ADDR address;
-     GDB_FILE *stream;
-     int format;
-     int deref_ref;
-     int recurse;
-     enum val_prettyprint pretty;
+chill_val_print_array_elements (struct type *type, char *valaddr,
+				CORE_ADDR address, struct ui_file *stream,
+				int format, int deref_ref, int recurse,
+				enum val_prettyprint pretty)
 {
   unsigned int i = 0;
   unsigned int things_printed = 0;
@@ -198,17 +191,9 @@ chill_val_print_array_elements (type, valaddr, address, stream,
    The PRETTY parameter controls prettyprinting.  */
 
 int
-chill_val_print (type, valaddr, embedded_offset, address,
-		 stream, format, deref_ref, recurse, pretty)
-     struct type *type;
-     char *valaddr;
-     int embedded_offset;
-     CORE_ADDR address;
-     GDB_FILE *stream;
-     int format;
-     int deref_ref;
-     int recurse;
-     enum val_prettyprint pretty;
+chill_val_print (struct type *type, char *valaddr, int embedded_offset,
+		 CORE_ADDR address, struct ui_file *stream, int format,
+		 int deref_ref, int recurse, enum val_prettyprint pretty)
 {
   LONGEST val;
   unsigned int i = 0;		/* Number of characters printed.  */
@@ -350,7 +335,7 @@ chill_val_print (type, valaddr, embedded_offset, address,
     case TYPE_CODE_SET:
       elttype = TYPE_INDEX_TYPE (type);
       CHECK_TYPEDEF (elttype);
-      if (TYPE_FLAGS (elttype) & TYPE_FLAG_STUB)
+      if (TYPE_STUB (elttype))
 	{
 	  fprintf_filtered (stream, "<incomplete type>");
 	  gdb_flush (stream);
@@ -460,7 +445,7 @@ chill_val_print (type, valaddr, embedded_offset, address,
 	{
 	  if (TYPE_CODE (TYPE_TARGET_TYPE (type)) != TYPE_CODE_UNDEF)
 	    {
-	      value_ptr deref_val =
+	      struct value *deref_val =
 	      value_at
 	      (TYPE_TARGET_TYPE (type),
 	       unpack_pointer (lookup_pointer_type (builtin_type_void),
@@ -513,15 +498,9 @@ chill_val_print (type, valaddr, embedded_offset, address,
    should not print, or zero if called from top level.  */
 
 static void
-chill_print_value_fields (type, valaddr, stream, format, recurse, pretty,
-			  dont_print)
-     struct type *type;
-     char *valaddr;
-     GDB_FILE *stream;
-     int format;
-     int recurse;
-     enum val_prettyprint pretty;
-     struct type **dont_print;
+chill_print_value_fields (struct type *type, char *valaddr,
+			  struct ui_file *stream, int format, int recurse,
+			  enum val_prettyprint pretty, struct type **dont_print)
 {
   int i, len;
   int fields_seen = 0;
@@ -558,7 +537,7 @@ chill_print_value_fields (type, valaddr, stream, format, recurse, pretty,
 	  fputs_filtered (": ", stream);
 	  if (TYPE_FIELD_PACKED (type, i))
 	    {
-	      value_ptr v;
+	      struct value *v;
 
 	      /* Bitfields require special handling, especially due to byte
 	         order problems.  */
@@ -585,11 +564,8 @@ chill_print_value_fields (type, valaddr, stream, format, recurse, pretty,
 }
 
 int
-chill_value_print (val, stream, format, pretty)
-     value_ptr val;
-     GDB_FILE *stream;
-     int format;
-     enum val_prettyprint pretty;
+chill_value_print (struct value *val, struct ui_file *stream, int format,
+		   enum val_prettyprint pretty)
 {
   struct type *type = VALUE_TYPE (val);
   struct type *real_type = check_typedef (type);

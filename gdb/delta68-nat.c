@@ -1,5 +1,5 @@
 /* Functions specific to running gdb native on a Motorola Delta Series sysV68.
-   Copyright (C) 1993, 1997-98, Free Software Foundation, Inc.
+   Copyright 1993, 1996, 1998, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -34,9 +34,7 @@
    BLOCKEND is the address of the end of the user structure.  */
 
 CORE_ADDR
-register_addr (regno, blockend)
-     int regno;
-     CORE_ADDR blockend;
+register_addr (int regno, CORE_ADDR blockend)
 {
   static int sysv68reg[] =
   {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, -1, 15, 16};
@@ -64,7 +62,7 @@ CORE_ADDR kernel_u_addr;
 
 /* Read the value of the u area from the kernel.  */
 void
-_initialize_delta68_nat ()
+_initialize_delta68_nat (void)
 {
   struct nlist nl[2];
 
@@ -79,14 +77,14 @@ _initialize_delta68_nat ()
     }
 }
 
-clear_insn_cache ()
+clear_insn_cache (void)
 {
 #ifdef MCT_TEXT			/* in sys/signal.h on sysV68 R3V7.1 */
   memctl (0, 4096, MCT_TEXT);
 #endif
 }
 
-kernel_u_size ()
+kernel_u_size (void)
 {
   return sizeof (struct user);
 }

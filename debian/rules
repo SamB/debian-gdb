@@ -1,167 +1,139 @@
 #!/usr/bin/make -f
 
+DH_COMPAT := 3
+export DH_COMPAT
+
 CC = gcc
-CFLAGS = -O2 -Wall
-# When using glibc 2 on Linux we must always use vtable thunks.
-CXXFLAGS = $(CFLAGS) -fvtable-thunks
+CFLAGS = -O2 -g
 
 LDFLAGS =
 install = /usr/bin/install -p
 
 # Rather paranoid than sorry. Make the shell exit with an error if an
 # untested command fails.
-SHELL+= -e
+SHELL += -e
 
-dir=`pwd`
-arch=`./config.guess|sed -e 's/unknown/debian/'`
-ARCH=$(shell dpkg --print-architecture)
-p=gdb
+dir := $(shell pwd)
+tmp := $(shell pwd)/debian/tmp
+DEB_HOST_GNU_CPU := $(shell dpkg-architecture -qDEB_HOST_GNU_CPU)
+DEB_HOST_GNU_TYPE := $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
+p   := gdb
+
+ifneq ($(findstring $(DEB_HOST_GNU_CPU),powerpc i386 alpha sparc),)
+run_tests := yes
+else
+run_tests := no
+endif
 
 # --- patch handling
 #
-#patch_dir = debian
-#debian_patches = 
-#ifeq ($(ARCH),i386)
-#  debian_patches += i386-threads
-#endif
-#
-#patched-%: $(patch_dir)/%.patch
-#	patch -p1 < $< 2>&1 | tee $@ 
-#	echo "$* patch applied." >> $@
-#
-#apply-patches: patched-stamp
-#
-#patched-stamp: $(foreach p,$(debian_patches),patched-$(p))
-#	touch patched-stamp
-#
-#reverse-patches:
-#	for stamp in patched-*; do \
-#	  case "$$stamp" in patched-stamp|patched-\*) continue; esac; \
-#	  patch=`echo $$stamp | sed -e 's/patched-//'`; \
-#	  echo "trying to revert patch $$patch ..."; \
-#	  if patch -p1 -R -E < $(patch_dir)/$$patch.patch; then \
-#	    echo "reverted $$patch patch."; \
-#	    rm -f $$stamp; \
-#	  else \
-#	    echo "error in reverting $$patch patch."; \
-#	    exit 1; \
-#	  fi; \
-#	done
-#	rm -f patched-stamp
-#
+
+patch_dir = debian/patches
+debian_patches := $(basename $(shell cd $(patch_dir) && ls *.patch))
+
+patched-%: $(patch_dir)/%.patch
+	patch -p1 --no-backup-if-mismatch < $< > log-$@ 2>&1
+	echo "$* patch applied." >> $@
+
+apply-patches: patched-stamp
+
+patched-stamp: $(foreach p,$(debian_patches),patched-$(p))
+	touch patched-stamp
+
+reverse-patches:
+	for stamp in patched-*; do \
+	  case "$$stamp" in patched-stamp|patched-\*) continue; esac; \
+	  patch=`echo $$stamp | sed -e 's/patched-//'`; \
+	  echo "trying to revert patch $$patch ..."; \
+	  if patch -p1 -R -E --no-backup-if-mismatch < $(patch_dir)/$$patch.patch; then \
+	    echo "reverted $$patch patch."; \
+	    rm -f $$stamp log-$$stamp; \
+	  else \
+	    echo "error in reverting $$patch patch."; \
+	    exit 1; \
+	  fi; \
+	done
+	rm -f patched-stamp
+
 # --- end patch handling
 
 config: config-stamp
-config-stamp:
-	env INSTALL="$(install)" ./configure --prefix=/usr -v --enable-shared
+config-stamp: patched-stamp
+	-mkdir objdir
+	cd objdir && \
+	  env INSTALL="$(install)" ../configure $(DEB_HOST_GNU_TYPE) \
+		--prefix=/usr --mandir='\$${prefix}/share/man' \
+		--disable-gdbtk \
+		-v --enable-shared --enable-tui
 	touch config-stamp
 
-build: config ##patched-stamp
+build: build-stamp
+build-stamp: patched-stamp config-stamp
 	$(checkdir)
-# Regenerate the configure scripts, so they contain our libtools brokenness
-# workarounds
-	##for am in `find . -type f -name 'Makefile.am'` ; do \
-	##  (cd `dirname $$am` ; \
-	##   if [ -e configure.in ] ; then \
-	##     echo "Recreating configure scripts in $$am" ; \
-	##     libtoolize --force --copy --automake ; \
-	##     automake --cygnus ; \
-	##     aclocal ; \
-	##     autoconf ; \
-	##   fi ) ; \
-	##done
-# Builds the binary package.
-	### env INSTALL="$(install)" ./configure --prefix=/usr -v --enable-shared
-	make CC="$(CC)" CFLAGS="$(CFLAGS)" CXXFLAGS="$(CXXFLAGS)" \
-            LDFLAGS="$(LDFLAGS)" all info
-	cd gdb/doc && make refcard.dvi refcard.ps 
-	touch build
+	cd objdir && make CC="$(CC)" CFLAGS="$(CFLAGS)" \
+	  CXXFLAGS="$(CXXFLAGS)" LDFLAGS="$(LDFLAGS)" all info
+	$(MAKE) -C objdir/gdb/doc refcard.dvi refcard.ps 
+ifeq ($(run_tests),yes)
+	-$(MAKE) -C objdir/gdb check \
+		RUNTESTFLAGS="--target_board 'unix unix/gdb:debug_flags=-gdwarf-2'" \
+		2>&1 | tee objdir/check.log
+endif
+	touch build-stamp
 
-clean: ##reverse-patches
+clean: reverse-patches
 # Undoes the effect of `make -f debian.rules build'.
 	$(checkdir)
-	-make distclean
-	-make -C gdb/gdbserver distclean
-	-find . -name \*.info\* -print | xargs rm -f
-	-find . -name \*.tab.c -print | xargs rm -f
-	-rm -f gdb/xm.h gdb/tm.h gdb/nm.h readline/sysdep.h config.log gdb/doc/GDBvn.texi
-	rm -f build config-stamp
-	rm -rf debian/tmp debian/*~ debian/*.bak debian/files* debian/substvars gdb/doc/refcard.{ps,dvi}
+	dh_clean
+	rm -rf objdir
+	rm -f build-stamp config-stamp
+	find -type f -name 'config.status' | xargs grep -l -i 'Generated automatically' | xargs rm -f
 
-binary: checkroot build binary-indep binary-arch
-	$(checkdir)
+binary: build binary-indep binary-arch
 
-binary-indep: checkroot build
-	$(checkdir)
+binary-indep: build
 
-binary-arch: checkroot build
-# Makes a binary package.
+binary-arch: build
 	$(checkdir)
-	rm -rf debian/tmp
+	dh_testroot
+	dh_clean
+
 	$(install) -d -m 755 debian/tmp
 	chmod g-s debian/tmp
-	cd debian/tmp ; \
-	  for dir in DEBIAN usr usr/include usr/include/readline usr/man \
-	             usr/man/man1 usr/info usr/bin; do \
-	    $(install) -d -m 755 $$dir ; \
-	  done
-	make install INSTALL_PROGRAM_ARGS="-s" \
-	    prefix=$(dir)/debian/tmp/usr
-#	mv -f debian/tmp/usr/bin/$(aa)-linux-gdb \
-#	  debian/tmp/usr/bin/gdb
-#	mv -f debian/tmp/usr/man/man1/$(aa)-linux-gdb.1 \
-#	  debian/tmp/usr/man/man1/gdb.1
-	make install-info \
-	     prefix=$(dir)/debian/tmp/usr
-# We need not distribute the includes and libraries.
-	rm -rf debian/tmp/usr/$(arch)
-	rm -rf debian/tmp/usr/include
-	find debian/tmp/usr/info -type f ! \( -name 'gdb*' -o -name 'stabs*' \) | xargs rm -f
-	rm -rf debian/tmp/usr/lib
-	rm -f debian/tmp/usr/man/man1/configure.1
-	chmod -R g-w debian/tmp
-	$(install) -d -m 755 debian/tmp/usr/doc/$(p)/applied-patches
-	$(install) -m 644 gdb/doc/refcard.tex debian/tmp/usr/doc/$(p)/
-	$(install) -m 644 gdb/doc/refcard.dvi debian/tmp/usr/doc/$(p)/
-	$(install) -m 644 gdb/doc/refcard.ps debian/tmp/usr/doc/$(p)/
-	$(install) -m 644 debian/copyright debian/tmp/usr/doc/$(p)/copyright
-	$(install) -m 644 debian/changelog debian/tmp/usr/doc/$(p)/changelog.Debian
-	$(install) -m 644 gdb/ChangeLog debian/tmp/usr/doc/$(p)/changelog
-	$(install) -m 644 debian/m68k.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
-	$(install) -m 644 debian/objc.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
-	$(install) -m 644 debian/objC2.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
-	$(install) -m 644 debian/4.17.gnat.diff.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
-	$(install) -m 644 debian/gdb-4.17-4.17.0.4.diff.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
-	$(install) -m 644 debian/gdb-4.17.0.4-4.17.0.8.diff.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
-	cd debian/tmp/usr/doc/$(p)/applied-patches/ && \
-	for patch in * none; do \
-		case "$$patch" in none) continue; esac; \
-		uudecode $$patch; \
-		rm $$patch; \
-	done
-	$(install) -m 755 debian/postinst debian/tmp/DEBIAN/postinst
-	$(install) -m 755 debian/prerm debian/tmp/DEBIAN/prerm
-	-gzip -9f debian/tmp/usr/info/*
-	-gzip -9 debian/tmp/usr/man/man*/*
-	-gzip -9 debian/tmp/usr/doc/$(p)/changelog*
-	-rm -f debian/tmp/usr/bin/[^g]*
-	-rm -rf debian/tmp/usr/share
-	dpkg-shlibdeps gdb/gdb
-	dpkg-gencontrol
-	chown -R root.root debian/tmp
-	chmod -R a+rX,g-w,o-w,u+w debian/tmp
-	dpkg --build debian/tmp ..
+	mkdir -p debian/tmp/usr/share/man/man1
+	mkdir -p debian/tmp/usr/share/info
+	mkdir -p debian/tmp/usr/bin
+	cd objdir && make install install-info prefix=$(tmp)/usr \
+	  mandir=$(tmp)/usr/share/man infodir=$(tmp)/usr/share/info
 
-source diff:
-	echo "Source and diff are obsolete. Use dpkg-source -b instead." >&2
-	false
+	dh_movefiles -a
 
-checkroot:
-	$(checkdir)
-	test root = "`whoami`"
+	if [ -x debian/tmp/usr/bin/run ]; then					\
+		$(install) -m 755 debian/tmp/usr/bin/run			\
+		  debian/gdb/usr/bin/$(DEB_HOST_GNU_TYPE)-run;			\
+		$(install) -m 755 debian/tmp/usr/share/man/man1/run.1		\
+		  debian/gdb/usr/share/man/man1/$(DEB_HOST_GNU_TYPE)-run.1;	\
+	fi
+
+	dh_fixperms -a
+
+	dh_installdocs -a gdb/NEWS gdb/README gdb/doc/refcard.tex \
+		objdir/gdb/doc/refcard.dvi objdir/gdb/doc/refcard.ps
+ifeq ($(run_tests),yes)
+	install -m 644 objdir/check.log \
+		debian/gdb/usr/share/doc/gdb/check.log
+endif
+	dh_installchangelogs -a gdb/ChangeLog
+	dh_installinfo -a
+	dh_compress -a
+	dh_strip -a
+	dh_shlibdeps -a
+
+	dh_installdeb -a
+	dh_gencontrol -a
+	dh_builddeb -a
 
 define checkdir
 	test -r config-ml.in
 endef
 
-.PHONY: source diff binary binary-arch binary-indep checkroot testdir
+.PHONY: binary binary-arch binary-indep

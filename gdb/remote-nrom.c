@@ -1,5 +1,6 @@
 /* Remote debugging with the XLNT Designs, Inc (XDI) NetROM.
-   Copyright 1990, 1991, 1992, 1995 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1995, 1998, 1999, 2000
+   Free Software Foundation, Inc.
    Contributed by:
    Roger Moyers 
    XLNT Designs, Inc.
@@ -37,16 +38,16 @@
 #define DEFAULT_NETROM_LOAD_PORT    1236
 #define DEFAULT_NETROM_CONTROL_PORT 1237
 
-static void nrom_close PARAMS ((int quitting));
+static void nrom_close (int quitting);
 
 /* New commands.  */
 
-static void nrom_passthru PARAMS ((char *, int));
+static void nrom_passthru (char *, int);
 
 /* We talk to the NetROM over these sockets.  */
 
-static serial_t load_desc = NULL;
-static serial_t ctrl_desc = NULL;
+static struct serial *load_desc = NULL;
+static struct serial *ctrl_desc = NULL;
 
 static int load_port = DEFAULT_NETROM_LOAD_PORT;
 static int control_port = DEFAULT_NETROM_CONTROL_PORT;
@@ -61,24 +62,22 @@ extern struct target_ops nrom_ops;
    don't match.  */
 
 static int
-expect (string)
-     char *string;
+expect (char *string)
 {
   char *p = string;
   int c;
 
-  immediate_quit = 1;
+  immediate_quit++;
 
   while (1)
     {
-      c = SERIAL_READCHAR (ctrl_desc, 5);
+      c = serial_readchar (ctrl_desc, 5);
 
       if (c == *p++)
 	{
 	  if (*p == '\0')
 	    {
-	      immediate_quit = 0;
-
+	      immediate_quit--;
 	      return 0;
 	    }
 	}
@@ -93,21 +92,19 @@ expect (string)
 }
 
 static void
-nrom_kill ()
+nrom_kill (void)
 {
   nrom_close (0);
 }
 
-static serial_t
-open_socket (name, port)
-     char *name;
-     int port;
+static struct serial *
+open_socket (char *name, int port)
 {
   char sockname[100];
-  serial_t desc;
+  struct serial *desc;
 
   sprintf (sockname, "%s:%d", name, port);
-  desc = SERIAL_OPEN (sockname);
+  desc = serial_open (sockname);
   if (!desc)
     perror_with_name (sockname);
 
@@ -115,18 +112,16 @@ open_socket (name, port)
 }
 
 static void
-load_cleanup ()
+load_cleanup (void)
 {
-  SERIAL_CLOSE (load_desc);
+  serial_close (load_desc);
   load_desc = NULL;
 }
 
 /* Download a file specified in ARGS to the netROM.  */
 
 static void
-nrom_load (args, fromtty)
-     char *args;
-     int fromtty;
+nrom_load (char *args, int fromtty)
 {
   int fd, rd_amt, fsize;
   bfd *pbfd;
@@ -135,7 +130,7 @@ nrom_load (args, fromtty)
   struct cleanup *old_chain;
 
   /* Tell the netrom to get ready to download. */
-  if (SERIAL_WRITE (ctrl_desc, downloadstring, strlen (downloadstring)))
+  if (serial_write (ctrl_desc, downloadstring, strlen (downloadstring)))
     error ("nrom_load: control_send() of `%s' failed", downloadstring);
 
   expect ("Waiting for a connection...\n");
@@ -186,7 +181,7 @@ nrom_load (args, fromtty)
 		      bfd_get_section_contents (pbfd, section, buffer, fptr,
 						count);
 
-		      SERIAL_WRITE (load_desc, buffer, count);
+		      serial_write (load_desc, buffer, count);
 		      section_address += count;
 		      fptr += count;
 		      section_size -= count;
@@ -210,9 +205,7 @@ nrom_load (args, fromtty)
 /* Open a connection to the remote NetROM devices.  */
 
 static void
-nrom_open (name, from_tty)
-     char *name;
-     int from_tty;
+nrom_open (char *name, int from_tty)
 {
   int errn;
 
@@ -238,31 +231,28 @@ or IP address of the NetROM device you wish to use.");
 /* Close out all files and local state before this target loses control. */
 
 static void
-nrom_close (quitting)
-     int quitting;
+nrom_close (int quitting)
 {
   if (load_desc)
-    SERIAL_CLOSE (load_desc);
+    serial_close (load_desc);
   if (ctrl_desc)
-    SERIAL_CLOSE (ctrl_desc);
+    serial_close (ctrl_desc);
 }
 
 /* Pass arguments directly to the NetROM. */
 
 static void
-nrom_passthru (args, fromtty)
-     char *args;
-     int fromtty;
+nrom_passthru (char *args, int fromtty)
 {
   char buf[1024];
 
   sprintf (buf, "%s\n", args);
-  if (SERIAL_WRITE (ctrl_desc, buf, strlen (buf)))
+  if (serial_write (ctrl_desc, buf, strlen (buf)))
     error ("nrom_reset: control_send() of `%s'failed", args);
 }
 
 static void
-nrom_mourn ()
+nrom_mourn (void)
 {
   unpush_target (&nrom_ops);
   generic_mourn_inferior ();
@@ -327,7 +317,6 @@ init_nrom_ops (void)
   nrom_ops.to_thread_alive = 0;
   nrom_ops.to_stop = 0;
   nrom_ops.to_pid_to_exec_file = NULL;
-  nrom_ops.to_core_file_to_sym_file = NULL;
   nrom_ops.to_stratum = download_stratum;
   nrom_ops.DONT_USE = NULL;
   nrom_ops.to_has_all_memory = 1;
@@ -338,10 +327,10 @@ init_nrom_ops (void)
   nrom_ops.to_sections = NULL;
   nrom_ops.to_sections_end = NULL;
   nrom_ops.to_magic = OPS_MAGIC;
-};
+}
 
 void
-_initialize_remote_nrom ()
+_initialize_remote_nrom (void)
 {
   init_nrom_ops ();
   add_target (&nrom_ops);

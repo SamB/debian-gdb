@@ -44,7 +44,6 @@ MKINSTALLDIRS = @MKINSTALLDIRS@
 l = @l@
 
 AR = ar
-AR_FLAGS = cru
 CC = @CC@
 LIBTOOL = @LIBTOOL@
 RANLIB = @RANLIB@
@@ -90,7 +89,7 @@ install-info:
 
 libintl.a: $(OBJECTS)
 	rm -f $@
-	$(AR) $(AR_FLAGS) $@ $(OBJECTS)
+	$(AR) cru $@ $(OBJECTS)
 	$(RANLIB) $@
 
 libintl.la: $(OBJECTS)
