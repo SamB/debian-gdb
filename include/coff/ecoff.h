@@ -24,6 +24,7 @@
 
 /* Alpha magic numbers used in filehdr.  */
 #define ALPHA_MAGIC 0x183
+#define ALPHA_MAGIC_BSD 0x185
 
 /* Magic numbers used in a.out header.  */
 #define ECOFF_AOUT_OMAGIC 0407	/* not demand paged (ld -N).  */
@@ -352,6 +353,18 @@ struct ecoff_find_line
   /* FDR table, sorted by address: */
   long fdrtab_len;
   struct ecoff_fdrtab_entry *fdrtab;
+
+  /* Cache entry for most recently found line information.  The sect
+     field is NULL if this cache does not contain valid information.  */
+  struct
+    {
+      asection *sect;
+      bfd_vma start;
+      bfd_vma stop;
+      const char *filename;
+      const char *functionname;
+      unsigned int line_num;
+    } cache;
 };
 
 /********************** SWAPPING **********************/

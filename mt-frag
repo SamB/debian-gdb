@@ -1,0 +1,3 @@
+# When using glibc 2 on Linux we must always use vtable thunks.
+  CXXFLAGS=-O2 -g -fvtable-thunks
+PICFLAG_FOR_TARGET=-fpic

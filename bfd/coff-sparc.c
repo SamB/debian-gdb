@@ -1,5 +1,5 @@
 /* BFD back-end for Sparc COFF files.
-   Copyright 1990, 1991, 1992, 1993, 1994 Free Software Foundation, Inc.
+   Copyright 1990, 91, 92, 93, 94, 95, 96, 1997 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
 This file is part of BFD, the Binary File Descriptor library.
@@ -21,7 +21,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "bfd.h"
 #include "sysdep.h"
 #include "libbfd.h"
-#include "obstack.h"
 #include "coff/sparc.h"
 #include "coff/internal.h"
 #include "libcoff.h"
@@ -87,8 +86,7 @@ bfd_coff_generic_reloc (abfd, reloc_entry, symbol, data, input_section,
      char **error_message;
 {
   if (output_bfd != (bfd *) NULL
-      && (symbol->flags & BSF_SECTION_SYM) == 0
-      && reloc_entry->addend == 0)
+      && (symbol->flags & BSF_SECTION_SYM) == 0)
     {
       reloc_entry->address += input_section->output_offset;
       return bfd_reloc_ok;
@@ -186,28 +184,8 @@ rtype2howto (cache_ptr, dst)
 
 #define SWAP_IN_RELOC_OFFSET	bfd_h_get_32
 #define SWAP_OUT_RELOC_OFFSET	bfd_h_put_32
-/* This is just like the standard one, except that we don't set up an
-   addend for relocs against global symbols (otherwise linking objects
-   created by -r fails), and we add in the reloc offset at the end.  */
-#define CALC_ADDEND(abfd, ptr, reloc, cache_ptr)                \
-  {                                                             \
-    coff_symbol_type *coffsym = (coff_symbol_type *) NULL;      \
-    if (ptr && bfd_asymbol_bfd (ptr) != abfd)                   \
-      coffsym = (obj_symbols (abfd)                             \
-                 + (cache_ptr->sym_ptr_ptr - symbols));         \
-    else if (ptr)                                               \
-      coffsym = coff_symbol_from (abfd, ptr);                   \
-    if (coffsym != (coff_symbol_type *) NULL                    \
-        && coffsym->native->u.syment.n_scnum == 0)              \
-      cache_ptr->addend = 0;                                    \
-    else if (ptr && bfd_asymbol_bfd (ptr) == abfd               \
-             && ptr->section != (asection *) NULL               \
-	     && (ptr->flags & BSF_GLOBAL) == 0)			\
-      cache_ptr->addend = - (ptr->section->vma + ptr->value);   \
-    else                                                        \
-      cache_ptr->addend = 0;                                    \
-    cache_ptr->addend += reloc.r_offset;			\
-  }
+#define CALC_ADDEND(abfd, ptr, reloc, cache_ptr) \
+  cache_ptr->addend = reloc.r_offset;
 
 /* Clear the r_spare field in relocs.  */
 #define SWAP_OUT_RELOC_EXTRA(abfd,src,dst) \

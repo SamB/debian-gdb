@@ -2,7 +2,7 @@ Source: gdb
 Maintainer: Vincent Renardias <vincent@waw.com>
 Section: devel
 Priority: standard
-Standards-Version: 2.1.1.0
+Standards-Version: 2.4.0.0
 
 Package: gdb
 Depends: ${shlibs:Depends}
@@ -10,5 +10,5 @@ Architecture: any
 Description: The GNU Debugger
  GDB is a source-level debugger, capable of breaking programs at
  any specific line, displaying variable values, and determining
- where errors occurred. Currently, it works for C, C++, and
- Fortran programs. A must-have for any serious programmer.
+ where errors occurred. Currently, it works for C, C++, Fortran
+ and Objective-C programs. A must-have for any serious programmer.

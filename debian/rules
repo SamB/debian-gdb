@@ -1,83 +1,93 @@
 #!/usr/bin/make -f
-#
-# Last updated: Sat Dec 17 10:52:20 EST 1994 by imurdock.
-#
-# To make the binary distribution package, the ``Debianized'' source package
-# and the context diff to the original package, type `./debian.rules dist'.
-# Make sure that `debian.rules' is executable before the final distribution
-# is made.
-#
-# Invoke each target with `./debian.rules <target>'.  All targets should be
-# invoked with the package root as the current directory.
-#
-# The `binary' target must be run as root, as it needs to install files with
-# specific ownerships.  The `diff' target assumes that you have the original
-# source package available, unpacked, in ../$(p)-$(v).orig, or that you have
-# the previous revision of the ``Debianized'' source package and context diff
-# in the parent directory.
 
 CC = gcc
-CFLAGS = -O2
-LDFLAGS = -s
+CFLAGS = -O2 -Wall
+# When using glibc 2 on Linux we must always use vtable thunks.
+CXXFLAGS = $(CFLAGS) -fvtable-thunks
+
+LDFLAGS =
+install = /usr/bin/install -p
+
+# Rather paranoid than sorry. Make the shell exit with an error if an
+# untested command fails.
+SHELL+= -e
 
 dir=`pwd`
 arch=`./config.guess|sed -e 's/unknown/debian/'`
 p=gdb
 
-build:
+build: 
+	$(checkdir)
+# Regenerate the configure scripts, so they contain our libtools brokenness
+# workarounds
+	for am in `find . -type f -name 'Makefile.am'` ; do \
+	  (cd `dirname $$am` ; \
+	   if [ -e configure.in ] ; then \
+	     echo "Recreating configure scripts in $$am" ; \
+	     libtoolize --force --copy --automake ; \
+	     automake --cygnus ; \
+	     aclocal ; \
+	     autoconf ; \
+	   fi ) ; \
+	done
 # Builds the binary package.
-	./configure --prefix=/usr $(arch)
-	make CC="$(CC)" CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)"
-	touch stamp-build
+	env INSTALL="$(install)" ./configure --prefix=/usr -v --enable-shared
+	make CC="$(CC)" CFLAGS="$(CFLAGS)" CXXFLAGS="$(CXXFLAGS)" \
+            LDFLAGS="$(LDFLAGS)" all info
+	touch build
 
 clean:
 # Undoes the effect of `make -f debian.rules build'.
+	$(checkdir)
 	-make distclean
 	-make -C gdb/gdbserver distclean
-	-find . -name \*.info\* -print | xargs rm
-	rm -f stamp-build
+	-find . -name \*.info\* -print | xargs rm -f
+	-find . -name \*.tab.c -print | xargs rm -f
+	-rm -f gdb/xm.h gdb/tm.h gdb/nm.h readline/sysdep.h libiberty/alloca-conf.h config.log gdb/doc/GDBvn.texi
+	rm -f build
 	rm -rf debian/tmp debian/*~ debian/*.bak debian/files* debian/substvars
 
-binary: binary-indep binary-arch
+binary: checkroot build binary-indep binary-arch
+	$(checkdir)
 
-binary-indep:
-	true
+binary-indep: checkroot build
+	$(checkdir)
 
-binary-arch:
+binary-arch: checkroot build
 # Makes a binary package.
+	$(checkdir)
 	rm -rf debian/tmp
-	install -d -m 755 debian/tmp
+	$(install) -d -m 755 debian/tmp
 	chmod g-s debian/tmp
-	install -d -m 755 debian/tmp/DEBIAN
-	make install prefix=$(dir)/debian/tmp/usr
+	cd debian/tmp ; \
+	  for dir in DEBIAN usr usr/include usr/include/readline usr/man \
+	             usr/man/man1 usr/info usr/bin; do \
+	    $(install) -d -m 755 $$dir ; \
+	  done
+	make install INSTALL_PROGRAM_ARGS="-s" \
+	    prefix=$(dir)/debian/tmp/usr
 #	mv -f debian/tmp/usr/bin/$(aa)-linux-gdb \
 #	  debian/tmp/usr/bin/gdb
 #	mv -f debian/tmp/usr/man/man1/$(aa)-linux-gdb.1 \
 #	  debian/tmp/usr/man/man1/gdb.1
-	make install-info prefix=$(dir)/debian/tmp/usr
+	make install-info \
+	     prefix=$(dir)/debian/tmp/usr
 # We need not distribute the includes and libraries.
 	rm -rf debian/tmp/usr/$(arch)
 	rm -rf debian/tmp/usr/include
-	rm -f debian/tmp/usr/info/[^gs]*.*
-	rm -f debian/tmp/usr/info/standard*.*
-	#rm -f debian/tmp/usr/info/bfd.*
-	#rm -f debian/tmp/usr/info/cfg-paper.*
-	#rm -f debian/tmp/usr/info/configure.*
-	#rm -f debian/tmp/usr/info/history.*
-	#rm -f debian/tmp/usr/info/mmalloc.*
-	#rm -f debian/tmp/usr/info/readline.*
-	#rm -f debian/tmp/usr/info/standards.*
+	find debian/tmp/usr/info -type f ! \( -name 'gdb*' -o -name 'stabs*' \) | xargs rm -f
 	rm -rf debian/tmp/usr/lib
 	rm -f debian/tmp/usr/man/man1/configure.1
 	chmod -R g-w debian/tmp
-	install -d -m 755 debian/tmp/usr/doc/$(p)
-	install -m 644 debian/copyright debian/tmp/usr/doc/$(p)/copyright
-	install -m 644 debian/changelog debian/tmp/usr/doc/$(p)/changelog.Debian
-	install -m 644 gdb/ChangeLog debian/tmp/usr/doc/$(p)/changelog.upstream
-	install -m 644 gdb/README.objc debian/tmp/usr/doc/$(p)/README.objc
-	install -m 644 debian/gdb-glibc2.diff debian/tmp/usr/doc/$(p)/gdb-glibc2.diff
-	install -m 755 debian/postinst debian/tmp/DEBIAN/postinst
-	install -m 755 debian/prerm debian/tmp/DEBIAN/prerm
+	$(install) -d -m 755 debian/tmp/usr/doc/$(p)/applied-patches
+	$(install) -m 644 debian/copyright debian/tmp/usr/doc/$(p)/copyright
+	$(install) -m 644 debian/changelog debian/tmp/usr/doc/$(p)/changelog.Debian
+	$(install) -m 644 gdb/ChangeLog debian/tmp/usr/doc/$(p)/changelog
+	$(install) -m 644 debian/m68k.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
+	$(install) -m 644 debian/objc.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
+	#install -m 644 debian/gnat.diff debian/tmp/usr/doc/$(p)/gnat.diff
+	$(install) -m 755 debian/postinst debian/tmp/DEBIAN/postinst
+	$(install) -m 755 debian/prerm debian/tmp/DEBIAN/prerm
 	-gzip -9f debian/tmp/usr/info/*
 	-gzip -9 debian/tmp/usr/man/man*/*
 	-gzip -9 debian/tmp/usr/doc/$(p)/changelog*
@@ -91,4 +101,12 @@ source diff:
 	echo "Source and diff are obsolete. Use dpkg-source -b instead." >&2
 	false
 
-.PHONY: source diff binary binary-arch binary-indep
+checkroot:
+        $(checkdir)
+        test root = "`whoami`"
+
+define checkdir
+	test -r config-ml.in
+endef
+
+.PHONY: source diff binary binary-arch binary-indep checkroot testdir

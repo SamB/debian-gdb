@@ -7,3 +7,7 @@ is an obsolete format.)
 
 A corrected procfs.h is included in the debian directory, but
 is not otherwise used.
+
+Update (March '98):
+- This doesn't seem needed anymore with libc6.
+	[Vincent]

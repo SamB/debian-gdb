@@ -1,5 +1,6 @@
 /*** coff information for the ARM */
 
+#define COFFARM 1
 
 /********************** FILE HEADER **********************/
 
@@ -18,22 +19,57 @@ struct external_filehdr {
  *	F_EXEC		file is executable (no unresolved external references)
  *	F_LNNO		line numbers stripped from file
  *	F_LSYMS		local symbols stripped from file
+ *      F_INTERWORK     file supports switching between ARM and Thumb instruction sets
+ *      F_INTERWORK_SET the F_INTERWORK bit is valid
+ *	F_APCS_FLOAT	code passes float arguments in float registers
+ *	F_PIC		code is reentrant/position-independent
  *	F_AR32WR	file has byte ordering of an AR32WR machine (e.g. vax)
+ *	F_APCS_26	file uses 26 bit ARM Procedure Calling Standard
+ *	F_APCS_SET	the F_APCS_26, F_APCS_FLOAT and F_PIC bits have been initialised
  */
 
 #define F_RELFLG	(0x0001)
 #define F_EXEC		(0x0002)
 #define F_LNNO		(0x0004)
 #define F_LSYMS		(0x0008)
+#define F_INTERWORK	(0x0010)
+#define F_INTERWORK_SET	(0x0020)
+#define F_APCS_FLOAT	(0x0040)
+#undef  F_AR16WR
+#define F_PIC		(0x0080)
+#define	F_AR32WR	(0x0100)
+#define F_APCS_26	(0x0400)
+#define F_APCS_SET	(0x0800)
 
+/* Bits stored in flags filed of the internal_f structure */
 
+#define F_INTERWORK	(0x0010)
+#define F_APCS26	(0x1000)
+#define F_ARM_ARCHITECTURE_MASK	(0xe000)
+#define F_ARM_2		(0x2000)
+#define F_ARM_2a	(0x4000)
+#define F_ARM_3		(0x6000)
+#define F_ARM_3M	(0x8000)
+#define F_ARM_4		(0xa000)
+#define F_ARM_4T	(0xc000)
+#define F_APCS_FLOAT	(0x0040)
+#define F_PIC		(0x0080)
 
-#define	ARMMAGIC	0xa00  /* I just made these up */
+/*
+ * ARMMAGIC ought to encoded the procesor type,
+ * but it is too late to change it now, instead
+ * the flags field of the internal_f structure
+ * is used as shown above.
+ *
+ * XXX - NC 5/6/97
+ */
+
+#define	ARMMAGIC	0xa00  /* I just made this up */ 
 
 #define ARMBADMAG(x) (((x).f_magic != ARMMAGIC))
 
 #define	FILHDR	struct external_filehdr
-#define	FILHSZ	sizeof(FILHDR)
+#define	FILHSZ	20
 
 
 /********************** AOUT "OPTIONAL HEADER" **********************/
@@ -55,7 +91,8 @@ typedef struct
 AOUTHDR;
 
 
-#define AOUTSZ (sizeof(AOUTHDR))
+#define AOUTSZ 28
+#define AOUTHDRSZ 28
 
 #define OMAGIC          0404    /* object files, eg as output */
 #define ZMAGIC          0413    /* demand load format, eg normal ld output */
@@ -87,7 +124,7 @@ struct external_scnhdr {
 };
 
 #define	SCNHDR	struct external_scnhdr
-#define	SCNHSZ	sizeof(SCNHDR)
+#define	SCNHSZ	40
 
 /*
  * names of "special" sections
@@ -97,6 +134,9 @@ struct external_scnhdr {
 #define _BSS	".bss"
 #define _COMMENT ".comment"
 #define _LIB ".lib"
+
+/* We use the .rdata section to hold read only data.  */
+#define _LIT	".rdata"
 
 /********************** LINE NUMBERS **********************/
 
@@ -144,7 +184,7 @@ struct external_syment
 #define N_TMASK		(0x30)
 #define N_BTSHFT	(4)
 #define N_TSHIFT	(2)
-  
+
 union external_auxent {
 	struct {
 		char x_tagndx[4];	/* str, un, or enum tag indx */
@@ -176,9 +216,12 @@ union external_auxent {
 	} x_file;
 
 	struct {
-		char x_scnlen[4];			/* section length */
+		char x_scnlen[4];	/* section length */
 		char x_nreloc[2];	/* # relocation entries */
 		char x_nlinno[2];	/* # line numbers */
+		char x_checksum[4];	/* section COMDAT checksum */
+		char x_associated[2];	/* COMDAT associated section index */
+		char x_comdat[1];	/* COMDAT selection number */
 	} x_scn;
 
         struct {
@@ -212,4 +255,4 @@ struct external_reloc {
 
 
 #define RELOC struct external_reloc
-#define RELSZ sizeof (RELOC)
+#define RELSZ 14

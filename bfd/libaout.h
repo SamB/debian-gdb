@@ -1,5 +1,5 @@
 /* BFD back-end data structures for a.out (and similar) files.
-   Copyright 1990, 1991, 1992 Free Software Foundation, Inc.
+   Copyright 1990, 91, 92, 93, 94, 95, 96, 1997 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
 This file is part of BFD, the Binary File Descriptor library.
@@ -105,6 +105,12 @@ struct aout_backend_data
      If not, the text section starts on the next page.  */
   unsigned char text_includes_header;
 
+  /* If this flag is set, then if the entry address is not in the
+     first SEGMENT_SIZE bytes of the text section, it is taken to be
+     the address of the start of the text section.  This can be useful
+     for kernels.  */
+  unsigned char entry_is_text_address;
+
   /* The value to pass to N_SET_FLAGS.  */
   unsigned char exec_hdr_flags;
 
@@ -192,14 +198,14 @@ struct internal_exec
 };
 
 /* Magic number is written 
-< MSB        >
+< MSB          >
 3130292827262524232221201918171615141312111009080706050403020100
-< FLAGS      >< MACHINE TYPE ><  MAGIC NUMBER		       >
+< FLAGS        >< MACHINE TYPE ><  MAGIC NUMBER                >
 */
 /* Magic number for NetBSD is
-<MSB         >
+<MSB           >
 3130292827262524232221201918171615141312111009080706050403020100
-< FLAGS    ><                  ><  MAGIC NUMBER                >
+< FLAGS    >< MACHINE TYPE     ><  MAGIC NUMBER                >
 */
 
 enum machine_type {
@@ -216,16 +222,24 @@ enum machine_type {
   M_29K = 101,          /* AMD 29000 */
   M_386_DYNIX = 102,	/* Sequent running dynix */
   M_ARM = 103,		/* Advanced Risc Machines ARM */
+  M_SPARCLET = 131,	/* SPARClet = M_SPARC + 128 */
   M_386_NETBSD = 134,	/* NetBSD/i386 binary */
   M_68K_NETBSD = 135,	/* NetBSD/m68k binary */
   M_68K4K_NETBSD = 136,	/* NetBSD/m68k4k binary */
   M_532_NETBSD = 137,	/* NetBSD/ns32k binary */
   M_SPARC_NETBSD = 138,	/* NetBSD/sparc binary */
+  M_SPARCLET_1 = 147,	/* 0x93, reserved */
   M_MIPS1 = 151,        /* MIPS R2000/R3000 binary */
   M_MIPS2 = 152,        /* MIPS R4000/R6000 binary */
+  M_SPARCLET_2 = 163,	/* 0xa3, reserved */
+  M_SPARCLET_3 = 179,	/* 0xb3, reserved */
+  M_SPARCLET_4 = 195,	/* 0xc3, reserved */
   M_HP200 = 200,	/* HP 200 (68010) BSD binary */
   M_HP300 = (300 % 256), /* HP 300 (68020+68881) BSD binary */
-  M_HPUX = (0x20c % 256)/* HP 200/300 HPUX binary */
+  M_HPUX = (0x20c % 256), /* HP 200/300 HPUX binary */
+  M_SPARCLET_5 = 211,	/* 0xd3, reserved */
+  M_SPARCLET_6 = 227,	/* 0xe3, reserved */
+  M_SPARCLET_7 = 243	/* 0xf3, reserved */
 };
 
 #define N_DYNAMIC(exec) ((exec).a_info & 0x80000000)
@@ -553,8 +567,8 @@ NAME(aout,bfd_free_cached_info) PARAMS ((bfd *));
 #define NO_WRITE_HEADER_KLUDGE 0
 #endif
 
-#ifndef aout_32_bfd_is_local_label
-#define aout_32_bfd_is_local_label bfd_generic_is_local_label
+#ifndef aout_32_bfd_is_local_label_name
+#define aout_32_bfd_is_local_label_name bfd_generic_is_local_label_name
 #endif
 
 #ifndef WRITE_HEADERS
@@ -582,26 +596,22 @@ NAME(aout,bfd_free_cached_info) PARAMS ((bfd *));
   									      \
 	if (bfd_get_outsymbols (abfd) != (asymbol **) NULL		      \
 	    && bfd_get_symcount (abfd) != 0) 				      \
-	    {								      \
-	      if (bfd_seek (abfd, (file_ptr)(N_SYMOFF(*execp)), SEEK_SET)     \
-		  != 0)							      \
-	        return false;						      \
+	  {								      \
+	    if (bfd_seek (abfd, (file_ptr)(N_SYMOFF(*execp)), SEEK_SET) != 0) \
+	      return false;						      \
 									      \
-	      if (! NAME(aout,write_syms)(abfd)) return false;		      \
+	    if (! NAME(aout,write_syms)(abfd)) return false;		      \
+	  }								      \
 									      \
-	      if (bfd_seek (abfd, (file_ptr)(N_TRELOFF(*execp)), SEEK_SET)    \
-		  != 0)							      \
-	        return false;						      \
+	if (bfd_seek (abfd, (file_ptr)(N_TRELOFF(*execp)), SEEK_SET) != 0)    \
+	  return false;						      	      \
+	if (!NAME(aout,squirt_out_relocs) (abfd, obj_textsec (abfd)))         \
+	  return false;						      	      \
 									      \
-	      if (!NAME(aout,squirt_out_relocs) (abfd, obj_textsec (abfd)))   \
-		return false;						      \
-	      if (bfd_seek (abfd, (file_ptr)(N_DRELOFF(*execp)), SEEK_SET)    \
-		  != 0)							      \
-	        return false;						      \
-									      \
-	      if (!NAME(aout,squirt_out_relocs)(abfd, obj_datasec (abfd)))    \
-		return false;						      \
-	    }								      \
+	if (bfd_seek (abfd, (file_ptr)(N_DRELOFF(*execp)), SEEK_SET) != 0)    \
+	  return false;						      	      \
+	if (!NAME(aout,squirt_out_relocs)(abfd, obj_datasec (abfd)))          \
+	  return false;						      	      \
       }									      
 #endif
 

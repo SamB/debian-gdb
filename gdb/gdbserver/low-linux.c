@@ -226,12 +226,12 @@ m68k_linux_register_u_addr (blockend, regnum)
 }
 #endif
 
-unsigned int
+CORE_ADDR
 register_addr (regno, blockend)
      int regno;
-     int blockend;
+     CORE_ADDR blockend;
 {
-  int addr;
+  CORE_ADDR addr;
 
   if (regno < 0 || regno >= ARCH_NUM_REGS)
     error ("Invalid register number %d.", regno);
@@ -248,7 +248,6 @@ fetch_register (regno)
      int regno;
 {
   register unsigned int regaddr;
-  char buf[MAX_REGISTER_RAW_SIZE];
   register int i;
 
   /* Offset of registers within the u area.  */
@@ -299,10 +298,8 @@ store_inferior_registers (regno)
      int regno;
 {
   register unsigned int regaddr;
-  char buf[80];
   register int i;
   unsigned int offset = U_REGS_OFFSET;
-  int scratch;
 
   if (regno >= 0)
     {
@@ -361,6 +358,7 @@ store_inferior_registers (regno)
 /* Copy LEN bytes from inferior's memory starting at MEMADDR
    to debugger memory starting at MYADDR.  */
 
+void
 read_inferior_memory (memaddr, myaddr, len)
      CORE_ADDR memaddr;
      char *myaddr;

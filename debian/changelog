@@ -1,3 +1,96 @@
+gdb (4.17-0.1) frozen unstable; urgency=low
+
+  * New upstream release (differences with upstream 4.16.98 are negligable).
+  * Non-maintainer upload.
+  * Disabled linking -rpath:
+    * bfd/configure.in, opcodes/configure.in: applied libtool-rpath-workaround
+    * gdb/configure.in, gdb/configure: don't use -rpath on Linux.
+    * regenerate "configure" scripts involved.
+
+ -- J.H.M. Dassen (Ray) <jdassen@wi.LeidenUniv.nl>  Thu, 30 Apr 1998 19:47:34 +0200
+
+gdb (4.16.98-1) frozen unstable; urgency=low
+
+  * New upstream code. Only change relevant on Linux: Patch by
+    H.J. Lu so debugging of shared library works properly (That was
+    the important patch motivating this upload).
+    This release _is_ supposed to be the final gdb-4.17 (from the announce:
+    'I wanted to make a "this is the release unless something is
+    very wrong" release and then kick 4.17 out').
+
+ -- Vincent Renardias <vincent@waw.com>  Thu, 23 Apr 1998 20:44:36 +0200
+
+gdb (4.16.86-1) unstable; urgency=low
+
+  * New upstream code. (still unreleased).
+  * Re-added the m68k stuff that didn't make it upstream (Bug #19539, #19635).
+  * Re-added the Objective-C stuff (Bug #19630)
+
+ -- Vincent Renardias <vincent@waw.com>  Sat, 14 Mar 1998 23:40:06 +0100
+
+gdb (4.16.85-2) unstable; urgency=low
+
+  * debian/rules: Also remove gdb/doc/GDBvn.texi and config.log when cleaning up.
+  * The following has been done by <jdassen@wi.LeidenUniv.nl>:
+  * TODO: this version of gdb uses an evil new version of libtool which
+    forces -rpath. With lesstif, I got around this by replacing the libtool
+    scripts with those from the Debian libtool package.
+  * Use dynamic readline library.
+  * Install with preserved timestamps.
+  * Clean out .tab.c files missed by "make distclean", so the .diff.gz is
+    smaller.
+  * Clean out symlinks, so dpkg-source works after debian/rules build clean.
+  * Several other minor clean-ups of the rules file.
+  * Updated FSF address (lintian).
+  * Bumped Standards-Version.
+
+ -- Vincent Renardias <vincent@waw.com>  Fri,  6 Mar 1998 20:49:54 +0100
+
+gdb (4.16.85-1) unstable; urgency=low
+
+  * New upstream code (Although not released yet).
+
+ -- Vincent Renardias <vincent@waw.com>  Thu,  5 Mar 1998 20:19:14 +0100
+
+gdb (4.16-12) unstable; urgency=low
+
+  * Applied alpha patches (#11841).
+
+ -- Vincent Renardias <vincent@waw.com>  Mon, 4 Aug 1997 22:28:54 +0200
+
+gdb (4.16-11) unstable; urgency=low
+
+  * Included patch to fix bugs (#11552,#11324).
+
+ -- Vincent Renardias <vincent@waw.com>  Wed, 30 Jul 1997 20:40:01 +0200
+
+gdb (4.16-10) unstable; urgency=low
+
+  * Fixed #11136 (support for Ada;
+    Thanx to Marc Eichin for pointing this patch).
+
+ -- Vincent Renardias <vincent@waw.com>  Thu, 10 Jul 1997 19:38:07 +0200
+
+gdb (4.16-9) unstable; urgency=low
+
+  * Fixed #11037 (compilation on m68k).
+
+ -- Vincent Renardias <vincent@waw.com>  Sat,  5 Jul 1997 16:14:39 +0200
+
+gdb (4.16-8) unstable; urgency=low
+
+  * Compiled with libc6/ncurses3.4/libreadline2.1.
+  * Fixed #9654 (cosmetic fix).
+  * Updated debian/control file (now supports Objective-C).
+
+ -- Vincent Renardias <vincent@waw.com>  Sat, 21 Jun 1997 15:15:13 +0200
+
+gdb (4.16-7) unstable; urgency=low
+
+  * Fixed typo. in documentation (Fixes bug #5477).
+
+ -- Vincent Renardias <vincent@waw.com>  Mon, 7 Apr 1997 16:35:53 +0200
+
 gdb (4.16-6) unstable; urgency=low
 
   * Corrected texinfo documentation (Fixes bug #3823).

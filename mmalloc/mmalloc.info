@@ -1,5 +1,5 @@
-This is Info file ./mmalloc.info, produced by Makeinfo-1.55 from the
-input file mmalloc.texi.
+This is Info file ./mmalloc.info, produced by Makeinfo version 1.68
+from the input file mmalloc.texi.
 
 START-INFO-DIR-ENTRY
 * Mmalloc: (mmalloc).		The GNU mapped-malloc package.
@@ -210,10 +210,10 @@ package.
 
 
 Tag Table:
-Node: Top955
-Node: Overview1389
-Node: Implementation2417
-Node: Compatibility3810
-Node: Functions4884
+Node: Top963
+Node: Overview1397
+Node: Implementation2425
+Node: Compatibility3818
+Node: Functions4892
 
 End Tag Table

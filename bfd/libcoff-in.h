@@ -1,5 +1,6 @@
 /* BFD COFF object file private structure.
-   Copyright (C) 1990, 91, 92, 93, 94, 95, 1996 Free Software Foundation, Inc.
+   Copyright (C) 1990, 91, 92, 93, 94, 95, 96, 1997
+   Free Software Foundation, Inc.
    Written by Cygnus Support.
 
 ** NOTE: libcoff.h is a GENERATED file.  Don't change it; instead,
@@ -95,6 +96,10 @@ typedef struct coff_tdata
 
   /* Used by coff_find_nearest_line.  */
   PTR line_info;
+
+  /* Copy of some of the f_flags bits in the COFF filehdr structure, used by ARM code */
+  int flags;
+  
 } coff_data_type;
 
 /* Tdata for pe image files. */
@@ -177,6 +182,8 @@ struct coff_section_tdata
   unsigned int i;
   const char *function;
   int line_base;
+  /* A pointer used for .stab linking optimizations.  */
+  PTR stab_info;
   /* Available for individual backends.  */
   PTR tdata;
 };
@@ -204,6 +211,18 @@ struct xcoff_section_tdata
 /* An accessor macro the xcoff_section_tdata structure.  */
 #define xcoff_section_data(abfd, sec) \
   ((struct xcoff_section_tdata *) coff_section_data ((abfd), (sec))->tdata)
+
+/* Tdata for sections in PEI image files.  */
+
+struct pei_section_tdata
+{
+  /* The virtual size of the section.  */
+  bfd_size_type virt_size;
+};
+
+/* An accessor macro for the pei_section_tdata structure.  */
+#define pei_section_data(abfd, sec) \
+  ((struct pei_section_tdata *) coff_section_data ((abfd), (sec))->tdata)
 
 /* COFF linker hash table entries.  */
 
@@ -236,6 +255,8 @@ struct coff_link_hash_entry
 struct coff_link_hash_table
 {
   struct bfd_link_hash_table root;
+  /* A pointer to information used to link stabs in sections.  */
+  PTR stab_info;
 };
 
 /* Look up an entry in a COFF linker hash table.  */
@@ -280,6 +301,7 @@ extern void coff_print_symbol PARAMS ((bfd *, PTR filep, asymbol *,
 				       bfd_print_symbol_type how));
 extern void coff_get_symbol_info PARAMS ((bfd *, asymbol *,
 					  symbol_info *ret));
+extern boolean _bfd_coff_is_local_label_name PARAMS ((bfd *, const char *));
 extern asymbol *coff_bfd_make_debug_symbol PARAMS ((bfd *, PTR,
 						    unsigned long));
 extern boolean coff_find_nearest_line PARAMS ((bfd *,
@@ -399,6 +421,10 @@ struct coff_final_link_info
   bfd *output_bfd;
   /* Used to indicate failure in traversal routine.  */
   boolean failed;
+  /* If doing "task linking" set only during the time when we want the
+     global symbol writer to convert the storage class of defined global
+     symbols from global to static. */
+  boolean global_to_static;
   /* Hash table for long symbol names.  */
   struct bfd_strtab_hash *strtab;
   /* When doing a relocateable link, an array of information kept for
@@ -408,6 +434,11 @@ struct coff_final_link_info
   long last_file_index;
   /* Contents of last C_FILE symbol.  */
   struct internal_syment last_file;
+  /* Symbol index of first aux entry of last .bf symbol with an empty
+     endndx field (-1 if none).  */
+  long last_bf_index;
+  /* Contents of last_bf_index aux entry.  */
+  union internal_auxent last_bf;
   /* Hash table used to merge debug information.  */
   struct coff_debug_merge_hash_table debug_merge;
   /* Buffer large enough to hold swapped symbols of any input file.  */
@@ -456,6 +487,8 @@ extern struct bfd_hash_entry *_bfd_coff_debug_merge_hash_newfunc
   PARAMS ((struct bfd_hash_entry *, struct bfd_hash_table *, const char *));
 extern boolean _bfd_coff_write_global_sym
   PARAMS ((struct coff_link_hash_entry *, PTR));
+extern boolean _bfd_coff_write_task_globals
+  PARAMS ((struct coff_link_hash_entry *, PTR));
 extern boolean _bfd_coff_link_input_bfd
   PARAMS ((struct coff_final_link_info *, bfd *));
 extern boolean _bfd_coff_reloc_link_order
@@ -468,6 +501,12 @@ extern boolean _bfd_coff_reloc_link_order
 
 /* Functions in xcofflink.c.  */
 
+extern long _bfd_xcoff_get_dynamic_symtab_upper_bound PARAMS ((bfd *));
+extern long _bfd_xcoff_canonicalize_dynamic_symtab
+  PARAMS ((bfd *, asymbol **));
+extern long _bfd_xcoff_get_dynamic_reloc_upper_bound PARAMS ((bfd *));
+extern long _bfd_xcoff_canonicalize_dynamic_reloc
+  PARAMS ((bfd *, arelent **, asymbol **));
 extern struct bfd_link_hash_table *_bfd_xcoff_bfd_link_hash_table_create
   PARAMS ((bfd *));
 extern boolean _bfd_xcoff_bfd_link_add_symbols
@@ -477,6 +516,13 @@ extern boolean _bfd_xcoff_bfd_final_link
 extern boolean _bfd_ppc_xcoff_relocate_section
   PARAMS ((bfd *, struct bfd_link_info *, bfd *, asection *, bfd_byte *,
 	   struct internal_reloc *, struct internal_syment *, asection **));
+
+/* Functions in coff-ppc.c.  FIXME: These are called be pe.em in the
+   linker, and so should start with bfd and be declared in bfd.h.  */
+
+extern boolean ppc_allocate_toc_section PARAMS ((struct bfd_link_info *));
+extern boolean ppc_process_before_allocation
+  PARAMS ((bfd *, struct bfd_link_info *));
 
 /* And more taken from the source .. */
 

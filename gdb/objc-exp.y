@@ -137,7 +137,6 @@ yyerror PARAMS ((char *));
     struct block *bval;
     enum exp_opcode opcode;
     struct internalvar *ivar;
-    struct objc_class class;
 
     struct type **tvec;
     int *ivec;
@@ -172,11 +171,10 @@ parse_number PARAMS ((char *, int, int, YYSTYPE *));
    nonterminal "name", which matches either NAME or TYPENAME.  */
 
 %token <sval> STRING
-%token <sval> NSSTRING		/* ObjC Foundation "NSString" literal */
-%token <sval> SELECTOR		/* ObjC "@selector" pseudo-operator   */
+%token <sval> NSSTRING		/* NextStep ObjC "NSString" data type */
 %token <ssym> NAME /* BLOCKNAME defined below to give it higher precedence. */
 %token <tsym> TYPENAME
-%token <class> CLASSNAME	/* ObjC Class name */
+%token <lval> CLASSNAME		/* ObjC Class name */
 %type <sval> name
 %type <ssym> name_not_typename
 %type <tsym> typename
@@ -188,7 +186,7 @@ parse_number PARAMS ((char *, int, int, YYSTYPE *));
 
 %token <ssym> NAME_OR_INT 
 
-%token STRUCT CLASS UNION ENUM SIZEOF UNSIGNED COLONCOLON 
+%token STRUCT CLASS UNION ENUM SIZEOF UNSIGNED COLONCOLON SELECTOR
 %token TEMPLATE
 %token ERROR
 
@@ -326,32 +324,11 @@ exp	:	exp '[' exp1 ']'
  *	'[' target selector {':' argument}* ']'
  */
 
-exp	: 	'[' TYPENAME
-			{
-			  CORE_ADDR class;
-
-			  class = lookup_objc_class (copy_name ($2.stoken));
-			  if (class == 0)
-			    error ("%s is not an ObjC Class", 
-				   copy_name ($2.stoken));
-			  write_exp_elt_opcode (OP_LONG);
-			  write_exp_elt_type (builtin_type_int);
-			  write_exp_elt_longcst ((LONGEST) class);
-			  write_exp_elt_opcode (OP_LONG);
-			  start_msglist();
-			}
-		msglist ']'
-			{ write_exp_elt_opcode (OP_MSGCALL);
-			  end_msglist();
-			  write_exp_elt_opcode (OP_MSGCALL); 
-			}
-	;
-
 exp	:	'[' CLASSNAME
 			{
 			  write_exp_elt_opcode (OP_LONG);
 			  write_exp_elt_type (builtin_type_int);
-			  write_exp_elt_longcst ((LONGEST) $2.class);
+			  write_exp_elt_longcst ((LONGEST) $2);
 			  write_exp_elt_opcode (OP_LONG);
 			  start_msglist();
 			}
@@ -566,7 +543,7 @@ exp	:	VARIABLE
 exp	:	SELECTOR 
 			{
 			  write_exp_elt_opcode (OP_SELECTOR);
-			  write_exp_string ($1);
+			  write_exp_string (yylval.sval);
 			  write_exp_elt_opcode (OP_SELECTOR); }
 
 exp	:	SIZEOF '(' type ')'	%prec UNARY
@@ -736,6 +713,7 @@ variable:	qualified_name
 
 variable:	name_not_typename
 			{ struct symbol *sym = $1.sym;
+			  struct objc_class *class;
 
 			  if (sym)
 			    {
@@ -757,9 +735,9 @@ variable:	name_not_typename
 			    }
 			  else if ($1.is_a_field_of_this)
 			    {
-			      /* C++/ObjC: it hangs off of `this'/'self'.  
-				 Must not inadvertently convert from a 
-				 method call to data ref.  */
+			      /* C++: it hangs off of `this'.  Must
+			         not inadvertently convert from a method call
+				 to data ref.  */
 			      if (innermost_block == 0 || 
 				  contained_in (block_found, innermost_block))
 				innermost_block = block_found;
@@ -868,14 +846,6 @@ type	:	ptype
 typebase  /* Implements (approximately): (type-qualifier)* type-specifier */
 	:	TYPENAME
 			{ $$ = $1.type; }
-	|	CLASSNAME
-			{
-			  if ($1.type == NULL)
-			    error ("No symbol \"%s\" in current context.", 
-				   copy_name($1.stoken));
-			  else
-			    $$ = $1.type;
-			}
 	|	INT_KEYWORD
 			{ $$ = builtin_type_int; }
 	|	LONG
@@ -967,11 +937,10 @@ nonempty_typelist
 		}
 	;
 
-name	:	NAME        { $$ = $1.stoken; }
-	|	BLOCKNAME   { $$ = $1.stoken; }
-	|	TYPENAME    { $$ = $1.stoken; }
-	|	CLASSNAME   { $$ = $1.stoken; }
-	|	NAME_OR_INT { $$ = $1.stoken; }
+name	:	NAME { $$ = $1.stoken; }
+	|	BLOCKNAME { $$ = $1.stoken; }
+	|	TYPENAME { $$ = $1.stoken; }
+	|	NAME_OR_INT  { $$ = $1.stoken; }
 	;
 
 name_not_typename :	NAME
@@ -1464,7 +1433,7 @@ yylex ()
 	  tokptr = strchr(tokstart, '(');
 	  if (tokptr == NULL)
 	    {
-	      error ("Missing '(' in @selector(...)");
+	      error ("Missing '(' in @SELECTOR(...)");
 	    }
 	  tempbufindex = 0;
 	  tokptr++;	/* skip the '(' */
@@ -1479,7 +1448,7 @@ yylex ()
 	  } while ((*tokptr != ')') && (*tokptr != '\0'));
 	  if (*tokptr++ != ')')
 	    {
-	      error ("Missing ')' in @selector(...)");
+	      error ("Missing ')' in @SELECTOR(...)");
 	    }
 	  tempbuf[tempbufindex] = '\0';
 	  yylval.sval.ptr = tempbuf;
@@ -1602,7 +1571,8 @@ yylex ()
 	return DOUBLE_KEYWORD;
       break;
     case 5:
-      if ((current_language->la_language == language_cplus)
+      if ((current_language->la_language == language_cplus ||
+	   current_language->la_language == language_objc)
 	  && STREQN (tokstart, "class", 5))
 	return CLASS;
       if (STREQN (tokstart, "union", 5))
@@ -1669,7 +1639,7 @@ yylex ()
 			 (struct symtab **) NULL);
     /* Call lookup_symtab, not lookup_partial_symtab, in case there are
        no psymtabs (coff, xcoff, or some future change to blow away the
-       psymtabs once symbols are read).  */
+       psymtabs once once symbols are read).  */
     if ((sym && SYMBOL_CLASS (sym) == LOC_BLOCK) ||
         lookup_symtab (tmp))
       {
@@ -1775,10 +1745,7 @@ yylex ()
 	CORE_ADDR Class = lookup_objc_class(tmp);
 	if (Class)
 	  {
-	    extern struct symbol *lookup_struct_typedef();
-	    yylval.class.class = Class;
-	    if (sym = lookup_struct_typedef (tmp, expression_context_block, 1))
-	      yylval.class.type = SYMBOL_TYPE (sym);
+	    yylval.lval = Class;
 	    return CLASSNAME;
 	  }
       }

@@ -28,8 +28,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "value.h"
 #include "symfile.h"
 #include "objfiles.h"
-#include "string.h"		/* for strchr */
-#include "target.h"		/* for target_has_execution */
+#include "string.h"
 
 extern value_ptr find_function_in_inferior PARAMS((char *));
 
@@ -38,14 +37,8 @@ extern value_ptr find_function_in_inferior PARAMS((char *));
 static struct complaint noclass_complaint = 
   {"%s: class not found", 0, 0};
 
-static struct complaint noclass_lookup_complaint = 
-  {"no way to lookup ObjC classes", 0, 0};
-
 static struct complaint noselector_complaint = 
   {"%s: selector not found", 0, 0};
-
-static struct complaint nosel_lookup_complaint = 
-  {"no way to lookup ObjC selectors", 0, 0};
 
 
 /* test for a string of the form "+/-[...]" with balanced brackets.
@@ -83,7 +76,7 @@ is_objc_demangled(name)
    visible in lexical block BLOCK.  
    If NOERR is nonzero, return zero if NAME is not suitably defined.  */
 
-struct symbol *
+static struct symbol *
 lookup_struct_typedef (name, block, noerr)
      char *name;
      struct block *block;
@@ -136,18 +129,10 @@ lookup_objc_class(classname)
 {
   value_ptr function, classval;
 
-  if (!target_has_execution)
-    return 0;		/* can't call into inferior to lookup class */
-
   if (lookup_minimal_symbol("objc_lookUpClass", 0, 0))
     function = find_function_in_inferior("objc_lookUpClass");
-  else if (lookup_minimal_symbol("objc_lookup_class", 0, 0))
-    function = find_function_in_inferior("objc_lookup_class");
   else
-    {
-      complain (&noclass_lookup_complaint, 0);
-      return 0;
-    }
+    function = find_function_in_inferior("objc_lookup_class");
 
   classval = value_string(classname, strlen(classname) + 1);
   classval = value_coerce_array(classval);
@@ -162,18 +147,10 @@ lookup_child_selector(selname)
 {
   value_ptr function, selstring;
 
-  if (!target_has_execution)
-    return 0;		/* can't call into inferior to lookup selector */
-
   if (lookup_minimal_symbol("sel_getUid", 0, 0))
     function = find_function_in_inferior("sel_getUid");
-  else if (lookup_minimal_symbol("sel_get_any_uid", 0, 0))
-    function = find_function_in_inferior("sel_get_any_uid");
   else
-    {
-      complain (&nosel_lookup_complaint, 0);
-      return 0;
-    }
+    function = find_function_in_inferior("sel_get_any_uid");
 
   selstring = value_coerce_array(value_string(selname, strlen(selname) + 1));
   return value_as_long(call_function_by_hand(function, 1, &selstring));
@@ -184,46 +161,24 @@ value_nsstring(ptr, len)
      char *ptr;
      int len;
 {
-  value_ptr stringValue[3];
-  value_ptr function, nsstringValue;
-  struct minimal_symbol *msymbol;
+  value_ptr stringValue = value_string(ptr, len);
+  value_ptr new_string, nsstringValue;
   struct symbol *sym;
   struct type *type;
 
-  if (!target_has_execution)
-    return 0;		/* can't call into inferior to create NSString */
-
-  if (!(sym = lookup_struct_typedef("NSString", 0, 1)) &&
-      !(sym = lookup_struct_typedef("NXString", 0, 1)))
-    type = lookup_pointer_type(builtin_type_void);
-  else
-    type = lookup_pointer_type(SYMBOL_TYPE (sym));
-
-  stringValue[2] = value_string(ptr, len);
-  stringValue[2] = value_coerce_array(stringValue[2]);
   /* _NSNewStringFromCString replaces "istr" after Lantern2A */
-  if (lookup_minimal_symbol("_NSNewStringFromCString", 0, 0))
-    {
-      function = find_function_in_inferior("_NSNewStringFromCString");
-      nsstringValue = call_function_by_hand(function, 1, &stringValue[2]);
-    }
-  else if (lookup_minimal_symbol("istr", 0, 0))
-    {
-      function = find_function_in_inferior("istr");
-      nsstringValue = call_function_by_hand(function, 1, &stringValue[2]);
-    }
-  else if (lookup_minimal_symbol("+[NSString stringWithCString:]", 0, 0))
-    {
-      function = find_function_in_inferior("+[NSString stringWithCString:]");
-      stringValue[0] = value_from_longest 
-	(builtin_type_long, lookup_objc_class ("NSString"));
-      stringValue[1] = value_from_longest 
-	(builtin_type_long, lookup_child_selector ("stringWithCString:"));
-      nsstringValue = call_function_by_hand(function, 3, &stringValue[0]);
-    }
-  else
-    error ("NSString: internal error -- no way to create new NSString");
+  if (!(new_string = find_function_in_inferior("_NSNewStringFromCString")))
+    if (!(new_string = find_function_in_inferior("istr")))
+      error ("NSString: internal error -- can't create new NSString");
 
+
+  if (!(sym = lookup_struct_typedef("NSString", 0, 0)))
+    if (!(sym = lookup_struct_typedef("NXString", 0, 0)))
+      error ("NSString: no NSString type known.");
+
+  type = lookup_pointer_type(SYMBOL_TYPE (sym));
+  stringValue = value_coerce_array(stringValue);
+  nsstringValue = call_function_by_hand(new_string, 1, &stringValue);
   VALUE_TYPE(nsstringValue) = type;
   return nsstringValue;
 }
@@ -770,7 +725,7 @@ end_msglist()
 }
 
 /*
- * Function: specialcmp (char *a, char *b)
+ * Function: specialcmp (char *a, char *b, char term)
  *
  * Special strcmp: treats ']' and ' ' as end-of-string.
  * Used for qsorting lists of objc methods (either by class or selector) 
@@ -874,10 +829,8 @@ selectors_info (regexp, from_tty)
   ALL_MSYMBOLS (objfile, msymbol)
     {
       QUIT;
-      if ((name = SYMBOL_DEMANGLED_NAME (msymbol)) == NULL)
-	name = SYMBOL_NAME (msymbol);
-      if (name &&
-	 (name[0] == '-' || name[0] == '+') &&
+      if ((name = SYMBOL_DEMANGLED_NAME (msymbol)) != NULL &&
+	  (name[0] == '-' || name[0] == '+') &&
 	  name[1] == '[')		/* got a method name */
 	{
 	  if (plusminus && name[0] != plusminus)
@@ -904,10 +857,8 @@ selectors_info (regexp, from_tty)
       ALL_MSYMBOLS (objfile, msymbol)
 	{
 	  QUIT;
-	  if ((name = SYMBOL_DEMANGLED_NAME (msymbol)) == NULL)
-	    name = SYMBOL_NAME (msymbol);
-	  if (name &&
-	     (name[0] == '-' || name[0] == '+') &&
+	  if ((name = SYMBOL_DEMANGLED_NAME (msymbol)) != NULL &&
+	      (name[0] == '-' || name[0] == '+') &&
 	      name[1] == '[')		/* got a method name */
 	    {
 	      if (plusminus && name[0] != plusminus)
@@ -926,9 +877,7 @@ selectors_info (regexp, from_tty)
 	  char *p = asel;
 
 	  QUIT;
-	  if ((name = SYMBOL_DEMANGLED_NAME (sym_arr[ix])) == NULL)
-	    name = SYMBOL_NAME (sym_arr[ix]);
-	  name = strchr (name, ' ') + 1;
+	  name = strchr (SYMBOL_DEMANGLED_NAME (sym_arr[ix]), ' ') + 1;
 	  if (p[0] && specialcmp(name, p) == 0)
 	    continue;		/* seen this one already (not unique) */
 
@@ -1010,10 +959,8 @@ classes_info (regexp, from_tty)
   ALL_MSYMBOLS (objfile, msymbol)
     {
       QUIT;
-      if ((name = SYMBOL_DEMANGLED_NAME (msymbol)) == NULL)
-	name = SYMBOL_NAME (msymbol);
-      if (name &&
-	 (name[0] == '-' || name[0] == '+') &&
+      if ((name = SYMBOL_DEMANGLED_NAME (msymbol)) != NULL &&
+	  (name[0] == '-' || name[0] == '+') &&
 	  name[1] == '[')				/* got a method name */
 	if (regexp == NULL || re_exec(name+2) != 0)
 	  { 
@@ -1034,10 +981,8 @@ classes_info (regexp, from_tty)
       ALL_MSYMBOLS (objfile, msymbol)
 	{
 	  QUIT;
-	  if ((name = SYMBOL_DEMANGLED_NAME (msymbol)) == NULL)
-	    name = SYMBOL_NAME (msymbol);
-	  if (name &&
-	     (name[0] == '-' || name[0] == '+') &&
+	  if ((name = SYMBOL_DEMANGLED_NAME (msymbol)) != NULL &&
+	      (name[0] == '-' || name[0] == '+') &&
 	      name[1] == '[')				/* got a method name */
 	    if (regexp == NULL || re_exec(name+2) != 0)
 		sym_arr[matches++] = (struct symbol *) msymbol;
@@ -1051,9 +996,7 @@ classes_info (regexp, from_tty)
 	  char *p = aclass;
 
 	  QUIT;
-	  if ((name = SYMBOL_DEMANGLED_NAME (sym_arr[ix])) == NULL)
-	    name = SYMBOL_NAME (sym_arr[ix]);
-	  name += 2;
+	  name = SYMBOL_DEMANGLED_NAME (sym_arr[ix]) + 2;
 	  if (p[0] && specialcmp(name, p) == 0)
 	    continue;	/* seen this one already (not unique) */
 
@@ -1090,16 +1033,25 @@ total_number_of_imps (selector, symtab)
   char                  *name;
   char                  *val;
   int                    matches = 0;
+  char                   myregexp[2048];
   int                    plusminus = 0;
   struct block          *block = 0;
 
-  if (selector != NULL)		/* null input, match all selectors */
-    {				/* (should never really happen)    */
+  if (selector == NULL)		/* null input, match all selectors */
+    strcpy(myregexp, " .*]");	/* (this should never really happen) */
+  else
+    {
       if (*selector == '-' || *selector == '+')
-	plusminus = *selector++;	/* user selects class/inst methods */
-      while (*selector == ' ' || *selector == '\t')
-	selector++;			/* strip spaces/tabs */
+	{
+	  plusminus = *selector++;	/* user selects class/inst methods */
+	  while (*selector == ' ' || *selector == '\t')
+	    selector++;			/* strip spaces/tabs */
+	}
+      sprintf(myregexp, " %s]", selector);
     }
+
+  if (0 != (val = re_comp (myregexp)))
+    error ("Invalid selector (%s): %s", val, selector);
 
   if (symtab)
     block = BLOCKVECTOR_BLOCK (BLOCKVECTOR (symtab), STATIC_BLOCK);
@@ -1112,20 +1064,13 @@ total_number_of_imps (selector, symtab)
 	  SYMBOL_VALUE_ADDRESS (msymbol) >= block->endaddr))
 	continue;		/* not in the specified symtab */
 
-      if ((name = SYMBOL_DEMANGLED_NAME (msymbol)) == NULL)
-	name = SYMBOL_NAME (msymbol);
-      if (name &&
+      if ((name = SYMBOL_DEMANGLED_NAME (msymbol)) != NULL &&
 	  (name[0] == '-' || name[0] == '+') &&
 	  name[1] == '[')	/* got a method name */
 	if (plusminus && name[0] != plusminus)
 	  continue;		/* filter for class/instance methods */
-	else 
-	  {
-	    if (!(name = strchr (name, ' ')))
-	      continue;		/* defensive coding: shouldn't happen */
-	    if (!specialcmp (name+1, selector))
-	      matches++;	/* got a match */
-	  }
+	else if (re_exec (name+2) != 0)
+	  matches++;
     }
   return matches;
 }
@@ -1175,20 +1120,28 @@ find_imps (selector, sym_arr, num_debuggable, fn_match, symtab)
   char                  *val;
   int                    matches = 0;
   int                    maxlen  = 0;
+  char                   myregexp[2048];
   char                   animp[256];
   int                    plusminus = 0;
   struct block          *block = 0;
 
-  if (selector != NULL)		/* Null would mean match all */
-    {				/* (shouldn't happen) */
+  if (selector == NULL)
+    strcpy(myregexp, " .*]");
+  else
+    {
       if (*selector == '-' || *selector == '+')
-	plusminus = *selector++;	/* user selects class/inst methods */
-      while (*selector == ' ' || *selector == '\t')
-	selector++;
+	{
+	  plusminus = *selector++;	/* user selects class/inst methods */
+	  while (*selector == ' ' || *selector == '\t')
+	    selector++;
+	}
+      sprintf(myregexp, " %s]", selector);
     }
 
-  if (num_debuggable)
-    *num_debuggable = 0;
+  if (0 != (val = re_comp (myregexp)))
+    error ("Invalid selector (%s): %s", val, selector);
+
+  if (num_debuggable)     *num_debuggable = 0;
 
   if (symtab)
     block = BLOCKVECTOR_BLOCK (BLOCKVECTOR (symtab), STATIC_BLOCK);
@@ -1207,15 +1160,12 @@ find_imps (selector, sym_arr, num_debuggable, fn_match, symtab)
 	  SYMBOL_VALUE_ADDRESS (msymbol) >= block->endaddr))
 	continue;		/* not in the specified symtab */
 
-      if ((name = SYMBOL_DEMANGLED_NAME (msymbol)) != NULL ||
-	  (name = SYMBOL_NAME (msymbol))           != NULL)
+      if ((name = SYMBOL_DEMANGLED_NAME (msymbol)) != NULL)
 	if ((name[0] == '-' || name[0] == '+') && name[1] == '[')
 	  {				/* found a method */
 	    if (plusminus && name[0] != plusminus)
 	      continue;			/* filter for class/instance methods */
-	    if (!(name = strchr (name, ' ')))
-	      continue;		/* defensive coding; shouldn't happen */
-	    if (!specialcmp(name+1, selector))
+	    if (re_exec (name+2) != 0)	/* matching method */
 	      if (num_debuggable &&
 		  (sym = find_pc_function (SYMBOL_VALUE_ADDRESS (msymbol))))
 		{ 	/* found a high-level method sym: swap it into the 
@@ -1252,7 +1202,6 @@ find_imps (selector, sym_arr, num_debuggable, fn_match, symtab)
   sym_arr[matches] = 0;		/* terminate the sym_arr list */
   return  matches;
 }
-
 
 void
 _initialize_objc_language ()

@@ -1,9 +1,8 @@
 /* BFD back-end for VERSAdos-E objects.
+   Copyright 1995, 96, 1997 Free Software Foundation, Inc.
+   Written by Steve Chamberlain of Cygnus Support <sac@cygnus.com>.
 
    Versados is a Motorola trademark.
-
-   Copyright 1995 Free Software Foundation, Inc.
-   Written by Steve Chamberlain of Cygnus Support <sac@cygnus.com>.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -551,6 +550,9 @@ versados_scan (abfd)
 
   VDATA (abfd)->strings = bfd_alloc (abfd, VDATA (abfd)->stringlen);
 
+  if ((VDATA (abfd)->symbols == NULL && abfd->symcount > 0)
+      || (VDATA (abfd)->strings == NULL && VDATA (abfd)->stringlen > 0))
+    return false;
 
   /* Actually fill in the section symbols,
      we stick them at the end of the table */
@@ -593,20 +595,34 @@ versados_object_p (abfd)
   struct ext_vheader ext;
   unsigned char len;
 
-  if (bfd_seek (abfd, (file_ptr) 0, SEEK_SET))
+  if (bfd_seek (abfd, (file_ptr) 0, SEEK_SET) != 0)
     return NULL;
 
+  if (bfd_read (&len, 1, 1, abfd) != 1)
+    {
+      if (bfd_get_error () != bfd_error_system_call)
+	bfd_set_error (bfd_error_wrong_format);
+      return NULL;
+    }
 
-  bfd_read (&len, 1, 1, abfd);
-  if (bfd_read (&ext.type, 1, len, abfd) != len
-      || ext.type != '1')
+  if (bfd_read (&ext.type, 1, len, abfd) != len)
+    {
+      if (bfd_get_error () != bfd_error_system_call)
+	bfd_set_error (bfd_error_wrong_format);
+      return NULL;
+    }
+
+  /* We guess that the language field will never be larger than 10.
+     In sample files, it is always either 0 or 1.  Checking for this
+     prevents confusion with Intel Hex files.  */
+  if (ext.type != VHEADER
+      || ext.lang > 10)
     {
       bfd_set_error (bfd_error_wrong_format);
       return NULL;
     }
 
-  /* ok, looks like a record, build the tdata and read 
-     in.. */
+  /* OK, looks like a record, build the tdata and read in.  */
 
   if (!versados_mkobject (abfd)
       || !versados_scan (abfd))
@@ -833,7 +849,7 @@ versados_canonicalize_reloc (abfd, section, relptr, symbols)
 #define versados_bfd_free_cached_info _bfd_generic_bfd_free_cached_info
 #define versados_new_section_hook _bfd_generic_new_section_hook
 
-#define versados_bfd_is_local_label bfd_generic_is_local_label
+#define versados_bfd_is_local_label_name bfd_generic_is_local_label_name
 #define versados_get_lineno _bfd_nosymbols_get_lineno
 #define versados_find_nearest_line _bfd_nosymbols_find_nearest_line
 #define versados_bfd_make_debug_symbol _bfd_nosymbols_bfd_make_debug_symbol
