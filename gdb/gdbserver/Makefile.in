@@ -1,5 +1,5 @@
 # Copyright 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-# 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
+# 1999, 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
 
 # This file is part of GDB.
 
@@ -90,16 +90,19 @@ INCLUDE_CFLAGS = -I. -I${srcdir} -I$(srcdir)/../regformats -I$(INCLUDE_DIR)
 GLOBAL_CFLAGS = ${MT_CFLAGS} ${MH_CFLAGS}
 #PROFILE_CFLAGS = -pg
 
+WARN_CFLAGS = -Wall
+
 # CFLAGS is specifically reserved for setting from the command line
 # when running make.  I.E.  "make CFLAGS=-Wmissing-prototypes".
 CFLAGS = @CFLAGS@
 
 # INTERNAL_CFLAGS is the aggregate of all other *CFLAGS macros.
-INTERNAL_CFLAGS = ${CFLAGS} ${GLOBAL_CFLAGS} ${PROFILE_CFLAGS} \
-	${INCLUDE_CFLAGS} ${BFD_CFLAGS}
+INTERNAL_CFLAGS =  $(WARN_CFLAGS) ${CFLAGS} ${GLOBAL_CFLAGS} \
+	${PROFILE_CFLAGS} ${INCLUDE_CFLAGS} ${BFD_CFLAGS}
 
 # LDFLAGS is specifically reserved for setting from the command line
 # when running make.
+LDFLAGS = @LDFLAGS@
 
 # Perhaps should come from parent Makefile
 VERSION = gdbserver-4.12.3
@@ -110,17 +113,27 @@ LINTFLAGS= $(BFD_CFLAGS)
 
 # All source files that go into linking GDB remote server.
 
-SFILES = $(srcdir)/low-hppabsd.c $(srcdir)/low-linux.c $(srcdir)/low-lynx.c \
-	 $(srcdir)/low-nbsd.c $(srcdir)/low-sim.c $(srcdir)/low-sparc.c \
-	 $(srcdir)/low-sun3.c $(srcdir)/utils.c $(srcdir)/server.c \
-	 $(srcdir)/remote-utils.c
+SFILES=	$(srcdir)/gdbreplay.c $(srcdir)/inferiors.c \
+	$(srcdir)/mem-break.c $(srcdir)/proc-service.c $(srcdir)/regcache.c \
+	$(srcdir)/remote-utils.c $(srcdir)/server.c $(srcdir)/target.c \
+	$(srcdir)/thread-db.c $(srcdir)/utils.c \
+	$(srcdir)/linux-arm-low.c $(srcdir)/linux-i386-low.c \
+	$(srcdir)/i387-fp.c \
+	$(srcdir)/linux-ia64-low.c $(srcdir)/linux-low.c \
+	$(srcdir)/linux-m68k-low.c $(srcdir)/linux-mips-low.c \
+	$(srcdir)/linux-ppc-low.c $(srcdir)/linux-s390-low.c \
+	$(srcdir)/linux-sh-low.c $(srcdir)/linux-x86-64-low.c
 
 DEPFILES = @GDBSERVER_DEPFILES@
 
 SOURCES = $(SFILES)
 TAGFILES = $(SOURCES) ${HFILES} ${ALLPARAM} ${POSSLIBS} 
 
-OBS = utils.o $(DEPFILES) server.o remote-utils.o regcache.o signals.o
+OBS = inferiors.o regcache.o remote-utils.o server.o signals.o target.o \
+	utils.o \
+	mem-break.o \
+	$(DEPFILES)
+GDBSERVER_LIBS = @GDBSERVER_LIBS@
 
 # Prevent Sun make from putting in the machine type.  Setting
 # TARGET_ARCH to nothing works for SunOS 3, 4.0, but not for 4.1.
@@ -138,13 +151,15 @@ install: all install-only
 install-only: 
 	n=`echo gdbserver | sed '$(program_transform_name)'`; \
 	if [ x$$n = x ]; then n=gdbserver; else true; fi; \
-	$(INSTALL_PROGRAM) gdbserver $(bindir)/$$n; \
-	$(INSTALL_DATA) $(srcdir)/gdbserver.1 $(man1dir)/$$n.1
+	$(SHELL) $(srcdir)/../../mkinstalldirs $(DESTDIR)$(bindir); \
+	$(INSTALL_PROGRAM) gdbserver $(DESTDIR)$(bindir)/$$n; \
+	$(SHELL) $(srcdir)/../../mkinstalldirs $(DESTDIR)$(man1dir); \
+	$(INSTALL_DATA) $(srcdir)/gdbserver.1 $(DESTDIR)$(man1dir)/$$n.1
 
 uninstall: force
 	n=`echo gdbserver | sed '$(program_transform_name)'`; \
 	if [ x$$n = x ]; then n=gdbserver; else true; fi; \
-	rm -f $(bindir)/$$n $(man1dir)/$$n.1
+	rm -f $(bindir)/$$n $(DESTDIR)$(man1dir)/$$n.1
 
 installcheck:
 check:
@@ -185,18 +200,18 @@ clean:
 	rm -f reg-arm.c reg-i386.c reg-ia64.c reg-m68k.c reg-mips.c
 	rm -f reg-ppc.c reg-sh.c reg-x86-64.c reg-i386-linux.c
 
-distclean: clean
-	rm -f nm.h tm.h xm.h config.status
-	rm -f Makefile
-
-maintainer-clean realclean: clean
-	rm -f nm.h tm.h xm.h config.status
+maintainer-clean realclean distclean: clean
+	rm -f nm.h tm.h xm.h config.status config.h stamp-h config.log
 	rm -f Makefile
 
 STAGESTUFF=${OBS} ${TSOBS} ${NTSOBS} ${ADD_FILES} init.c init.o version.c gdb
 
+config.h: stamp-h ; @true
+stamp-h: config.in config.status
+	CONFIG_FILES="" $(SHELL) ./config.status
+
 Makefile: Makefile.in config.status
-	$(SHELL) ./config.status
+	CONFIG_HEADERS="" $(SHELL) ./config.status
 
 config.status: configure configure.srv
 	$(SHELL) ./config.status --recheck
@@ -217,20 +232,22 @@ version.c: Makefile
 # will remove them.
 MAKEOVERRIDES=
 
-## This is ugly, but I don't want GNU make to put these variables in
-## the environment.  Older makes will see this as a set of targets
-## with no dependencies and no actions.
-unexport CHILLFLAGS CHILL_LIB CHILL_FOR_TARGET :
-
+gdb_proc_service_h = $(srcdir)/../gdb_proc_service.h $(srcdir)/../gregset.h
 regdat_sh = $(srcdir)/../regformats/regdat.sh
 regdef_h = $(srcdir)/../regformats/regdef.h
 regcache_h = $(srcdir)/regcache.h
-server_h = $(srcdir)/server.h $(regcache_h) config.h
+server_h = $(srcdir)/server.h $(regcache_h) config.h $(srcdir)/target.h \
+		$(srcdir)/mem-break.h
 
-server.o: server.c $(server_h)
-remote-utils.o: remote-utils.c terminal.h $(server_h)
-utils.o: utils.c $(server_h)
+inferiors.o: inferiors.c $(server_h)
+mem-break.o: mem-break.c $(server_h)
+proc-service.o: proc-service.c $(server_h) $(gdb_proc_service_h)
 regcache.o: regcache.c $(server_h) $(regdef_h)
+remote-utils.o: remote-utils.c terminal.h $(server_h)
+server.o: server.c $(server_h)
+target.o: target.c $(server_h)
+thread-db.o: thread-db.c $(server_h) $(gdb_proc_service_h)
+utils.o: utils.c $(server_h)
 
 signals.o: ../signals/signals.c $(server_h)
 	$(CC) -c $(CPPFLAGS) $(INTERNAL_CFLAGS) $< -DGDBSERVER
@@ -240,6 +257,8 @@ i387-fp.o: i387-fp.c $(server_h)
 linux_low_h = $(srcdir)/linux-low.h
 
 linux-low.o: linux-low.c $(linux_low_h) $(server_h)
+	$(CC) -c $(CPPFLAGS) $(INTERNAL_CFLAGS) $< @USE_THREAD_DB@
+
 linux-arm-low.o: linux-arm-low.c $(linux_low_h) $(server_h)
 linux-i386-low.o: linux-i386-low.c $(linux_low_h) $(server_h)
 linux-ia64-low.o: linux-ia64-low.c $(linux_low_h) $(server_h)
@@ -248,14 +267,6 @@ linux-ppc-low.o: linux-ppc-low.c $(linux_low_h) $(server_h)
 linux-s390-low.o: linux-s390-low.c $(linux_low_h) $(server_h)
 linux-sh-low.o: linux-sh-low.c $(linux_low_h) $(server_h)
 linux-x86-64-low.o: linux-x86-64-low.c $(linux_low_h) $(server_h)
-
-# OBSOLETE TARGETS
-# OBSOLETE # low-lynx.o : ${srcdir}/low-lynx.c ${srcdir}/server.h
-# OBSOLETE # low-nbsd.o : ${srcdir}/low-nbsd.c ${srcdir}/server.h
-# OBSOLETE # low-sim.o : ${srcdir}/low-sim.c ${srcdir}/server.h
-# OBSOLETE # low-sparc.o : $(srcdir)/low-sparc.c $(srcdir)/server.h
-# OBSOLETE # low-sun3.o : $(srcdir)/low-sun3.c $(srcdir)/server.h
-# OBSOLETE # low-hppabsd.o : $(srcdir)/low-hppabsd.c $(srcdir)/server.h
 
 reg-arm.o : reg-arm.c $(regdef_h)
 reg-arm.c : $(srcdir)/../regformats/reg-arm.dat $(regdat_sh)

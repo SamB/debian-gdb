@@ -9,8 +9,10 @@ MKDEP = gcc -MM
 SUBDIRS = doc po
 
 docdir = doc
+bfdlibdir = @bfdlibdir@
+bfdincludedir = @bfdincludedir@
 
-lib_LTLIBRARIES = libbfd.la
+bfdlib_LTLIBRARIES = libbfd.la
 
 WARN_CFLAGS = @WARN_CFLAGS@
 AM_CFLAGS = $(WARN_CFLAGS)
@@ -26,20 +28,22 @@ BFD_H = bfd.h
 # need two copies of the executable, one to download and one for the
 # debugger).
 BFD32_LIBS = \
-	archive.lo archures.lo bfd.lo cache.lo coffgen.lo corefile.lo \
+	archive.lo archures.lo bfd.lo bfdio.lo bfdwin.lo \
+	cache.lo coffgen.lo corefile.lo \
 	format.lo init.lo libbfd.lo opncls.lo reloc.lo \
 	section.lo syms.lo targets.lo hash.lo linker.lo \
 	srec.lo binary.lo tekhex.lo ihex.lo stabs.lo stab-syms.lo \
-	merge.lo dwarf2.lo
+	merge.lo dwarf2.lo simple.lo
 
 BFD64_LIBS = archive64.lo
 
 BFD32_LIBS_CFILES = \
-	archive.c archures.c bfd.c cache.c coffgen.c corefile.c \
+	archive.c archures.c bfd.c bfdio.c bfdwin.c \
+	cache.c coffgen.c corefile.c \
 	format.c init.c libbfd.c opncls.c reloc.c \
 	section.c syms.c targets.c hash.c linker.c \
 	srec.c binary.c tekhex.c ihex.c stabs.c stab-syms.c \
-	merge.c dwarf2.c
+	merge.c dwarf2.c simple.c
 
 BFD64_LIBS_CFILES = archive64.c
 
@@ -54,7 +58,9 @@ ALL_MACHINES = \
 	cpu-cris.lo \
 	cpu-d10v.lo \
 	cpu-d30v.lo \
+	cpu-dlx.lo \
 	cpu-fr30.lo \
+	cpu-frv.lo \
 	cpu-h8300.lo \
 	cpu-h8500.lo \
 	cpu-hppa.lo \
@@ -63,6 +69,8 @@ ALL_MACHINES = \
 	cpu-i386.lo \
 	cpu-i860.lo \
 	cpu-i960.lo \
+	cpu-ip2k.lo \
+	cpu-iq2000.lo \
 	cpu-m32r.lo \
 	cpu-m68hc11.lo \
 	cpu-m68hc12.lo \
@@ -73,6 +81,7 @@ ALL_MACHINES = \
 	cpu-mcore.lo \
 	cpu-mips.lo \
 	cpu-mmix.lo \
+	cpu-msp430.lo \
 	cpu-or32.lo \
 	cpu-ns32k.lo \
 	cpu-openrisc.lo \
@@ -84,6 +93,7 @@ ALL_MACHINES = \
 	cpu-sh.lo \
 	cpu-sparc.lo \
 	cpu-tic30.lo \
+	cpu-tic4x.lo \
 	cpu-tic54x.lo \
 	cpu-tic80.lo \
 	cpu-v850.lo \
@@ -91,6 +101,7 @@ ALL_MACHINES = \
 	cpu-we32k.lo \
 	cpu-w65.lo \
 	cpu-xstormy16.lo \
+	cpu-xtensa.lo \
 	cpu-z8k.lo
 
 ALL_MACHINES_CFILES = \
@@ -102,7 +113,9 @@ ALL_MACHINES_CFILES = \
 	cpu-cris.c \
 	cpu-d10v.c \
 	cpu-d30v.c \
+	cpu-dlx.c \
 	cpu-fr30.c \
+	cpu-frv.c \
 	cpu-h8300.c \
 	cpu-h8500.c \
 	cpu-hppa.c \
@@ -111,6 +124,8 @@ ALL_MACHINES_CFILES = \
 	cpu-i386.c \
 	cpu-i860.c \
 	cpu-i960.c \
+	cpu-ip2k.c \
+	cpu-iq2000.c \
 	cpu-m32r.c \
 	cpu-m68hc11.c \
 	cpu-m68hc12.c \
@@ -121,6 +136,7 @@ ALL_MACHINES_CFILES = \
 	cpu-mcore.c \
 	cpu-mips.c \
 	cpu-mmix.c \
+	cpu-msp430.c \
 	cpu-or32.c \
 	cpu-ns32k.c \
 	cpu-openrisc.c \
@@ -132,6 +148,7 @@ ALL_MACHINES_CFILES = \
 	cpu-sh.c \
 	cpu-sparc.c \
 	cpu-tic30.c \
+	cpu-tic4x.c \
 	cpu-tic54x.c \
 	cpu-tic80.c \
 	cpu-v850.c \
@@ -139,6 +156,7 @@ ALL_MACHINES_CFILES = \
 	cpu-we32k.c \
 	cpu-w65.c \
 	cpu-xstormy16.c \
+	cpu-xtensa.c \
 	cpu-z8k.c
 
 # The .o files needed by all of the 32 bit vectors that are configured into
@@ -177,6 +195,7 @@ BFD32_BACKENDS = \
 	coff-stgo32.lo \
 	coff-svm68k.lo \
 	coff-tic30.lo \
+	coff-tic4x.lo \
 	coff-tic54x.lo \
 	coff-tic80.lo \
 	coff-u68k.lo \
@@ -189,6 +208,7 @@ BFD32_BACKENDS = \
 	ecofflink.lo \
 	efi-app-ia32.lo \
 	elf.lo \
+	elf32-am33lin.lo \
 	elf32-arc.lo \
 	elfarm-oabi.lo \
 	elfarm-nabi.lo \
@@ -196,7 +216,9 @@ BFD32_BACKENDS = \
 	elf32-cris.lo \
 	elf32-d10v.lo \
 	elf32-d30v.lo \
+	elf32-dlx.lo \
 	elf32-fr30.lo \
+	elf32-frv.lo \
 	elf32-gen.lo \
 	elf32-h8300.lo \
 	elf32-hppa.lo \
@@ -205,27 +227,33 @@ BFD32_BACKENDS = \
 	elf32-i860.lo \
 	elf32-i960.lo \
 	elf32-ia64.lo \
+	elf32-ip2k.lo \
+	elf32-iq2000.lo \
 	elf32-m32r.lo \
 	elf32-m68hc11.lo \
 	elf32-m68hc12.lo \
+	elf32-m68hc1x.lo \
 	elf32-m68k.lo \
 	elf32-m88k.lo \
 	elf-m10200.lo \
 	elf-m10300.lo \
 	elf32-mcore.lo \
+	elfxx-mips.lo \
 	elf32-mips.lo \
+	elf32-msp430.lo \
 	elf32-openrisc.lo \
 	elf32-or32.lo \
 	elf32-pj.lo \
 	elf32-ppc.lo \
 	elf32-s390.lo \
 	elf32-sh.lo \
-	elf32-sh-lin.lo \
 	elf32-sh64.lo \
-	elf32-sh-nbsd.lo \
+	elf32-sh64-com.lo \
 	elf32-sparc.lo \
 	elf32-v850.lo \
+	elf32-vax.lo \
 	elf32-xstormy16.lo \
+	elf32-xtensa.lo \
 	elf32.lo \
 	elflink.lo \
 	elf-strtab.lo \
@@ -251,6 +279,7 @@ BFD32_BACKENDS = \
 	m68klynx.lo \
 	m68knetbsd.lo \
 	m88kmach3.lo \
+	mach-o.lo \
 	mipsbsd.lo \
 	newsos3.lo \
 	nlm.lo \
@@ -262,6 +291,7 @@ BFD32_BACKENDS = \
 	oasys.lo \
 	pc532-mach.lo \
 	pdp11.lo \
+	pef.lo \
 	pe-arm.lo \
 	pei-arm.lo \
 	pe-i386.lo \
@@ -283,13 +313,18 @@ BFD32_BACKENDS = \
 	sparcnetbsd.lo \
 	sunos.lo \
 	vaxnetbsd.lo \
+	vax1knetbsd.lo \
+	vaxbsd.lo \
 	versados.lo \
 	vms.lo \
 	vms-gsd.lo \
 	vms-hdr.lo \
 	vms-misc.lo \
 	vms-tir.lo \
-	xcofflink.lo
+	xcofflink.lo \
+	xsym.lo \
+	xtensa-isa.lo \
+	xtensa-modules.lo
 
 BFD32_BACKENDS_CFILES = \
 	aout-adobe.c \
@@ -325,6 +360,7 @@ BFD32_BACKENDS_CFILES = \
 	coff-stgo32.c \
 	coff-svm68k.c \
 	coff-tic30.c \
+	coff-tic4x.c \
 	coff-tic54x.c \
 	coff-tic80.c \
 	coff-u68k.c \
@@ -337,6 +373,7 @@ BFD32_BACKENDS_CFILES = \
 	ecofflink.c \
 	efi-app-ia32.c \
 	elf.c \
+	elf32-am33lin.c \
 	elf32-arc.c \
 	elfarm-oabi.c \
 	elfarm-nabi.c \
@@ -344,7 +381,9 @@ BFD32_BACKENDS_CFILES = \
 	elf32-cris.c \
 	elf32-d10v.c \
 	elf32-d30v.c \
+	elf32-dlx.c \
 	elf32-fr30.c \
+	elf32-frv.c \
 	elf32-gen.c \
 	elf32-h8300.c \
 	elf32-hppa.c \
@@ -352,27 +391,33 @@ BFD32_BACKENDS_CFILES = \
 	elf32-i386.c \
 	elf32-i860.c \
 	elf32-i960.c \
+	elf32-ip2k.c \
+	elf32-iq2000.c \
 	elf32-m32r.c \
 	elf32-m68k.c \
 	elf32-m68hc11.c \
 	elf32-m68hc12.c \
+	elf32-m68hc1x.c \
 	elf32-m88k.c \
 	elf-m10200.c \
 	elf-m10300.c \
 	elf32-mcore.c \
+	elfxx-mips.c \
 	elf32-mips.c \
+	elf32-msp430.c \
 	elf32-openrisc.c \
 	elf32-or32.c \
 	elf32-pj.c \
 	elf32-ppc.c \
 	elf32-sh64.c \
+	elf32-sh64-com.c \
 	elf32-s390.c \
 	elf32-sh.c \
-	elf32-sh-lin.c \
-	elf32-sh-nbsd.c \
 	elf32-sparc.c \
 	elf32-v850.c \
+	elf32-vax.c \
 	elf32-xstormy16.c \
+	elf32-xtensa.c \
 	elf32.c \
 	elflink.c \
 	elf-strtab.c \
@@ -398,6 +443,7 @@ BFD32_BACKENDS_CFILES = \
 	m68klynx.c \
 	m68knetbsd.c \
 	m88kmach3.c \
+	mach-o.c \
 	mipsbsd.c \
 	newsos3.c \
 	nlm.c \
@@ -409,6 +455,7 @@ BFD32_BACKENDS_CFILES = \
 	oasys.c \
 	pc532-mach.c \
 	pdp11.c \
+	pef.c \
 	pe-arm.c \
 	pei-arm.c \
 	pe-i386.c \
@@ -429,13 +476,18 @@ BFD32_BACKENDS_CFILES = \
 	sparcnetbsd.c \
 	sunos.c \
 	vaxnetbsd.c \
+	vax1knetbsd.c \
+	vaxbsd.c \
 	versados.c \
 	vms.c \
 	vms-gsd.c \
 	vms-hdr.c \
 	vms-misc.c \
 	vms-tir.c \
-	xcofflink.c
+	xcofflink.c \
+	xsym.c \
+	xtensa-isa.c \
+	xtensa-modules.c
 
 # The .o files needed by all of the 64 bit vectors that are configured into
 # target_vector in targets.c if configured with --enable-targets=all
@@ -452,6 +504,7 @@ BFD64_BACKENDS = \
 	elf64-hppa.lo \
 	elf64-ia64.lo \
 	elf64-gen.lo \
+	elfn32-mips.lo \
 	elf64-mips.lo \
 	elf64-mmix.lo \
 	elf64-sh64.lo \
@@ -475,6 +528,7 @@ BFD64_BACKENDS_CFILES = \
 	elf64-alpha.c \
 	elf64-hppa.c \
 	elf64-gen.c \
+	elfn32-mips.c \
 	elf64-mips.c \
 	elf64-mmix.c \
 	elf64-ppc.c \
@@ -533,16 +587,18 @@ CFILES = $(SOURCE_CFILES) $(BUILD_CFILES)
 ## This is a list of all .h files which are in the source tree.
 SOURCE_HFILES = \
 	aout-target.h aoutf1.h aoutx.h coffcode.h coffswap.h ecoffswap.h \
-	elf-bfd.h elf-hppa.h elf32-arm.h elf32-hppa.h elf64-hppa.h \
-	elfcode.h elfcore.h elflink.h freebsd.h genlink.h go32stub.h \
-	libaout.h libbfd.h libcoff.h libecoff.h libhppa.h \
-	libieee.h libnlm.h liboasys.h libpei.h netbsd.h nlm-target.h \
-	nlmcode.h nlmswap.h ns32k.h peicode.h som.h vms.h libxcoff.h \
-	xcoff-target.h version.h
+	elf-bfd.h elf-hppa.h elf32-arm.h elf32-hppa.h \
+	elf64-hppa.h elfcode.h elfcore.h elflink.h \
+	freebsd.h genlink.h go32stub.h \
+	libaout.h libbfd.h libcoff.h libecoff.h libhppa.h libieee.h \
+	libnlm.h liboasys.h libpei.h libxcoff.h mach-o.h \
+	netbsd.h nlm-target.h nlmcode.h nlmswap.h ns32k.h \
+	pef.h pef-traceback.h peicode.h som.h version.h \
+	vms.h xcoff-target.h xsym.h
 
 ## ... and all .h files which are in the build tree.
 BUILD_HFILES = \
-	elf32-target.h elf64-target.h targmatch.h
+	bfdver.h elf32-target.h elf64-target.h targmatch.h
 
 HFILES = $(SOURCE_HFILES) $(BUILD_HFILES)
 
@@ -550,22 +606,14 @@ SRC_POTFILES = $(SOURCE_CFILES) $(SOURCE_HFILES)
 BLD_POTFILES = $(BUILD_CFILES) $(BUILD_HFILES)
 
 po/SRC-POTFILES.in: @MAINT@ Makefile $(SRC_POTFILES)
-	for file in $(SRC_POTFILES); do echo $$file; done | sort > tmp.src \
+	for file in $(SRC_POTFILES); do echo $$file; done \
+	  | LC_COLLATE= sort > tmp.src \
 	  && mv tmp.src $(srcdir)/po/SRC-POTFILES.in
 
 po/BLD-POTFILES.in: @MAINT@ Makefile $(BLD_POTFILES)
-	for file in $(BLD_POTFILES); do echo $$file; done | sort > tmp.bld \
+	for file in $(BLD_POTFILES); do echo $$file; done \
+	  | LC_COLLATE= sort > tmp.bld \
 	  && mv tmp.bld $(srcdir)/po/BLD-POTFILES.in
-
-# The following target is retained for upgrade purposes.
-# This target used to exist in older versions of this makefile, and was
-# referenced by <builddir>/po/Makefile (which is created from <srcdir>/po/Make-in)
-# So old versions of <builddir>/po/Makefile will try to regenerate themselves
-# when make is next run, but that dependency cannot be completed without a build
-# of po/POTFILES.in.  Hence the presence of this rule.  This rule will be deleted
-# once it is no longer needed - probably in the fall of 2001.
-po/POTFILES.in:
-
 
 diststuff: info
 
@@ -625,10 +673,10 @@ targmatch.h: config.bfd targmatch.sed
 # When compiling archures.c and targets.c, supply the default target
 # info from configure.
 
-targets.lo: targets.c config.status
+targets.lo: targets.c Makefile
 	$(LIBTOOL) --mode=compile $(COMPILE) -c $(TDEFAULTS) $(srcdir)/targets.c
 
-archures.lo: archures.c config.status
+archures.lo: archures.c Makefile
 	$(LIBTOOL) --mode=compile $(COMPILE) -c $(TDEFAULTS) $(srcdir)/archures.c
 
 elf32-target.h : elfxx-target.h
@@ -670,14 +718,35 @@ $(BFD32_LIBS) \
  $(BFD64_BACKENDS) \
  $(OPTIONAL_BACKENDS): $(BFD_H) $(BFD_H_DEPS) $(LOCAL_H_DEPS)
 
-# Install BFD include file, and others that it needs.
-install-data-local: $(BFD_H)
+install-bfdlibLTLIBRARIES: @INSTALL_LIBBFD_TRUE@install_libbfd
 	@$(NORMAL_INSTALL)
-	$(mkinstalldirs) $(DESTDIR)$(includedir)
-	$(INSTALL_DATA) $(BFD_H) $(DESTDIR)$(includedir)/bfd.h
-	$(INSTALL_DATA) $(INCDIR)/ansidecl.h $(DESTDIR)$(includedir)/ansidecl.h
-	$(INSTALL_DATA) $(INCDIR)/symcat.h $(DESTDIR)$(includedir)/symcat.h
-	$(INSTALL_DATA) $(INCDIR)/bfdlink.h $(DESTDIR)$(includedir)/bfdlink.h
+
+uninstall-bfdlibLTLIBRARIES: @INSTALL_LIBBFD_TRUE@uninstall_libbfd
+	@$(NORMAL_UNINSTALL)
+
+.PHONY: install_libbfd uninstall_libbfd
+install_libbfd: $(bfdlib_LTLIBRARIES) $(BFD_H)
+	$(mkinstalldirs) $(DESTDIR)$(bfdlibdir)
+	$(mkinstalldirs) $(DESTDIR)$(bfdincludedir)
+	@list='$(bfdlib_LTLIBRARIES)'; for p in $$list; do \
+	  if test -f $$p; then \
+	    echo "$(LIBTOOL)  --mode=install $(INSTALL) $$p $(DESTDIR)$(bfdlibdir)/$$p"; \
+	    $(LIBTOOL)  --mode=install $(INSTALL) $$p $(DESTDIR)$(bfdlibdir)/$$p; \
+	  else :; fi; \
+	done
+	$(INSTALL_DATA) $(BFD_H) $(DESTDIR)$(bfdincludedir)/bfd.h
+	$(INSTALL_DATA) $(INCDIR)/ansidecl.h $(DESTDIR)$(bfdincludedir)/ansidecl.h
+	$(INSTALL_DATA) $(INCDIR)/symcat.h $(DESTDIR)$(bfdincludedir)/symcat.h
+	$(INSTALL_DATA) $(INCDIR)/bfdlink.h $(DESTDIR)$(bfdincludedir)/bfdlink.h
+
+uninstall_libbfd:
+	list='$(bfdlib_LTLIBRARIES)'; for p in $$list; do \
+	  $(LIBTOOL)  --mode=uninstall rm -f $(DESTDIR)$(bfdlibdir)/$$p; \
+	done
+	rm -f $(DESTDIR)$(bfdincludedir)/bfd.h
+	rm -f $(DESTDIR)$(bfdincludedir)/ansidecl.h
+	rm -f $(DESTDIR)$(bfdincludedir)/symcat.h
+	rm -f $(DESTDIR)$(bfdincludedir)/bfdlink.h
 
 Makefile: $(srcdir)/configure.in
 
@@ -702,8 +771,8 @@ DEP1: $(CFILES)
 dep.sed: dep-in.sed config.status
 	sed <$(srcdir)/dep-in.sed >dep.sed	\
 		-e 's!@BFD_H@!$(BFD_H)!'	\
-		-e 's!@INCDIR@!$(INCDIR)!'	\
-		-e 's!@SRCDIR@!$(srcdir)!'
+		-e 's!@SRCDIR@!$(srcdir)!'	\
+		-e 's!@TOPDIR@!'`echo $(srcdir) | sed -e s,/bfd$$,,`'!'
 
 dep: DEP
 	sed -e '/^..DO NOT DELETE THIS LINE/,$$d' < Makefile > tmp-Makefile
@@ -739,9 +808,11 @@ stmp-bfd-h: bfd-in3.h
 	touch stmp-bfd-h
 
 BFD_H_FILES = bfd-in.h init.c opncls.c libbfd.c section.c archures.c \
-	reloc.c syms.c bfd.c archive.c corefile.c targets.c format.c version.h
+	reloc.c syms.c bfd.c bfdio.c bfdwin.c \
+	archive.c corefile.c targets.c format.c
 BFD64_H_FILES = archive64.c
-LIBBFD_H_FILES = libbfd-in.h init.c libbfd.c cache.c reloc.c archures.c elf.c
+LIBBFD_H_FILES = libbfd-in.h init.c libbfd.c bfdio.c bfdwin.c \
+	cache.c reloc.c archures.c elf.c
 LIBCOFF_H_FILES = libcoff-in.h coffcode.h
 
 # Could really use a "copy-if-change"...
@@ -785,10 +856,10 @@ CLEANFILES = bfd.h dep.sed stmp-bfd-h DEP DEPA DEP1 DEP2 libbfd.a stamp-lib \
 
 DISTCLEANFILES = $(BUILD_CFILES) $(BUILD_HFILES)
 
-# We want to rerun configure if config.bfd or configure.host change.
-config.status: $(srcdir)/configure $(srcdir)/config.bfd $(srcdir)/configure.host
+# We want to rerun configure if config.bfd, configure.host or version.h change.
+config.status: $(srcdir)/configure $(srcdir)/config.bfd \
+		$(srcdir)/configure.host $(srcdir)/version.h
 	$(SHELL) ./config.status --recheck
-
 
 # What appears below is generated by a hacked mkdep using gcc -MM.
 
@@ -797,11 +868,13 @@ config.status: $(srcdir)/configure $(srcdir)/config.bfd $(srcdir)/configure.host
 archive.lo: archive.c $(INCDIR)/filenames.h $(INCDIR)/aout/ar.h \
   $(INCDIR)/aout/ranlib.h $(INCDIR)/safe-ctype.h
 archures.lo: archures.c $(INCDIR)/filenames.h $(INCDIR)/safe-ctype.h
-bfd.lo: bfd.c $(INCDIR)/filenames.h $(INCDIR)/libiberty.h \
+bfd.lo: bfd.c bfdver.h $(INCDIR)/filenames.h $(INCDIR)/libiberty.h \
   $(INCDIR)/safe-ctype.h $(INCDIR)/bfdlink.h $(INCDIR)/coff/internal.h \
   $(INCDIR)/coff/sym.h libcoff.h libecoff.h $(INCDIR)/coff/ecoff.h \
   elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
   $(INCDIR)/elf/external.h
+bfdio.lo: bfdio.c $(INCDIR)/filenames.h
+bfdwin.lo: bfdwin.c $(INCDIR)/filenames.h
 cache.lo: cache.c $(INCDIR)/filenames.h
 coffgen.lo: coffgen.c $(INCDIR)/filenames.h $(INCDIR)/coff/internal.h \
   libcoff.h $(INCDIR)/bfdlink.h
@@ -809,7 +882,8 @@ corefile.lo: corefile.c $(INCDIR)/filenames.h
 format.lo: format.c $(INCDIR)/filenames.h
 init.lo: init.c $(INCDIR)/filenames.h
 libbfd.lo: libbfd.c $(INCDIR)/filenames.h
-opncls.lo: opncls.c $(INCDIR)/filenames.h $(INCDIR)/objalloc.h
+opncls.lo: opncls.c $(INCDIR)/filenames.h $(INCDIR)/objalloc.h \
+  $(INCDIR)/libiberty.h
 reloc.lo: reloc.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h
 section.lo: section.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h
 syms.lo: syms.c $(INCDIR)/filenames.h $(INCDIR)/safe-ctype.h \
@@ -829,20 +903,24 @@ stabs.lo: stabs.c $(INCDIR)/filenames.h $(INCDIR)/aout/stab_gnu.h \
   $(INCDIR)/aout/stab.def $(INCDIR)/safe-ctype.h
 stab-syms.lo: stab-syms.c libaout.h $(INCDIR)/bfdlink.h \
   $(INCDIR)/aout/aout64.h $(INCDIR)/aout/stab.def
-merge.lo: merge.c $(INCDIR)/filenames.h $(INCDIR)/hashtab.h
+merge.lo: merge.c $(INCDIR)/filenames.h $(INCDIR)/hashtab.h \
+  $(INCDIR)/libiberty.h
 dwarf2.lo: dwarf2.c $(INCDIR)/filenames.h $(INCDIR)/libiberty.h \
   elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
   $(INCDIR)/elf/external.h $(INCDIR)/bfdlink.h $(INCDIR)/elf/dwarf2.h
+simple.lo: simple.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h
 archive64.lo: archive64.c $(INCDIR)/filenames.h $(INCDIR)/aout/ar.h
 cpu-a29k.lo: cpu-a29k.c $(INCDIR)/filenames.h
 cpu-alpha.lo: cpu-alpha.c $(INCDIR)/filenames.h
 cpu-arc.lo: cpu-arc.c $(INCDIR)/filenames.h
-cpu-arm.lo: cpu-arm.c $(INCDIR)/filenames.h
+cpu-arm.lo: cpu-arm.c $(INCDIR)/filenames.h $(INCDIR)/libiberty.h
 cpu-avr.lo: cpu-avr.c $(INCDIR)/filenames.h
 cpu-cris.lo: cpu-cris.c $(INCDIR)/filenames.h
 cpu-d10v.lo: cpu-d10v.c $(INCDIR)/filenames.h
 cpu-d30v.lo: cpu-d30v.c $(INCDIR)/filenames.h
+cpu-dlx.lo: cpu-dlx.c $(INCDIR)/filenames.h
 cpu-fr30.lo: cpu-fr30.c $(INCDIR)/filenames.h
+cpu-frv.lo: cpu-frv.c $(INCDIR)/filenames.h
 cpu-h8300.lo: cpu-h8300.c $(INCDIR)/filenames.h
 cpu-h8500.lo: cpu-h8500.c $(INCDIR)/filenames.h
 cpu-hppa.lo: cpu-hppa.c $(INCDIR)/filenames.h
@@ -852,6 +930,8 @@ cpu-i370.lo: cpu-i370.c $(INCDIR)/filenames.h
 cpu-i386.lo: cpu-i386.c $(INCDIR)/filenames.h
 cpu-i860.lo: cpu-i860.c $(INCDIR)/filenames.h
 cpu-i960.lo: cpu-i960.c $(INCDIR)/filenames.h
+cpu-ip2k.lo: cpu-ip2k.c $(INCDIR)/filenames.h
+cpu-iq2000.lo: cpu-iq2000.c $(INCDIR)/filenames.h
 cpu-m32r.lo: cpu-m32r.c $(INCDIR)/filenames.h
 cpu-m68hc11.lo: cpu-m68hc11.c $(INCDIR)/filenames.h
 cpu-m68hc12.lo: cpu-m68hc12.c $(INCDIR)/filenames.h
@@ -862,6 +942,7 @@ cpu-m10300.lo: cpu-m10300.c $(INCDIR)/filenames.h
 cpu-mcore.lo: cpu-mcore.c $(INCDIR)/filenames.h
 cpu-mips.lo: cpu-mips.c $(INCDIR)/filenames.h
 cpu-mmix.lo: cpu-mmix.c $(INCDIR)/filenames.h
+cpu-msp430.lo: cpu-msp430.c $(INCDIR)/filenames.h
 cpu-or32.lo: cpu-or32.c $(INCDIR)/filenames.h
 cpu-ns32k.lo: cpu-ns32k.c $(INCDIR)/filenames.h ns32k.h
 cpu-openrisc.lo: cpu-openrisc.c $(INCDIR)/filenames.h
@@ -873,6 +954,7 @@ cpu-s390.lo: cpu-s390.c $(INCDIR)/filenames.h
 cpu-sh.lo: cpu-sh.c $(INCDIR)/filenames.h
 cpu-sparc.lo: cpu-sparc.c $(INCDIR)/filenames.h
 cpu-tic30.lo: cpu-tic30.c $(INCDIR)/filenames.h
+cpu-tic4x.lo: cpu-tic4x.c $(INCDIR)/filenames.h
 cpu-tic54x.lo: cpu-tic54x.c $(INCDIR)/filenames.h
 cpu-tic80.lo: cpu-tic80.c $(INCDIR)/filenames.h
 cpu-v850.lo: cpu-v850.c $(INCDIR)/filenames.h $(INCDIR)/safe-ctype.h
@@ -880,6 +962,7 @@ cpu-vax.lo: cpu-vax.c $(INCDIR)/filenames.h
 cpu-we32k.lo: cpu-we32k.c $(INCDIR)/filenames.h
 cpu-w65.lo: cpu-w65.c $(INCDIR)/filenames.h
 cpu-xstormy16.lo: cpu-xstormy16.c $(INCDIR)/filenames.h
+cpu-xtensa.lo: cpu-xtensa.c $(INCDIR)/filenames.h
 cpu-z8k.lo: cpu-z8k.c $(INCDIR)/filenames.h
 aout-adobe.lo: aout-adobe.c $(INCDIR)/filenames.h $(INCDIR)/aout/adobe.h \
   $(INCDIR)/aout/stab_gnu.h $(INCDIR)/aout/stab.def libaout.h \
@@ -942,7 +1025,8 @@ coff-aux.lo: coff-aux.c $(INCDIR)/filenames.h $(INCDIR)/coff/aux-coff.h \
   coffswap.h
 coff-h8300.lo: coff-h8300.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   genlink.h $(INCDIR)/coff/h8300.h $(INCDIR)/coff/external.h \
-  $(INCDIR)/coff/internal.h libcoff.h coffcode.h coffswap.h
+  $(INCDIR)/coff/internal.h libcoff.h $(INCDIR)/libiberty.h \
+  coffcode.h coffswap.h
 coff-h8500.lo: coff-h8500.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   $(INCDIR)/coff/h8500.h $(INCDIR)/coff/external.h $(INCDIR)/coff/internal.h \
   libcoff.h coffcode.h coffswap.h
@@ -991,6 +1075,9 @@ coff-svm68k.lo: coff-svm68k.c coff-m68k.c $(INCDIR)/filenames.h \
 coff-tic30.lo: coff-tic30.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   $(INCDIR)/coff/tic30.h $(INCDIR)/coff/external.h $(INCDIR)/coff/internal.h \
   libcoff.h coffcode.h coffswap.h
+coff-tic4x.lo: coff-tic4x.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
+  $(INCDIR)/coff/tic4x.h $(INCDIR)/coff/ti.h $(INCDIR)/coff/internal.h \
+  libcoff.h coffcode.h coffswap.h
 coff-tic54x.lo: coff-tic54x.c $(INCDIR)/filenames.h \
   $(INCDIR)/bfdlink.h $(INCDIR)/coff/tic54x.h $(INCDIR)/coff/ti.h \
   $(INCDIR)/coff/internal.h libcoff.h coffcode.h coffswap.h
@@ -1010,7 +1097,7 @@ coff-z8k.lo: coff-z8k.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   $(INCDIR)/coff/z8k.h $(INCDIR)/coff/external.h $(INCDIR)/coff/internal.h \
   libcoff.h coffcode.h coffswap.h
 cofflink.lo: cofflink.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
-  $(INCDIR)/coff/internal.h libcoff.h
+  $(INCDIR)/coff/internal.h libcoff.h $(INCDIR)/safe-ctype.h
 dwarf1.lo: dwarf1.c $(INCDIR)/filenames.h $(INCDIR)/libiberty.h \
   elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
   $(INCDIR)/elf/external.h $(INCDIR)/bfdlink.h $(INCDIR)/elf/dwarf.h
@@ -1030,6 +1117,10 @@ efi-app-ia32.lo: efi-app-ia32.c $(INCDIR)/filenames.h \
 elf.lo: elf.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
   $(INCDIR)/elf/external.h $(INCDIR)/libiberty.h
+elf32-am33lin.lo: elf32-am33lin.c elf-m10300.c $(INCDIR)/filenames.h \
+  elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
+  $(INCDIR)/elf/external.h $(INCDIR)/bfdlink.h $(INCDIR)/elf/mn10300.h \
+  $(INCDIR)/elf/reloc-macros.h elf32-target.h
 elf32-arc.lo: elf32-arc.c $(INCDIR)/filenames.h elf-bfd.h \
   $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h \
   $(INCDIR)/bfdlink.h $(INCDIR)/elf/arc.h $(INCDIR)/elf/reloc-macros.h \
@@ -1058,9 +1149,17 @@ elf32-d30v.lo: elf32-d30v.c $(INCDIR)/filenames.h elf-bfd.h \
   $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h \
   $(INCDIR)/bfdlink.h $(INCDIR)/elf/d30v.h $(INCDIR)/elf/reloc-macros.h \
   elf32-target.h
+elf32-dlx.lo: elf32-dlx.c $(INCDIR)/filenames.h elf-bfd.h \
+  $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h \
+  $(INCDIR)/bfdlink.h $(INCDIR)/elf/dlx.h $(INCDIR)/elf/reloc-macros.h \
+  elf32-target.h
 elf32-fr30.lo: elf32-fr30.c $(INCDIR)/filenames.h elf-bfd.h \
   $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h \
   $(INCDIR)/bfdlink.h $(INCDIR)/elf/fr30.h $(INCDIR)/elf/reloc-macros.h \
+  elf32-target.h
+elf32-frv.lo: elf32-frv.c $(INCDIR)/filenames.h elf-bfd.h \
+  $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h \
+  $(INCDIR)/bfdlink.h $(INCDIR)/elf/frv.h $(INCDIR)/elf/reloc-macros.h \
   elf32-target.h
 elf32-gen.lo: elf32-gen.c $(INCDIR)/filenames.h elf-bfd.h \
   $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h \
@@ -1075,7 +1174,8 @@ elf32-hppa.lo: elf32-hppa.c $(INCDIR)/filenames.h elf-bfd.h \
   libhppa.h elf32-hppa.h elf-hppa.h elf32-target.h
 elf32-i370.lo: elf32-i370.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
-  $(INCDIR)/elf/external.h $(INCDIR)/elf/i370.h elf32-target.h
+  $(INCDIR)/elf/external.h $(INCDIR)/elf/i370.h $(INCDIR)/elf/reloc-macros.h \
+  elf32-target.h
 elf32-i386.lo: elf32-i386.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
   $(INCDIR)/elf/external.h $(INCDIR)/elf/i386.h $(INCDIR)/elf/reloc-macros.h \
@@ -1088,6 +1188,14 @@ elf32-i960.lo: elf32-i960.c $(INCDIR)/filenames.h elf-bfd.h \
   $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h \
   $(INCDIR)/bfdlink.h $(INCDIR)/elf/i960.h $(INCDIR)/elf/reloc-macros.h \
   elf32-target.h
+elf32-ip2k.lo: elf32-ip2k.c $(INCDIR)/filenames.h elf-bfd.h \
+  $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h \
+  $(INCDIR)/bfdlink.h $(INCDIR)/elf/ip2k.h $(INCDIR)/elf/reloc-macros.h \
+  elf32-target.h
+elf32-iq2000.lo: elf32-iq2000.c $(INCDIR)/filenames.h \
+  elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
+  $(INCDIR)/elf/external.h $(INCDIR)/bfdlink.h $(INCDIR)/elf/iq2000.h \
+  $(INCDIR)/elf/reloc-macros.h elf32-target.h
 elf32-m32r.lo: elf32-m32r.c $(INCDIR)/filenames.h elf-bfd.h \
   $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h \
   $(INCDIR)/bfdlink.h $(INCDIR)/elf/m32r.h $(INCDIR)/elf/reloc-macros.h \
@@ -1097,13 +1205,20 @@ elf32-m68k.lo: elf32-m68k.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   $(INCDIR)/elf/external.h $(INCDIR)/elf/m68k.h $(INCDIR)/elf/reloc-macros.h \
   elf32-target.h
 elf32-m68hc11.lo: elf32-m68hc11.c $(INCDIR)/filenames.h \
-  elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
-  $(INCDIR)/elf/external.h $(INCDIR)/bfdlink.h $(INCDIR)/elf/m68hc11.h \
-  $(INCDIR)/elf/reloc-macros.h elf32-target.h
+  $(INCDIR)/bfdlink.h elf-bfd.h $(INCDIR)/elf/common.h \
+  $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h elf32-m68hc1x.h \
+  $(INCDIR)/elf/m68hc11.h $(INCDIR)/elf/reloc-macros.h \
+  $(INCDIR)/opcode/m68hc11.h elf32-target.h
 elf32-m68hc12.lo: elf32-m68hc12.c $(INCDIR)/filenames.h \
-  elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
-  $(INCDIR)/elf/external.h $(INCDIR)/bfdlink.h $(INCDIR)/elf/m68hc11.h \
-  $(INCDIR)/elf/reloc-macros.h elf32-target.h
+  $(INCDIR)/bfdlink.h elf-bfd.h $(INCDIR)/elf/common.h \
+  $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h elf32-m68hc1x.h \
+  $(INCDIR)/elf/m68hc11.h $(INCDIR)/elf/reloc-macros.h \
+  $(INCDIR)/opcode/m68hc11.h elf32-target.h
+elf32-m68hc1x.lo: elf32-m68hc1x.c $(INCDIR)/filenames.h \
+  $(INCDIR)/bfdlink.h elf-bfd.h $(INCDIR)/elf/common.h \
+  $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h elf32-m68hc1x.h \
+  $(INCDIR)/elf/m68hc11.h $(INCDIR)/elf/reloc-macros.h \
+  $(INCDIR)/opcode/m68hc11.h
 elf32-m88k.lo: elf32-m88k.c $(INCDIR)/filenames.h elf-bfd.h \
   $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h \
   $(INCDIR)/bfdlink.h elf32-target.h
@@ -1118,12 +1233,23 @@ elf32-mcore.lo: elf32-mcore.c $(INCDIR)/filenames.h \
   $(INCDIR)/bfdlink.h elf-bfd.h $(INCDIR)/elf/common.h \
   $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h $(INCDIR)/elf/mcore.h \
   $(INCDIR)/elf/reloc-macros.h elf32-target.h
+elfxx-mips.lo: elfxx-mips.c $(INCDIR)/filenames.h $(INCDIR)/libiberty.h \
+  elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
+  $(INCDIR)/elf/external.h $(INCDIR)/bfdlink.h elfxx-mips.h \
+  $(INCDIR)/elf/mips.h $(INCDIR)/elf/reloc-macros.h $(INCDIR)/coff/sym.h \
+  $(INCDIR)/coff/symconst.h $(INCDIR)/coff/ecoff.h $(INCDIR)/coff/mips.h \
+  $(INCDIR)/coff/external.h $(INCDIR)/hashtab.h
 elf32-mips.lo: elf32-mips.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   genlink.h elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
-  $(INCDIR)/elf/external.h $(INCDIR)/elf/mips.h $(INCDIR)/elf/reloc-macros.h \
-  $(INCDIR)/coff/sym.h $(INCDIR)/coff/symconst.h $(INCDIR)/coff/internal.h \
-  $(INCDIR)/coff/ecoff.h $(INCDIR)/coff/mips.h $(INCDIR)/coff/external.h \
-  ecoffswap.h elf32-target.h
+  $(INCDIR)/elf/external.h elfxx-mips.h $(INCDIR)/elf/mips.h \
+  $(INCDIR)/elf/reloc-macros.h $(INCDIR)/coff/sym.h $(INCDIR)/coff/symconst.h \
+  $(INCDIR)/coff/internal.h $(INCDIR)/coff/ecoff.h $(INCDIR)/coff/mips.h \
+  $(INCDIR)/coff/external.h ecoffswap.h elf32-target.h
+elf32-msp430.lo: elf32-msp430.c $(INCDIR)/filenames.h \
+  $(INCDIR)/libiberty.h elf-bfd.h $(INCDIR)/elf/common.h \
+  $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h $(INCDIR)/bfdlink.h \
+  $(INCDIR)/elf/msp430.h $(INCDIR)/elf/reloc-macros.h \
+  elf32-target.h
 elf32-openrisc.lo: elf32-openrisc.c $(INCDIR)/filenames.h \
   elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
   $(INCDIR)/elf/external.h $(INCDIR)/bfdlink.h $(INCDIR)/elf/openrisc.h \
@@ -1140,12 +1266,16 @@ elf32-pj.lo: elf32-pj.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
 elf32-ppc.lo: elf32-ppc.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
   $(INCDIR)/elf/external.h $(INCDIR)/elf/ppc.h $(INCDIR)/elf/reloc-macros.h \
-  elf32-target.h
+  elf32-ppc.h elf32-target.h
 elf32-sh64.lo: elf32-sh64.c $(INCDIR)/filenames.h elf-bfd.h \
   $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h \
   $(INCDIR)/bfdlink.h $(srcdir)/../opcodes/sh64-opc.h \
-  elf32-sh.c $(INCDIR)/elf/sh.h $(INCDIR)/elf/reloc-macros.h \
+  elf32-sh64.h elf32-sh.c $(INCDIR)/elf/sh.h $(INCDIR)/elf/reloc-macros.h \
   elf32-target.h
+elf32-sh64-com.lo: elf32-sh64-com.c $(INCDIR)/filenames.h \
+  elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
+  $(INCDIR)/elf/external.h $(INCDIR)/bfdlink.h $(INCDIR)/elf/sh.h \
+  $(INCDIR)/elf/reloc-macros.h elf32-sh64.h $(srcdir)/../opcodes/sh64-opc.h
 elf32-s390.lo: elf32-s390.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
   $(INCDIR)/elf/external.h $(INCDIR)/elf/s390.h $(INCDIR)/elf/reloc-macros.h \
@@ -1154,14 +1284,6 @@ elf32-sh.lo: elf32-sh.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
   $(INCDIR)/elf/external.h $(INCDIR)/elf/sh.h $(INCDIR)/elf/reloc-macros.h \
   elf32-target.h
-elf32-sh-lin.lo: elf32-sh-lin.c $(INCDIR)/filenames.h \
-  $(INCDIR)/elf/internal.h elf-bfd.h $(INCDIR)/elf/common.h \
-  $(INCDIR)/elf/external.h $(INCDIR)/bfdlink.h elf32-sh.c \
-  $(INCDIR)/elf/sh.h $(INCDIR)/elf/reloc-macros.h elf32-target.h
-elf32-sh-nbsd.lo: elf32-sh-nbsd.c elf32-sh.c $(INCDIR)/filenames.h \
-  $(INCDIR)/bfdlink.h elf-bfd.h $(INCDIR)/elf/common.h \
-  $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h $(INCDIR)/elf/sh.h \
-  $(INCDIR)/elf/reloc-macros.h elf32-target.h
 elf32-sparc.lo: elf32-sparc.c $(INCDIR)/filenames.h \
   $(INCDIR)/bfdlink.h elf-bfd.h $(INCDIR)/elf/common.h \
   $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h $(INCDIR)/elf/sparc.h \
@@ -1171,21 +1293,30 @@ elf32-v850.lo: elf32-v850.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
   $(INCDIR)/elf/external.h $(INCDIR)/elf/v850.h $(INCDIR)/elf/reloc-macros.h \
   $(INCDIR)/libiberty.h elf32-target.h
+elf32-vax.lo: elf32-vax.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
+  elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
+  $(INCDIR)/elf/external.h $(INCDIR)/elf/vax.h $(INCDIR)/elf/reloc-macros.h \
+  elf32-target.h
 elf32-xstormy16.lo: elf32-xstormy16.c $(INCDIR)/filenames.h \
   elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
   $(INCDIR)/elf/external.h $(INCDIR)/bfdlink.h $(INCDIR)/elf/xstormy16.h \
   $(INCDIR)/elf/reloc-macros.h $(INCDIR)/libiberty.h \
   elf32-target.h
+elf32-xtensa.lo: elf32-xtensa.c $(INCDIR)/filenames.h \
+  $(INCDIR)/bfdlink.h elf-bfd.h $(INCDIR)/elf/common.h \
+  $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h $(INCDIR)/elf/xtensa.h \
+  $(INCDIR)/elf/reloc-macros.h $(INCDIR)/xtensa-isa.h \
+  $(INCDIR)/xtensa-config.h elf32-target.h
 elf32.lo: elf32.c elfcode.h $(INCDIR)/filenames.h $(INCDIR)/libiberty.h \
   $(INCDIR)/bfdlink.h elf-bfd.h $(INCDIR)/elf/common.h \
   $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h elfcore.h \
-  elflink.h
+  elflink.h $(INCDIR)/safe-ctype.h
 elflink.lo: elflink.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
   $(INCDIR)/elf/external.h
 elf-strtab.lo: elf-strtab.c $(INCDIR)/filenames.h elf-bfd.h \
   $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h \
-  $(INCDIR)/bfdlink.h $(INCDIR)/hashtab.h
+  $(INCDIR)/bfdlink.h $(INCDIR)/hashtab.h $(INCDIR)/libiberty.h
 elf-eh-frame.lo: elf-eh-frame.c $(INCDIR)/filenames.h \
   elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
   $(INCDIR)/elf/external.h $(INCDIR)/bfdlink.h $(INCDIR)/elf/dwarf2.h
@@ -1252,6 +1383,8 @@ m68knetbsd.lo: m68knetbsd.c netbsd.h $(INCDIR)/filenames.h \
 m88kmach3.lo: m88kmach3.c $(INCDIR)/filenames.h libaout.h \
   $(INCDIR)/bfdlink.h aout-target.h $(INCDIR)/aout/aout64.h \
   $(INCDIR)/aout/stab_gnu.h $(INCDIR)/aout/stab.def $(INCDIR)/aout/ar.h
+mach-o.lo: mach-o.c mach-o.h $(INCDIR)/filenames.h \
+  $(INCDIR)/libiberty.h mach-o-target.c
 mipsbsd.lo: mipsbsd.c $(INCDIR)/filenames.h libaout.h \
   $(INCDIR)/bfdlink.h aout-target.h $(INCDIR)/aout/aout64.h \
   $(INCDIR)/aout/stab_gnu.h $(INCDIR)/aout/stab.def $(INCDIR)/aout/ar.h
@@ -1283,6 +1416,8 @@ pc532-mach.lo: pc532-mach.c $(INCDIR)/filenames.h libaout.h \
 pdp11.lo: pdp11.c $(INCDIR)/filenames.h libaout.h $(INCDIR)/bfdlink.h \
   aout-target.h $(INCDIR)/aout/aout64.h $(INCDIR)/aout/stab_gnu.h \
   $(INCDIR)/aout/stab.def $(INCDIR)/aout/ar.h $(INCDIR)/safe-ctype.h
+pef.lo: pef.c $(INCDIR)/safe-ctype.h pef.h pef-traceback.h \
+  $(INCDIR)/filenames.h $(INCDIR)/libiberty.h
 pe-arm.lo: pe-arm.c $(INCDIR)/filenames.h coff-arm.c \
   $(INCDIR)/coff/arm.h $(INCDIR)/coff/external.h $(INCDIR)/coff/internal.h \
   $(INCDIR)/coff/pe.h libcoff.h $(INCDIR)/bfdlink.h coffcode.h \
@@ -1355,13 +1490,19 @@ sunos.lo: sunos.c $(INCDIR)/bfdlink.h libaout.h aoutf1.h \
 vaxnetbsd.lo: vaxnetbsd.c netbsd.h $(INCDIR)/filenames.h \
   libaout.h $(INCDIR)/bfdlink.h aout-target.h $(INCDIR)/aout/aout64.h \
   $(INCDIR)/aout/stab_gnu.h $(INCDIR)/aout/stab.def $(INCDIR)/aout/ar.h
+vax1knetbsd.lo: vax1knetbsd.c netbsd.h $(INCDIR)/filenames.h \
+  libaout.h $(INCDIR)/bfdlink.h aout-target.h $(INCDIR)/aout/aout64.h \
+  $(INCDIR)/aout/stab_gnu.h $(INCDIR)/aout/stab.def $(INCDIR)/aout/ar.h
+vaxbsd.lo: vaxbsd.c $(INCDIR)/filenames.h libaout.h \
+  $(INCDIR)/bfdlink.h aout-target.h $(INCDIR)/aout/aout64.h \
+  $(INCDIR)/aout/stab_gnu.h $(INCDIR)/aout/stab.def $(INCDIR)/aout/ar.h
 versados.lo: versados.c $(INCDIR)/filenames.h $(INCDIR)/libiberty.h
 vms.lo: vms.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   vms.h
 vms-gsd.lo: vms-gsd.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   vms.h
-vms-hdr.lo: vms-hdr.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
-  $(INCDIR)/safe-ctype.h vms.h
+vms-hdr.lo: vms-hdr.c bfdver.h $(INCDIR)/filenames.h \
+  $(INCDIR)/bfdlink.h $(INCDIR)/safe-ctype.h vms.h
 vms-misc.lo: vms-misc.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   vms.h
 vms-tir.lo: vms-tir.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
@@ -1369,6 +1510,11 @@ vms-tir.lo: vms-tir.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
 xcofflink.lo: xcofflink.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   $(INCDIR)/coff/internal.h $(INCDIR)/coff/xcoff.h libcoff.h \
   libxcoff.h
+xsym.lo: xsym.c xsym.h $(INCDIR)/filenames.h
+xtensa-isa.lo: xtensa-isa.c $(INCDIR)/xtensa-isa.h \
+  $(INCDIR)/xtensa-isa-internal.h
+xtensa-modules.lo: xtensa-modules.c $(INCDIR)/xtensa-isa.h \
+  $(INCDIR)/xtensa-isa-internal.h
 aix5ppc-core.lo: aix5ppc-core.c
 aout64.lo: aout64.c aoutx.h $(INCDIR)/filenames.h $(INCDIR)/safe-ctype.h \
   $(INCDIR)/bfdlink.h libaout.h $(INCDIR)/aout/aout64.h \
@@ -1408,19 +1554,27 @@ elf64-hppa.lo: elf64-hppa.c $(INCDIR)/alloca-conf.h \
 elf64-gen.lo: elf64-gen.c $(INCDIR)/filenames.h elf-bfd.h \
   $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h \
   $(INCDIR)/bfdlink.h elf64-target.h
+elfn32-mips.lo: elfn32-mips.c $(INCDIR)/filenames.h \
+  $(INCDIR)/bfdlink.h genlink.h elf-bfd.h $(INCDIR)/elf/common.h \
+  $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h elfxx-mips.h \
+  $(INCDIR)/elf/mips.h $(INCDIR)/elf/reloc-macros.h $(INCDIR)/coff/sym.h \
+  $(INCDIR)/coff/symconst.h $(INCDIR)/coff/internal.h \
+  $(INCDIR)/coff/ecoff.h $(INCDIR)/coff/mips.h $(INCDIR)/coff/external.h \
+  ecoffswap.h elf32-target.h
 elf64-mips.lo: elf64-mips.c $(INCDIR)/filenames.h $(INCDIR)/aout/ar.h \
   $(INCDIR)/bfdlink.h genlink.h elf-bfd.h $(INCDIR)/elf/common.h \
-  $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h $(INCDIR)/elf/mips.h \
-  $(INCDIR)/elf/reloc-macros.h $(INCDIR)/coff/sym.h $(INCDIR)/coff/symconst.h \
-  $(INCDIR)/coff/internal.h $(INCDIR)/coff/ecoff.h $(INCDIR)/coff/alpha.h \
-  ecoffswap.h elf64-target.h
+  $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h elfxx-mips.h \
+  $(INCDIR)/elf/mips.h $(INCDIR)/elf/reloc-macros.h $(INCDIR)/coff/sym.h \
+  $(INCDIR)/coff/symconst.h $(INCDIR)/coff/internal.h \
+  $(INCDIR)/coff/ecoff.h $(INCDIR)/coff/alpha.h ecoffswap.h \
+  elf64-target.h
 elf64-mmix.lo: elf64-mmix.c $(INCDIR)/filenames.h elf-bfd.h \
   $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h \
   $(INCDIR)/bfdlink.h $(INCDIR)/elf/mmix.h $(INCDIR)/elf/reloc-macros.h \
   $(INCDIR)/opcode/mmix.h elf64-target.h
 elf64-ppc.lo: elf64-ppc.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
-  $(INCDIR)/elf/external.h $(INCDIR)/elf/ppc.h $(INCDIR)/elf/reloc-macros.h \
+  $(INCDIR)/elf/external.h $(INCDIR)/elf/ppc64.h $(INCDIR)/elf/reloc-macros.h \
   elf64-ppc.h elf64-target.h
 elf64-s390.lo: elf64-s390.c $(INCDIR)/filenames.h $(INCDIR)/bfdlink.h \
   elf-bfd.h $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h \
@@ -1438,7 +1592,7 @@ elf64-sparc.lo: elf64-sparc.c $(INCDIR)/filenames.h \
 elf64.lo: elf64.c elfcode.h $(INCDIR)/filenames.h $(INCDIR)/libiberty.h \
   $(INCDIR)/bfdlink.h elf-bfd.h $(INCDIR)/elf/common.h \
   $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h elfcore.h \
-  elflink.h
+  elflink.h $(INCDIR)/safe-ctype.h
 mmo.lo: mmo.c $(INCDIR)/filenames.h $(INCDIR)/libiberty.h \
   $(INCDIR)/elf/mmix.h $(INCDIR)/elf/reloc-macros.h $(INCDIR)/opcode/mmix.h
 nlm32-alpha.lo: nlm32-alpha.c $(INCDIR)/filenames.h \
@@ -1462,11 +1616,13 @@ cisco-core.lo: cisco-core.c $(INCDIR)/filenames.h
 elf32-ia64.lo: elf32-ia64.c $(INCDIR)/filenames.h elf-bfd.h \
   $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h \
   $(INCDIR)/bfdlink.h $(INCDIR)/opcode/ia64.h $(INCDIR)/elf/ia64.h \
-  $(INCDIR)/elf/reloc-macros.h elf32-target.h
+  $(INCDIR)/elf/reloc-macros.h $(INCDIR)/objalloc.h $(INCDIR)/hashtab.h \
+  elf32-target.h
 elf64-ia64.lo: elf64-ia64.c $(INCDIR)/filenames.h elf-bfd.h \
   $(INCDIR)/elf/common.h $(INCDIR)/elf/internal.h $(INCDIR)/elf/external.h \
   $(INCDIR)/bfdlink.h $(INCDIR)/opcode/ia64.h $(INCDIR)/elf/ia64.h \
-  $(INCDIR)/elf/reloc-macros.h elf64-target.h
+  $(INCDIR)/elf/reloc-macros.h $(INCDIR)/objalloc.h $(INCDIR)/hashtab.h \
+  elf64-target.h
 peigen.lo: peigen.c $(INCDIR)/filenames.h $(INCDIR)/coff/internal.h \
   $(INCDIR)/coff/i386.h $(INCDIR)/coff/external.h $(INCDIR)/coff/pe.h \
   libcoff.h $(INCDIR)/bfdlink.h libpei.h

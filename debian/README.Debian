@@ -1,0 +1,6 @@
+GDB is a complex program.  It comes with an Info manual (`info gdb' or your
+favorite other info browser), which serves as a good command reference.
+
+There are also a number of books and tutorials devoted to GDB.  One
+particularly useful guide is Peter Jay Salzman's, at:
+  http://www.dirac.org/linux/gdb/

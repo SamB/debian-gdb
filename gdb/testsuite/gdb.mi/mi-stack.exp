@@ -1,4 +1,4 @@
-#   Copyright 2000 Free Software Foundation, Inc.
+# Copyright 2000, 2002, 2004 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -46,22 +46,6 @@ mi_gdb_reinitialize_dir $srcdir/$subdir
 mi_gdb_reinitialize_dir $srcdir/$subdir
 mi_gdb_load ${binfile}
 
-
-mi_gdb_test "200-break-insert callee4" \
-	"200\\^done,bkpt=\{number=\"1\",type=\"breakpoint\",disp=\"keep\",enabled=\"y\",addr=\"$hex\",func=\"callee4\",file=\".*basics.c\",line=\"8\",times=\"0\"\}" \
-	"break-insert operation"
-
-mi_run_cmd
-# The running part has been checked already by mi_run_cmd
-gdb_expect {
-    -re "\[\r\n\]*000\\*stopped,reason=\"breakpoint-hit\",bkptno=\"1\",thread-id=\"\[01\]\",frame=\{addr=\"$hex\",func=\"callee4\",args=\\\[\\\],file=\".*basics.c\",line=\"8\"\}\r\n$mi_gdb_prompt$" {
-	pass "run to callee4"
-    }
-    -re ".*$mi_gdb_prompt$" {fail "run to callee4 (2)"}
-    timeout {fail "run to callee4 (timeout 2)"}
-}
-
-
 proc test_stack_frame_listing {} {
     global mi_gdb_prompt
     global hex
@@ -73,13 +57,13 @@ proc test_stack_frame_listing {} {
     # -stack-list-frames 1 3
 
     mi_gdb_test "231-stack-list-frames" \
-	    "231\\^done,stack=\\\[frame=\{level=\"0 \",addr=\"$hex\",func=\"callee4\",file=\".*basics.c\",line=\"8\"\},frame=\{level=\"1 \",addr=\"$hex\",func=\"callee3\",.*\},frame=\{level=\"2 \",addr=\"$hex\",func=\"callee2\",.*\},frame=\{level=\"3 \",addr=\"$hex\",func=\"callee1\",.*\},frame=\{level=\"4 \",addr=\"$hex\",func=\"main\",.*\}\\\]" \
+	    "231\\^done,stack=\\\[frame=\{level=\"0\",addr=\"$hex\",func=\"callee4\",file=\".*basics.c\",line=\"8\"\},frame=\{level=\"1\",addr=\"$hex\",func=\"callee3\",.*\},frame=\{level=\"2\",addr=\"$hex\",func=\"callee2\",.*\},frame=\{level=\"3\",addr=\"$hex\",func=\"callee1\",.*\},frame=\{level=\"4\",addr=\"$hex\",func=\"main\",.*\}\\\]" \
                 "stack frame listing"
     mi_gdb_test "232-stack-list-frames 1 1" \
-	    "232\\^done,stack=\\\[frame=\{level=\"1 \",addr=\"$hex\",func=\"callee3\",.*\}\\\]" \
+	    "232\\^done,stack=\\\[frame=\{level=\"1\",addr=\"$hex\",func=\"callee3\",.*\}\\\]" \
                 "stack frame listing 1 1"
     mi_gdb_test "233-stack-list-frames 1 3" \
-	    "233\\^done,stack=\\\[frame=\{level=\"1 \",addr=\"$hex\",func=\"callee3\",.*\},frame=\{level=\"2 \",addr=\"$hex\",func=\"callee2\",.*\},frame=\{level=\"3 \",addr=\"$hex\",func=\"callee1\",.*\}\\\]" \
+	    "233\\^done,stack=\\\[frame=\{level=\"1\",addr=\"$hex\",func=\"callee3\",.*\},frame=\{level=\"2\",addr=\"$hex\",func=\"callee2\",.*\},frame=\{level=\"3\",addr=\"$hex\",func=\"callee1\",.*\}\\\]" \
                 "stack frame listing 1 3"
 
     mi_gdb_test "234-stack-list-frames 1" \
@@ -165,6 +149,7 @@ proc test_stack_locals_listing {} {
     # Tests:
     # -stack-list-locals 0
     # -stack-list-locals 1
+    # -stack-list-locals 2
     # -stack-list-arguments 
 
     mi_gdb_test "232-stack-list-locals 0" \
@@ -183,6 +168,10 @@ gdb_expect {
     mi_gdb_test "232-stack-list-locals 1" \
 	    "232\\^done,locals=\\\[\{name=\"A\",value=\"1\"\},\{name=\"B\",value=\"2\"\},\{name=\"C\",value=\"3\"\}\\\]" \
                 "stack locals listing 1"
+
+    mi_gdb_test "232-stack-list-locals 2" \
+	    "232\\^done,locals=\\\[\{name=\"A\",type=\"int\",value=\"1\"\},\{name=\"B\",type=\"int\",value=\"2\"\},\{name=\"C\",type=\"int\",value=\"3\"\}\\\]" \
+                "stack locals listing 2"
 
     mi_gdb_test "234-stack-list-locals" \
 	    "234\\^error,msg=\"mi_cmd_stack_list_locals: Usage.*PRINT_VALUES.*\"" \
@@ -208,6 +197,7 @@ gdb_expect {
 
 }
 
+mi_runto callee4
 test_stack_frame_listing
 test_stack_args_listing
 test_stack_locals_listing

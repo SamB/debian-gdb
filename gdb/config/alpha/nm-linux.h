@@ -1,7 +1,7 @@
 /* Native definitions for alpha running GNU/Linux.
 
-   Copyright 1993, 1994, 1996, 1998, 2000, 2001, 2002 Free Software
-   Foundation, Inc.
+   Copyright 1993, 1994, 1996, 1998, 2000, 2001, 2002, 2003
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,16 +23,7 @@
 #ifndef NM_LINUX_H
 #define NM_LINUX_H
 
-#include "nm-linux.h"
-
-/* Figure out where the longjmp will land.  We expect that we have just entered
-   longjmp and haven't yet setup the stack frame, so the args are still in the
-   argument regs.  A0_REGNUM points at the jmp_buf structure from which we
-   extract the pc (JB_PC) that we will land at.  The pc is copied into ADDR.
-   This routine returns true on success */
-
-#define GET_LONGJMP_TARGET(ADDR) get_longjmp_target(ADDR)
-extern int get_longjmp_target (CORE_ADDR *);
+#include "config/nm-linux.h"
 
 /* ptrace register ``addresses'' are absolute.  */
 
@@ -48,14 +39,16 @@ extern int get_longjmp_target (CORE_ADDR *);
 
 /* The alpha does not step over a breakpoint, the manpage is lying again.  */
 
-#define CANNOT_STEP_BREAKPOINT
-
-/* GNU/Linux has shared libraries.  */
-
-#define GDB_TARGET_HAS_SHARED_LIBS
+#define CANNOT_STEP_BREAKPOINT 1
 
 /* Given a pointer to either a gregset_t or fpregset_t, return a
    pointer to the first register.  */
 #define ALPHA_REGSET_BASE(regsetp)  ((long *) (regsetp))
+
+/* Given a pointer to a gregset_t, locate the UNIQUE value.  */
+#define ALPHA_REGSET_UNIQUE(regsetp)  ((long *)(regsetp) + 32)
+
+/* The address of UNIQUE for ptrace.  */
+#define ALPHA_UNIQUE_PTRACE_ADDR 65
 
 #endif /* NM_LINUX_H */

@@ -1,139 +1,109 @@
 #!/usr/bin/make -f
 
-DH_COMPAT := 3
-export DH_COMPAT
+DEB_BUILDDIR := $(shell pwd)/objdir
 
-CC = gcc
-CFLAGS = -O2 -g
+# This implements the .deb package creation using debhelper.
+include /usr/share/cdbs/1/rules/debhelper.mk
 
-LDFLAGS =
+# This implements building using a configure script and Makefile.
+include /usr/share/cdbs/1/class/autotools.mk
+
+# Quilt-based patches in debian/patches.
+include /usr/share/cdbs/1/rules/patchsys-quilt.mk
+
+
 install = /usr/bin/install -p
 
 # Rather paranoid than sorry. Make the shell exit with an error if an
 # untested command fails.
 SHELL += -e
 
-dir := $(shell pwd)
-tmp := $(shell pwd)/debian/tmp
+DEB_HOST_GNU_SYSTEM := $(shell dpkg-architecture -qDEB_HOST_GNU_SYSTEM)
 DEB_HOST_GNU_CPU := $(shell dpkg-architecture -qDEB_HOST_GNU_CPU)
 DEB_HOST_GNU_TYPE := $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
-p   := gdb
 
-ifneq ($(findstring $(DEB_HOST_GNU_CPU),powerpc i386 alpha sparc),)
 run_tests := yes
-else
-run_tests := no
+run_thread_tests := yes
+
+ifneq ($(DEB_HOST_GNU_SYSTEM),linux)
+  run_tests := no
 endif
 
-# --- patch handling
-#
-
-patch_dir = debian/patches
-debian_patches := $(basename $(shell cd $(patch_dir) && ls *.patch))
-
-patched-%: $(patch_dir)/%.patch
-	patch -p1 --no-backup-if-mismatch < $< > log-$@ 2>&1
-	echo "$* patch applied." >> $@
-
-apply-patches: patched-stamp
-
-patched-stamp: $(foreach p,$(debian_patches),patched-$(p))
-	touch patched-stamp
-
-reverse-patches:
-	for stamp in patched-*; do \
-	  case "$$stamp" in patched-stamp|patched-\*) continue; esac; \
-	  patch=`echo $$stamp | sed -e 's/patched-//'`; \
-	  echo "trying to revert patch $$patch ..."; \
-	  if patch -p1 -R -E --no-backup-if-mismatch < $(patch_dir)/$$patch.patch; then \
-	    echo "reverted $$patch patch."; \
-	    rm -f $$stamp log-$$stamp; \
-	  else \
-	    echo "error in reverting $$patch patch."; \
-	    exit 1; \
-	  fi; \
-	done
-	rm -f patched-stamp
-
-# --- end patch handling
-
-config: config-stamp
-config-stamp: patched-stamp
-	-mkdir objdir
-	cd objdir && \
-	  env INSTALL="$(install)" ../configure $(DEB_HOST_GNU_TYPE) \
-		--prefix=/usr --mandir='\$${prefix}/share/man' \
-		--disable-gdbtk \
-		-v --enable-shared --enable-tui
-	touch config-stamp
-
-build: build-stamp
-build-stamp: patched-stamp config-stamp
-	$(checkdir)
-	cd objdir && make CC="$(CC)" CFLAGS="$(CFLAGS)" \
-	  CXXFLAGS="$(CXXFLAGS)" LDFLAGS="$(LDFLAGS)" all info
-	$(MAKE) -C objdir/gdb/doc refcard.dvi refcard.ps 
-ifeq ($(run_tests),yes)
-	-$(MAKE) -C objdir/gdb check \
-		RUNTESTFLAGS="--target_board 'unix unix/gdb:debug_flags=-gdwarf-2'" \
-		2>&1 | tee objdir/check.log
+ifeq ($(findstring z$(DEB_HOST_GNU_CPU)z,zpowerpcz zi386z zalphaz zia64z zhppaz zs390z zsparcz),)
+  run_tests := no
 endif
-	touch build-stamp
 
-clean: reverse-patches
-# Undoes the effect of `make -f debian.rules build'.
-	$(checkdir)
-	dh_clean
-	rm -rf objdir
-	rm -f build-stamp config-stamp
-	find -type f -name 'config.status' | xargs grep -l -i 'Generated automatically' | xargs rm -f
+INSTALL = $(install)
+export INSTALL
 
-binary: build binary-indep binary-arch
+# We pass srcdir explicitly to avoid an extra '/.' at the end of it.  That
+# causes a harmless, but ugly, testsuite failure in maint.exp.
+DEB_CONFIGURE_EXTRA_FLAGS := $(DEB_HOST_GNU_TYPE) --disable-gdbtk \
+	--disable-shared --enable-tui --srcdir=$(shell pwd)
 
-binary-indep: build
+DEB_MAKE_BUILD_TARGET = all info
 
-binary-arch: build
-	$(checkdir)
-	dh_testroot
-	dh_clean
-
-	$(install) -d -m 755 debian/tmp
-	chmod g-s debian/tmp
-	mkdir -p debian/tmp/usr/share/man/man1
-	mkdir -p debian/tmp/usr/share/info
-	mkdir -p debian/tmp/usr/bin
-	cd objdir && make install install-info prefix=$(tmp)/usr \
-	  mandir=$(tmp)/usr/share/man infodir=$(tmp)/usr/share/info
-
-	dh_movefiles -a
-
-	if [ -x debian/tmp/usr/bin/run ]; then					\
-		$(install) -m 755 debian/tmp/usr/bin/run			\
-		  debian/gdb/usr/bin/$(DEB_HOST_GNU_TYPE)-run;			\
-		$(install) -m 755 debian/tmp/usr/share/man/man1/run.1		\
-		  debian/gdb/usr/share/man/man1/$(DEB_HOST_GNU_TYPE)-run.1;	\
+post-patches::
+	if ! test -f gdb/version.in.backup; then \
+	  mv -f gdb/version.in gdb/version.in.backup; \
+	  sed -e 's/$$/-debian/' < gdb/version.in.backup > gdb/version.in; \
 	fi
 
-	dh_fixperms -a
+# This should probably be common-post-build-arch, but that runs during
+# install, under fakeroot, in CDBS 0.4.21.
+build/gdb:: check-stamp
+	$(MAKE) -C objdir/gdb/doc refcard.dvi refcard.ps
 
-	dh_installdocs -a gdb/NEWS gdb/README gdb/doc/refcard.tex \
-		objdir/gdb/doc/refcard.dvi objdir/gdb/doc/refcard.ps
+check-stamp:
 ifeq ($(run_tests),yes)
+ifeq ($(run_thread_tests),no)
+	echo "	$(foreach exp,$(wildcard gdb/testsuite/gdb.threads/*.exp),mv $(exp) $(exp).disabled;)"
+	$(foreach exp,$(wildcard gdb/testsuite/gdb.threads/*.exp),mv $(exp) $(exp).disabled;)
+endif
+	-$(MAKE) -C objdir/gdb check \
+		2>&1 | tee objdir/check.log
+ifeq ($(run_thread_tests),no)
+	$(foreach exp,$(wildcard gdb/testsuite/gdb.threads/*.exp.disabled),mv $(exp) $(subst .disabled,,$(exp);))
+endif
+endif
+	touch $@
+
+clean::
+	rm -rf objdir
+
+	if test -f gdb/version.in.backup; then \
+	  mv -f gdb/version.in.backup gdb/version.in; \
+	fi
+
+#	# For snapshots this is appropriate; careful of release tarballs
+#	# which include .gmo files.
+#	find -type f -name '*.gmo' | xargs rm -f
+
+	rm -f check-stamp
+
+binary-post-install/gdb ::
+	if [ -x debian/gdb/usr/bin/run ]; then					\
+		mv debian/gdb/usr/bin/run					\
+		  debian/gdb/usr/bin/$(DEB_HOST_GNU_TYPE)-run;			\
+		mv debian/gdb/usr/share/man/man1/run.1				\
+		  debian/gdb/usr/share/man/man1/$(DEB_HOST_GNU_TYPE)-run.1;	\
+	fi
+ifeq ($(run_tests),yes)
+	install -d debian/gdb/usr/share/doc/gdb
 	install -m 644 objdir/check.log \
 		debian/gdb/usr/share/doc/gdb/check.log
 endif
-	dh_installchangelogs -a gdb/ChangeLog
-	dh_installinfo -a
-	dh_compress -a
-	dh_strip -a
-	dh_shlibdeps -a
 
-	dh_installdeb -a
-	dh_gencontrol -a
-	dh_builddeb -a
+	rm -rf debian/gdb/usr/include \
+		debian/gdb/usr/lib \
+		debian/gdb/usr/share/info/annotate.info* \
+		debian/gdb/usr/share/info/bfd.info* \
+		debian/gdb/usr/share/info/configure.info* \
+		debian/gdb/usr/share/info/mmalloc.info* \
+		debian/gdb/usr/share/info/standards.info* \
+		debian/gdb/usr/share/locale
 
-define checkdir
-	test -r config-ml.in
-endef
+DEB_INSTALL_DOCS_gdb = gdb/NEWS gdb/README gdb/doc/refcard.tex \
+		objdir/gdb/doc/refcard.dvi objdir/gdb/doc/refcard.ps
 
-.PHONY: binary binary-arch binary-indep
+DEB_INSTALL_CHANGELOGS_gdb = gdb/ChangeLog

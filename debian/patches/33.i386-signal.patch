@@ -1,0 +1,44 @@
+2004-01-25  Daniel Jacobowitz  <drow@mvista.com>
+
+	* i386-tdep.c (i386_gdbarch_init): Check for signal frame first.
+	* i386-linux-tdep.c (i386_linux_pc_in_sigtramp): Handle
+	__kernel_sigreturn.
+
+Index: gdb-6.1/gdb/i386-linux-tdep.c
+===================================================================
+--- gdb-6.1.orig/gdb/i386-linux-tdep.c	2004-04-05 13:26:42.000000000 -0400
++++ gdb-6.1/gdb/i386-linux-tdep.c	2004-04-05 13:26:46.000000000 -0400
+@@ -227,6 +227,10 @@ i386_linux_pc_in_sigtramp (CORE_ADDR pc,
+      exported from the shared C library, so the trampoline may appear to
+      be part of the preceding function.  This should always be sigaction,
+      __sigaction, or __libc_sigaction (all aliases to the same function).  */
++
++  if (name && strcmp (name, "__kernel_sigreturn") == 0)
++    return 1;
++
+   if (name == NULL || strstr (name, "sigaction") != NULL)
+     return (i386_linux_sigtramp_start (pc) != 0
+ 	    || i386_linux_rt_sigtramp_start (pc) != 0);
+Index: gdb-6.1/gdb/i386-tdep.c
+===================================================================
+--- gdb-6.1.orig/gdb/i386-tdep.c	2004-04-05 13:26:42.000000000 -0400
++++ gdb-6.1/gdb/i386-tdep.c	2004-04-05 13:26:46.000000000 -0400
+@@ -2013,6 +2013,10 @@ i386_gdbarch_init (struct gdbarch_info i
+   /* Helper for function argument information.  */
+   set_gdbarch_fetch_pointer_argument (gdbarch, i386_fetch_pointer_argument);
+ 
++  /* The signal handler might have dwarf2 CFI, via the vsyscall DSO, so check
++     for this first.  */
++  frame_unwind_append_sniffer (gdbarch, i386_sigtramp_frame_sniffer);
++
+   /* Hook in the DWARF CFI frame unwinder.  */
+   frame_unwind_append_sniffer (gdbarch, dwarf2_frame_sniffer);
+ 
+@@ -2021,7 +2025,6 @@ i386_gdbarch_init (struct gdbarch_info i
+   /* Hook in ABI-specific overrides, if they have been registered.  */
+   gdbarch_init_osabi (info, gdbarch);
+ 
+-  frame_unwind_append_sniffer (gdbarch, i386_sigtramp_frame_sniffer);
+   frame_unwind_append_sniffer (gdbarch, i386_frame_sniffer);
+ 
+   /* If we have a register mapping, enable the generic core file

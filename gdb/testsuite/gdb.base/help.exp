@@ -36,6 +36,8 @@ gdb_test "set height 400" "" "test set height"
 # use a larger expect input buffer for long help outputs.
 # test help add-symbol-file
 gdb_test "help add-symbol-file" "Usage: add-symbol-file FILE ADDR \\\[-s <SECT> <SECT_ADDR> -s <SECT> <SECT_ADDR> \.\.\.\\\]\[\r\n\]+Load the symbols from FILE, assuming FILE has been dynamically loaded\.\[\r\n\]+ADDR is the starting address of the file's text\.\[\r\n\]+The optional arguments are section-name section-address pairs and\[\r\n\]+should be specified if the data and bss segments are not contiguous\[\r\n\]+with the text\.  SECT is a section name to be loaded at SECT_ADDR\." "help add-symbol-file"
+# test help advance
+gdb_test "help advance" "Continue the program up to the given location \\(same form as args for break command\\)\.\[\r\n]+Execution will also stop upon exit from the current stack frame\." "help advance"
 # test help aliases
 gdb_test "help aliases" "Aliases of other commands\.\[\r\n\]+List of commands\:.*\[\r\n\]+Type \"help\" followed by command name for full documentation\.\[\r\n\]+Command name abbreviations are allowed if unambiguous\." "help aliases"
 # test help append
@@ -390,9 +392,9 @@ gdb_test "help set print address" "Set printing of addresses\." "help set print 
 # test help set print array
 gdb_test "help set print array" "Set prettyprinting of arrays\." "help set print array"
 # test help set print asm-demangle
-gdb_test "help set print asm-demangle" "Set demangling of C\[+\]+ names in disassembly listings\." "help set print asm-demangle"
+gdb_test "help set print asm-demangle" "Set demangling of C\[+\]+/ObjC names in disassembly listings\." "help set print asm-demangle"
 # test help set print demangle
-gdb_test "help set print demangle" "Set demangling of encoded C\[+\]+ names when displaying symbols\." "help set print demangle"
+gdb_test "help set print demangle" "Set demangling of encoded C\[+\]+/ObjC names when displaying symbols\." "help set print demangle"
 # test help set print elements
 gdb_test "help set print elements" "Set limit on string chars or array elements to print\.\[\r\n\]+\"set print elements 0\" causes there to be no limit\." "help set print elements"
 # test help set print object
@@ -482,9 +484,9 @@ gdb_test "help show print address" "Show printing of addresses\." "help show pri
 # test help show print array
 gdb_test "help show print array" "Show prettyprinting of arrays\." "help show print array"
 # test help show print asm-demangle
-gdb_test "help show print asm-demangle" "Show demangling of C\[+\]+ names in disassembly listings\." "help show print asm-demangle"
+gdb_test "help show print asm-demangle" "Show demangling of C\[+\]+/ObjC names in disassembly listings\." "help show print asm-demangle"
 # test help show print demangle
-gdb_test "help show print demangle" "Show demangling of encoded C\[+\]+ names when displaying symbols\." "help show print demangle"
+gdb_test "help show print demangle" "Show demangling of encoded C\[+\]+/ObjC names when displaying symbols\." "help show print demangle"
 # test help show print elements
 gdb_test "help show print elements" "Show limit on string chars or array elements to print\.\[\r\n\]+\"set print elements 0\" causes there to be no limit\." "help show print elements"
 # test help show print object
@@ -535,7 +537,8 @@ gdb_test "help source" "Read commands from a file named FILE\.\[\r\n\]+Note that
 # test help stack
 gdb_test "help stack" "Examining the stack\..*\[\r\n\]+When the program being debugged stops, gdb selects the innermost frame\.\[\r\n\]+The commands below can be used to select other frames by number or address\.\[\r\n\]+List of commands:\[\r\n\]+backtrace -- Print backtrace of all stack frames\[\r\n\]+bt -- Print backtrace of all stack frames\[\r\n\]+down -- Select and print stack frame called by this one\[\r\n\]+frame -- Select and print a stack frame\[\r\n\]+return -- Make selected stack frame return to its caller\[\r\n\]+select-frame -- Select a stack frame without printing anything\[\r\n\]+up -- Select and print stack frame that called this one\[\r\n\]+Type \"help\" followed by command name for full documentation\.\[\r\n\]+Command name abbreviations are allowed if unambiguous\." "help stack"
 # test help status
-gdb_test "help status" "Status inquiries\.\[\r\n\]+List of commands:\[\r\n\]+info -- Generic command for showing things about the program being debugged\[\r\n\]+show -- Generic command for showing things about the debugger\[\r\n\]+Type \"help\" followed by command name for full documentation\.\[\r\n\]+Command name abbreviations are allowed if unambiguous\." "help status"
+gdb_test "help status" "Status inquiries\.\[\r\n\]+List of commands:\[\r\n\]+info -- Generic command for showing things about the program being debugged.*\[\r\n\]+show -- Generic command for showing things about the debugger\[\r\n\]+Type \"help\" followed by command name for full documentation\.\[\r\n\]+Command name abbreviations are allowed if unambiguous\." "help status"
+
 # test help support
 # FIXME -- Ultrix hangs randomly on this very long output from gdb and
 # continues with its output only if something is sent to gdb.
@@ -544,7 +547,7 @@ gdb_test "help support" "Support facilities\.\[\r\n\]+List of commands:.*\[\r\n\
 # test help symbol-file
 gdb_test "help symbol-file" "Load symbol table from executable file FILE\.\[\r\n\]+The `file' command can also load symbol tables, as well as setting the file\[\r\n\]+to execute\." "help symbol-file"
 # test help target child
-gdb_test "help target child" "Unix child process \\(started by the \"run\" command\\)\.|Undefined target command: \"child\"\.  Try \"help target\"\." "help target child"
+gdb_test "help target child" "(Unix|Win32) child process \\(started by the \"run\" command\\)\.|Undefined target command: \"child\"\.  Try \"help target\"\." "help target child"
 # test help target procfs
 gdb_test "help target procfs" "Unix /proc child process \\(started by the \"run\" command\\)\.|Undefined target command: \"procfs\"\.  Try \"help target\"\." "help target procfs (procfs version)"
 # test help target core
@@ -561,9 +564,9 @@ gdb_test "help tbreak" "Set a temporary breakpoint.*" "help tbreak"
 # test help tty
 gdb_test "help tty" "Set terminal for future runs of program being debugged\." "help tty"
 # test help until "u" abbreviation
-gdb_test "help u" "Execute until the program reaches a source line greater than the current\[\r\n\]+or a specified line or address or function \\(same args as break command\\)\.\[\r\n\]+Execution will also stop upon exit from the current stack frame\." "help until \"u\" abbreviation"
+gdb_test "help u" "Execute until the program reaches a source line greater than the current\[\r\n\]+or a specified location \\(same args as break command\\) within the current frame\." "help until \"u\" abbreviation"
 # test help until
-gdb_test "help until" "Execute until the program reaches a source line greater than the current\[\r\n\]+or a specified line or address or function \\(same args as break command\\)\.\[\r\n\]+Execution will also stop upon exit from the current stack frame\." "help until"
+gdb_test "help until" "Execute until the program reaches a source line greater than the current\[\r\n\]+or a specified location \\(same args as break command\\) within the current frame\." "help until"
 # test help undisplay
 gdb_test "help undisplay" "Cancel some expressions to be displayed when program stops\.\[\r\n\]+Arguments are the code numbers of the expressions to stop displaying\.\[\r\n\]+No argument means cancel all automatic-display expressions\.\[\r\n\]+\"delete display\" has the same effect as this command\.\[\r\n\]+Do \"info display\" to see current list of code numbers\." "help undisplay"
 # test help unset environment

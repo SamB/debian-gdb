@@ -1,0 +1,853 @@
+[Changelog not complete, since I decided not to submit this.  Most of these,
+as Andrew put it, should be taking a frame argument anyway - but that's a
+lot more work.  So this patch is an interim, to reduce segfaults.]
+
+2003-08-01  Daniel Jacobowitz  <drow@mvista.com>
+
+	* ada-tasks.c (task_command): Replace uses of
+	deprecated_selected_frame with get_selected_frame ().
+	* breakpoint.c (insert_breakpoints): Likewise.
+	(break_at_finish_at_depth_command_1): Likewise.
+	(break_at_finish_command_1): Likewise.
+	(until_break_command, do_enable_breakpoint): Likewise.
+	* cli/cli-cmds.c (disassemble_command): Likewise.
+	* corelow.c (core_open): Likewise.
+	* f-valprint.c (f77_get_dynamic_lowerbound): Likewise.
+	(f77_get_dynamic_upperbound, info_common_command): Likewise.
+	(there_is_a_visible_common_named): Likewise.
+	* hppa-tdep.c (pa_do_registers_info): Likewise.
+	(pa_do_strcat_registers_info, pa_print_fp_reg): Likewise.
+	(pa_strcat_fp_reg): Likewise.
+	* infcmd.c (finish_command, registers_info, print_vector_info)
+	(vector_info, print_float_info, float_info): Likewise.
+	* inflow.c (kill_command): Likewise.
+	* infrun.c (normal_stop, save_inferior_status): Likewise.
+	* mn10300-tdep.c (mn10300_print_register): Likewise.
+
+	* stack.c: Likewise.
+	* thread.c: Likewise.
+	* tracepoint.c: Likewise.
+	* valops.c: Likewise.
+	* varobj.c: Likewise.
+
+	* tui-disassem.c: Likewise.
+	* tui-source.c: Likewise.
+	* tui-winsource.c: Likewise.
+
+	* generic/gdbtk-cmds.c: Likewise.
+	* generic/gdbtk-register.c: Likewise.
+
+	* mi-cmd-stack.c (mi_cmd_stack_list_locals): Likewise.
+	* mi-main.c (mi_cmd_exec_return, register_changed_p)
+	(get_register): Likewise.
+
+Index: gdb-6.1/gdb/ada-tasks.c
+===================================================================
+--- gdb-6.1.orig/gdb/ada-tasks.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/ada-tasks.c	2004-04-19 10:52:02.000000000 -0400
+@@ -794,10 +794,10 @@ task_command (char *tidstr, int from_tty
+     {
+       /* FIXME: find_printable_frame should be defined in frame.h, and
+          implemented in ada-lang.c */
+-      /*      find_printable_frame (deprecated_selected_frame, frame_relative_level (deprecated_selected_frame)); */
++      /*      find_printable_frame (get_selected_frame (), frame_relative_level (get_selected_frame ())); */
+       printf_filtered ("[Switching to task %d]\n", num);
+-      print_stack_frame (deprecated_selected_frame,
+-			 frame_relative_level (deprecated_selected_frame), 1);
++      print_stack_frame (get_selected_frame (),
++			 frame_relative_level (get_selected_frame ()), 1);
+     }
+   else
+     printf_filtered ("Unable to switch to task %d\n", num);
+Index: gdb-6.1/gdb/breakpoint.c
+===================================================================
+--- gdb-6.1.orig/gdb/breakpoint.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/breakpoint.c	2004-04-19 10:52:02.000000000 -0400
+@@ -902,8 +902,8 @@ insert_bp_location (struct bp_location *
+       /* FIXME drow/2003-09-09: It would be nice if evaluate_expression
+ 	 took a frame parameter, so that we didn't have to change the
+ 	 selected frame.  */
+-      saved_frame = deprecated_selected_frame;
+-      saved_level = frame_relative_level (deprecated_selected_frame);
++      saved_frame = get_selected_frame ();
++      saved_level = frame_relative_level (get_selected_frame ());
+ 
+       /* Determine if the watchpoint is within scope.  */
+       if (bpt->owner->exp_valid_block == NULL)
+@@ -999,8 +999,8 @@ insert_bp_location (struct bp_location *
+ 	}
+ 
+       /* Restore the frame and level.  */
+-      if (saved_frame != deprecated_selected_frame
+-	  || saved_level != frame_relative_level (deprecated_selected_frame))
++      if (saved_frame != get_selected_frame ()
++	  || saved_level != frame_relative_level (get_selected_frame ()))
+ 	select_frame (saved_frame);
+ 
+       return val;
+@@ -5412,14 +5412,9 @@ break_at_finish_at_depth_command_1 (char
+ 
+       if (default_breakpoint_valid)
+ 	{
+-	  if (deprecated_selected_frame)
+-	    {
+-	      selected_pc = get_frame_pc (deprecated_selected_frame);
+-	      if (arg)
+-		if_arg = 1;
+-	    }
+-	  else
+-	    error ("No selected frame.");
++	  selected_pc = get_frame_pc (get_selected_frame ());
++	  if (arg)
++	    if_arg = 1;
+ 	}
+       else
+ 	error ("No default breakpoint address now.");
+@@ -5490,15 +5485,10 @@ break_at_finish_command_1 (char *arg, in
+     {
+       if (default_breakpoint_valid)
+ 	{
+-	  if (deprecated_selected_frame)
+-	    {
+-	      addr_string = xstrprintf ("*0x%s",
+-					paddr_nz (get_frame_pc (deprecated_selected_frame)));
+-	      if (arg)
+-		if_arg = 1;
+-	    }
+-	  else
+-	    error ("No selected frame.");
++	  addr_string = xstrprintf ("*0x%s",
++				    paddr_nz (get_frame_pc (get_selected_frame ())));
++	  if (arg)
++	    if_arg = 1;
+ 	}
+       else
+ 	error ("No default breakpoint address now.");
+@@ -6034,7 +6024,7 @@ until_break_command (char *arg, int from
+ {
+   struct symtabs_and_lines sals;
+   struct symtab_and_line sal;
+-  struct frame_info *prev_frame = get_prev_frame (deprecated_selected_frame);
++  struct frame_info *prev_frame = get_prev_frame (get_selected_frame ());
+   struct breakpoint *breakpoint;
+   struct cleanup *old_chain;
+   struct continuation_arg *arg1;
+@@ -6071,7 +6061,7 @@ until_break_command (char *arg, int from
+     /* Otherwise, specify the current frame, because we want to stop only
+        at the very same frame.  */
+     breakpoint = set_momentary_breakpoint (sal,
+-					   get_frame_id (deprecated_selected_frame),
++					   get_frame_id (get_selected_frame ()),
+ 					   bp_until);
+ 
+   if (!event_loop_p || !target_can_async_p ())
+@@ -7596,8 +7586,8 @@ is valid is not currently in scope.\n", 
+ 		  return;
+ 		}
+ 	      
+-	      save_selected_frame = deprecated_selected_frame;
+-	      save_selected_frame_level = frame_relative_level (deprecated_selected_frame);
++	      save_selected_frame = get_selected_frame ();
++	      save_selected_frame_level = frame_relative_level (get_selected_frame ());
+ 	      select_frame (fr);
+ 	    }
+ 	  
+Index: gdb-6.1/gdb/cli/cli-cmds.c
+===================================================================
+--- gdb-6.1.orig/gdb/cli/cli-cmds.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/cli/cli-cmds.c	2004-04-19 10:52:02.000000000 -0400
+@@ -845,10 +845,7 @@ disassemble_command (char *arg, int from
+   name = NULL;
+   if (!arg)
+     {
+-      if (!deprecated_selected_frame)
+-	error ("No frame selected.\n");
+-
+-      pc = get_frame_pc (deprecated_selected_frame);
++      pc = get_frame_pc (get_selected_frame ());
+       if (find_pc_partial_function (pc, &name, &low, &high) == 0)
+ 	error ("No function contains program counter for selected frame.\n");
+ #if defined(TUI)
+Index: gdb-6.1/gdb/corelow.c
+===================================================================
+--- gdb-6.1.orig/gdb/corelow.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/corelow.c	2004-04-19 10:52:02.000000000 -0400
+@@ -388,8 +388,8 @@ core_open (char *filename, int from_tty)
+       /* Now, set up the frame cache, and print the top of stack.  */
+       flush_cached_frames ();
+       select_frame (get_current_frame ());
+-      print_stack_frame (deprecated_selected_frame,
+-			 frame_relative_level (deprecated_selected_frame), 1);
++      print_stack_frame (get_selected_frame (),
++			 frame_relative_level (get_selected_frame ()), 1);
+     }
+   else
+     {
+Index: gdb-6.1/gdb/f-valprint.c
+===================================================================
+--- gdb-6.1.orig/gdb/f-valprint.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/f-valprint.c	2004-04-19 10:52:02.000000000 -0400
+@@ -76,7 +76,7 @@ f77_get_dynamic_lowerbound (struct type 
+   switch (TYPE_ARRAY_LOWER_BOUND_TYPE (type))
+     {
+     case BOUND_BY_VALUE_ON_STACK:
+-      current_frame_addr = get_frame_base (deprecated_selected_frame);
++      current_frame_addr = get_frame_base (get_selected_frame ());
+       if (current_frame_addr > 0)
+ 	{
+ 	  *lower_bound =
+@@ -100,7 +100,7 @@ f77_get_dynamic_lowerbound (struct type 
+       break;
+ 
+     case BOUND_BY_REF_ON_STACK:
+-      current_frame_addr = get_frame_base (deprecated_selected_frame);
++      current_frame_addr = get_frame_base (get_selected_frame ());
+       if (current_frame_addr > 0)
+ 	{
+ 	  ptr_to_lower_bound =
+@@ -134,7 +134,7 @@ f77_get_dynamic_upperbound (struct type 
+   switch (TYPE_ARRAY_UPPER_BOUND_TYPE (type))
+     {
+     case BOUND_BY_VALUE_ON_STACK:
+-      current_frame_addr = get_frame_base (deprecated_selected_frame);
++      current_frame_addr = get_frame_base (get_selected_frame ());
+       if (current_frame_addr > 0)
+ 	{
+ 	  *upper_bound =
+@@ -163,7 +163,7 @@ f77_get_dynamic_upperbound (struct type 
+       break;
+ 
+     case BOUND_BY_REF_ON_STACK:
+-      current_frame_addr = get_frame_base (deprecated_selected_frame);
++      current_frame_addr = get_frame_base (get_selected_frame ());
+       if (current_frame_addr > 0)
+ 	{
+ 	  ptr_to_upper_bound =
+@@ -630,10 +630,7 @@ info_common_command (char *comname, int 
+      first make sure that it is visible and if so, let 
+      us display its contents */
+ 
+-  fi = deprecated_selected_frame;
+-
+-  if (fi == NULL)
+-    error ("No frame selected");
++  fi = get_selected_frame ();
+ 
+   /* The following is generally ripped off from stack.c's routine 
+      print_frame_info() */
+@@ -722,10 +719,7 @@ there_is_a_visible_common_named (char *c
+   if (comname == NULL)
+     error ("Cannot deal with NULL common name!");
+ 
+-  fi = deprecated_selected_frame;
+-
+-  if (fi == NULL)
+-    error ("No frame selected");
++  fi = get_selected_frame ();
+ 
+   /* The following is generally ripped off from stack.c's routine 
+      print_frame_info() */
+Index: gdb-6.1/gdb/hppa-tdep.c
+===================================================================
+--- gdb-6.1.orig/gdb/hppa-tdep.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/hppa-tdep.c	2004-04-19 10:52:02.000000000 -0400
+@@ -3021,7 +3021,7 @@ pa_do_registers_info (int regnum, int fp
+   /* Make a copy of gdb's save area (may cause actual
+      reads from the target). */
+   for (i = 0; i < NUM_REGS; i++)
+-    frame_register_read (deprecated_selected_frame, i,
++    frame_register_read (get_selected_frame (), i,
+ 			 raw_regs + DEPRECATED_REGISTER_BYTE (i));
+ 
+   if (regnum == -1)
+@@ -3066,7 +3066,7 @@ pa_do_strcat_registers_info (int regnum,
+   /* Make a copy of gdb's save area (may cause actual
+      reads from the target). */
+   for (i = 0; i < NUM_REGS; i++)
+-    frame_register_read (deprecated_selected_frame, i,
++    frame_register_read (get_selected_frame (), i,
+ 			 raw_regs + DEPRECATED_REGISTER_BYTE (i));
+ 
+   if (regnum == -1)
+@@ -3319,7 +3319,7 @@ pa_print_fp_reg (int i)
+   char virtual_buffer[MAX_REGISTER_SIZE];
+ 
+   /* Get 32bits of data.  */
+-  frame_register_read (deprecated_selected_frame, i, raw_buffer);
++  frame_register_read (get_selected_frame (), i, raw_buffer);
+ 
+   /* Put it in the buffer.  No conversions are ever necessary.  */
+   memcpy (virtual_buffer, raw_buffer, DEPRECATED_REGISTER_RAW_SIZE (i));
+@@ -3337,7 +3337,7 @@ pa_print_fp_reg (int i)
+   if ((i % 2) == 0)
+     {
+       /* Get the data in raw format for the 2nd half.  */
+-      frame_register_read (deprecated_selected_frame, i + 1, raw_buffer);
++      frame_register_read (get_selected_frame (), i + 1, raw_buffer);
+ 
+       /* Copy it into the appropriate part of the virtual buffer.  */
+       memcpy (virtual_buffer + DEPRECATED_REGISTER_RAW_SIZE (i), raw_buffer,
+@@ -3365,7 +3365,7 @@ pa_strcat_fp_reg (int i, struct ui_file 
+   print_spaces_filtered (8 - strlen (REGISTER_NAME (i)), stream);
+ 
+   /* Get 32bits of data.  */
+-  frame_register_read (deprecated_selected_frame, i, raw_buffer);
++  frame_register_read (get_selected_frame (), i, raw_buffer);
+ 
+   /* Put it in the buffer.  No conversions are ever necessary.  */
+   memcpy (virtual_buffer, raw_buffer, DEPRECATED_REGISTER_RAW_SIZE (i));
+@@ -3376,7 +3376,7 @@ pa_strcat_fp_reg (int i, struct ui_file 
+       char raw_buf[MAX_REGISTER_SIZE];
+ 
+       /* Get the data in raw format for the 2nd half.  */
+-      frame_register_read (deprecated_selected_frame, i + 1, raw_buf);
++      frame_register_read (get_selected_frame (), i + 1, raw_buf);
+ 
+       /* Copy it into the appropriate part of the virtual buffer.  */
+       memcpy (virtual_buffer + DEPRECATED_REGISTER_RAW_SIZE (i), raw_buf,
+Index: gdb-6.1/gdb/infcmd.c
+===================================================================
+--- gdb-6.1.orig/gdb/infcmd.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/infcmd.c	2004-04-19 10:52:02.000000000 -0400
+@@ -1206,10 +1206,8 @@ finish_command (char *arg, int from_tty)
+     error ("The \"finish\" command does not take any arguments.");
+   if (!target_has_execution)
+     error ("The program is not running.");
+-  if (deprecated_selected_frame == NULL)
+-    error ("No selected frame.");
+ 
+-  frame = get_prev_frame (deprecated_selected_frame);
++  frame = get_prev_frame (get_selected_frame ());
+   if (frame == 0)
+     error ("\"finish\" not meaningful in the outermost frame.");
+ 
+@@ -1227,15 +1225,15 @@ finish_command (char *arg, int from_tty)
+ 
+   /* Find the function we will return from.  */
+ 
+-  function = find_pc_function (get_frame_pc (deprecated_selected_frame));
++  function = find_pc_function (get_frame_pc (get_selected_frame ()));
+ 
+   /* Print info on the selected frame, including level number but not
+      source.  */
+   if (from_tty)
+     {
+       printf_filtered ("Run till exit from ");
+-      print_stack_frame (deprecated_selected_frame,
+-			 frame_relative_level (deprecated_selected_frame), 0);
++      print_stack_frame (get_selected_frame (),
++			 frame_relative_level (get_selected_frame ()), 0);
+     }
+ 
+   /* If running asynchronously and the target support asynchronous
+@@ -1616,13 +1614,11 @@ registers_info (char *addr_exp, int fpre
+ 
+   if (!target_has_registers)
+     error ("The program has no registers now.");
+-  if (deprecated_selected_frame == NULL)
+-    error ("No selected frame.");
+ 
+   if (!addr_exp)
+     {
+       gdbarch_print_registers_info (current_gdbarch, gdb_stdout,
+-				    deprecated_selected_frame, -1, fpregs);
++				    get_selected_frame (), -1, fpregs);
+       return;
+     }
+ 
+@@ -1660,7 +1656,7 @@ registers_info (char *addr_exp, int fpre
+ 	if (regnum >= 0)
+ 	  {
+ 	    gdbarch_print_registers_info (current_gdbarch, gdb_stdout,
+-					  deprecated_selected_frame, regnum, fpregs);
++					  get_selected_frame (), regnum, fpregs);
+ 	    continue;
+ 	  }
+       }
+@@ -1674,7 +1670,7 @@ registers_info (char *addr_exp, int fpre
+ 	    && regnum < NUM_REGS + NUM_PSEUDO_REGS)
+ 	  {
+ 	    gdbarch_print_registers_info (current_gdbarch, gdb_stdout,
+-					  deprecated_selected_frame, regnum, fpregs);
++					  get_selected_frame (), regnum, fpregs);
+ 	    continue;
+ 	  }
+       }
+@@ -1700,7 +1696,7 @@ registers_info (char *addr_exp, int fpre
+ 		if (gdbarch_register_reggroup_p (current_gdbarch, regnum,
+ 						 group))
+ 		  gdbarch_print_registers_info (current_gdbarch,
+-						gdb_stdout, deprecated_selected_frame,
++						gdb_stdout, get_selected_frame (),
+ 						regnum, fpregs);
+ 	      }
+ 	    continue;
+@@ -1730,8 +1726,6 @@ print_vector_info (struct gdbarch *gdbar
+ {
+   if (!target_has_registers)
+     error ("The program has no registers now.");
+-  if (deprecated_selected_frame == NULL)
+-    error ("No selected frame.");
+ 
+   if (gdbarch_print_vector_info_p (gdbarch))
+     gdbarch_print_vector_info (gdbarch, file, frame, args);
+@@ -1756,7 +1750,7 @@ print_vector_info (struct gdbarch *gdbar
+ static void
+ vector_info (char *args, int from_tty)
+ {
+-  print_vector_info (current_gdbarch, gdb_stdout, deprecated_selected_frame, args);
++  print_vector_info (current_gdbarch, gdb_stdout, get_selected_frame (), args);
+ }
+ 
+ 
+@@ -1921,8 +1915,6 @@ print_float_info (struct gdbarch *gdbarc
+ {
+   if (!target_has_registers)
+     error ("The program has no registers now.");
+-  if (deprecated_selected_frame == NULL)
+-    error ("No selected frame.");
+ 
+   if (gdbarch_print_float_info_p (gdbarch))
+     gdbarch_print_float_info (gdbarch, file, frame, args);
+@@ -1948,7 +1940,7 @@ No floating-point info available for thi
+ static void
+ float_info (char *args, int from_tty)
+ {
+-  print_float_info (current_gdbarch, gdb_stdout, deprecated_selected_frame, args);
++  print_float_info (current_gdbarch, gdb_stdout, get_selected_frame (), args);
+ }
+ 
+ static void
+Index: gdb-6.1/gdb/inflow.c
+===================================================================
+--- gdb-6.1.orig/gdb/inflow.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/inflow.c	2004-04-19 10:52:02.000000000 -0400
+@@ -592,11 +592,8 @@ kill_command (char *arg, int from_tty)
+   if (target_has_stack)
+     {
+       printf_filtered ("In %s,\n", target_longname);
+-      if (deprecated_selected_frame == NULL)
+-	fputs_filtered ("No selected stack frame.\n", gdb_stdout);
+-      else
+-	print_stack_frame (deprecated_selected_frame,
+-			   frame_relative_level (deprecated_selected_frame), 1);
++      print_stack_frame (get_selected_frame (),
++			 frame_relative_level (get_selected_frame ()), 1);
+     }
+ }
+ 
+Index: gdb-6.1/gdb/infrun.c
+===================================================================
+--- gdb-6.1.orig/gdb/infrun.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/infrun.c	2004-04-19 10:52:02.000000000 -0400
+@@ -3343,7 +3343,7 @@ normal_stop (void)
+ 	     LOCATION: Print only location
+ 	     SRC_AND_LOC: Print location and source line */
+ 	  if (do_frame_printing)
+-	    print_stack_frame (deprecated_selected_frame, -1, source_flag);
++	    print_stack_frame (get_selected_frame (), -1, source_flag);
+ 
+ 	  /* Display the auto-display expressions.  */
+ 	  do_displays ();
+@@ -3814,7 +3814,7 @@ save_inferior_status (int restore_stack_
+ 
+   inf_status->registers = regcache_dup (current_regcache);
+ 
+-  inf_status->selected_frame_id = get_frame_id (deprecated_selected_frame);
++  inf_status->selected_frame_id = get_frame_id (get_selected_frame ());
+   return inf_status;
+ }
+ 
+Index: gdb-6.1/gdb/mi/mi-main.c
+===================================================================
+--- gdb-6.1.orig/gdb/mi/mi-main.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/mi/mi-main.c	2004-04-19 10:52:02.000000000 -0400
+@@ -191,8 +191,8 @@ mi_cmd_exec_return (char *args, int from
+ 
+   /* Because we have called return_command with from_tty = 0, we need
+      to print the frame here. */
+-  print_stack_frame (deprecated_selected_frame,
+-		     frame_relative_level (deprecated_selected_frame),
++  print_stack_frame (get_selected_frame (),
++		     frame_relative_level (get_selected_frame ()),
+ 		     LOC_AND_ADDRESS);
+ 
+   return MI_CMD_DONE;
+@@ -405,7 +405,7 @@ register_changed_p (int regnum)
+ {
+   char raw_buffer[MAX_REGISTER_SIZE];
+ 
+-  if (! frame_register_read (deprecated_selected_frame, regnum, raw_buffer))
++  if (! frame_register_read (get_selected_frame (), regnum, raw_buffer))
+     return -1;
+ 
+   if (memcmp (&old_regs[DEPRECATED_REGISTER_BYTE (regnum)], raw_buffer,
+@@ -529,7 +529,7 @@ get_register (int regnum, int format)
+   if (format == 'N')
+     format = 0;
+ 
+-  frame_register (deprecated_selected_frame, regnum, &optim, &lval, &addr,
++  frame_register (get_selected_frame (), regnum, &optim, &lval, &addr,
+ 		  &realnum, raw_buffer);
+ 
+   if (optim)
+Index: gdb-6.1/gdb/mn10300-tdep.c
+===================================================================
+--- gdb-6.1.orig/gdb/mn10300-tdep.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/mn10300-tdep.c	2004-04-19 10:52:02.000000000 -0400
+@@ -1013,7 +1013,7 @@ mn10300_print_register (const char *name
+     printf_filtered ("%s: ", name);
+ 
+   /* Get the data */
+-  if (!frame_register_read (deprecated_selected_frame, regnum, raw_buffer))
++  if (!frame_register_read (get_selected_frame (), regnum, raw_buffer))
+     {
+       printf_filtered ("[invalid]");
+       return;
+Index: gdb-6.1/gdb/stack.c
+===================================================================
+--- gdb-6.1.orig/gdb/stack.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/stack.c	2004-04-19 10:52:02.000000000 -0400
+@@ -764,9 +764,7 @@ parse_frame_specification (char *frame_e
+   switch (numargs)
+     {
+     case 0:
+-      if (deprecated_selected_frame == NULL)
+-	error ("No selected frame.");
+-      return deprecated_selected_frame;
++      return get_selected_frame ();
+       /* NOTREACHED */
+     case 1:
+       {
+@@ -908,10 +906,10 @@ frame_info (char *addr_exp, int from_tty
+     }
+   calling_frame_info = get_prev_frame (fi);
+ 
+-  if (!addr_exp && frame_relative_level (deprecated_selected_frame) >= 0)
++  if (!addr_exp && frame_relative_level (get_selected_frame ()) >= 0)
+     {
+       printf_filtered ("Stack level %d, frame at ",
+-		       frame_relative_level (deprecated_selected_frame));
++		       frame_relative_level (get_selected_frame ()));
+       print_address_numeric (get_frame_base (fi), 1, gdb_stdout);
+       printf_filtered (":\n");
+     }
+@@ -1489,9 +1487,7 @@ print_frame_label_vars (struct frame_inf
+ void
+ locals_info (char *args, int from_tty)
+ {
+-  if (!deprecated_selected_frame)
+-    error ("No frame selected.");
+-  print_frame_local_vars (deprecated_selected_frame, 0, gdb_stdout);
++  print_frame_local_vars (get_selected_frame (), 0, gdb_stdout);
+ }
+ 
+ static void
+@@ -1518,7 +1514,7 @@ catch_info (char *ignore, int from_tty)
+       if (!deprecated_selected_frame)
+ 	error ("No frame selected.");
+ 
+-      print_frame_label_vars (deprecated_selected_frame, 0, gdb_stdout);
++      print_frame_label_vars (get_selected_frame (), 0, gdb_stdout);
+     }
+ }
+ 
+@@ -1585,9 +1581,7 @@ print_frame_arg_vars (struct frame_info 
+ void
+ args_info (char *ignore, int from_tty)
+ {
+-  if (!deprecated_selected_frame)
+-    error ("No frame selected.");
+-  print_frame_arg_vars (deprecated_selected_frame, gdb_stdout);
++  print_frame_arg_vars (get_selected_frame (), gdb_stdout);
+ }
+ 
+ 
+@@ -1695,7 +1689,7 @@ void
+ select_frame_command (char *level_exp, int from_tty)
+ {
+   struct frame_info *frame;
+-  int level = frame_relative_level (deprecated_selected_frame);
++  int level = frame_relative_level (get_selected_frame ());
+ 
+   if (!target_has_stack)
+     error ("No stack.");
+@@ -1703,8 +1697,8 @@ select_frame_command (char *level_exp, i
+   frame = parse_frame_specification (level_exp);
+ 
+   select_frame (frame);
+-  if (level != frame_relative_level (deprecated_selected_frame))
+-    selected_frame_level_changed_event (frame_relative_level (deprecated_selected_frame));
++  if (level != frame_relative_level (get_selected_frame ()))
++    selected_frame_level_changed_event (frame_relative_level (get_selected_frame ()));
+ }
+ 
+ /* The "frame" command.  With no arg, print selected frame briefly.
+@@ -1715,8 +1709,8 @@ void
+ frame_command (char *level_exp, int from_tty)
+ {
+   select_frame_command (level_exp, from_tty);
+-  print_stack_frame (deprecated_selected_frame,
+-		     frame_relative_level (deprecated_selected_frame), 1);
++  print_stack_frame (get_selected_frame (),
++		     frame_relative_level (get_selected_frame ()), 1);
+ }
+ 
+ /* The XDB Compatibility command to print the current frame. */
+@@ -1726,8 +1720,8 @@ current_frame_command (char *level_exp, 
+ {
+   if (target_has_stack == 0 || deprecated_selected_frame == 0)
+     error ("No stack.");
+-  print_stack_frame (deprecated_selected_frame,
+-			  frame_relative_level (deprecated_selected_frame), 1);
++  print_stack_frame (get_selected_frame (),
++		     frame_relative_level (get_selected_frame ()), 1);
+ }
+ 
+ /* Select the frame up one or COUNT stack levels
+@@ -1745,11 +1739,11 @@ up_silently_base (char *count_exp)
+   if (target_has_stack == 0 || deprecated_selected_frame == 0)
+     error ("No stack.");
+ 
+-  fi = find_relative_frame (deprecated_selected_frame, &count1);
++  fi = find_relative_frame (get_selected_frame (), &count1);
+   if (count1 != 0 && count_exp == 0)
+     error ("Initial frame selected; you cannot go up.");
+   select_frame (fi);
+-  selected_frame_level_changed_event (frame_relative_level (deprecated_selected_frame));
++  selected_frame_level_changed_event (frame_relative_level (get_selected_frame ()));
+ }
+ 
+ static void
+@@ -1762,8 +1756,8 @@ static void
+ up_command (char *count_exp, int from_tty)
+ {
+   up_silently_base (count_exp);
+-  print_stack_frame (deprecated_selected_frame,
+-		     frame_relative_level (deprecated_selected_frame), 1);
++  print_stack_frame (get_selected_frame (),
++		     frame_relative_level (get_selected_frame ()), 1);
+ }
+ 
+ /* Select the frame down one or COUNT stack levels
+@@ -1781,7 +1775,7 @@ down_silently_base (char *count_exp)
+   if (target_has_stack == 0 || deprecated_selected_frame == 0)
+     error ("No stack.");
+ 
+-  frame = find_relative_frame (deprecated_selected_frame, &count1);
++  frame = find_relative_frame (get_selected_frame (), &count1);
+   if (count1 != 0 && count_exp == 0)
+     {
+ 
+@@ -1794,7 +1788,7 @@ down_silently_base (char *count_exp)
+     }
+ 
+   select_frame (frame);
+-  selected_frame_level_changed_event (frame_relative_level (deprecated_selected_frame));
++  selected_frame_level_changed_event (frame_relative_level (get_selected_frame ()));
+ }
+ 
+ static void
+@@ -1807,8 +1801,8 @@ static void
+ down_command (char *count_exp, int from_tty)
+ {
+   down_silently_base (count_exp);
+-  print_stack_frame (deprecated_selected_frame,
+-		     frame_relative_level (deprecated_selected_frame), 1);
++  print_stack_frame (get_selected_frame (),
++		     frame_relative_level (get_selected_frame ()), 1);
+ }
+ 
+ void
+@@ -2026,7 +2020,7 @@ func_command (char *arg, int from_tty)
+ 
+   if (!found)
+     printf_filtered ("'%s' not within current stack frame.\n", arg);
+-  else if (fp != deprecated_selected_frame)
++  else if (fp != get_selected_frame ())
+     select_and_print_frame (fp);
+ }
+ 
+@@ -2047,7 +2041,7 @@ get_frame_language (void)
+          instruction of another function.  So we rely on
+          get_frame_address_in_block(), it provides us with a PC which is
+          guaranteed to be inside the frame's code block.  */
+-      s = find_pc_symtab (get_frame_address_in_block (deprecated_selected_frame));
++      s = find_pc_symtab (get_frame_address_in_block (get_selected_frame ()));
+       if (s)
+ 	flang = s->language;
+       else
+Index: gdb-6.1/gdb/thread.c
+===================================================================
+--- gdb-6.1.orig/gdb/thread.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/thread.c	2004-04-19 10:52:02.000000000 -0400
+@@ -704,8 +704,8 @@ do_captured_thread_select (struct ui_out
+ #endif
+   ui_out_text (uiout, ")]");
+ 
+-  print_stack_frame (deprecated_selected_frame,
+-		     frame_relative_level (deprecated_selected_frame), 1);
++  print_stack_frame (get_selected_frame (),
++		     frame_relative_level (get_selected_frame ()), 1);
+   return GDB_RC_OK;
+ }
+ 
+Index: gdb-6.1/gdb/tracepoint.c
+===================================================================
+--- gdb-6.1.orig/gdb/tracepoint.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/tracepoint.c	2004-04-19 10:52:02.000000000 -0400
+@@ -1955,8 +1955,8 @@ finish_tfind_command (char *msg,
+       else
+ 	source_only = 1;
+ 
+-      print_stack_frame (deprecated_selected_frame,
+-			 frame_relative_level (deprecated_selected_frame),
++      print_stack_frame (get_selected_frame (),
++			 frame_relative_level (get_selected_frame ()),
+ 			 source_only);
+       do_displays ();
+     }
+Index: gdb-6.1/gdb/tui/tui-disasm.c
+===================================================================
+--- gdb-6.1.orig/gdb/tui/tui-disasm.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/tui/tui-disasm.c	2004-04-19 10:52:02.000000000 -0400
+@@ -382,7 +382,7 @@ tui_vertical_disassem_scroll (enum tui_s
+ 
+       content = (tui_win_content) TUI_DISASM_WIN->generic.content;
+       if (cursal.symtab == (struct symtab *) NULL)
+-	s = find_pc_symtab (get_frame_pc (deprecated_selected_frame));
++	s = find_pc_symtab (get_frame_pc (get_selected_frame ()));
+       else
+ 	s = cursal.symtab;
+ 
+Index: gdb-6.1/gdb/tui/tui-source.c
+===================================================================
+--- gdb-6.1.orig/gdb/tui/tui-source.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/tui/tui-source.c	2004-04-19 10:52:02.000000000 -0400
+@@ -326,7 +326,7 @@ tui_vertical_source_scroll (enum tui_scr
+       struct symtab_and_line cursal = get_current_source_symtab_and_line ();
+ 
+       if (cursal.symtab == (struct symtab *) NULL)
+-	s = find_pc_symtab (get_frame_pc (deprecated_selected_frame));
++	s = find_pc_symtab (get_frame_pc (get_selected_frame ()));
+       else
+ 	s = cursal.symtab;
+ 
+Index: gdb-6.1/gdb/tui/tui-winsource.c
+===================================================================
+--- gdb-6.1.orig/gdb/tui/tui-winsource.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/tui/tui-winsource.c	2004-04-19 10:52:02.000000000 -0400
+@@ -311,7 +311,7 @@ tui_horizontal_source_scroll (struct tui
+       struct symtab_and_line cursal = get_current_source_symtab_and_line ();
+ 
+       if (cursal.symtab == (struct symtab *) NULL)
+-	s = find_pc_symtab (get_frame_pc (deprecated_selected_frame));
++	s = find_pc_symtab (get_frame_pc (get_selected_frame ()));
+       else
+ 	s = cursal.symtab;
+ 
+Index: gdb-6.1/gdb/valops.c
+===================================================================
+--- gdb-6.1.orig/gdb/valops.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/valops.c	2004-04-19 10:52:02.000000000 -0400
+@@ -2731,15 +2731,10 @@ value_of_local (const char *name, int co
+   struct block *b;
+   struct value * ret;
+ 
+-  if (deprecated_selected_frame == 0)
+-    {
+-      if (complain)
+-	error ("no frame selected");
+-      else
+-	return 0;
+-    }
++  if (!complain && deprecated_selected_frame == 0)
++    return 0;
+ 
+-  func = get_frame_function (deprecated_selected_frame);
++  func = get_frame_function (get_selected_frame ());
+   if (!func)
+     {
+       if (complain)
+@@ -2768,7 +2763,7 @@ value_of_local (const char *name, int co
+ 	return NULL;
+     }
+ 
+-  ret = read_var_value (sym, deprecated_selected_frame);
++  ret = read_var_value (sym, get_selected_frame ());
+   if (ret == 0 && complain)
+     error ("`%s' argument unreadable", name);
+   return ret;
+Index: gdb-6.1/gdb/varobj.c
+===================================================================
+--- gdb-6.1.orig/gdb/varobj.c	2004-04-06 00:15:10.000000000 -0400
++++ gdb-6.1/gdb/varobj.c	2004-04-19 10:52:02.000000000 -0400
+@@ -488,7 +488,7 @@ varobj_create (char *objname,
+       if (fi != NULL)
+ 	{
+ 	  var->root->frame = get_frame_id (fi);
+-	  old_fi = deprecated_selected_frame;
++	  old_fi = get_selected_frame ();
+ 	  select_frame (fi);
+ 	}
+ 
+Index: gdb-6.1/gdb/testsuite/gdb.base/default.exp
+===================================================================
+--- gdb-6.1.orig/gdb/testsuite/gdb.base/default.exp	2003-03-20 09:45:50.000000000 -0500
++++ gdb-6.1/gdb/testsuite/gdb.base/default.exp	2004-04-19 10:52:15.000000000 -0400
+@@ -167,7 +167,7 @@ gdb_test "disable breakpoints" "" "disab
+ #test disable display
+ gdb_test "disable display" "" "disable display"
+ #test disassemble
+-gdb_test "disassemble" "No frame selected." "disassemble"
++gdb_test "disassemble" "No (frame selected|registers)." "disassemble"
+ #test display
+ gdb_test "display" "" "display"
+ #test do
+@@ -229,9 +229,9 @@ gdb_expect {
+ }
+ 
+ #test frame "f" abbreviation
+-gdb_test "f" "No stack." "frame \"f\" abbreviation"
++gdb_test "f" "No (stack|registers)." "frame \"f\" abbreviation"
+ #test frame
+-gdb_test "frame" "No stack." "frame"
++gdb_test "frame" "No (stack|registers)." "frame"
+ #test fg
+ gdb_test "fg" "The program is not being run." "fg"
+ # FIXME: fg kills the udi connection
+@@ -294,9 +294,9 @@ gdb_test "ignore" "Argument required .a 
+ #test info address
+ gdb_test "info address" "Argument required." "info address"
+ #test info all-registers
+-gdb_test "info all-registers" "The program has no registers now." "info all-registers"
++gdb_test "info all-registers" "(The program has no registers now|No registers)." "info all-registers"
+ #test info args
+-gdb_test "info args" "No frame selected." "info args"
++gdb_test "info args" "No (frame selected|registers)." "info args"
+ #test info bogus-gdb-command
+ gdb_test "info bogus-gdb-command" "Undefined info command: \"bogus-gdb-command\".  Try \"help info\".*" "info bogus-gdb-command"
+ #test info breakpoints
+@@ -320,11 +320,11 @@ gdb_test "info frame" "No stack.|No sele
+ #test info files
+ gdb_test "info files" "" "info files"
+ #test info float
+-gdb_test "info float" "The program has no registers now." "info float"
++gdb_test "info float" "(The program has no registers now|No registers)." "info float"
+ #test info functions
+ gdb_test "info functions" "All defined functions:" "info functions"
+ #test info locals
+-gdb_test "info locals" "No frame selected." "info locals"
++gdb_test "info locals" "(No frame selected|No registers)." "info locals"
+ #test info program
+ gdb_test "info program" "The program being debugged is not being run." "info program"
+ #test info registers
+@@ -352,7 +352,7 @@ gdb_test "info types" "All defined types
+ #test info variables
+ gdb_test "info variables" "All defined variables:" "info variables"
+ #test info vector
+-gdb_test "info vector" "The program has no registers now." "info vector"
++gdb_test "info vector" "(The program has no registers now|No registers)." "info vector"
+ #test info warranty
+ gdb_test "info warranty" "NO WARRANTY(\[^\r\n\]*\[\r\n\])+  *11.  *BECAUSE THE PROGRAM IS LICENSED FREE OF CHARGE, THERE IS NO WARRANTY(\[^\r\n\]*\[\r\n\])+FOR THE PROGRAM, TO THE EXTENT PERMITTED BY APPLICABLE LAW.  EXCEPT WHEN(\[^\r\n\]*\[\r\n\])+OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR OTHER PARTIES(\[^\r\n\]*\[\r\n\])+PROVIDE THE PROGRAM \"AS IS\" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED(\[^\r\n\]*\[\r\n\])+OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF(\[^\r\n\]*\[\r\n\])+MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  THE ENTIRE RISK AS(\[^\r\n\]*\[\r\n\])+TO THE QUALITY AND PERFORMANCE OF THE PROGRAM IS WITH YOU.  SHOULD THE(\[^\r\n\]*\[\r\n\])+PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING,(\[^\r\n\]*\[\r\n\])+REPAIR OR CORRECTION.(\[^\r\n\]*\[\r\n\])+  *12.  *IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING(\[^\r\n\]*\[\r\n\])+WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY AND/OR(\[^\r\n\]*\[\r\n\])+REDISTRIBUTE THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES,(\[^\r\n\]*\[\r\n\])+INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING(\[^\r\n\]*\[\r\n\])+OUT OF THE USE OR INABILITY TO USE THE PROGRAM .INCLUDING BUT NOT LIMITED(\[^\r\n\]*\[\r\n\])+TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY(\[^\r\n\]*\[\r\n\])+YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER(\[^\r\n\]*\[\r\n\])+PROGRAMS., EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE(\[^\r\n\]*\[\r\n\])+POSSIBILITY OF SUCH DAMAGES.*" "info warranty"
+ #test info watchpoints

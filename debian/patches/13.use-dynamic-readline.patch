@@ -1,0 +1,27 @@
+Debian local - Use system readline to build.
+
+Index: gdb-6.1/gdb/Makefile.in
+===================================================================
+--- gdb-6.1.orig/gdb/Makefile.in	2004-04-05 13:26:43.000000000 -0400
++++ gdb-6.1/gdb/Makefile.in	2004-04-05 13:26:44.000000000 -0400
+@@ -113,10 +113,16 @@ BFD_SRC = $(srcdir)/$(BFD_DIR)
+ BFD_CFLAGS = -I$(BFD_DIR) -I$(BFD_SRC)
+ 
+ # Where is the READLINE library?  Typically in ../readline.
+-READLINE_DIR = ../readline
+-READLINE = $(READLINE_DIR)/libreadline.a
+-READLINE_SRC = $(srcdir)/$(READLINE_DIR)
+-READLINE_CFLAGS = -I$(READLINE_SRC)/..
++#READLINE_DIR = ../readline
++#READLINE = $(READLINE_DIR)/libreadline.a
++#READLINE_SRC = $(srcdir)/$(READLINE_DIR)
++#READLINE_CFLAGS = -I$(READLINE_SRC)/..
++#
++# Debian has a perfectly fine readline - use it.
++READLINE_SRC=/usr/include/readline
++READLINE=-lreadline
++READLINE_CFLAGS=
++READLINE_DIR=
+ 
+ WARN_CFLAGS = @WARN_CFLAGS@
+ WERROR_CFLAGS = @WERROR_CFLAGS@

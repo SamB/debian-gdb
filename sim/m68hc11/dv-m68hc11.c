@@ -1,6 +1,6 @@
 /*  dv-m68hc11.c -- CPU 68HC11&68HC12 as a device.
-    Copyright (C) 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
-    Written by Stephane Carrez (stcarrez@worldnet.fr)
+    Copyright (C) 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+    Written by Stephane Carrez (stcarrez@nerim.fr)
     (From a driver model Contributed by Cygnus Solutions.)
     
     This program is free software; you can redistribute it and/or modify
@@ -24,6 +24,7 @@
 #include "sim-hw.h"
 #include "hw-main.h"
 #include "sim-options.h"
+#include "hw-base.h"
 #include <limits.h>
 
 /* DEVICE
@@ -159,6 +160,7 @@ enum {
   SET_PORT_A,
   SET_PORT_C,
   SET_PORT_D,
+  CPU_WRITE_PORT,
   PORT_A,
   PORT_B,
   PORT_C,
@@ -177,6 +179,8 @@ static const struct hw_port_descriptor m68hc11cpu_ports[] = {
   { "set-port-a", SET_PORT_A,    0, input_port, },
   { "set-port-c", SET_PORT_C,    0, input_port, },
   { "set-port-d", SET_PORT_D,    0, input_port, },
+
+  { "cpu-write-port", CPU_WRITE_PORT,    0, input_port, },
 
   /* Events generated for connection to other devices.  */
   { "cpu-reset", CPU_RESET_PORT, 0, output_port, },
@@ -316,6 +320,13 @@ attach_m68hc11_regs (struct hw *me,
     {
       cpu->cpu_frequency = 8*1000*1000;
     }
+
+  if (hw_find_property (me, "use_bank") != NULL)
+    hw_attach_address (hw_parent (me), 0,
+                       exec_map,
+                       cpu->bank_start,
+                       cpu->bank_end - cpu->bank_start,
+                       me);
 
   cpu_mode = "expanded";
   if (hw_find_property (me, "mode") != NULL)
@@ -530,6 +541,9 @@ m68hc11cpu_port_event (struct hw *me,
 
     case SET_PORT_D:
       m68hc11cpu_set_port (me, cpu, M6811_PORTD, level);
+      break;
+
+    case CPU_WRITE_PORT:
       break;
 
     default:
@@ -794,13 +808,15 @@ m68hc11_option_handler (SIM_DESC sd, sim_cpu *cpu,
                                "      %d       %d    %35.35s\n",
                                osc->name, freq,
                                cur_value, next_value,
-                               cycle_to_string (cpu, t));
+                               cycle_to_string (cpu, t,
+                                                PRINT_TIME | PRINT_CYCLE));
               else
                 sim_io_printf (sd, " %4.4s  %8.8s hz "
                                "      %d       %d    %35.35s\n",
                                osc->name, freq,
                                cur_value, next_value,
-                               cycle_to_string (cpu, t));
+                               cycle_to_string (cpu, t,
+                                                PRINT_TIME | PRINT_CYCLE));
             }
         }
       break;      
@@ -829,6 +845,14 @@ m68hc11cpu_io_read_buffer (struct hw *me,
   sd  = hw_system (me);
   cpu = STATE_CPU (sd, 0);
 
+  if (base >= cpu->bank_start && base < cpu->bank_end)
+    {
+      address_word virt_addr = phys_to_virt (cpu, base);
+      if (virt_addr != base)
+        return sim_core_read_buffer (sd, cpu, space, dest,
+                                     virt_addr, nr_bytes);
+    }
+
   /* Handle reads for the sub-devices.  */
   base -= controller->attach_address;
   result = sim_core_read_buffer (sd, cpu,
@@ -842,7 +866,7 @@ m68hc11cpu_io_read_buffer (struct hw *me,
 	break;
 
       memcpy (dest, &cpu->ios[base], 1);
-      dest++;
+      dest = (char*) dest + 1;
       base++;
       byte++;
       nr_bytes--;
@@ -1002,7 +1026,7 @@ m68hc11cpu_io_write (struct hw *me, sim_cpu *cpu,
 
 	/* Update IO mapping.  Detach from the old address
 	   and attach to the new one.  */
-	if ((old_bank & 0xF0) != (val & 0xF0))
+	if ((old_bank & 0x0F) != (val & 0x0F))
 	  {
             struct m68hc11cpu *controller = hw_data (me);
 
@@ -1018,7 +1042,7 @@ m68hc11cpu_io_write (struct hw *me, sim_cpu *cpu,
                                controller->attach_size,
                                me);
 	  }
-	if ((old_bank & 0x0F) != (val & 0x0F))
+	if ((old_bank & 0xF0) != (val & 0xF0))
 	  {
 	    ;
 	  }
@@ -1068,6 +1092,14 @@ m68hc11cpu_io_write_buffer (struct hw *me,
 
   sd = hw_system (me); 
   cpu = STATE_CPU (sd, 0);  
+
+  if (base >= cpu->bank_start && base < cpu->bank_end)
+    {
+      address_word virt_addr = phys_to_virt (cpu, base);
+      if (virt_addr != base)
+        return sim_core_write_buffer (sd, cpu, space, source,
+                                      virt_addr, nr_bytes);
+    }
   base -= controller->attach_address;
   result = sim_core_write_buffer (sd, cpu,
 				  io_map, source, base, nr_bytes);
@@ -1083,7 +1115,7 @@ m68hc11cpu_io_write_buffer (struct hw *me,
 
       val = *((uint8*) source);
       m68hc11cpu_io_write (me, cpu, base, val);
-      source++;
+      source = (char*) source + 1;
       base++;
       byte++;
       nr_bytes--;

@@ -44,11 +44,13 @@ WITH_COMMON_RUN_OBJS = nrun.o
 SIM_RUN_OBJS = $(@mn10300_common@_COMMON_RUN_OBJS)
 
 SIM_EXTRA_CLEAN = clean-extra
+# Extra dependencies for "sim-main.h"
+SIM_EXTRA_DEPS = mn10300_sim.h itable.h idecode.h
 
 # Select mn10300 support in nltvals.def.
 NL_TARGET = -DNL_TARGET_mn10300
 
-INCLUDE = mn10300_sim.h $(srcdir)/../../include/callback.h
+INCLUDE = mn10300_sim.h $(srcdir)/../../include/gdb/callback.h
 
 # List of extra flags to always pass to $(CC).
 SIM_EXTRA_CFLAGS = @sim_gen@ -DPOLL_QUIT_INTERVAL=0x20

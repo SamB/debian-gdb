@@ -27,6 +27,8 @@
 #include "regcache.h"
 #include "value.h"
 
+#include "m68k-tdep.h"
+
 static void rom68k_open (char *args, int from_tty);
 
 /* Return true if C is a hex digit.
@@ -86,7 +88,7 @@ static char *
 rom68k_supply_one_register (int regno, unsigned char *hex)
 {
   ULONGEST value;
-  unsigned char regbuf[MAX_REGISTER_RAW_SIZE];
+  unsigned char regbuf[MAX_REGISTER_SIZE];
 
   value = 0;
   while (*hex != '\0')
@@ -99,7 +101,7 @@ rom68k_supply_one_register (int regno, unsigned char *hex)
   while (is_whitespace (*hex))
     hex++;
 
-  store_unsigned_integer (regbuf, REGISTER_RAW_SIZE (regno), value);
+  store_unsigned_integer (regbuf, DEPRECATED_REGISTER_RAW_SIZE (regno), value);
   supply_register (regno, regbuf);
 
   return hex;
@@ -129,13 +131,13 @@ rom68k_supply_register (char *regname, int regnamelen, char *val, int vallen)
       case 'D':
 	if (regname[1] != 'R')
 	  break;
-	regno = D0_REGNUM;
+	regno = M68K_D0_REGNUM;
 	numregs = 8;
 	break;
       case 'A':
 	if (regname[1] != 'R')
 	  break;
-	regno = A0_REGNUM;
+	regno = M68K_A0_REGNUM;
 	numregs = 7;
 	break;
       }
@@ -157,11 +159,24 @@ rom68k_supply_register (char *regname, int regnamelen, char *val, int vallen)
    than does GDB, and don't necessarily support all the registers
    either. So, typing "info reg sp" becomes a "r30".  */
 
-static char *rom68k_regnames[NUM_REGS] =
+static const char *
+rom68k_regname (int index) 
 {
-  "D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7",
-  "A0", "A1", "A2", "A3", "A4", "A5", "A6", "ISP",
-  "SR", "PC"};
+
+  static char *regnames[] =
+  {
+    "D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7",
+    "A0", "A1", "A2", "A3", "A4", "A5", "A6", "ISP",
+    "SR", "PC"
+  };
+  
+  if ((index >= (sizeof (regnames) / sizeof(regnames[0]))) 
+       || (index < 0) || (index >= NUM_REGS))
+    return NULL;
+  else
+    return regnames[index];
+
+}
 
 /* Define the monitor command strings. Since these are passed directly
    through to a printf style function, we may include formatting
@@ -220,7 +235,8 @@ init_rom68k_cmds (void)
   rom68k_cmds.cmd_end = ".\r";
   rom68k_cmds.target = &rom68k_ops;
   rom68k_cmds.stopbits = SERIAL_1_STOPBITS;
-  rom68k_cmds.regnames = rom68k_regnames;
+  rom68k_cmds.regnames = NULL;
+  rom68k_cmds.regname = rom68k_regname;
   rom68k_cmds.magic = MONITOR_OPS_MAGIC;
 }				/* init_rom68k_cmds */
 
@@ -229,6 +245,8 @@ rom68k_open (char *args, int from_tty)
 {
   monitor_open (args, &rom68k_cmds, from_tty);
 }
+
+extern initialize_file_ftype _initialize_rom68k; /* -Wmissing-prototypes */
 
 void
 _initialize_rom68k (void)

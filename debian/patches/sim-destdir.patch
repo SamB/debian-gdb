@@ -1,0 +1,81 @@
+%patch
+Index: gdb-6.1/sim/Makefile.in
+===================================================================
+--- gdb-6.1.orig/sim/Makefile.in	2004-04-05 13:26:42.000000000 -0400
++++ gdb-6.1/sim/Makefile.in	2004-04-05 13:26:47.000000000 -0400
+@@ -93,6 +93,7 @@ FLAGS_TO_PASS = \
+ 	"CC=$(CC)" \
+ 	"CC_FOR_BUILD=$(CC_FOR_BUILD)" \
+ 	"CFLAGS=$(CFLAGS)" \
++	"DESTDIR=$(DESTDIR)" \
+ 	"RANLIB=$(RANLIB)" \
+ 	"MAKEINFO=$(MAKEINFO)" \
+ 	"INSTALL=$(INSTALL)" \
+Index: gdb-6.1/sim/common/Make-common.in
+===================================================================
+--- gdb-6.1.orig/sim/common/Make-common.in	2004-04-05 13:26:42.000000000 -0400
++++ gdb-6.1/sim/common/Make-common.in	2004-04-05 13:26:47.000000000 -0400
+@@ -581,14 +581,14 @@ install: install-common $(SIM_EXTRA_INST
+ 
+ install-common: installdirs
+ 	n=`echo run | sed '$(program_transform_name)'`; \
+-	$(INSTALL_PROGRAM) run$(EXEEXT) $(bindir)/$$n$(EXEEXT)
++	$(INSTALL_PROGRAM) run$(EXEEXT) $(DESTDIR)$(bindir)/$$n$(EXEEXT)
+ 	n=`echo libsim.a | sed s/libsim.a/lib$(target_alias)-sim.a/`; \
+-	$(INSTALL_DATA) libsim.a $(libdir)/$$n ; \
+-	( cd $(libdir) ; $(RANLIB) $$n )
++	$(INSTALL_DATA) libsim.a $(DESTDIR)$(libdir)/$$n ; \
++	( cd $(DESTDIR)$(libdir) ; $(RANLIB) $$n )
+ 
+ installdirs:
+-	$(SHELL) $(srcdir)/../../mkinstalldirs $(bindir)
+-	$(SHELL) $(srcdir)/../../mkinstalldirs $(libdir)
++	$(SHELL) $(srcdir)/../../mkinstalldirs $(DESTDIR)$(bindir)
++	$(SHELL) $(srcdir)/../../mkinstalldirs $(DESTDIR)$(libdir)
+ 
+ check:
+ 	cd ../testsuite && $(MAKE) check RUNTESTFLAGS="$(RUNTESTFLAGS)"
+Index: gdb-6.1/sim/common/Makefile.in
+===================================================================
+--- gdb-6.1.orig/sim/common/Makefile.in	2004-04-05 13:26:42.000000000 -0400
++++ gdb-6.1/sim/common/Makefile.in	2004-04-05 13:26:47.000000000 -0400
+@@ -119,10 +119,10 @@ install: install-man
+ 
+ install-man: installdirs
+ 	n=`echo run | sed '$(program_transform_name)'`; \
+-	$(INSTALL_DATA) $(srcdir)/run.1 $(man1dir)/$$n.1
++	$(INSTALL_DATA) $(srcdir)/run.1 $(DESTDIR)$(man1dir)/$$n.1
+ 
+ installdirs:
+-	$(SHELL) $(srcdir)/../../mkinstalldirs $(man1dir)
++	$(SHELL) $(srcdir)/../../mkinstalldirs $(DESTDIR)$(man1dir)
+ 
+ Makefile: Makefile.in config.status
+ 	$(SHELL) ./config.status
+Index: gdb-6.1/sim/erc32/Makefile.in
+===================================================================
+--- gdb-6.1.orig/sim/erc32/Makefile.in	2004-04-05 13:26:42.000000000 -0400
++++ gdb-6.1/sim/erc32/Makefile.in	2004-04-05 13:26:47.000000000 -0400
+@@ -53,7 +53,7 @@ end.h: end
+ # Copy the files into directories where they will be run.
+ install-sis: installdirs
+ 	n=`echo sis | sed '$(program_transform_name)'`; \
+-	$(INSTALL_PROGRAM) sis$(EXEEXT) $(bindir)/$$n$(EXEEXT)
++	$(INSTALL_PROGRAM) sis$(EXEEXT) $(DESTDIR)$(bindir)/$$n$(EXEEXT)
+ 
+ clean-sis:
+ 	rm -f sis end end.h
+Index: gdb-6.1/sim/ppc/Makefile.in
+===================================================================
+--- gdb-6.1.orig/sim/ppc/Makefile.in	2004-04-05 13:26:42.000000000 -0400
++++ gdb-6.1/sim/ppc/Makefile.in	2004-04-05 13:26:47.000000000 -0400
+@@ -665,7 +665,7 @@ config.status: configure
+ 
+ install: installdirs
+ 	n=`echo run | sed '$(program_transform_name)'`; \
+-	$(INSTALL_PROGRAM) run$(EXEEXT) $(bindir)/$$n$(EXEEXT)
++	$(INSTALL_PROGRAM) run$(EXEEXT) $(DESTDIR)$(bindir)/$$n$(EXEEXT)
+ 
+ installdirs:
+-	$(SHELL) $(srcdir)/../../mkinstalldirs $(bindir)
++	$(SHELL) $(srcdir)/../../mkinstalldirs $(DESTDIR)$(bindir)

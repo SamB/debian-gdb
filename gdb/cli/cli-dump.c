@@ -31,6 +31,7 @@
 #include "gdb_assert.h"
 #include <ctype.h>
 #include "target.h"
+#include "readline/readline.h"
 
 #define XMALLOC(TYPE) ((TYPE*) xmalloc (sizeof (TYPE)))
 
@@ -131,7 +132,8 @@ bfd_openr_with_cleanup (const char *filename, const char *target)
 {
   bfd *ibfd;
 
-  if ((ibfd = bfd_openr (filename, target)) == NULL)
+  ibfd = bfd_openr (filename, target);
+  if (ibfd == NULL)
     error ("Failed to open %s: %s.", filename, 
 	   bfd_errmsg (bfd_get_error ()));
 
@@ -149,7 +151,8 @@ bfd_openw_with_cleanup (char *filename, const char *target, char *mode)
 
   if (*mode == 'w')	/* Write: create new file */
     {
-      if ((obfd = bfd_openw (filename, target)) == NULL)
+      obfd = bfd_openw (filename, target);
+      if (obfd == NULL)
 	error ("Failed to open %s: %s.", filename, 
 	       bfd_errmsg (bfd_get_error ()));
       make_cleanup_bfd_close (obfd);
@@ -328,93 +331,63 @@ dump_value_command (char *cmd, char *mode)
 }
 
 static void
-dump_filetype (char *cmd, char *mode, char *filetype)
-{
-  char *suffix = cmd;
-
-  if (cmd == NULL || *cmd == '\0')
-    error ("Missing subcommand: try 'help %s %s'.", 
-	   mode[0] == 'a' ? "append" : "dump", 
-	   filetype);
-
-  suffix += strcspn (cmd, " \t");
-
-  if (suffix != cmd)
-    {
-      if (strncmp ("memory", cmd, suffix - cmd) == 0)
-	{
-	  dump_memory_to_file (suffix, mode, filetype);
-	  return;
-	}
-      else if (strncmp ("value", cmd, suffix - cmd) == 0)
-	{
-	  dump_value_to_file (suffix, mode, filetype);
-	  return;
-	}
-    }
-
-  error ("dump %s: unknown subcommand '%s' -- try 'value' or 'memory'.",
-	 filetype, cmd);
-}
-
-static void
 dump_srec_memory (char *args, int from_tty)
 {
-  dump_memory_to_file (args, "w", "srec");
+  dump_memory_to_file (args, FOPEN_WB, "srec");
 }
 
 static void
 dump_srec_value (char *args, int from_tty)
 {
-  dump_value_to_file (args, "w", "srec");
+  dump_value_to_file (args, FOPEN_WB, "srec");
 }
 
 static void
 dump_ihex_memory (char *args, int from_tty)
 {
-  dump_memory_to_file (args, "w", "ihex");
+  dump_memory_to_file (args, FOPEN_WB, "ihex");
 }
 
 static void
 dump_ihex_value (char *args, int from_tty)
 {
-  dump_value_to_file (args, "w", "ihex");
+  dump_value_to_file (args, FOPEN_WB, "ihex");
 }
 
 static void
 dump_tekhex_memory (char *args, int from_tty)
 {
-  dump_memory_to_file (args, "w", "tekhex");
+  dump_memory_to_file (args, FOPEN_WB, "tekhex");
 }
 
 static void
 dump_tekhex_value (char *args, int from_tty)
 {
-  dump_value_to_file (args, "w", "tekhex");
+  dump_value_to_file (args, FOPEN_WB, "tekhex");
 }
 
 static void
 dump_binary_memory (char *args, int from_tty)
 {
-  dump_memory_to_file (args, "w", "binary");
+  dump_memory_to_file (args, FOPEN_WB, "binary");
 }
 
 static void
 dump_binary_value (char *args, int from_tty)
 {
-  dump_value_to_file (args, "w", "binary");
+  dump_value_to_file (args, FOPEN_WB, "binary");
 }
 
 static void
 append_binary_memory (char *args, int from_tty)
 {
-  dump_memory_to_file (args, "a", "binary");
+  dump_memory_to_file (args, FOPEN_AB, "binary");
 }
 
 static void
 append_binary_value (char *args, int from_tty)
 {
-  dump_value_to_file (args, "a", "binary");
+  dump_value_to_file (args, FOPEN_AB, "binary");
 }
 
 struct dump_context
@@ -442,7 +415,7 @@ add_dump_command (char *name, void (*func) (char *args, char *mode),
   c->completer =  filename_completer;
   d = XMALLOC (struct dump_context);
   d->func = func;
-  d->mode = "w";
+  d->mode = FOPEN_WB;
   set_cmd_context (c, d);
   c->func = call_dump_func;
 
@@ -450,7 +423,7 @@ add_dump_command (char *name, void (*func) (char *args, char *mode),
   c->completer =  filename_completer;
   d = XMALLOC (struct dump_context);
   d->func = func;
-  d->mode = "a";
+  d->mode = FOPEN_AB;
   set_cmd_context (c, d);
   c->func = call_dump_func;
 
@@ -527,11 +500,11 @@ restore_section_callback (bfd *ibfd, asection *isec, void *args)
 		   (unsigned long) sec_end);
 
   if (data->load_offset != 0 || data->load_start != 0 || data->load_end != 0)
-    printf_filtered (" into memory (0x%lx to 0x%lx)\n", 
-		     (unsigned long) sec_start 
-		     + sec_offset + data->load_offset, 
-		     (unsigned long) sec_start + sec_offset 
-		       + data->load_offset + sec_load_count);
+    printf_filtered (" into memory (0x%s to 0x%s)\n", 
+		     paddr_nz ((unsigned long) sec_start 
+			       + sec_offset + data->load_offset), 
+		     paddr_nz ((unsigned long) sec_start + sec_offset 
+		       + data->load_offset + sec_load_count));
   else
     puts_filtered ("\n");
 
@@ -547,7 +520,7 @@ restore_section_callback (bfd *ibfd, asection *isec, void *args)
 static void
 restore_binary_file (char *filename, struct callback_data *data)
 {
-  FILE *file = fopen_with_cleanup (filename, "r");
+  FILE *file = fopen_with_cleanup (filename, FOPEN_RB);
   int status;
   char *buf;
   long len;
@@ -623,18 +596,16 @@ restore_command (char *args, int from_tty)
       /* Parse offset (optional). */
       if (args != NULL && *args != '\0')
       data.load_offset = 
-	parse_and_eval_address (scan_expression_with_cleanup (&args, 
-							      NULL));
+	parse_and_eval_long (scan_expression_with_cleanup (&args, NULL));
       if (args != NULL && *args != '\0')
 	{
 	  /* Parse start address (optional). */
 	  data.load_start = 
-	    parse_and_eval_address (scan_expression_with_cleanup (&args, 
-								  NULL));
+	    parse_and_eval_long (scan_expression_with_cleanup (&args, NULL));
 	  if (args != NULL && *args != '\0')
 	    {
 	      /* Parse end address (optional). */
-	      data.load_end = parse_and_eval_address (args);
+	      data.load_end = parse_and_eval_long (args);
 	      if (data.load_end <= data.load_start)
 		error ("Start must be less than end.");
 	    }
@@ -696,6 +667,8 @@ binary_append_command (char *cmd, int from_tty)
   printf_unfiltered ("\"append binary\" must be followed by a subcommand.\n");
   help_list (binary_append_cmdlist, "append binary ", -1, gdb_stdout);
 }
+
+extern initialize_file_ftype _initialize_cli_dump; /* -Wmissing-prototypes */
 
 void
 _initialize_cli_dump (void)

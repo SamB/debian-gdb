@@ -1,5 +1,8 @@
 /* External/Public TUI Header File.
-   Copyright 1998, 1999, 2000, 2001 Free Software Foundation, Inc.
+
+   Copyright 1998, 1999, 2000, 2001, 2004 Free Software Foundation,
+   Inc.
+
    Contributed by Hewlett-Packard Company.
 
    This file is part of GDB.
@@ -22,78 +25,40 @@
 #ifndef TUI_H
 #define TUI_H
 
-#include <stdarg.h>
-#include <string.h>
-#include "ansidecl.h"
+struct ui_file;
 
-#if defined(reg)
-#undef reg
-#endif
-#if defined(chtype)
-#undef chtype
-#endif
+extern void strcat_to_buf (char *, int, const char *);
 
-/* Opaque data type */
-typedef char *Opaque;
-typedef
-Opaque (*OpaqueFuncPtr) (va_list);
-     typedef char **OpaqueList;
-     typedef OpaqueList OpaquePtr;
-
-/* Generic function pointer */
-     typedef void (*TuiVoidFuncPtr) (va_list);
-     typedef int (*TuiIntFuncPtr) (va_list);
-/*
-   typedef Opaque (*TuiOpaqueFuncPtr) (va_list);
- */
-     typedef OpaqueFuncPtr TuiOpaqueFuncPtr;
-
-extern Opaque vcatch_errors (OpaqueFuncPtr, ...);
-extern Opaque va_catch_errors (OpaqueFuncPtr, va_list);
-
-extern void strcat_to_buf (char *, int, char *);
-extern void strcat_to_buf_with_fmt (char *, int, char *, ...);
-
-/* Types of error returns */
-     typedef enum
-       {
-	 TUI_SUCCESS,
-	 TUI_FAILURE
-       }
-TuiStatus, *TuiStatusPtr;
+/* Types of error returns.  */
+enum tui_status
+{
+  TUI_SUCCESS,
+  TUI_FAILURE
+};
 
 /* Types of windows */
-     typedef enum
-       {
-	 SRC_WIN = 0,
-	 DISASSEM_WIN,
-	 DATA_WIN,
-	 CMD_WIN,
-	 /* This must ALWAYS be AFTER the major windows last */
-	 MAX_MAJOR_WINDOWS,
-	 /* auxillary windows */
-	 LOCATOR_WIN,
-	 EXEC_INFO_WIN,
-	 DATA_ITEM_WIN,
-	 /* This must ALWAYS be next to last */
-	 MAX_WINDOWS,
-	 UNDEFINED_WIN		/* LAST */
-       }
-TuiWinType, *TuiWinTypePtr;
-
-/* This is a point definition */
-     typedef struct _TuiPoint
-       {
-	 int x, y;
-       }
-TuiPoint, *TuiPointPtr;
+enum tui_win_type
+{
+  SRC_WIN = 0,
+  DISASSEM_WIN,
+  DATA_WIN,
+  CMD_WIN,
+  /* This must ALWAYS be AFTER the major windows last.  */
+  MAX_MAJOR_WINDOWS,
+  /* Auxillary windows.  */
+  LOCATOR_WIN,
+  EXEC_INFO_WIN,
+  DATA_ITEM_WIN,
+  /* This must ALWAYS be next to last.  */
+  MAX_WINDOWS,
+  UNDEFINED_WIN		/* LAST */
+};
 
 /* GENERAL TUI FUNCTIONS */
 /* tui.c */
-extern void tuiFree (char *);
-extern CORE_ADDR tuiGetLowDisassemblyAddress (CORE_ADDR, CORE_ADDR);
+extern CORE_ADDR tui_get_low_disassembly_address (CORE_ADDR, CORE_ADDR);
 extern void tui_show_assembly (CORE_ADDR addr);
-extern int tui_is_window_visible (TuiWinType type);
+extern int tui_is_window_visible (enum tui_win_type type);
 extern int tui_get_command_dimension (int *width, int *height);
 
 /* Initialize readline and configure the keymap for the switching
@@ -106,36 +71,30 @@ extern void tui_enable (void);
 /* Leave the tui mode.  */
 extern void tui_disable (void);
 
-extern void tui_initialize_io (void);
+enum tui_key_mode
+{
+  /* Plain command mode to enter gdb commands.  */
+  TUI_COMMAND_MODE,
 
-extern void tui_initialize_readline (void);
+  /* SingleKey mode with some keys bound to gdb commands.  */
+  TUI_SINGLE_KEY_MODE,
+
+  /* Read/edit one command and return to SingleKey after it's processed.  */
+  TUI_ONE_COMMAND_MODE
+};
+
+extern enum tui_key_mode tui_current_key_mode;
+
+/* Change the TUI key mode by installing the appropriate readline keymap.  */
+extern void tui_set_key_mode (enum tui_key_mode mode);
 
 extern int tui_active;
-
-extern void tui_install_hooks (void);
-extern void tui_remove_hooks (void);
 
 extern void tui_show_source (const char *file, int line);
 
 extern struct ui_out *tui_out_new (struct ui_file *stream);
 
-/* tuiDataWin.c */
-extern void tui_vCheckDataValues (va_list);
+/* tui-layout.c */
+extern enum tui_status tui_set_layout_for_display_command (const char *name);
 
-/* tuiIO.c */
-extern void tui_vStartNewLines (va_list);
-
-/* tuiLayout.c */
-extern TuiStatus tui_set_layout (const char *);
-
-/* tuiSourceWin.c */
-extern void tuiDisplayMainFunction (void);
-extern void tuiUpdateAllExecInfos (void);
-extern void tuiUpdateOnEnd (void);
-extern void tui_vAllSetHasBreakAt (va_list);
-extern void tui_vUpdateSourceWindowsWithAddr (va_list);
-
-/* tuiStack.c */
-extern void tui_vShowFrameInfo (va_list);
-extern void tui_vUpdateLocatorFilename (va_list);
-#endif /* TUI_H */
+#endif

@@ -61,8 +61,8 @@ code on the hardware.
 #include "getopt.h"
 #include "libiberty.h"
 #include "bfd.h"
-#include "callback.h"   /* GDB simulator callback interface */
-#include "remote-sim.h" /* GDB simulator interface */
+#include "gdb/callback.h"   /* GDB simulator callback interface */
+#include "gdb/remote-sim.h" /* GDB simulator interface */
 
 #include "sysdep.h"
 
@@ -326,7 +326,7 @@ SIM_DESC
 sim_open (kind, cb, abfd, argv)
      SIM_OPEN_KIND kind;
      host_callback *cb;
-     struct _bfd *abfd;
+     struct bfd *abfd;
      char **argv;
 {
   SIM_DESC sd = sim_state_alloc (kind, cb);
@@ -575,7 +575,7 @@ sim_open (kind, cb, abfd, argv)
       {
 	if (rn < 32)
 	  cpu->register_widths[rn] = WITH_TARGET_WORD_BITSIZE;
-	else if ((rn >= FGRIDX) && (rn < (FGRIDX + NR_FGR)))
+	else if ((rn >= FGR_BASE) && (rn < (FGR_BASE + NR_FGR)))
 	  cpu->register_widths[rn] = WITH_TARGET_FLOATING_POINT_BITSIZE;
 	else if ((rn >= 33) && (rn <= 37))
 	  cpu->register_widths[rn] = WITH_TARGET_WORD_BITSIZE;
@@ -849,26 +849,26 @@ sim_store_register (sd,rn,memory,length)
 
 
 
-  if (rn >= FGRIDX && rn < FGRIDX + NR_FGR)
+  if (rn >= FGR_BASE && rn < FGR_BASE + NR_FGR)
     {
-      cpu->fpr_state[rn - FGRIDX] = fmt_uninterpreted;
+      cpu->fpr_state[rn - FGR_BASE] = fmt_uninterpreted;
       if (cpu->register_widths[rn] == 32)
 	{
 	  if (length == 8)
 	    {
-	      cpu->fgr[rn - FGRIDX] = 
+	      cpu->fgr[rn - FGR_BASE] = 
 		(unsigned32) T2H_8 (*(unsigned64*)memory);
 	      return 8;
 	    }
 	  else
 	    {
-	      cpu->fgr[rn - FGRIDX] = T2H_4 (*(unsigned32*)memory);
+	      cpu->fgr[rn - FGR_BASE] = T2H_4 (*(unsigned32*)memory);
 	      return 4;
 	    }
 	}
       else
 	{
-	  cpu->fgr[rn - FGRIDX] = T2H_8 (*(unsigned64*)memory);
+	  cpu->fgr[rn - FGR_BASE] = T2H_8 (*(unsigned64*)memory);
 	  return 8;
 	}
     }
@@ -921,25 +921,25 @@ sim_fetch_register (sd,rn,memory,length)
 
 
   /* Any floating point register */
-  if (rn >= FGRIDX && rn < FGRIDX + NR_FGR)
+  if (rn >= FGR_BASE && rn < FGR_BASE + NR_FGR)
     {
       if (cpu->register_widths[rn] == 32)
 	{
 	  if (length == 8)
 	    {
 	      *(unsigned64*)memory =
-		H2T_8 ((unsigned32) (cpu->fgr[rn - FGRIDX]));
+		H2T_8 ((unsigned32) (cpu->fgr[rn - FGR_BASE]));
 	      return 8;
 	    }
 	  else
 	    {
-	      *(unsigned32*)memory = H2T_4 (cpu->fgr[rn - FGRIDX]);
+	      *(unsigned32*)memory = H2T_4 (cpu->fgr[rn - FGR_BASE]);
 	      return 4;
 	    }
 	}
       else
 	{
-	  *(unsigned64*)memory = H2T_8 (cpu->fgr[rn - FGRIDX]);
+	  *(unsigned64*)memory = H2T_8 (cpu->fgr[rn - FGR_BASE]);
 	  return 8;
 	}
     }
@@ -971,7 +971,7 @@ sim_fetch_register (sd,rn,memory,length)
 SIM_RC
 sim_create_inferior (sd, abfd, argv,env)
      SIM_DESC sd;
-     struct _bfd *abfd;
+     struct bfd *abfd;
      char **argv;
      char **env;
 {
@@ -1077,7 +1077,10 @@ sim_firmware_command (SIM_DESC sd, char *arg)
 	  }
       }
     else
-      address_present = 0;
+      {
+	address_present = 0;
+	address = -1; /* Dummy value.  */
+      }
   }
 
   if (! strncmp (arg, "idt", 3))
@@ -1223,7 +1226,7 @@ sim_monitor (SIM_DESC sd,
 	break;
       }
 
-    case 28 : /* PMON flush_cache */
+    case 28: /* PMON flush_cache */
       break;
 
     case 55: /* void get_mem_info(unsigned int *ptr) */
@@ -1238,11 +1241,11 @@ sim_monitor (SIM_DESC sd,
 	sim_write (sd, A0 + 0, (char *)&value, 4);
 	sim_write (sd, A0 + 4, (char *)&zero, 4);
 	sim_write (sd, A0 + 8, (char *)&zero, 4);
-	/* sim_io_eprintf (sd, "sim: get_mem_info() depreciated\n"); */
+	/* sim_io_eprintf (sd, "sim: get_mem_info() deprecated\n"); */
 	break;
       }
     
-    case 158 : /* PMON printf */
+    case 158: /* PMON printf */
       /* in:  A0 = pointer to format string */
       /*      A1 = optional argument 1 */
       /*      A2 = optional argument 2 */
@@ -1671,7 +1674,7 @@ signal_exception (SIM_DESC sd,
 
   switch (exception) {
 
-    case DebugBreakPoint :
+    case DebugBreakPoint:
       if (! (Debug & Debug_DM))
         {
           if (INDELAYSLOT())
@@ -1694,7 +1697,7 @@ signal_exception (SIM_DESC sd,
         }
       break;
 
-    case ReservedInstruction :
+    case ReservedInstruction:
      {
        va_list ap;
        unsigned int instruction;
@@ -1845,7 +1848,7 @@ signal_exception (SIM_DESC sd,
 	 sim_engine_halt (SD, CPU, NULL, PC,
 			  sim_stopped, SIM_SIGTRAP);
 
-       default : /* Unknown internal exception */
+       default: /* Unknown internal exception */
 	 PC = EPC;
 	 sim_engine_halt (SD, CPU, NULL, PC,
 			  sim_stopped, SIM_SIGABRT);
@@ -1869,28 +1872,31 @@ signal_exception (SIM_DESC sd,
 
 
 
-#if defined(WARN_RESULT)
-/* Description from page A-26 of the "MIPS IV Instruction Set" manual (revision 3.1) */
-/* This function indicates that the result of the operation is
-   undefined. However, this should not affect the instruction
-   stream. All that is meant to happen is that the destination
-   register is set to an undefined result. To keep the simulator
-   simple, we just don't bother updating the destination register, so
-   the overall result will be undefined. If desired we can stop the
-   simulator by raising a pseudo-exception. */
-#define UndefinedResult() undefined_result (sd,cia)
-static void
-undefined_result(sd,cia)
-     SIM_DESC sd;
-     address_word cia;
+/* This function implements what the MIPS32 and MIPS64 ISAs define as
+   "UNPREDICTABLE" behaviour.
+
+   About UNPREDICTABLE behaviour they say: "UNPREDICTABLE results
+   may vary from processor implementation to processor implementation,
+   instruction to instruction, or as a function of time on the same
+   implementation or instruction.  Software can never depend on results
+   that are UNPREDICTABLE. ..."  (MIPS64 Architecture for Programmers
+   Volume II, The MIPS64 Instruction Set.  MIPS Document MD00087 revision
+   0.95, page 2.)
+  
+   For UNPREDICTABLE behaviour, we print a message, if possible print
+   the offending instructions mips.igen instruction name (provided by
+   the caller), and stop the simulator.
+
+   XXX FIXME: eventually, stopping the simulator should be made conditional
+   on a command-line option.  */
+void
+unpredictable_action(sim_cpu *cpu, address_word cia)
 {
-  sim_io_eprintf(sd,"UndefinedResult: PC = 0x%s\n",pr_addr(cia));
-#if 0 /* Disabled for the moment, since it actually happens a lot at the moment. */
-  state |= simSTOP;
-#endif
-  return;
+  SIM_DESC sd = CPU_STATE(cpu);
+
+  sim_io_eprintf(sd, "UNPREDICTABLE: PC = 0x%s\n", pr_addr (cia));
+  sim_engine_halt (SD, CPU, NULL, cia, sim_stopped, SIM_SIGABRT);
 }
-#endif /* WARN_RESULT */
 
 
 /*-- co-processor support routines ------------------------------------------*/

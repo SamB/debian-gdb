@@ -1420,13 +1420,19 @@ case "${target}" in
 	extra_subdirs="${extra_subdirs} testsuite"
 	;;
   d10v-*-*)		sim_target=d10v ;;
-  d30v-*-*)
-	sim_target=d30v
-	only_if_gcc=yes
-	extra_subdirs="${extra_subdirs} igen"
+# OBSOLETE   d30v-*-*)
+# OBSOLETE 	sim_target=d30v
+# OBSOLETE 	only_if_gcc=yes
+# OBSOLETE 	extra_subdirs="${extra_subdirs} igen"
+# OBSOLETE 	;;
+# OBSOLETE   fr30-*-*)		sim_target=fr30 ;;
+  frv-*-*)		sim_target=frv
+	extra_subdirs="${extra_subdirs} testsuite"
 	;;
-  fr30-*-*)		sim_target=fr30 ;;
-  h8300*-*-*)		sim_target=h8300 ;;
+  h8300*-*-*)		
+	sim_target=h8300 
+	extra_subdirs="${extra_subdirs} testsuite"
+	;;
   h8500-*-*)		sim_target=h8500 ;;
   i960-*-*)		sim_target=i960 ;;
   m32r-*-*)		sim_target=m32r ;;
@@ -1436,7 +1442,7 @@ case "${target}" in
 	# The MIPS simulator can only be compiled by gcc.
 	sim_target=mips
 	only_if_gcc=yes
-	extra_subdirs="${extra_subdirs} igen"
+	extra_subdirs="${extra_subdirs} igen testsuite"
 	;;
   mn10300*-*-*)
 	# The mn10300 simulator can only be compiled by gcc.
@@ -1447,7 +1453,10 @@ case "${target}" in
   mn10200*-*-*)
 	sim_target=mn10200
 	;;
-  sh*-*-*)		sim_target=sh ;;
+  sh*-*-*)
+	sim_target=sh 
+	extra_subdirs="${extra_subdirs} testsuite"
+	;;
   powerpc*-*-eabi* | powerpc*-*-solaris* | powerpc*-*-sysv4* | \
   powerpc*-*-elf* | powerpc*-*-linux* | powerpc*-*-netbsd* )
 	# The PowerPC simulator uses the GCC extension long long as well as

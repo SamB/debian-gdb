@@ -1,4 +1,4 @@
-/* Target-specific definitions for GNU/Linux running on a Hitachi
+/* Target-specific definitions for GNU/Linux running on a Renesas
    Super-H.
 
    Copyright 2000, 2002 Free Software Foundation, Inc.
@@ -21,7 +21,7 @@
    Boston, MA 02111-1307, USA.  */
 
 /* Pull in GNU/Linux generic defs.  */
-#include "tm-linux.h"
+#include "config/tm-linux.h"
 
 /* Pull in sh-target defs */
 #include "sh/tm-sh.h"

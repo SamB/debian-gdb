@@ -1,2 +1,3 @@
-debian/tmp/usr/share/info/gdb*
-debian/tmp/usr/share/info/stabs*
+objdir/gdb/doc/gdb.info*
+objdir/gdb/doc/gdbint.info*
+objdir/gdb/doc/stabs.info*

@@ -1,3 +1,317 @@
+gdb (6.1-3) unstable; urgency=low
+
+  * Fix passing and returning of non-trivial C++ objects (Closes: #160459).
+  * Update hppa patches (Closes: #247948).
+  * Add a patch for finding C++ member variables in base classes
+    (Closes: #239535).
+  * Replace versions of insight which contain gdbtui.  Partial fix for
+    #242498.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Thu, 27 May 2004 11:30:23 -0400
+
+gdb (6.1-2) unstable; urgency=low
+
+  * Add an NPTL thread-exit patch.  Short-lived threads could cause GDB
+    to leave unattached threads, which would crash as soon as they hit
+    a breakpoint.
+  * Testsuite patches - no unexpected FAILs on i386-linux.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Mon, 19 Apr 2004 11:43:07 -0400
+
+gdb (6.1-1) unstable; urgency=low
+
+  * New upstream version.
+  * Re-add the -debian suffix to GDB's version number.  This got lost in the
+    transition to CDBS.
+  * Revised HPPA port.  Thanks to Randolph Chung, as usual.
+  * Run the testsuite on SPARC again.  The SPARC port is much improved
+    (it has been basically rewritten from scratch).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Tue,  6 Apr 2004 00:13:00 -0400
+
+gdb (6.0-6) unstable; urgency=low
+
+  * Also add DESTDIR to the ranlib invocation.
+  * Fix typo in moving run.1 manpage.
+  * Link linux-nat.o on HPPA.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Tue,  3 Feb 2004 11:07:27 -0500
+
+gdb (6.0-5) unstable; urgency=low
+
+  * Add DESTDIR support to sim/, to fix build failures on targets with a
+    simulator.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Mon,  2 Feb 2004 15:32:23 -0500
+
+gdb (6.0-4) unstable; urgency=low
+
+  * Switch to CDBS and quilt.
+  * Suppress warning about "<in-memory>" on re-run with a vsyscall DSO.
+  * Import gdb 6.0 CVS branch; fixes a segfault with development GCC
+    and frequent segfaults when rereading changed binaries
+    (Closes: #230550).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Mon,  2 Feb 2004 10:03:19 -0500
+
+gdb (6.0-3) unstable; urgency=low
+
+  * Include <asm/offsets.h> instead of <asm/offset.h> on HPPA
+    (Closes: #208928).
+  * Support backtraces through the vsyscall DSO on i386.
+  * Do not run testsuite on hurd-i386 (Closes: #221956).
+  * Fix up texinfo files so that dh_installinfo puts them in the right
+    section.
+  * Update build dependency on texinfo (Closes: #219337).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun, 25 Jan 2004 18:04:24 -0500
+
+gdb (6.0-2) unstable; urgency=low
+
+  * Add build dependency on mig for hurd-i386 (Closes: #216428).
+  * Don't paginate symbol file progress messages.  In combination
+    with recent changes to dwarf2-frame.c this fixes some potential
+    internal errors (Closes: #199889).
+    - 28.symfile-unfiltered.patch
+
+ -- Daniel Jacobowitz <dan@debian.org>  Mon, 27 Oct 2003 23:32:39 -0500
+
+gdb (6.0-1) unstable; urgency=low
+
+  * New upstream release
+    - 11.read-var-value.patch merged upstream.
+    - 12.dwarf-loc-register.patch merged upstream.
+    - -data-list-changed-registers no longer segfaults (Closes: #204561).
+  * Include the text of the GFDL in the copyright file (Closes: #212890).
+  * Include a threading patch which may fix #212949.
+    - 26.lin-lwp-assert.patch
+  * Include a patch which should improve Control-C handling for LinuxThreads
+    on 2.6 kernels.
+    - 27.lin-lwp-2.6.patch
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sat,  4 Oct 2003 17:47:35 -0400
+
+gdb (5.3.20030824-1) unstable; urgency=low
+
+  * New upstream CVS snapshot, from the GDB 6.0 branch.
+    - 27.tui-paginate-backtrace.patch merged upstream.
+    - 28.minsym-section.patch merged upstream.
+    - Watchpoint handling bug for ia64 fixed (Closes: #205241).
+  * Squash some warnings for HPPA.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun, 24 Aug 2003 14:26:52 -0400
+
+gdb (5.3.20030801-1) unstable; urgency=low
+
+  * New upstream CVS snapshot, from the GDB 6.0 branch.
+    - 26.fix-sparc-build-two.patch merged upstream.
+    - Includes a fix for backtracing from noreturn functions like abort ().
+    - Insert a space between the address and code when disassembling,
+      even if we don't have a function name (Closes: #199672).
+  * Update HPPA patch again; is anyone ever going to submit this
+    upstream?  Better do it soon. (Closes: #200980).
+  * Make filtered output paginate correctly again.
+    - 27.tui-paginate-backtrace.patch
+  * Fix an internal error on -data-list-changed-registers, and possibly
+    many others (Closes: #203553).
+    - 10.selected-frame.patch
+  * Add two patches for watchpoints in optimized programs (Closes: #203000).
+    - 11.read-var-value.patch
+    - 12.dwarf-loc-register.patch
+  * Add a patch for several shared library single-stepping bugs.
+    - 28.minsym-section.patch
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun,  3 Aug 2003 23:09:56 -0400
+
+gdb (5.3.20030629-2) unstable; urgency=low
+
+  * Yet another sparc build fix.
+    - 26.fix-sparc-build-two.patch
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun, 29 Jun 2003 17:11:12 -0400
+
+gdb (5.3.20030629-1) unstable; urgency=low
+
+  * New upstream CVS snapshot, from the GDB 6.0 branch.
+    - Remote debugging isn't totally broken any more.
+  * Remove merge or obsoleted patches.
+    - Parts of 23.static-thread-apps.patch
+    - 26.fix-tui-build.patch
+    - 27.fix-sparc-build-two.patch
+    - 28.dwarf2-reread-segv.patch
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sat, 28 Jun 2003 21:17:13 -0400
+
+gdb (5.3.20030606-3) unstable; urgency=low
+
+  * Fix build failure on HPPA.
+  * Fix a segfault when reread applications (Closes: #197226).
+    - 28.dwarf2-reread-segv.patch
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun, 22 Jun 2003 14:30:49 -0400
+
+gdb (5.3.20030606-2) unstable; urgency=low
+
+  * Add 27.fix-sparc-build-two.patch to fix build failure on sparc.
+  * Disable the testsuite on sparc, since it's completely broken.
+  * Conditionalize gcj build dependency for architectures which both
+    have gcj and run the testsuite.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sat, 14 Jun 2003 12:30:33 -0400
+
+gdb (5.3.20030606-1) unstable; urgency=low
+
+  * New upstream snapshot, with lots of nice features.
+    - Improved prologue analyzer and DWARF-2 frame unwind support for i386.
+    - Overhauled Alpha support.
+    - More C++ namespace support (still not complete).
+    - DW_AT_ranges support - if you've noticed local variables in your code
+      being missing in GDB, this is the most likely cause.
+    - Integrated Objective C support, finally! It's got some rough edges
+      but it works (Closes: #62081, #24598, #57824, #86506).
+    - "set cp-abi" command for debugging combined v2 and v3 C++ code.
+    - Some bug fixes in the parsing for gdb --args (Closes: #33361, #193413).
+    - Support for debug info in separate files, coming soon to a Debian
+      near you.
+  * Removed integrated or obsoleted patches:
+    - 01.const-tilde_expand.patch
+    - 05.i386-backtrace-to-main.patch
+    - 08.max-ui-out.patch
+    - 12.tui-readline.patch
+    - 15.m68k-build.patch
+    - 16.use-rl-prefixed-function.patch
+    - 19.alpha-doublest-correction.patch
+    - 21.lin-lwp-schedlock.patch
+  * Disabled some patches which I hope are no longer needed:
+    - 06.java-testsuite-jmisc.patch
+    - 11.thread-confused-exit.patch
+    - 20.alpha-testsuite.patch
+    - 22.alpha-proc-desc-stack.patch
+  * Updated HPPA patches for this snapshot.
+    - 02.gdb-hppa.patch
+    - 03.hppa-core.patch
+    - 04.hppa-func-returns.patch
+  * Add some build fixes for TUI.
+    - 26.fix-tui-build.patch
+  * Build with an absolute path to configure, to work around three failing
+    MI tests.
+  * Don't bother running the testsuite for two debug formats any more.
+  * Add build-dependencies for gcj and gobjc, for the testsuite.
+  * Adjust configure --mandir argument to match more stupid quoting.
+  * Re-enable thread testsuite on Alpha.
+  * Enable the testsuite on ia64, hppa, and s390.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun,  8 Jun 2003 20:15:55 -0400
+
+gdb (5.3-2) unstable; urgency=low
+
+  * Fix build on SPARC.
+  * Fix buid on HPPA.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sat,  4 Jan 2003 01:02:36 -0500
+
+gdb (5.3-1) unstable; urgency=low
+
+  * New upstream release.
+  * Patches updated for new release.
+    - Patch 14.gdb-maint-its-typo.patch included.
+    - Patch 17.tui-fixes.patch included.
+    - Patch 18.threads-much-faster.patch included.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Mon, 16 Dec 2002 14:43:03 -0500
+
+gdb (5.2.debian90.cvs20021120-4) unstable; urgency=low
+
+  * Fix thread debugging for statically linked applications
+    (Closes: #170107).
+  * Prevent a segfault when entering tracepoint actions if you hit EOF
+    (Closes: #167997).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Tue,  3 Dec 2002 14:46:07 -0500
+
+gdb (5.2.debian90.cvs20021120-3) unstable; urgency=low
+
+  * Add another Alpha patch for setting breakpoints after the process exits.
+  * Disable running the thread tests on Alpha (ew).  It hangs the build
+    daemon; the problem appears to be in glibc.  It returns nonexistant
+    and duplicate threads.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun, 24 Nov 2002 23:16:36 -0500
+
+gdb (5.2.debian90.cvs20021120-2) unstable; urgency=low
+
+  * Add patch for testsuite false failures on Alpha.
+  * Add patch for floating point support on Alpha.
+  * Add a patch from the CVS HEAD for schedule-lock mode and for software
+    single step platforms.
+  * Correct the testsuite to match "help maint dump-me".
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun, 24 Nov 2002 18:11:26 -0500
+
+gdb (5.2.debian90.cvs20021120-1) unstable; urgency=low
+
+  * New upstream CVS snapshot from 5.3 CVS branch.
+    - Builds with new bison (Closes: #169656).
+    - Fixes crashes without SSE support or when loading core files without
+      applications.
+    - TUI no longer crashes if there is no debugging information for main
+      (Closes: #141491).
+    - GDB no longer crashes on "info win" if there are no windows
+      (Closes: #158186).
+    - Setting some C++ breakpoints works the first time instead of having
+      to do it twice (Closes: #110684).
+  * Patches updated for new release.
+    - Patch 07.manual-vector.dpatch included in CVS.
+    - Patch 09.mips-linux-buildfixes-aug02.patch included in CVS.
+    - Patch 10.no-readline-docs.patch removed - we still use readline,
+      I believe that leaving it as an appendix to the GDB manual is
+      appropriate.
+    - Patch 12.tui-readline.patch updated.
+    - Patch 17.tui-fixes.patch added to fix a TUI problem with -i=mi.
+  * Remove useless --enable-shared.
+  * Fix a typo in "help maint dump-me" (Closes: #168495).
+  * Add a patch to fix build on m68k, from Michael Fedrowitz
+    <michaelf@debian.org> (Closes: #163543).
+  * Added a patch to call rl_filename_completion_function instead of
+    filename_completion_function, from Matt Chapman
+    <matthewc@cse.unsw.edu.au> (Closes: #165366).
+  * Tag GDB version with "-debian" because we apply patches.
+  * Add a patch which makes debugging threaded applications drastically
+    (5x - 10x) faster.  Whee!
+
+ -- Daniel Jacobowitz <dan@debian.org>  Fri, 22 Nov 2002 17:30:26 -0500
+
+gdb (5.2.cvs20020818-3) unstable; urgency=low
+
+  * HPPA fix from Randolph Chung (Closes: #158055).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun, 25 Aug 2002 00:37:34 -0400
+
+gdb (5.2.cvs20020818-2) unstable; urgency=low
+
+  * MIPS and MIPSel build fixes.
+  * Apply and remove patches in numbered order.
+  * HPPA build fixes.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Mon, 19 Aug 2002 10:49:40 -0400
+
+gdb (5.2.cvs20020818-1) unstable; urgency=low
+
+  * New upstream CVS snapshot.
+    - Don't include <termio.h> in TUI (Closes: #145040).
+    - Don't use libthread_db with core files (Closes: #133778).
+  * Recompile against current readline package (Closes: #153972).
+  * Reduce some thread-db errors to warnings
+    (Closes: #123675, #126614, #134693).
+  * Bump MAX_UI_OUT_LEVELS for the Hurd (Closes: #145630).
+  * Include patch from Richard Hirst to improve function return printing
+    on HPPA.  It looks like there's finally a little progress on getting
+    the HPPA code in upstream... (Closes: #148672).
+  * Mention Peter Jay Salzman's GDB tutorial in the documentation
+    (Closes: #151128).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun, 18 Aug 2002 23:09:46 -0400
+
 gdb (5.2.cvs20020401-6) unstable; urgency=medium
 
   * More HPPA build fixes - I forgot linux-proc.o again

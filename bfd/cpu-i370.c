@@ -1,5 +1,5 @@
 /* BFD i370 CPU definition
-   Copyright 1994, 1995, 1996, 1998, 1999, 2000
+   Copyright 1994, 1995, 1996, 1998, 1999, 2000, 2002
    Free Software Foundation, Inc.
    Contributed by Ian Lance Taylor, Cygnus Support.
    Hacked by Linas Vepstas <linas@linas.org> in 1998, 1999
@@ -36,7 +36,7 @@ static const bfd_arch_info_type arch_info_struct[] =
     "i370",
     "i370:360",
     3,
-    false, /* not the default */
+    FALSE, /* not the default */
     bfd_default_compatible,
     bfd_default_scan,
     &arch_info_struct[1]
@@ -50,7 +50,7 @@ static const bfd_arch_info_type arch_info_struct[] =
     "i370",
     "i370:370",
     3,
-    false, /* not the default */
+    FALSE, /* not the default */
     bfd_default_compatible,
     bfd_default_scan,
     0
@@ -67,7 +67,7 @@ const bfd_arch_info_type bfd_i370_arch =
     "i370",
     "i370:common",
     3,
-    true, /* the default */
+    TRUE, /* the default */
     bfd_default_compatible,
     bfd_default_scan,
     &arch_info_struct[0]

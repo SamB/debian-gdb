@@ -1,7 +1,8 @@
 /* Parameters for target execution on an RS6000, for GDB, the GNU debugger.
-   Copyright 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000
-   Free Software Foundation, Inc.
+
+   Copyright 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996,
+   1997, 1998, 1999, 2000, 2004 Free Software Foundation, Inc.
+
    Contributed by IBM Corporation.
 
    This file is part of GDB.
@@ -21,16 +22,13 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
+struct frame_info;
+
 #define GDB_MULTI_ARCH 1
 
 /* Minimum possible text address in AIX */
 
 #define TEXT_SEGMENT_BASE	0x10000000
-
-/* AIX's assembler doesn't grok dollar signs in identifiers.
-   So we use dots instead.  This item must be coordinated with G++. */
-#undef CPLUS_MARKER
-#define CPLUS_MARKER '.'
 
 /* Return whether PC in function NAME is in code that should be skipped when
    single-stepping.  */
@@ -44,11 +42,6 @@ extern int rs6000_in_solib_return_trampoline (CORE_ADDR, char *);
 
 #define	SKIP_TRAMPOLINE_CODE(pc)	rs6000_skip_trampoline_code (pc)
 extern CORE_ADDR rs6000_skip_trampoline_code (CORE_ADDR);
-
-/* Number of trap signals we need to skip over, once the inferior process
-   starts running. */
-
-#define	START_INFERIOR_TRAPS_EXPECTED	2
 
 /* AIX has a couple of strange returns from wait().  */
 
@@ -81,29 +74,11 @@ extern void aix_process_linenos (void);
 #define FP0_REGNUM 32		/* Floating point register 0 */
 #define FPLAST_REGNUM 63	/* Last floating point register */
 
-/* These #defines are used to parse core files and talk to ptrace, so they
-   must remain fixed.  */
-#define	FIRST_UISA_SP_REGNUM 64	/* first special register number */
-#define LAST_UISA_SP_REGNUM  70	/* last special register number */
-
 /* Define other aspects of the stack frame.  */
 
-#define INIT_FRAME_PC_FIRST(fromleaf, prev) \
-  prev->pc = (fromleaf ? SAVED_PC_AFTER_CALL (prev->next) : \
-	      prev->next ? FRAME_SAVED_PC (prev->next) : read_pc ());
-#define INIT_FRAME_PC(fromleaf, prev)	/* nothing */
-
-/* Default offset from SP where the LR is stored */
-#define	DEFAULT_LR_SAVE 8
-
-/* Flag for machine-specific stuff in shared files.  FIXME */
-#define IBM6000_TARGET
-
-/* RS6000/AIX does not support PT_STEP.  Has to be simulated.  */
-
-#define SOFTWARE_SINGLE_STEP_P() 1
-extern void rs6000_software_single_step (enum target_signal, int);
-#define SOFTWARE_SINGLE_STEP(sig,bp_p) rs6000_software_single_step (sig, bp_p)
+#define DEPRECATED_INIT_FRAME_PC_FIRST(fromleaf, prev) \
+  (fromleaf ? DEPRECATED_SAVED_PC_AFTER_CALL (prev->next) : \
+	      prev->next ? DEPRECATED_FRAME_SAVED_PC (prev->next) : read_pc ())
 
 /* Notice when a new child process is started. */
 

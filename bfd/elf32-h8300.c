@@ -1,21 +1,22 @@
-/* Generic support for 32-bit ELF
-   Copyright 1993, 1995, 1998, 1999, 2001 Free Software Foundation, Inc.
+/* BFD back-end for Renesas H8/300 ELF binaries.
+   Copyright 1993, 1995, 1998, 1999, 2001, 2002, 2003, 2004
+   Free Software Foundation, Inc.
 
-This file is part of BFD, the Binary File Descriptor library.
+   This file is part of BFD, the Binary File Descriptor library.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -24,212 +25,209 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "elf/h8.h"
 
 static reloc_howto_type *elf32_h8_reloc_type_lookup
-  PARAMS ((bfd *abfd, bfd_reloc_code_real_type code));
+  (bfd *abfd, bfd_reloc_code_real_type code);
 static void elf32_h8_info_to_howto
-  PARAMS ((bfd *, arelent *, Elf_Internal_Rela *));
+  (bfd *, arelent *, Elf_Internal_Rela *);
 static void elf32_h8_info_to_howto_rel
-  PARAMS ((bfd *, arelent *, Elf32_Internal_Rel *));
-static unsigned long elf32_h8_mach
-  PARAMS ((flagword));
-static void elf32_h8_final_write_processing
-  PARAMS ((bfd *, boolean));
-static boolean elf32_h8_object_p
-  PARAMS ((bfd *));
-static boolean elf32_h8_merge_private_bfd_data
-  PARAMS ((bfd *, bfd *));
-static boolean elf32_h8_relax_section
-  PARAMS ((bfd *, asection *, struct bfd_link_info *, boolean *));
-static boolean elf32_h8_relax_delete_bytes
-  PARAMS ((bfd *, asection *, bfd_vma, int));
-static boolean elf32_h8_symbol_address_p
-  PARAMS ((bfd *, asection *, bfd_vma));
+  (bfd *, arelent *, Elf_Internal_Rela *);
+static unsigned long elf32_h8_mach (flagword);
+static void elf32_h8_final_write_processing (bfd *, bfd_boolean);
+static bfd_boolean elf32_h8_object_p (bfd *);
+static bfd_boolean elf32_h8_merge_private_bfd_data (bfd *, bfd *);
+static bfd_boolean elf32_h8_relax_section
+  (bfd *, asection *, struct bfd_link_info *, bfd_boolean *);
+static bfd_boolean elf32_h8_relax_delete_bytes
+  (bfd *, asection *, bfd_vma, int);
+static bfd_boolean elf32_h8_symbol_address_p (bfd *, asection *, bfd_vma);
 static bfd_byte *elf32_h8_get_relocated_section_contents
-  PARAMS ((bfd *, struct bfd_link_info *, struct bfd_link_order *,
-	   bfd_byte *, boolean, asymbol **));
+  (bfd *, struct bfd_link_info *, struct bfd_link_order *,
+   bfd_byte *, bfd_boolean, asymbol **);
+static asection *elf32_h8_gc_mark_hook
+  (asection *, struct bfd_link_info *, Elf_Internal_Rela *,
+   struct elf_link_hash_entry *, Elf_Internal_Sym *);
+static bfd_boolean elf32_h8_gc_sweep_hook
+  (bfd *, struct bfd_link_info *, asection *, const Elf_Internal_Rela *);
 static bfd_reloc_status_type elf32_h8_final_link_relocate
-  PARAMS ((unsigned long, bfd *, bfd *, asection *,
-	   bfd_byte *, bfd_vma, bfd_vma, bfd_vma,
-	   struct bfd_link_info *, asection *, int));
-static boolean elf32_h8_relocate_section
-  PARAMS ((bfd *, struct bfd_link_info *, bfd *, asection *,
-	   bfd_byte *, Elf_Internal_Rela *,
-	   Elf_Internal_Sym *, asection **));
+  (unsigned long, bfd *, bfd *, asection *,
+   bfd_byte *, bfd_vma, bfd_vma, bfd_vma,
+   struct bfd_link_info *, asection *, int);
+static bfd_boolean elf32_h8_relocate_section
+  (bfd *, struct bfd_link_info *, bfd *, asection *,
+   bfd_byte *, Elf_Internal_Rela *,
+   Elf_Internal_Sym *, asection **);
 static bfd_reloc_status_type special
-  PARAMS ((bfd *, arelent *, asymbol *, PTR, asection *, bfd *, char **));
+  (bfd *, arelent *, asymbol *, PTR, asection *, bfd *, char **);
 
 /* This does not include any relocation information, but should be
    good enough for GDB or objdump to read the file.  */
 
-static reloc_howto_type h8_elf_howto_table[] =
-{
+static reloc_howto_type h8_elf_howto_table[] = {
 #define R_H8_NONE_X 0
   HOWTO (R_H8_NONE,		/* type */
 	 0,			/* rightshift */
 	 0,			/* size (0 = byte, 1 = short, 2 = long) */
 	 0,			/* bitsize */
-	 false,			/* pc_relative */
+	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_dont, /* complain_on_overflow */
-	 special,			/* special_function */
+	 complain_overflow_dont,/* complain_on_overflow */
+	 special,		/* special_function */
 	 "R_H8_NONE",		/* name */
-	 false,			/* partial_inplace */
+	 FALSE,			/* partial_inplace */
 	 0,			/* src_mask */
 	 0,			/* dst_mask */
-	 false),		/* pcrel_offset */
+	 FALSE),		/* pcrel_offset */
 #define R_H8_DIR32_X (R_H8_NONE_X + 1)
   HOWTO (R_H8_DIR32,		/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 32,			/* bitsize */
-	 false,			/* pc_relative */
+	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_dont, /* complain_on_overflow */
-	 special,			/* special_function */
+	 complain_overflow_dont,/* complain_on_overflow */
+	 special,		/* special_function */
 	 "R_H8_DIR32",		/* name */
-	 false,			/* partial_inplace */
+	 FALSE,			/* partial_inplace */
 	 0,			/* src_mask */
 	 0xffffffff,		/* dst_mask */
-	 false),		/* pcrel_offset */
+	 FALSE),		/* pcrel_offset */
 #define R_H8_DIR16_X (R_H8_DIR32_X + 1)
   HOWTO (R_H8_DIR16,		/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
-	 false,			/* pc_relative */
+	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_dont, /* complain_on_overflow */
-	 special,			/* special_function */
+	 complain_overflow_dont,/* complain_on_overflow */
+	 special,		/* special_function */
 	 "R_H8_DIR16",		/* name */
-	 false,			/* partial_inplace */
+	 FALSE,			/* partial_inplace */
 	 0,			/* src_mask */
 	 0x0000ffff,		/* dst_mask */
-	 false),		/* pcrel_offset */
+	 FALSE),		/* pcrel_offset */
 #define R_H8_DIR8_X (R_H8_DIR16_X + 1)
   HOWTO (R_H8_DIR8,		/* type */
 	 0,			/* rightshift */
 	 0,			/* size (0 = byte, 1 = short, 2 = long) */
 	 8,			/* bitsize */
-	 false,			/* pc_relative */
+	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_dont, /* complain_on_overflow */
-	 special,			/* special_function */
-	 "R_H8_DIR16",		/* name */
-	 false,			/* partial_inplace */
+	 complain_overflow_dont,/* complain_on_overflow */
+	 special,		/* special_function */
+	 "R_H8_DIR8",		/* name */
+	 FALSE,			/* partial_inplace */
 	 0,			/* src_mask */
 	 0x000000ff,		/* dst_mask */
-	 false),		/* pcrel_offset */
+	 FALSE),		/* pcrel_offset */
 #define R_H8_DIR16A8_X (R_H8_DIR8_X + 1)
   HOWTO (R_H8_DIR16A8,		/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
-	 false,			/* pc_relative */
+	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
 	 complain_overflow_bitfield, /* complain_on_overflow */
-	 special,			/* special_function */
+	 special,		/* special_function */
 	 "R_H8_DIR16A8",	/* name */
-	 false,			/* partial_inplace */
+	 FALSE,			/* partial_inplace */
 	 0,			/* src_mask */
 	 0x0000ffff,		/* dst_mask */
-	 false),		/* pcrel_offset */
+	 FALSE),		/* pcrel_offset */
 #define R_H8_DIR16R8_X (R_H8_DIR16A8_X + 1)
   HOWTO (R_H8_DIR16R8,		/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
-	 false,			/* pc_relative */
+	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
 	 complain_overflow_bitfield, /* complain_on_overflow */
-	 special,			/* special_function */
+	 special,		/* special_function */
 	 "R_H8_DIR16R8",	/* name */
-	 false,			/* partial_inplace */
+	 FALSE,			/* partial_inplace */
 	 0,			/* src_mask */
 	 0x0000ffff,		/* dst_mask */
-	 false),		/* pcrel_offset */
+	 FALSE),		/* pcrel_offset */
 #define R_H8_DIR24A8_X (R_H8_DIR16R8_X + 1)
   HOWTO (R_H8_DIR24A8,		/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 24,			/* bitsize */
-	 false,			/* pc_relative */
+	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
 	 complain_overflow_bitfield, /* complain_on_overflow */
-	 special,			/* special_function */
+	 special,		/* special_function */
 	 "R_H8_DIR24A8",	/* name */
-	 true,			/* partial_inplace */
+	 TRUE,			/* partial_inplace */
 	 0xff000000,		/* src_mask */
 	 0x00ffffff,		/* dst_mask */
-	 false),		/* pcrel_offset */
+	 FALSE),		/* pcrel_offset */
 #define R_H8_DIR24R8_X (R_H8_DIR24A8_X + 1)
   HOWTO (R_H8_DIR24R8,		/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 24,			/* bitsize */
-	 false,			/* pc_relative */
+	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
 	 complain_overflow_bitfield, /* complain_on_overflow */
-	 special,			/* special_function */
+	 special,		/* special_function */
 	 "R_H8_DIR24R8",	/* name */
-	 true,			/* partial_inplace */
+	 TRUE,			/* partial_inplace */
 	 0xff000000,		/* src_mask */
 	 0x00ffffff,		/* dst_mask */
-	 false),		/* pcrel_offset */
+	 FALSE),		/* pcrel_offset */
 #define R_H8_DIR32A16_X (R_H8_DIR24R8_X + 1)
   HOWTO (R_H8_DIR32A16,		/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 32,			/* bitsize */
-	 false,			/* pc_relative */
+	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_dont, /* complain_on_overflow */
-	 special,			/* special_function */
-	 "R_H8_DIR32",		/* name */
-	 false,			/* partial_inplace */
+	 complain_overflow_dont,/* complain_on_overflow */
+	 special,		/* special_function */
+	 "R_H8_DIR32A16",	/* name */
+	 FALSE,			/* partial_inplace */
 	 0,			/* src_mask */
 	 0xffffffff,		/* dst_mask */
-	 false),		/* pcrel_offset */
+	 FALSE),		/* pcrel_offset */
 #define R_H8_PCREL16_X (R_H8_DIR32A16_X + 1)
   HOWTO (R_H8_PCREL16,		/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
-	 true,			/* pc_relative */
+	 TRUE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_signed, /* complain_on_overflow */
-	 special,			/* special_function */
+	 complain_overflow_signed,/* complain_on_overflow */
+	 special,		/* special_function */
 	 "R_H8_PCREL16",	/* name */
-	 false,			/* partial_inplace */
+	 FALSE,			/* partial_inplace */
 	 0xffff,		/* src_mask */
 	 0xffff,		/* dst_mask */
-	 true),			/* pcrel_offset */
+	 TRUE),			/* pcrel_offset */
 #define R_H8_PCREL8_X (R_H8_PCREL16_X + 1)
   HOWTO (R_H8_PCREL8,		/* type */
 	 0,			/* rightshift */
 	 0,			/* size (0 = byte, 1 = short, 2 = long) */
 	 8,			/* bitsize */
-	 true,			/* pc_relative */
+	 TRUE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_signed, /* complain_on_overflow */
-	 special,			/* special_function */
+	 complain_overflow_signed,/* complain_on_overflow */
+	 special,		/* special_function */
 	 "R_H8_PCREL8",		/* name */
-	 false,			/* partial_inplace */
+	 FALSE,			/* partial_inplace */
 	 0xff,			/* src_mask */
 	 0xff,			/* dst_mask */
-	 true),			/* pcrel_offset */
+	 TRUE),			/* pcrel_offset */
 };
 
 /* This structure is used to map BFD reloc codes to H8 ELF relocs.  */
 
-struct elf_reloc_map
-{
+struct elf_reloc_map {
   bfd_reloc_code_real_type bfd_reloc_val;
   unsigned char howto_index;
 };
 
-/* An array mapping BFD reloc codes to SH ELF relocs.  */
+/* An array mapping BFD reloc codes to H8 ELF relocs.  */
 
-static const struct elf_reloc_map h8_reloc_map[] =
-{
+static const struct elf_reloc_map h8_reloc_map[] = {
   { BFD_RELOC_NONE, R_H8_NONE_X },
   { BFD_RELOC_32, R_H8_DIR32_X },
   { BFD_RELOC_16, R_H8_DIR16_X },
@@ -245,9 +243,8 @@ static const struct elf_reloc_map h8_reloc_map[] =
 
 
 static reloc_howto_type *
-elf32_h8_reloc_type_lookup (abfd, code)
-     bfd *abfd ATTRIBUTE_UNUSED;
-     bfd_reloc_code_real_type code;
+elf32_h8_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
+			    bfd_reloc_code_real_type code)
 {
   unsigned int i;
 
@@ -260,17 +257,15 @@ elf32_h8_reloc_type_lookup (abfd, code)
 }
 
 static void
-elf32_h8_info_to_howto (abfd, bfd_reloc, elf_reloc)
-     bfd *abfd ATTRIBUTE_UNUSED;
-     arelent *bfd_reloc;
-     Elf32_Internal_Rela *elf_reloc;
+elf32_h8_info_to_howto (bfd *abfd ATTRIBUTE_UNUSED, arelent *bfd_reloc,
+			Elf_Internal_Rela *elf_reloc)
 {
   unsigned int r;
   unsigned int i;
 
   r = ELF32_R_TYPE (elf_reloc->r_info);
   for (i = 0; i < sizeof (h8_elf_howto_table) / sizeof (reloc_howto_type); i++)
-    if (h8_elf_howto_table[i].type== r)
+    if (h8_elf_howto_table[i].type == r)
       {
 	bfd_reloc->howto = &h8_elf_howto_table[i];
 	return;
@@ -279,10 +274,8 @@ elf32_h8_info_to_howto (abfd, bfd_reloc, elf_reloc)
 }
 
 static void
-elf32_h8_info_to_howto_rel (abfd, bfd_reloc, elf_reloc)
-     bfd *abfd ATTRIBUTE_UNUSED;
-     arelent *bfd_reloc;
-     Elf32_Internal_Rel *elf_reloc ATTRIBUTE_UNUSED;
+elf32_h8_info_to_howto_rel (bfd *abfd ATTRIBUTE_UNUSED, arelent *bfd_reloc,
+			    Elf_Internal_Rela *elf_reloc ATTRIBUTE_UNUSED)
 {
   unsigned int r;
 
@@ -296,15 +289,13 @@ elf32_h8_info_to_howto_rel (abfd, bfd_reloc, elf_reloc)
    When doing -r, we can't do any arithmetic for the pcrel stuff, because
    we support relaxing on the H8/300 series chips.  */
 static bfd_reloc_status_type
-special (abfd, reloc_entry, symbol, data, input_section, output_bfd,
-	 error_message)
-     bfd *abfd ATTRIBUTE_UNUSED;
-     arelent *reloc_entry ATTRIBUTE_UNUSED;
-     asymbol *symbol ATTRIBUTE_UNUSED;
-     PTR data ATTRIBUTE_UNUSED;
-     asection *input_section ATTRIBUTE_UNUSED;
-     bfd *output_bfd;
-     char **error_message ATTRIBUTE_UNUSED;
+special (bfd *abfd ATTRIBUTE_UNUSED,
+	 arelent *reloc_entry ATTRIBUTE_UNUSED,
+	 asymbol *symbol ATTRIBUTE_UNUSED,
+	 PTR data ATTRIBUTE_UNUSED,
+	 asection *input_section ATTRIBUTE_UNUSED,
+	 bfd *output_bfd,
+	 char **error_message ATTRIBUTE_UNUSED)
 {
   if (output_bfd == (bfd *) NULL)
     return bfd_reloc_continue;
@@ -316,26 +307,19 @@ special (abfd, reloc_entry, symbol, data, input_section, output_bfd,
 
 /* Perform a relocation as part of a final link.  */
 static bfd_reloc_status_type
-elf32_h8_final_link_relocate (r_type, input_bfd, output_bfd,
-			      input_section, contents, offset, value,
-			      addend, info, sym_sec, is_local)
-     unsigned long r_type;
-     bfd *input_bfd;
-     bfd *output_bfd ATTRIBUTE_UNUSED;
-     asection *input_section ATTRIBUTE_UNUSED;
-     bfd_byte *contents;
-     bfd_vma offset;
-     bfd_vma value;
-     bfd_vma addend;
-     struct bfd_link_info *info ATTRIBUTE_UNUSED;
-     asection *sym_sec ATTRIBUTE_UNUSED;
-     int is_local ATTRIBUTE_UNUSED;
+elf32_h8_final_link_relocate (unsigned long r_type, bfd *input_bfd,
+			      bfd *output_bfd ATTRIBUTE_UNUSED,
+			      asection *input_section ATTRIBUTE_UNUSED,
+			      bfd_byte *contents, bfd_vma offset,
+			      bfd_vma value, bfd_vma addend,
+			      struct bfd_link_info *info ATTRIBUTE_UNUSED,
+			      asection *sym_sec ATTRIBUTE_UNUSED,
+			      int is_local ATTRIBUTE_UNUSED)
 {
   bfd_byte *hit_data = contents + offset;
 
   switch (r_type)
     {
-
     case R_H8_NONE:
       return bfd_reloc_ok;
 
@@ -364,7 +348,7 @@ elf32_h8_final_link_relocate (r_type, input_bfd, output_bfd,
       value += addend;
 
       /* HIT_DATA is the address for the first byte for the relocated
-	 value.  Subtract 1 so that we can manipulate the data in 32bit
+	 value.  Subtract 1 so that we can manipulate the data in 32-bit
 	 hunks.  */
       hit_data--;
 
@@ -374,7 +358,7 @@ elf32_h8_final_link_relocate (r_type, input_bfd, output_bfd,
       /* Retrieve the type byte for value from the section contents.  */
       value |= (bfd_get_32 (input_bfd, hit_data) & 0xff000000);
 
-      /* Now scribble it out in one 32bit hunk.  */
+      /* Now scribble it out in one 32-bit hunk.  */
       bfd_put_32 (input_bfd, value, hit_data);
       return bfd_reloc_ok;
 
@@ -412,21 +396,19 @@ elf32_h8_final_link_relocate (r_type, input_bfd, output_bfd,
 }
 
 /* Relocate an H8 ELF section.  */
-static boolean
-elf32_h8_relocate_section (output_bfd, info, input_bfd, input_section,
-			   contents, relocs, local_syms, local_sections)
-     bfd *output_bfd;
-     struct bfd_link_info *info;
-     bfd *input_bfd;
-     asection *input_section;
-     bfd_byte *contents;
-     Elf_Internal_Rela *relocs;
-     Elf_Internal_Sym *local_syms;
-     asection **local_sections;
+static bfd_boolean
+elf32_h8_relocate_section (bfd *output_bfd, struct bfd_link_info *info,
+			   bfd *input_bfd, asection *input_section,
+			   bfd_byte *contents, Elf_Internal_Rela *relocs,
+			   Elf_Internal_Sym *local_syms,
+			   asection **local_sections)
 {
   Elf_Internal_Shdr *symtab_hdr;
   struct elf_link_hash_entry **sym_hashes;
   Elf_Internal_Rela *rel, *relend;
+
+  if (info->relocatable)
+    return TRUE;
 
   symtab_hdr = &elf_tdata (input_bfd)->symtab_hdr;
   sym_hashes = elf_sym_hashes (input_bfd);
@@ -443,29 +425,9 @@ elf32_h8_relocate_section (output_bfd, info, input_bfd, input_section,
       bfd_vma relocation;
       bfd_reloc_status_type r;
 
+      /* This is a final link.  */
       r_symndx = ELF32_R_SYM (rel->r_info);
       r_type = ELF32_R_TYPE (rel->r_info);
-
-      if (info->relocateable)
-	{
-	  /* This is a relocateable link.  We don't have to change
-             anything, unless the reloc is against a section symbol,
-             in which case we have to adjust according to where the
-             section symbol winds up in the output section.  */
-	  if (r_symndx < symtab_hdr->sh_info)
-	    {
-	      sym = local_syms + r_symndx;
-	      if (ELF_ST_TYPE (sym->st_info) == STT_SECTION)
-		{
-		  sec = local_sections[r_symndx];
-		  rel->r_addend += sec->output_offset + sym->st_value;
-		}
-	    }
-
-	  continue;
-	}
-
-      /* This is a final link.  */
       h = NULL;
       sym = NULL;
       sec = NULL;
@@ -473,7 +435,7 @@ elf32_h8_relocate_section (output_bfd, info, input_bfd, input_section,
 	{
 	  sym = local_syms + r_symndx;
 	  sec = local_sections[r_symndx];
-	  relocation = _bfd_elf_rela_local_sym (output_bfd, sym, sec, rel);
+	  relocation = _bfd_elf_rela_local_sym (output_bfd, sym, &sec, rel);
 	}
       else
 	{
@@ -495,8 +457,8 @@ elf32_h8_relocate_section (output_bfd, info, input_bfd, input_section,
 	    {
 	      if (! ((*info->callbacks->undefined_symbol)
 		     (info, h->root.root.string, input_bfd,
-		      input_section, rel->r_offset, true)))
-		return false;
+		      input_section, rel->r_offset, TRUE)))
+		return FALSE;
 	      relocation = 0;
 	    }
 	}
@@ -533,14 +495,14 @@ elf32_h8_relocate_section (output_bfd, info, input_bfd, input_section,
 	      if (! ((*info->callbacks->reloc_overflow)
 		     (info, name, howto->name, (bfd_vma) 0,
 		      input_bfd, input_section, rel->r_offset)))
-		return false;
+		return FALSE;
 	      break;
 
 	    case bfd_reloc_undefined:
 	      if (! ((*info->callbacks->undefined_symbol)
 		     (info, name, input_bfd, input_section,
-		      rel->r_offset, true)))
-		return false;
+		      rel->r_offset, TRUE)))
+		return FALSE;
 	      break;
 
 	    case bfd_reloc_outofrange:
@@ -563,13 +525,13 @@ elf32_h8_relocate_section (output_bfd, info, input_bfd, input_section,
 	      if (!((*info->callbacks->warning)
 		    (info, msg, name, input_bfd, input_section,
 		     rel->r_offset)))
-		return false;
+		return FALSE;
 	      break;
 	    }
 	}
     }
 
-  return true;
+  return TRUE;
 }
 
 /* Object files encode the specific H8 model they were compiled
@@ -578,8 +540,7 @@ elf32_h8_relocate_section (output_bfd, info, input_bfd, input_section,
    Examine that field and return the proper BFD machine type for
    the object file.  */
 static unsigned long
-elf32_h8_mach (flags)
-     flagword flags;
+elf32_h8_mach (flagword flags)
 {
   switch (flags & EF_H8_MACH)
     {
@@ -592,6 +553,18 @@ elf32_h8_mach (flags)
 
     case E_H8_MACH_H8300S:
       return bfd_mach_h8300s;
+
+    case E_H8_MACH_H8300HN:
+      return bfd_mach_h8300hn;
+
+    case E_H8_MACH_H8300SN:
+      return bfd_mach_h8300sn;
+
+    case E_H8_MACH_H8300SX:
+      return bfd_mach_h8300sx;
+
+    case E_H8_MACH_H8300SXN:
+      return bfd_mach_h8300sxn;
     }
 }
 
@@ -600,9 +573,8 @@ elf32_h8_mach (flags)
    into the flags field in the object file.  */
 
 static void
-elf32_h8_final_write_processing (abfd, linker)
-     bfd *abfd;
-     boolean linker ATTRIBUTE_UNUSED;
+elf32_h8_final_write_processing (bfd *abfd,
+				 bfd_boolean linker ATTRIBUTE_UNUSED)
 {
   unsigned long val;
 
@@ -620,6 +592,22 @@ elf32_h8_final_write_processing (abfd, linker)
     case bfd_mach_h8300s:
       val = E_H8_MACH_H8300S;
       break;
+
+    case bfd_mach_h8300hn:
+      val = E_H8_MACH_H8300HN;
+      break;
+
+    case bfd_mach_h8300sn:
+      val = E_H8_MACH_H8300SN;
+      break;
+
+    case bfd_mach_h8300sx:
+      val = E_H8_MACH_H8300SX;
+      break;
+
+    case bfd_mach_h8300sxn:
+      val = E_H8_MACH_H8300SXN;
+      break;
     }
 
   elf_elfheader (abfd)->e_flags &= ~ (EF_H8_MACH);
@@ -629,42 +617,39 @@ elf32_h8_final_write_processing (abfd, linker)
 /* Return nonzero if ABFD represents a valid H8 ELF object file; also
    record the encoded machine type found in the ELF flags.  */
 
-static boolean
-elf32_h8_object_p (abfd)
-     bfd *abfd;
+static bfd_boolean
+elf32_h8_object_p (bfd *abfd)
 {
   bfd_default_set_arch_mach (abfd, bfd_arch_h8300,
 			     elf32_h8_mach (elf_elfheader (abfd)->e_flags));
-  return true;
+  return TRUE;
 }
 
 /* Merge backend specific data from an object file to the output
    object file when linking.  The only data we need to copy at this
    time is the architecture/machine information.  */
 
-static boolean
-elf32_h8_merge_private_bfd_data (ibfd, obfd)
-     bfd *ibfd;
-     bfd *obfd;
+static bfd_boolean
+elf32_h8_merge_private_bfd_data (bfd *ibfd, bfd *obfd)
 {
   if (bfd_get_flavour (ibfd) != bfd_target_elf_flavour
       || bfd_get_flavour (obfd) != bfd_target_elf_flavour)
-    return true;
+    return TRUE;
 
   if (bfd_get_arch (obfd) == bfd_get_arch (ibfd)
       && bfd_get_mach (obfd) < bfd_get_mach (ibfd))
     {
       if (! bfd_set_arch_mach (obfd, bfd_get_arch (ibfd),
-                               bfd_get_mach (ibfd)))
-        return false;
+			       bfd_get_mach (ibfd)))
+	return FALSE;
     }
 
-  return true;
+  return TRUE;
 }
 
 /* This function handles relaxing for the H8..
 
-   There's a few relaxing opportunites available on the H8:
+   There are a few relaxing opportunities available on the H8:
 
      jmp/jsr:24    ->    bra/bsr:8		2 bytes
      The jmp may be completely eliminated if the previous insn is a
@@ -674,45 +659,41 @@ elf32_h8_merge_private_bfd_data (ibfd, obfd)
      bCC:16          ->    bCC:8                  2 bytes
      bsr:16          ->    bsr:8                  2 bytes
 
+     bset:16	     ->    bset:8                 2 bytes
+     bset:24/32	     ->    bset:8                 4 bytes
+     (also applicable to other bit manipulation instructions)
+
      mov.b:16	     ->    mov.b:8                2 bytes
      mov.b:24/32     ->    mov.b:8                4 bytes
 
-     mov.[bwl]:24/32 ->    mov.[bwl]:16           2 bytes
+     bset:24/32	     ->    bset:16                2 bytes
+     (also applicable to other bit manipulation instructions)
 
+     mov.[bwl]:24/32 ->    mov.[bwl]:16           2 bytes */
 
-*/
-
-static boolean
-elf32_h8_relax_section (abfd, sec, link_info, again)
-     bfd *abfd;
-     asection *sec;
-     struct bfd_link_info *link_info;
-     boolean *again;
+static bfd_boolean
+elf32_h8_relax_section (bfd *abfd, asection *sec,
+			struct bfd_link_info *link_info, bfd_boolean *again)
 {
   Elf_Internal_Shdr *symtab_hdr;
-  Elf_Internal_Shdr *shndx_hdr;
   Elf_Internal_Rela *internal_relocs;
-  Elf_Internal_Rela *free_relocs = NULL;
   Elf_Internal_Rela *irel, *irelend;
   bfd_byte *contents = NULL;
-  bfd_byte *free_contents = NULL;
-  Elf32_External_Sym *extsyms = NULL;
-  Elf32_External_Sym *free_extsyms = NULL;
-  Elf_External_Sym_Shndx *shndx_buf = NULL;
+  Elf_Internal_Sym *isymbuf = NULL;
   static asection *last_input_section = NULL;
   static Elf_Internal_Rela *last_reloc = NULL;
 
   /* Assume nothing changes.  */
-  *again = false;
+  *again = FALSE;
 
-  /* We don't have to do anything for a relocateable link, if
+  /* We don't have to do anything for a relocatable link, if
      this section does not have relocs, or if this is not a
      code section.  */
-  if (link_info->relocateable
+  if (link_info->relocatable
       || (sec->flags & SEC_RELOC) == 0
       || sec->reloc_count == 0
       || (sec->flags & SEC_CODE) == 0)
-    return true;
+    return TRUE;
 
   /* If this is the first time we have been called for this section,
      initialize the cooked size.  */
@@ -720,16 +701,13 @@ elf32_h8_relax_section (abfd, sec, link_info, again)
     sec->_cooked_size = sec->_raw_size;
 
   symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
-  shndx_hdr = &elf_tdata (abfd)->symtab_shndx_hdr;
 
   /* Get a copy of the native relocations.  */
-  internal_relocs = (_bfd_elf32_link_read_relocs
+  internal_relocs = (_bfd_elf_link_read_relocs
 		     (abfd, sec, (PTR) NULL, (Elf_Internal_Rela *) NULL,
 		      link_info->keep_memory));
   if (internal_relocs == NULL)
     goto error_return;
-  if (! link_info->keep_memory)
-    free_relocs = internal_relocs;
 
   if (sec != last_input_section)
     last_reloc = NULL;
@@ -747,6 +725,13 @@ elf32_h8_relax_section (abfd, sec, link_info, again)
       if (irel != internal_relocs)
 	last_reloc = irel - 1;
 
+      if (ELF32_R_TYPE (irel->r_info) != R_H8_DIR24R8
+	  && ELF32_R_TYPE (irel->r_info) != R_H8_PCREL16
+	  && ELF32_R_TYPE (irel->r_info) != R_H8_DIR16A8
+	  && ELF32_R_TYPE (irel->r_info) != R_H8_DIR24A8
+	  && ELF32_R_TYPE (irel->r_info) != R_H8_DIR32A16)
+	continue;
+
       /* Get the section contents if we haven't done so already.  */
       if (contents == NULL)
 	{
@@ -759,7 +744,6 @@ elf32_h8_relax_section (abfd, sec, link_info, again)
 	      contents = (bfd_byte *) bfd_malloc (sec->_raw_size);
 	      if (contents == NULL)
 		goto error_return;
-	      free_contents = contents;
 
 	      if (! bfd_get_section_contents (abfd, sec, contents,
 					      (file_ptr) 0, sec->_raw_size))
@@ -768,59 +752,32 @@ elf32_h8_relax_section (abfd, sec, link_info, again)
 	}
 
       /* Read this BFD's local symbols if we haven't done so already.  */
-      if (extsyms == NULL)
+      if (isymbuf == NULL && symtab_hdr->sh_info != 0)
 	{
-	  /* Get cached copy if it exists.  */
-	  if (symtab_hdr->contents != NULL)
-	    extsyms = (Elf32_External_Sym *) symtab_hdr->contents;
-	  else
-	    {
-	      /* Go get them off disk.  */
-	      bfd_size_type amt;
-
-	      amt = symtab_hdr->sh_info * sizeof (Elf32_External_Sym);
-	      extsyms = (Elf32_External_Sym *) bfd_malloc (amt);
-	      if (extsyms == NULL)
-		goto error_return;
-	      free_extsyms = extsyms;
-	      if (bfd_seek (abfd, symtab_hdr->sh_offset, SEEK_SET) != 0
-		  || bfd_bread ((PTR) extsyms, amt, abfd) != amt)
-		goto error_return;
-	      symtab_hdr->contents = (PTR) extsyms;
-	    }
-
-	  if (shndx_hdr->sh_size != 0)
-	    {
-	      bfd_size_type amt;
-
-	      amt = symtab_hdr->sh_info * sizeof (Elf_External_Sym_Shndx);
-	      shndx_buf = (Elf_External_Sym_Shndx *) bfd_malloc (amt);
-	      if (shndx_buf == NULL)
-		goto error_return;
-	      if (bfd_seek (abfd, shndx_hdr->sh_offset, SEEK_SET) != 0
-		  || bfd_bread ((PTR) shndx_buf, amt, abfd) != amt)
-		goto error_return;
-	      shndx_hdr->contents = (PTR) shndx_buf;
-	    }
+	  isymbuf = (Elf_Internal_Sym *) symtab_hdr->contents;
+	  if (isymbuf == NULL)
+	    isymbuf = bfd_elf_get_elf_syms (abfd, symtab_hdr,
+					    symtab_hdr->sh_info, 0,
+					    NULL, NULL, NULL);
+	  if (isymbuf == NULL)
+	    goto error_return;
 	}
 
       /* Get the value of the symbol referred to by the reloc.  */
       if (ELF32_R_SYM (irel->r_info) < symtab_hdr->sh_info)
 	{
-	  Elf32_External_Sym *esym;
-	  Elf_External_Sym_Shndx *shndx;
-	  Elf_Internal_Sym isym;
+	  /* A local symbol.  */
+	  Elf_Internal_Sym *isym;
 	  asection *sym_sec;
 
-	  /* A local symbol.  */
-	  esym = extsyms + ELF32_R_SYM (irel->r_info);
-	  shndx = shndx_buf + (shndx_buf ? ELF32_R_SYM (irel->r_info) : 0);
-	  bfd_elf32_swap_symbol_in (abfd, esym, shndx, &isym);
-
-	  sym_sec = bfd_section_from_elf_index (abfd, isym.st_shndx);
-	  symval = (isym.st_value
-		    + sym_sec->output_section->vma
-		    + sym_sec->output_offset);
+	  isym = isymbuf + ELF32_R_SYM (irel->r_info);
+	  sym_sec = bfd_section_from_elf_index (abfd, isym->st_shndx);
+	  symval = isym->st_value;
+	  /* If the reloc is absolute, it will not have
+	     a symbol or section associated with it.  */
+	  if (sym_sec)
+	    symval += sym_sec->output_section->vma
+	      + sym_sec->output_offset;
 	}
       else
 	{
@@ -854,7 +811,7 @@ elf32_h8_relax_section (abfd, sec, link_info, again)
 	 the linker is run.  */
       switch (ELF32_R_TYPE (irel->r_info))
 	{
-        /* Try to turn a 24 bit absolute branch/call into an 8 bit
+        /* Try to turn a 24-bit absolute branch/call into an 8-bit
 	   pc-relative branch/call.  */
 	case R_H8_DIR24R8:
 	  {
@@ -878,12 +835,11 @@ elf32_h8_relax_section (abfd, sec, link_info, again)
 		/* Note that we've changed the relocs, section contents,
 		   etc.  */
 		elf_section_data (sec)->relocs = internal_relocs;
-		free_relocs = NULL;
-
 		elf_section_data (sec)->this_hdr.contents = contents;
-		free_contents = NULL;
+		symtab_hdr->contents = (unsigned char *) isymbuf;
 
-		free_extsyms = NULL;
+		/* Get the instruction code being relaxed.  */
+		code = bfd_get_8 (abfd, contents + irel->r_offset - 1);
 
 		/* If the previous instruction conditionally jumped around
 		   this instruction, we may be able to reverse the condition
@@ -891,31 +847,41 @@ elf32_h8_relax_section (abfd, sec, link_info, again)
 		   this instruction.
 
 		   Such sequences are used by the compiler to deal with
-		   long conditional branches.  */
-		if ((int) gap <= 130
+		   long conditional branches.
+
+		   Only perform this optimisation for jumps (code 0x5a) not
+		   subroutine calls, as otherwise it could transform:
+
+		   	             mov.w   r0,r0
+		   	             beq     .L1
+		         	     jsr     @_bar
+		              .L1:   rts
+		              _bar:  rts
+		   into:
+		   	             mov.w   r0,r0
+			             bne     _bar
+			             rts
+			      _bar:  rts
+
+		   which changes the call (jsr) into a branch (bne).  */
+		if (code == 0x5a
+		    && (int) gap <= 130
 		    && (int) gap >= -128
 		    && last_reloc
 		    && ELF32_R_TYPE (last_reloc->r_info) == R_H8_PCREL8
 		    && ELF32_R_SYM (last_reloc->r_info) < symtab_hdr->sh_info)
 		  {
-		    Elf32_External_Sym *esym;
-		    Elf_External_Sym_Shndx *shndx;
 		    bfd_vma last_value;
 		    asection *last_sym_sec;
-		    Elf_Internal_Sym last_symbol;
+		    Elf_Internal_Sym *last_sym;
 
 		    /* We will need to examine the symbol used by the
 		       previous relocation.  */
 
-		    esym = extsyms + ELF32_R_SYM (last_reloc->r_info);
-		    shndx = shndx_buf;
-		    if (shndx != NULL)
-		      shndx += ELF32_R_SYM (last_reloc->r_info);
-		    bfd_elf32_swap_symbol_in (abfd, esym, shndx, &last_symbol);
-
+		    last_sym = isymbuf + ELF32_R_SYM (last_reloc->r_info);
 		    last_sym_sec
-		      = bfd_section_from_elf_index (abfd, last_symbol.st_shndx);
-		    last_value = (last_symbol.st_value
+		      = bfd_section_from_elf_index (abfd, last_sym->st_shndx);
+		    last_value = (last_sym->st_value
 				  + last_sym_sec->output_section->vma
 				  + last_sym_sec->output_offset);
 
@@ -932,11 +898,10 @@ elf32_h8_relax_section (abfd, sec, link_info, again)
 			  = ELF32_R_INFO (ELF32_R_SYM (irel->r_info),
 					  ELF32_R_TYPE (R_H8_NONE));
 
-		        last_reloc->r_info
+			last_reloc->r_info
 			  = ELF32_R_INFO (ELF32_R_SYM (irel->r_info),
-					ELF32_R_TYPE (R_H8_PCREL8));
-		        last_reloc->r_addend = irel->r_addend;
-
+					  ELF32_R_TYPE (R_H8_PCREL8));
+			last_reloc->r_addend = irel->r_addend;
 
 			code = bfd_get_8 (abfd,
 					  contents + last_reloc->r_offset - 1);
@@ -951,17 +916,16 @@ elf32_h8_relax_section (abfd, sec, link_info, again)
 							  4))
 			  goto error_return;
 
-			*again = true;
+			*again = TRUE;
 			break;
 		      }
 		  }
 
-		/* We could not eliminate this jump, so just shorten it.  */
-		code = bfd_get_8 (abfd, contents + irel->r_offset - 1);
-
 		if (code == 0x5e)
+		  /* This is jsr.  */
 		  bfd_put_8 (abfd, 0x55, contents + irel->r_offset - 1);
 		else if (code == 0x5a)
+		  /* This is jmp.  */
 		  bfd_put_8 (abfd, 0x40, contents + irel->r_offset - 1);
 		else
 		  abort ();
@@ -977,12 +941,12 @@ elf32_h8_relax_section (abfd, sec, link_info, again)
 
 		/* That will change things, so, we should relax again.
 		   Note that this is not required, and it may be slow.  */
-		*again = true;
+		*again = TRUE;
 	      }
 	    break;
 	  }
 
-	/* Try to turn a 16bit pc-relative branch into a 8bit pc-relative
+	/* Try to turn a 16-bit pc-relative branch into a 8-bit pc-relative
 	   branch.  */
 	case R_H8_PCREL16:
 	  {
@@ -1000,219 +964,281 @@ elf32_h8_relax_section (abfd, sec, link_info, again)
 	    /* If the distance is within -126..+130 inclusive, then we can
 	       relax this jump.  +130 is valid since the target will move
 	       two bytes closer if we do relax this branch.  */
-	    if ((int)gap >= -126 && (int)gap <= 130)
+	    if ((int) gap >= -126 && (int) gap <= 130)
 	      {
-	        unsigned char code;
+		unsigned char code;
 
-	        /* Note that we've changed the relocs, section contents,
+		/* Note that we've changed the relocs, section contents,
 		   etc.  */
-	        elf_section_data (sec)->relocs = internal_relocs;
-	        free_relocs = NULL;
+		elf_section_data (sec)->relocs = internal_relocs;
+		elf_section_data (sec)->this_hdr.contents = contents;
+		symtab_hdr->contents = (unsigned char *) isymbuf;
 
-	        elf_section_data (sec)->this_hdr.contents = contents;
-	        free_contents = NULL;
-
-	        free_extsyms = NULL;
-
-	        /* Get the opcode.  */
-	        code = bfd_get_8 (abfd, contents + irel->r_offset - 2);
+		/* Get the opcode.  */
+		code = bfd_get_8 (abfd, contents + irel->r_offset - 2);
 
 		if (code == 0x58)
 		  {
 		    /* bCC:16 -> bCC:8 */
-		    /* Get the condition code from the original insn.  */
+		    /* Get the second byte of the original insn, which
+		       contains the condition code.  */
 		    code = bfd_get_8 (abfd, contents + irel->r_offset - 1);
+
+		    /* Compute the fisrt byte of the relaxed
+		       instruction.  The original sequence 0x58 0xX0
+		       is relaxed to 0x4X, where X represents the
+		       condition code.  */
 		    code &= 0xf0;
 		    code >>= 4;
 		    code |= 0x40;
 		    bfd_put_8 (abfd, code, contents + irel->r_offset - 2);
 		  }
 		else if (code == 0x5c)
+		  /* This is bsr.  */
 		  bfd_put_8 (abfd, 0x55, contents + irel->r_offset - 2);
 		else
 		  abort ();
 
 		/* Fix the relocation's type.  */
-	        irel->r_info = ELF32_R_INFO (ELF32_R_SYM (irel->r_info),
+		irel->r_info = ELF32_R_INFO (ELF32_R_SYM (irel->r_info),
 					     R_H8_PCREL8);
-	        irel->r_offset--;
+		irel->r_offset--;
 
-	        /* Delete two bytes of data.  */
-	        if (!elf32_h8_relax_delete_bytes (abfd, sec,
+		/* Delete two bytes of data.  */
+		if (!elf32_h8_relax_delete_bytes (abfd, sec,
 						  irel->r_offset + 1, 2))
 		  goto error_return;
 
-	        /* That will change things, so, we should relax again.
+		/* That will change things, so, we should relax again.
 		   Note that this is not required, and it may be slow.  */
-	        *again = true;
+		*again = TRUE;
 	      }
 	    break;
 	  }
 
-	/* This is a 16 bit absolute address in a "mov.b" insn, which may
-	   become an 8 bit absolute address if its in the right range.  */
+	/* This is a 16-bit absolute address in one of the following
+	   instructions:
+
+	     "band", "bclr", "biand", "bild", "bior", "bist", "bixor",
+	     "bld", "bnot", "bor", "bset", "bst", "btst", "bxor", and
+	     "mov.b"
+
+	   We may relax this into an 8-bit absolute address if it's in
+	   the right range.  */
 	case R_H8_DIR16A8:
 	  {
-	    bfd_vma value = symval + irel->r_addend;
+	    bfd_vma value;
 
-	    if ((bfd_get_mach (abfd) == bfd_mach_h8300
-	         && value >= 0xff00
-	         && value <= 0xffff)
-	        || ((bfd_get_mach (abfd) == bfd_mach_h8300h
-		     || bfd_get_mach (abfd) == bfd_mach_h8300s)
-		    && value >= 0xffff00
-		    && value <= 0xffffff))
+	    value = bfd_h8300_pad_address (abfd, symval + irel->r_addend);
+	    if (value >= 0xffffff00u)
 	      {
-	        unsigned char code;
+		unsigned char code;
+		unsigned char temp_code;
 
-	        /* Note that we've changed the relocs, section contents,
+		/* Note that we've changed the relocs, section contents,
 		   etc.  */
-	        elf_section_data (sec)->relocs = internal_relocs;
-	        free_relocs = NULL;
+		elf_section_data (sec)->relocs = internal_relocs;
+		elf_section_data (sec)->this_hdr.contents = contents;
+		symtab_hdr->contents = (unsigned char *) isymbuf;
 
-	        elf_section_data (sec)->this_hdr.contents = contents;
-	        free_contents = NULL;
+		/* Get the opcode.  */
+		code = bfd_get_8 (abfd, contents + irel->r_offset - 2);
 
-	        free_extsyms = NULL;
-
-	        /* Get the opcode.  */
-	        code = bfd_get_8 (abfd, contents + irel->r_offset - 2);
-
-	        /* Sanity check.  */
-	        if (code != 0x6a)
+		/* All instructions with R_H8_DIR16A8 start with
+		   0x6a.  */
+		if (code != 0x6a)
 		  abort ();
 
-	        code = bfd_get_8 (abfd, contents + irel->r_offset - 1);
+		temp_code = code = bfd_get_8 (abfd, contents + irel->r_offset - 1);
+		/* If this is a mov.b instruction, clear the lower
+		   nibble, which contains the source/destination
+		   register number.  */
+		if ((temp_code & 0x10) != 0x10)
+		  temp_code &= 0xf0;
 
-	        if ((code & 0xf0) == 0x00)
-		  bfd_put_8 (abfd,
-			     (code & 0xf) | 0x20,
-			      contents + irel->r_offset - 2);
-	        else if ((code & 0xf0) == 0x80)
-		  bfd_put_8 (abfd,
-			     (code & 0xf) | 0x30,
-			      contents + irel->r_offset - 2);
-	        else
-		  abort ();
+		switch (temp_code)
+		  {
+		  case 0x00:
+		    /* This is mov.b @aa:16,Rd.  */
+		    bfd_put_8 (abfd, (code & 0xf) | 0x20,
+			       contents + irel->r_offset - 2);
+		    break;
+		  case 0x80:
+		    /* This is mov.b Rs,@aa:16.  */
+		    bfd_put_8 (abfd, (code & 0xf) | 0x30,
+			       contents + irel->r_offset - 2);
+		    break;
+		  case 0x18:
+		    /* This is a bit-maniputation instruction that
+		       stores one bit into memory, one of "bclr",
+		       "bist", "bnot", "bset", and "bst".  */
+		    bfd_put_8 (abfd, 0x7f, contents + irel->r_offset - 2);
+		    break;
+		  case 0x10:
+		    /* This is a bit-maniputation instruction that
+		       loads one bit from memory, one of "band",
+		       "biand", "bild", "bior", "bixor", "bld", "bor",
+		       "btst", and "bxor".  */
+		    bfd_put_8 (abfd, 0x7e, contents + irel->r_offset - 2);
+		    break;
+		  default:
+		    abort ();
+		  }
 
-	        /* Fix the relocation's type.  */
-	        irel->r_info = ELF32_R_INFO (ELF32_R_SYM (irel->r_info),
+		/* Fix the relocation's type.  */
+		irel->r_info = ELF32_R_INFO (ELF32_R_SYM (irel->r_info),
 					     R_H8_DIR8);
 
-	        /* Delete two bytes of data.  */
-	        if (!elf32_h8_relax_delete_bytes (abfd, sec,
+		/* Move the relocation.  */
+		irel->r_offset--;
+
+		/* Delete two bytes of data.  */
+		if (!elf32_h8_relax_delete_bytes (abfd, sec,
 						  irel->r_offset + 1, 2))
 		  goto error_return;
 
-	        /* That will change things, so, we should relax again.
+		/* That will change things, so, we should relax again.
 		   Note that this is not required, and it may be slow.  */
-	        *again = true;
+		*again = TRUE;
 	      }
 	    break;
 	  }
 
-	/* This is a 24 bit absolute address in a "mov.b" insn, which may
-	   become an 8 bit absolute address if its in the right range.  */
+	/* This is a 24-bit absolute address in one of the following
+	   instructions:
+
+	     "band", "bclr", "biand", "bild", "bior", "bist", "bixor",
+	     "bld", "bnot", "bor", "bset", "bst", "btst", "bxor", and
+	     "mov.b"
+
+	   We may relax this into an 8-bit absolute address if it's in
+	   the right range.  */
 	case R_H8_DIR24A8:
 	  {
-	    bfd_vma value = symval + irel->r_addend;
+	    bfd_vma value;
 
-	    if ((bfd_get_mach (abfd) == bfd_mach_h8300
-	         && value >= 0xff00
-	         && value <= 0xffff)
-	        || ((bfd_get_mach (abfd) == bfd_mach_h8300h
-		     || bfd_get_mach (abfd) == bfd_mach_h8300s)
-		    && value >= 0xffff00
-		    && value <= 0xffffff))
+	    value = bfd_h8300_pad_address (abfd, symval + irel->r_addend);
+	    if (value >= 0xffffff00u)
 	      {
-	        unsigned char code;
+		unsigned char code;
+		unsigned char temp_code;
 
-	        /* Note that we've changed the relocs, section contents,
+		/* Note that we've changed the relocs, section contents,
 		   etc.  */
-	        elf_section_data (sec)->relocs = internal_relocs;
-	        free_relocs = NULL;
+		elf_section_data (sec)->relocs = internal_relocs;
+		elf_section_data (sec)->this_hdr.contents = contents;
+		symtab_hdr->contents = (unsigned char *) isymbuf;
 
-	        elf_section_data (sec)->this_hdr.contents = contents;
-	        free_contents = NULL;
+		/* Get the opcode.  */
+		code = bfd_get_8 (abfd, contents + irel->r_offset - 2);
 
-	        free_extsyms = NULL;
-
-	        /* Get the opcode.  */
-	        code = bfd_get_8 (abfd, contents + irel->r_offset - 2);
-
-	        /* Sanity check.  */
-	        if (code != 0x6a)
+		/* All instructions with R_H8_DIR24A8 start with
+		   0x6a.  */
+		if (code != 0x6a)
 		  abort ();
 
-	        code = bfd_get_8 (abfd, contents + irel->r_offset - 1);
+		temp_code = code = bfd_get_8 (abfd, contents + irel->r_offset - 1);
 
-	        if ((code & 0xf0) == 0x00)
-		  bfd_put_8 (abfd,
-			     (code & 0xf) | 0x20,
-			      contents + irel->r_offset - 2);
-	        else if ((code & 0xf0) == 0x80)
-		  bfd_put_8 (abfd,
-			     (code & 0xf) | 0x30,
-			      contents + irel->r_offset - 2);
-	        else
-		  abort ();
+		/* If this is a mov.b instruction, clear the lower
+		   nibble, which contains the source/destination
+		   register number.  */
+		if ((temp_code & 0x30) != 0x30)
+		  temp_code &= 0xf0;
 
-	        /* Fix the relocation's type.  */
-	        irel->r_info = ELF32_R_INFO (ELF32_R_SYM (irel->r_info),
+		switch (temp_code)
+		  {
+		  case 0x20:
+		    /* This is mov.b @aa:24/32,Rd.  */
+		    bfd_put_8 (abfd, (code & 0xf) | 0x20,
+			       contents + irel->r_offset - 2);
+		    break;
+		  case 0xa0:
+		    /* This is mov.b Rs,@aa:24/32.  */
+		    bfd_put_8 (abfd, (code & 0xf) | 0x30,
+			       contents + irel->r_offset - 2);
+		    break;
+		  case 0x38:
+		    /* This is a bit-maniputation instruction that
+		       stores one bit into memory, one of "bclr",
+		       "bist", "bnot", "bset", and "bst".  */
+		    bfd_put_8 (abfd, 0x7f, contents + irel->r_offset - 2);
+		    break;
+		  case 0x30:
+		    /* This is a bit-maniputation instruction that
+		       loads one bit from memory, one of "band",
+		       "biand", "bild", "bior", "bixor", "bld", "bor",
+		       "btst", and "bxor".  */
+		    bfd_put_8 (abfd, 0x7e, contents + irel->r_offset - 2);
+		    break;
+		  default:
+		    abort();
+		  }
+
+		/* Fix the relocation's type.  */
+		irel->r_info = ELF32_R_INFO (ELF32_R_SYM (irel->r_info),
 					     R_H8_DIR8);
+		irel->r_offset--;
 
-	        /* Delete two bytes of data.  */
-	        if (!elf32_h8_relax_delete_bytes (abfd, sec, irel->r_offset, 2))
+		/* Delete two bytes of data.  */
+		if (!elf32_h8_relax_delete_bytes (abfd, sec,
+						  irel->r_offset + 1, 4))
 		  goto error_return;
 
-	        /* That will change things, so, we should relax again.
+		/* That will change things, so, we should relax again.
 		   Note that this is not required, and it may be slow.  */
-	        *again = true;
+		*again = TRUE;
+		break;
 	      }
 	  }
 
-	/* FALLTHRU */
+	  /* Fall through.  */
 
-	/* This is a 24/32bit absolute address in a "mov" insn, which may
-	   become a 16bit absoulte address if it is in the right range.  */
+	  /* This is a 24-/32-bit absolute address in one of the
+	     following instructions:
+
+	       "band", "bclr", "biand", "bild", "bior", "bist",
+	       "bixor", "bld", "bnot", "bor", "bset", "bst", "btst",
+	       "bxor", "ldc.w", "stc.w" and "mov.[bwl]"
+
+	     We may relax this into an 16-bit absolute address if it's
+	     in the right range.  */
 	case R_H8_DIR32A16:
 	  {
-	    bfd_vma value = symval + irel->r_addend;
+	    bfd_vma value;
 
-	    if (value <= 0x7fff || value >= 0xff8000)
+	    value = bfd_h8300_pad_address (abfd, symval + irel->r_addend);
+	    if (value <= 0x7fff || value >= 0xffff8000u)
 	      {
-	        unsigned char code;
+		unsigned char code;
 
-	        /* Note that we've changed the relocs, section contents,
+		/* Note that we've changed the relocs, section contents,
 		   etc.  */
-	        elf_section_data (sec)->relocs = internal_relocs;
-	        free_relocs = NULL;
+		elf_section_data (sec)->relocs = internal_relocs;
+		elf_section_data (sec)->this_hdr.contents = contents;
+		symtab_hdr->contents = (unsigned char *) isymbuf;
 
-	        elf_section_data (sec)->this_hdr.contents = contents;
-	        free_contents = NULL;
+		/* Get the opcode.  */
+		code = bfd_get_8 (abfd, contents + irel->r_offset - 1);
 
-	        free_extsyms = NULL;
+		/* Fix the opcode.  For all the instructions that
+		   belong to this relaxation, we simply need to turn
+		   off bit 0x20 in the previous byte.  */
+		code &= ~0x20;
 
-	        /* Get the opcode.  */
-	        code = bfd_get_8 (abfd, contents + irel->r_offset - 1);
+		bfd_put_8 (abfd, code, contents + irel->r_offset - 1);
 
-	        /* We just need to turn off bit 0x20.  */
-	        code &= ~0x20;
+		/* Fix the relocation's type.  */
+		irel->r_info = ELF32_R_INFO (ELF32_R_SYM (irel->r_info),
+					     R_H8_DIR16);
 
-	        bfd_put_8 (abfd, code, contents + irel->r_offset - 1);
-
-	        /* Fix the relocation's type.  */
-	        irel->r_info = ELF32_R_INFO (ELF32_R_SYM (irel->r_info),
-					     R_H8_DIR16A8);
-
-	        /* Delete two bytes of data.  */
-	        if (!elf32_h8_relax_delete_bytes (abfd, sec,
+		/* Delete two bytes of data.  */
+		if (!elf32_h8_relax_delete_bytes (abfd, sec,
 						  irel->r_offset + 1, 2))
 		  goto error_return;
 
-	        /* That will change things, so, we should relax again.
+		/* That will change things, so, we should relax again.
 		   Note that this is not required, and it may be slow.  */
-	        *again = true;
+		*again = TRUE;
 	      }
 	    break;
 	  }
@@ -1222,84 +1248,62 @@ elf32_h8_relax_section (abfd, sec, link_info, again)
 	}
     }
 
-  if (free_relocs != NULL)
-    {
-      free (free_relocs);
-      free_relocs = NULL;
-    }
-
-  if (free_contents != NULL)
+  if (isymbuf != NULL
+      && symtab_hdr->contents != (unsigned char *) isymbuf)
     {
       if (! link_info->keep_memory)
-	free (free_contents);
+	free (isymbuf);
+      else
+	symtab_hdr->contents = (unsigned char *) isymbuf;
+    }
+
+  if (contents != NULL
+      && elf_section_data (sec)->this_hdr.contents != contents)
+    {
+      if (! link_info->keep_memory)
+	free (contents);
       else
 	{
 	  /* Cache the section contents for elf_link_input_bfd.  */
 	  elf_section_data (sec)->this_hdr.contents = contents;
 	}
-      free_contents = NULL;
     }
 
-  if (shndx_buf != NULL)
-    {
-      shndx_hdr->contents = NULL;
-      free (shndx_buf);
-    }
+  if (internal_relocs != NULL
+      && elf_section_data (sec)->relocs != internal_relocs)
+    free (internal_relocs);
 
-  if (free_extsyms != NULL)
-    {
-      if (! link_info->keep_memory)
-	{
-	  symtab_hdr->contents = NULL;
-	  free (free_extsyms);
-	}
-    }
-
-  return true;
+  return TRUE;
 
  error_return:
-  if (free_relocs != NULL)
-    free (free_relocs);
-  if (free_contents != NULL)
-    free (free_contents);
-  if (shndx_buf != NULL)
-    {
-      shndx_hdr->contents = NULL;
-      free (shndx_buf);
-    }
-  if (free_extsyms != NULL)
-    {
-      symtab_hdr->contents = NULL;
-      free (free_extsyms);
-    }
-  return false;
+  if (isymbuf != NULL
+      && symtab_hdr->contents != (unsigned char *) isymbuf)
+    free (isymbuf);
+  if (contents != NULL
+      && elf_section_data (sec)->this_hdr.contents != contents)
+    free (contents);
+  if (internal_relocs != NULL
+      && elf_section_data (sec)->relocs != internal_relocs)
+    free (internal_relocs);
+  return FALSE;
 }
 
 /* Delete some bytes from a section while relaxing.  */
 
-static boolean
-elf32_h8_relax_delete_bytes (abfd, sec, addr, count)
-     bfd *abfd;
-     asection *sec;
-     bfd_vma addr;
-     int count;
+static bfd_boolean
+elf32_h8_relax_delete_bytes (bfd *abfd, asection *sec, bfd_vma addr, int count)
 {
   Elf_Internal_Shdr *symtab_hdr;
-  Elf_Internal_Shdr *shndx_hdr;
-  Elf32_External_Sym *extsyms;
   unsigned int sec_shndx;
   bfd_byte *contents;
   Elf_Internal_Rela *irel, *irelend;
   Elf_Internal_Rela *irelalign;
+  Elf_Internal_Sym *isym;
+  Elf_Internal_Sym *isymend;
   bfd_vma toaddr;
-  Elf32_External_Sym *esym, *esymend;
-  Elf_External_Sym_Shndx *shndx;
   struct elf_link_hash_entry **sym_hashes;
   struct elf_link_hash_entry **end_hashes;
   unsigned int symcount;
-
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
-  extsyms = (Elf32_External_Sym *) symtab_hdr->contents;
 
   sec_shndx = _bfd_elf_section_from_bfd_section (abfd, sec);
 
@@ -1329,24 +1333,15 @@ elf32_h8_relax_delete_bytes (abfd, sec, addr, count)
     }
 
   /* Adjust the local symbols defined in this section.  */
-  shndx_hdr = &elf_tdata (abfd)->symtab_shndx_hdr;
-  shndx = (Elf_External_Sym_Shndx *) shndx_hdr->contents;
-  esym = extsyms;
-  esymend = esym + symtab_hdr->sh_info;
-  for (; esym < esymend; esym++, shndx = (shndx ? shndx + 1 : NULL))
+  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  isym = (Elf_Internal_Sym *) symtab_hdr->contents;
+  isymend = isym + symtab_hdr->sh_info;
+  for (; isym < isymend; isym++)
     {
-      Elf_Internal_Sym isym;
-      Elf_External_Sym_Shndx dummy;
-
-      bfd_elf32_swap_symbol_in (abfd, esym, shndx, &isym);
-
-      if (isym.st_shndx == sec_shndx
-	  && isym.st_value > addr
-	  && isym.st_value < toaddr)
-	{
-	  isym.st_value -= count;
-	  bfd_elf32_swap_symbol_out (abfd, &isym, esym, &dummy);
-	}
+      if (isym->st_shndx == sec_shndx
+	  && isym->st_value > addr
+	  && isym->st_value < toaddr)
+	isym->st_value -= count;
     }
 
   /* Now adjust the global symbols defined in this section.  */
@@ -1367,22 +1362,18 @@ elf32_h8_relax_delete_bytes (abfd, sec, addr, count)
 	}
     }
 
-  return true;
+  return TRUE;
 }
 
-/* Return true if a symbol exists at the given address, else return
-   false.  */
-static boolean
-elf32_h8_symbol_address_p (abfd, sec, addr)
-     bfd *abfd;
-     asection *sec;
-     bfd_vma addr;
+/* Return TRUE if a symbol exists at the given address, else return
+   FALSE.  */
+static bfd_boolean
+elf32_h8_symbol_address_p (bfd *abfd, asection *sec, bfd_vma addr)
 {
   Elf_Internal_Shdr *symtab_hdr;
-  Elf_Internal_Shdr *shndx_hdr;
   unsigned int sec_shndx;
-  Elf32_External_Sym *esym, *esymend;
-  Elf_External_Sym_Shndx *shndx;
+  Elf_Internal_Sym *isym;
+  Elf_Internal_Sym *isymend;
   struct elf_link_hash_entry **sym_hashes;
   struct elf_link_hash_entry **end_hashes;
   unsigned int symcount;
@@ -1391,19 +1382,13 @@ elf32_h8_symbol_address_p (abfd, sec, addr)
 
   /* Examine all the symbols.  */
   symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
-  shndx_hdr = &elf_tdata (abfd)->symtab_shndx_hdr;
-  shndx = (Elf_External_Sym_Shndx *) shndx_hdr->contents;
-  esym = (Elf32_External_Sym *) symtab_hdr->contents;
-  esymend = esym + symtab_hdr->sh_info;
-  for (; esym < esymend; esym++, shndx = (shndx ? shndx + 1 : NULL))
+  isym = (Elf_Internal_Sym *) symtab_hdr->contents;
+  isymend = isym + symtab_hdr->sh_info;
+  for (; isym < isymend; isym++)
     {
-      Elf_Internal_Sym isym;
-
-      bfd_elf32_swap_symbol_in (abfd, esym, shndx, &isym);
-
-      if (isym.st_shndx == sec_shndx
-	  && isym.st_value == addr)
-	return true;
+      if (isym->st_shndx == sec_shndx
+	  && isym->st_value == addr)
+	return TRUE;
     }
 
   symcount = (symtab_hdr->sh_size / sizeof (Elf32_External_Sym)
@@ -1417,47 +1402,40 @@ elf32_h8_symbol_address_p (abfd, sec, addr)
 	   || sym_hash->root.type == bfd_link_hash_defweak)
 	  && sym_hash->root.u.def.section == sec
 	  && sym_hash->root.u.def.value == addr)
-	return true;
+	return TRUE;
     }
 
-  return false;
+  return FALSE;
 }
 
 /* This is a version of bfd_generic_get_relocated_section_contents
    which uses elf32_h8_relocate_section.  */
 
 static bfd_byte *
-elf32_h8_get_relocated_section_contents (output_bfd, link_info, link_order,
-					 data, relocateable, symbols)
-     bfd *output_bfd;
-     struct bfd_link_info *link_info;
-     struct bfd_link_order *link_order;
-     bfd_byte *data;
-     boolean relocateable;
-     asymbol **symbols;
+elf32_h8_get_relocated_section_contents (bfd *output_bfd,
+					 struct bfd_link_info *link_info,
+					 struct bfd_link_order *link_order,
+					 bfd_byte *data,
+					 bfd_boolean relocatable,
+					 asymbol **symbols)
 {
   Elf_Internal_Shdr *symtab_hdr;
-  Elf_Internal_Shdr *shndx_hdr;
   asection *input_section = link_order->u.indirect.section;
   bfd *input_bfd = input_section->owner;
   asection **sections = NULL;
   Elf_Internal_Rela *internal_relocs = NULL;
-  Elf32_External_Sym *external_syms = NULL;
-  Elf_External_Sym_Shndx *shndx_buf = NULL;
-  Elf_External_Sym_Shndx *shndx;
-  Elf_Internal_Sym *internal_syms = NULL;
+  Elf_Internal_Sym *isymbuf = NULL;
 
   /* We only need to handle the case of relaxing, or of having a
      particular set of section contents, specially.  */
-  if (relocateable
+  if (relocatable
       || elf_section_data (input_section)->this_hdr.contents == NULL)
     return bfd_generic_get_relocated_section_contents (output_bfd, link_info,
 						       link_order, data,
-						       relocateable,
+						       relocatable,
 						       symbols);
 
   symtab_hdr = &elf_tdata (input_bfd)->symtab_hdr;
-  shndx_hdr = &elf_tdata (input_bfd)->symtab_shndx_hdr;
 
   memcpy (data, elf_section_data (input_section)->this_hdr.contents,
 	  (size_t) input_section->_raw_size);
@@ -1465,48 +1443,26 @@ elf32_h8_get_relocated_section_contents (output_bfd, link_info, link_order,
   if ((input_section->flags & SEC_RELOC) != 0
       && input_section->reloc_count > 0)
     {
-      Elf_Internal_Sym *isymp;
       asection **secpp;
-      Elf32_External_Sym *esym, *esymend;
+      Elf_Internal_Sym *isym, *isymend;
       bfd_size_type amt;
 
-      if (symtab_hdr->contents != NULL)
-	external_syms = (Elf32_External_Sym *) symtab_hdr->contents;
-      else if (symtab_hdr->sh_info != 0)
-	{
-	  amt = symtab_hdr->sh_info;
-	  amt *= sizeof (Elf32_External_Sym);
-	  external_syms = (Elf32_External_Sym *) bfd_malloc (amt);
-	  if (external_syms == NULL)
-	    goto error_return;
-	  if (bfd_seek (input_bfd, symtab_hdr->sh_offset, SEEK_SET) != 0
-	      || bfd_bread ((PTR) external_syms, amt, input_bfd) != amt)
-	    goto error_return;
-	}
-
-      if (symtab_hdr->sh_info != 0 && shndx_hdr->sh_size != 0)
-	{
-	  amt = symtab_hdr->sh_info;
-	  amt *= sizeof (Elf_External_Sym_Shndx);
-	  shndx_buf = (Elf_External_Sym_Shndx *) bfd_malloc (amt);
-	  if (shndx_buf == NULL)
-	    goto error_return;
-	  if (bfd_seek (input_bfd, shndx_hdr->sh_offset, SEEK_SET) != 0
-	      || bfd_bread ((PTR) shndx_buf, amt, input_bfd) != amt)
-	    goto error_return;
-	}
-
-      internal_relocs = (_bfd_elf32_link_read_relocs
+      internal_relocs = (_bfd_elf_link_read_relocs
 			 (input_bfd, input_section, (PTR) NULL,
-			  (Elf_Internal_Rela *) NULL, false));
+			  (Elf_Internal_Rela *) NULL, FALSE));
       if (internal_relocs == NULL)
 	goto error_return;
 
-      amt = symtab_hdr->sh_info;
-      amt *= sizeof (Elf_Internal_Sym);
-      internal_syms = (Elf_Internal_Sym *) bfd_malloc (amt);
-      if (internal_syms == NULL && amt != 0)
-	goto error_return;
+      if (symtab_hdr->sh_info != 0)
+	{
+	  isymbuf = (Elf_Internal_Sym *) symtab_hdr->contents;
+	  if (isymbuf == NULL)
+	    isymbuf = bfd_elf_get_elf_syms (input_bfd, symtab_hdr,
+					    symtab_hdr->sh_info, 0,
+					    NULL, NULL, NULL);
+	  if (isymbuf == NULL)
+	    goto error_return;
+	}
 
       amt = symtab_hdr->sh_info;
       amt *= sizeof (asection *);
@@ -1514,59 +1470,85 @@ elf32_h8_get_relocated_section_contents (output_bfd, link_info, link_order,
       if (sections == NULL && amt != 0)
 	goto error_return;
 
-      for (isymp = internal_syms, secpp = sections, shndx = shndx_buf,
-	     esym = external_syms, esymend = esym + symtab_hdr->sh_info;
-	   esym < esymend;
-	   ++esym, ++isymp, ++secpp, shndx = (shndx ? shndx + 1 : NULL))
+      isymend = isymbuf + symtab_hdr->sh_info;
+      for (isym = isymbuf, secpp = sections; isym < isymend; ++isym, ++secpp)
 	{
 	  asection *isec;
 
-	  bfd_elf32_swap_symbol_in (input_bfd, esym, shndx, isymp);
-
-	  if (isymp->st_shndx == SHN_UNDEF)
+	  if (isym->st_shndx == SHN_UNDEF)
 	    isec = bfd_und_section_ptr;
-	  else if (isymp->st_shndx == SHN_ABS)
+	  else if (isym->st_shndx == SHN_ABS)
 	    isec = bfd_abs_section_ptr;
-	  else if (isymp->st_shndx == SHN_COMMON)
+	  else if (isym->st_shndx == SHN_COMMON)
 	    isec = bfd_com_section_ptr;
 	  else
-	    isec = bfd_section_from_elf_index (input_bfd, isymp->st_shndx);
+	    isec = bfd_section_from_elf_index (input_bfd, isym->st_shndx);
 
 	  *secpp = isec;
 	}
 
       if (! elf32_h8_relocate_section (output_bfd, link_info, input_bfd,
 				       input_section, data, internal_relocs,
-				       internal_syms, sections))
+				       isymbuf, sections))
 	goto error_return;
 
       if (sections != NULL)
 	free (sections);
-      if (internal_syms != NULL)
-	free (internal_syms);
-      if (shndx_buf != NULL)
-	free (shndx_buf);
-      if (external_syms != NULL && symtab_hdr->contents == NULL)
-	free (external_syms);
-      if (internal_relocs != elf_section_data (input_section)->relocs)
+      if (isymbuf != NULL
+	  && symtab_hdr->contents != (unsigned char *) isymbuf)
+	free (isymbuf);
+      if (elf_section_data (input_section)->relocs != internal_relocs)
 	free (internal_relocs);
     }
 
   return data;
 
  error_return:
-  if (internal_relocs != NULL
-      && internal_relocs != elf_section_data (input_section)->relocs)
-    free (internal_relocs);
-  if (shndx_buf != NULL)
-    free (shndx_buf);
-  if (external_syms != NULL && symtab_hdr->contents == NULL)
-    free (external_syms);
-  if (internal_syms != NULL)
-    free (internal_syms);
   if (sections != NULL)
     free (sections);
+  if (isymbuf != NULL
+      && symtab_hdr->contents != (unsigned char *) isymbuf)
+    free (isymbuf);
+  if (internal_relocs != NULL
+      && elf_section_data (input_section)->relocs != internal_relocs)
+    free (internal_relocs);
   return NULL;
+}
+
+static asection *
+elf32_h8_gc_mark_hook (asection *sec,
+		       struct bfd_link_info *info ATTRIBUTE_UNUSED,
+		       Elf_Internal_Rela *rel ATTRIBUTE_UNUSED,
+		       struct elf_link_hash_entry *h,
+		       Elf_Internal_Sym *sym)
+{
+  if (h != NULL)
+    {
+      switch (h->root.type)
+        {
+	case bfd_link_hash_defined:
+	case bfd_link_hash_defweak:
+          return h->root.u.def.section;
+
+	case bfd_link_hash_common:
+          return h->root.u.c.p->section;
+
+	default:
+          break;
+        }
+    }
+  else
+    return bfd_section_from_elf_index (sec->owner, sym->st_shndx);
+  return NULL;
+}
+
+static bfd_boolean
+elf32_h8_gc_sweep_hook (bfd *abfd ATTRIBUTE_UNUSED,
+			struct bfd_link_info *info ATTRIBUTE_UNUSED,
+			asection *sec ATTRIBUTE_UNUSED,
+			const Elf_Internal_Rela *relocs ATTRIBUTE_UNUSED)
+{
+  return TRUE;
 }
 
 
@@ -1587,6 +1569,8 @@ elf32_h8_get_relocated_section_contents (output_bfd, link_info, link_order,
   elf32_h8_object_p
 #define bfd_elf32_bfd_merge_private_bfd_data \
   elf32_h8_merge_private_bfd_data
+#define elf_backend_gc_mark_hook        elf32_h8_gc_mark_hook
+#define elf_backend_gc_sweep_hook       elf32_h8_gc_sweep_hook
 
 /* ??? when elf_backend_relocate_section is not defined, elf32-target.h
    defaults to using _bfd_generic_link_hash_table_create, but
@@ -1597,6 +1581,8 @@ elf32_h8_get_relocated_section_contents (output_bfd, link_info, link_order,
 
 /* Use an H8 specific linker, not the ELF generic linker.  */
 #define elf_backend_relocate_section elf32_h8_relocate_section
+#define elf_backend_rela_normal		1
+#define elf_backend_can_gc_sections	1
 
 /* And relaxing stuff.  */
 #define bfd_elf32_bfd_relax_section     elf32_h8_relax_section

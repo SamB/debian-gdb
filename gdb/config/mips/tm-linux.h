@@ -1,6 +1,6 @@
 /* Target-dependent definitions for GNU/Linux MIPS.
 
-   Copyright 2001, 2002 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2004 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -26,41 +26,18 @@
 
 /* We don't want to inherit tm-mips.h's shared library trampoline code.  */
 
-#undef IN_SOLIB_CALL_TRAMPOLINE
 #undef IN_SOLIB_RETURN_TRAMPOLINE
 #undef SKIP_TRAMPOLINE_CODE
 #undef IGNORE_HELPER_CALL
 
 /* GNU/Linux MIPS has __SIGRTMAX == 127.  */
 
+#ifndef REALTIME_LO
 #define REALTIME_LO 32
 #define REALTIME_HI 128
+#endif
 
-#include "tm-linux.h"
-
-/* There's an E_MIPS_ABI_O32 flag in e_flags, but we don't use it - in
-   fact, using it may violate the o32 ABI.  */
-
-#define MIPS_DEFAULT_ABI MIPS_ABI_O32
-
-/* Use target_specific function to define link map offsets.  */
-
-extern struct link_map_offsets *mips_linux_svr4_fetch_link_map_offsets (void);
-#define SVR4_FETCH_LINK_MAP_OFFSETS() \
-  mips_linux_svr4_fetch_link_map_offsets ()
-
-/* Details about jmp_buf.  */
-
-#define JB_ELEMENT_SIZE 4
-#define JB_PC 0
-
-/* Figure out where the longjmp will land.  Slurp the arguments out of the
-   stack.  We expect the first arg to be a pointer to the jmp_buf structure
-   from which we extract the pc (JB_PC) that we will land at.  The pc is
-   copied into ADDR.  This routine returns 1 on success.  */
-
-#define GET_LONGJMP_TARGET(ADDR) mips_linux_get_longjmp_target(ADDR)
-extern int mips_linux_get_longjmp_target (CORE_ADDR *);
+#include "config/tm-linux.h"
 
 /* We do single stepping in software.  */
 
@@ -71,5 +48,15 @@ extern int mips_linux_get_longjmp_target (CORE_ADDR *);
 
 #undef  IN_SIGTRAMP
 #define IN_SIGTRAMP(pc, name)	(0)
+
+#undef IN_SOLIB_DYNSYM_RESOLVE_CODE
+#define IN_SOLIB_DYNSYM_RESOLVE_CODE(PC) mips_linux_in_dynsym_resolve_code (PC)
+int mips_linux_in_dynsym_resolve_code (CORE_ADDR pc);
+
+/* We don't want all of tm-sysv4.h's shared library trampoline code either.
+   Note that by undefining IN_SOLIB_CALL_TRAMPOLINE here we will use the
+   gdbarch vector's version instead.  */
+
+#undef IN_SOLIB_CALL_TRAMPOLINE
 
 #endif /* TM_MIPSLINUX_H */

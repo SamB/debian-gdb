@@ -1,3 +1,187 @@
+2003-12-29  Mark Mitchell  <mark@codesourcery.com>
+
+	* armos.c (fcntl.h): Do not include it.
+	(O_RDONLY): Do not define.
+	(O_WRONLY): Likewise.
+	(O_RDWR): Likewise.
+	(targ-vals.h): Include it.
+	(translate_open_mode): Use TARGET_O_* instead of O_*.
+	(SWIopen): Likewise.
+	* Makefile.in (armos.o): Depend on targ-vals.h.
+
+2003-04-13  Nick Clifton  <nickc@redhat.com>
+
+	* armvirt.c (GetWord): Only call XScale_check_memacc if in XScale
+	mode.
+	(PutWord): Likewise.
+
+2003-03-30  Nick Clifton  <nickc@redhat.com>
+
+	* configure.in (CON_FLAGS): Remove.
+	(COPRO): Unconditionally include iwmmxt.o.
+	* configure: Regenerate.
+	* Makefile.in (CON_FLAGS): Remove.
+	* armcopro.c: Remove use of __IWMMXT__ flag.
+	* wrapper.c: Likewise.
+	* armemu.c: Likewise.
+	Add explanatory comment for suppressed code.
+
+2003-03-27  Nick Clifton  <nickc@redhat.com>
+
+	* armos.c (ARMul_OsHandleSWI): Catch SWIs for unhandled vectors.
+
+2003-03-27  Nick Clifton  <nickc@redhat.com>
+
+	* configure.in: (CON_FLAGS): Define and intialise.
+	(COPRO): Add iwmmxt.o if configuring for XScale.
+	* configure: Regenerate.
+	* Makefile.in (iwmmxt.o): Add rule to build.
+	(COM_FLAGS): Define.
+	(ALL_FLAGS): Add CON_FLAGS.
+	* armcopro.c (ARMul_CoProInit): Initialise iWMMXt coprocessors.
+	* armdefs.h (struct ARMul_State): Add 'is_iWMMXt' field.
+	(ARM_iWMMXt_Prop): Define.
+	* armemu.c (ARMul_Emulate16): Intercept iWMMXt instructions and
+	pass to coprocessor.
+	* arminit.c (ARMul_NewState): Initialise 'is_iWMMXt'.
+	(ARMul_Abort): Catch branches through uninitialised vectors.
+	* armos.c (softevtorcode): Update comment.
+	(ARMul_OsInit): Use ARMUndefinedInstrV.
+	* wrapper.c (sim_create_inferior): Handle iWMMXt processor type.
+	(sim_store_register): Handle iWMMXt registers.
+	(sim_fetch_register): Handle iWMMXt registers.
+	* iwmmxt.h: New file. Exported iWMMXt coprocessor emulator
+	functions.
+	* iwmmxt.c: New file: iWMMXt emulator.
+
+2003-03-20  Nick Clifton  <nickc@redhat.com>
+
+	* Contribute support for Cirrus Maverick ARM co-processor,
+        written by Aldy Hernandez  <aldyh@redhat.com> and
+        Andrew Cagney  <cagney@redhat.com>:
+
+	* maverick.c: New file: Support for Maverick floating point
+	co-processor. 
+        * Makefile.in: Add maverick.o target.
+        * configure.in (COPRO): Add maverick.o.
+        * configure: Regenerate.
+        * armcopro.c (ARMul_CoProInit): Only initialise co-processors
+	available on target processor.  Add code to initialse Maverick
+	co-processor support code.
+        * armdefs.h (ARMul_state): Add is_ep9312 field.
+        (ARM_ep9312_Prop): Define.
+        * armemu.h: Add prototypes for Maverick co-processor
+	functions.
+        * arminit.c (ARMul_SelectProcessor): Initialise the
+	co-processor support once the chip has been selected.
+        * wrapper.c: Add support for Maverick co-processor.
+        (init): Do not call ARMul_CoProInit.  Delays this until the
+	chip has been selected.
+
+2003-03-02  Nick Clifton  <nickc@redhat.com>
+
+	* armos.c (SWIWrite0): Catch big-endian bug when printing
+	characters.
+
+2003-02-27  Andrew Cagney  <cagney@redhat.com>
+
+	* wrapper.c (sim_create_inferior, sim_open): Rename _bfd to bfd.
+	
+2003-01-10  Ben Elliston  <bje@redhat.com>
+
+	* README.Cygnus: Rename from this ..
+	* README: .. to this.
+
+2002-09-27  Andrew Cagney  <ac131313@redhat.com>
+
+	* wrapper.c (sim_open): Add support for -m<mem-size>.
+	(mem_size): Reduce to 2MB.
+	Fix PR gdb/433.
+
+2002-08-15  Nick Clifton  <nickc@redhat.com>
+
+	* armos.c (ARMul_OSHandleSWI): Catch and ignore SWIs of -1, they
+	can be caused by an interrupted system call being resumed by GDB.
+
+2002-07-05  Nick Clifton  <nickc@cambridge.redhat.com>
+
+	* armemu.c (ARMul_Emulate32): Add more tests for valid MIA, MIAPH
+	and MIAxy instructions.
+	
+2002-06-21  Nick Clifton  <nickc@cambridge.redhat.com>
+
+	* armos.h (ADP_Stopped_RunTimeError): Set correct value.
+
+2002-06-16  Andrew Cagney  <ac131313@redhat.com>
+
+	* configure: Regenerated to track ../common/aclocal.m4 changes.
+
+2002-06-12  Andrew Cagney  <ac131313@redhat.com>
+
+	* Makefile.in: Update copyright.
+	(wrapper.o): Specify dependencies.
+	* wrapper.c: Include "gdb/sim-arm.h".
+	(sim_store_register, sim_fetch_register): Rewrite using `enum
+	arm_sim_regs' and a switch.
+
+2002-06-09  Andrew Cagney  <cagney@redhat.com>
+
+	* wrapper.c: Include "gdb/callback.h" and "gdb/remote-sim.h".
+	* armos.c: Include "gdb/callback.h".
+
+2002-05-29  Nick Clifton  <nickc@cambridge.redhat.com>
+
+	* armcopro.c (XScale_check_memacc): Set the FSR and FAR registers
+	if a Data Abort is detected.
+
+2002-05-27  Nick Clifton  <nickc@cambridge.redhat.com>
+
+	* armvirt.c (GetWord): Only perform access checks if 'check'
+	is set.
+	(PutWord): Likewise.
+	* wrapper.c (sim_create_inferior): Report unknown machine
+	numbers.
+	* thumbemu.c (ARMul_ThumbDecode, Case 31): Do not set LR to pc +
+	2, it has already been advanced.
+
+2002-05-23  Nick Clifton  <nickc@cambridge.redhat.com>
+
+	* thumbemu.c (ARMul_ThumbDecode): When decoding a BLX(1)
+	instruction do not add in the second bit of the base address -
+	this has already been accounted for.
+
+2002-05-21  Nick Clifton  <nickc@cambridge.redhat.com>
+
+	* armcopro.c (check_cp13_access): Allow access to register 1 when
+	CRm is 1.
+	(write_cp13_reg): Allow bit 0 of reg 1 of CRm 1 to be written to.
+
+2002-05-17  Nick Clifton  <nickc@cambridge.redhat.com>
+
+	* Makefile.in (SIM_TARGET_SWITCHES): Define.
+	* armos.c (swi_mask): Define.  Initialise to supporting all
+	SWI emulations.
+	(ARMul_OSInit): For XScale targets, only support the ANGEL
+	SWI interface.  (This is at the request if Intel).
+	(ARMul_OSHandleSWI): Examine swi_mask to see if a particular
+        SWI call should be emulated.
+	Do not fall through from AngelSWI_Reason_WriteC.
+	Propagate exit code from RedBoot Exit SWI.
+	* rdi-dgb.h (swi_mask): Prototype.
+	(SWI_MASK_DEMON, SWI_MASK_ANGEL, SWI_MASK_REDBOOT): Define.
+	* wrapper.c (sim_target_parse_command_line): New function.
+	Look for and handle --swi-support switch.
+	(sim_target_parse_arg_array): New function.  Process an argv
+	array for parsing by sim_target_parse_command_line.
+	(sim_target_display_usage): New function.  Describe syntax of
+	--swi-suppoort switch.
+	(sim_open): Add call to sim_target_parse_arg_array).
+
+2002-05-09  Nick Clifton  <nickc@cambridge.redhat.com>
+
+	* armos.c (ARMul_OSHandleSWI): Support the RedBoot SWI in ARM
+	mode and some of its system calls.
+
 2002-03-17  Anthony Green  <green@redhat.com>
 
 	* wrapper.c (mem_size): Increase the default target memory to 8MB.

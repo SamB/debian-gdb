@@ -1,3 +1,87 @@
+2004-01-26  Chris Demetriou  <cgd@broadcom.com>
+
+	* configure.in (mips*-*-*): Configure in testsuite.
+	* configure: Regenerate.
+
+2003-10-08  Dave Brolley  <brolley@redhat.com>
+
+	* configure.in: Move frv handling to alphabetically correct placement.
+
+2003-09-03  Andreas Schwab  <schwab@suse.de>
+
+	* Makefile.in (FLAGS_TO_PASS): Pass down $(bindir) and $(mandir).
+
+2003-08-29  Dave Brolley  <brolley@redhat.com>
+
+	* MAINTAINERS: Add myself as maintainer of the FRV port.
+
+2003-08-20  Michael Snyder  <msnyder@redhat.com>
+            Dave Brolley  <brolley@redhat.com>
+
+	* frv/: New directory, simulator for the Fujitsu FRV.
+	* configure.in: Add frv configury.
+	* configure: Regenerate.
+
+2003-08-10  Ben Elliston  <bje@wasabisystems.com>
+
+	* MAINTAINERS: Update my mail address.
+
+2003-08-09  Andrew Cagney  <cagney@redhat.com>
+
+	* MAINTAINERS: Andrew Cagney (mips) and Geoff Keating (ppc) drop
+	maintenance.  List igen and sh maintainers.  Mention that target
+	and global maintainers pick up the slack.
+
+2003-07-09  Michael Snyder  <msnyder@redhat.com>
+
+	* configure.in: Add testsuite to extra_subdirs for sh.
+	* configure: Regenerate.
+
+2003-01-23  Nick Clifton  <nickc@redhat.com>
+
+	* Add sh2e support:
+
+2002-04-02  Alexandre Oliva  <aoliva@redhat.com>
+
+	* sh/gencode.c: Replace sh3e with sh2e except in fsqrt.
+
+2002-08-24  Geoffrey Keating  <geoffk@redhat.com>
+
+	* MAINTAINERS: Update my email address.
+
+2002-07-17  Andrew Cagney  <ac131313@redhat.com>
+
+	* w65/: Delete directory.
+
+2002-07-16  Andrew Cagney  <ac131313@redhat.com>
+
+	* configure.in (extra_subdirs): Mark fr30-*-* as obsolete.
+	* configure: Re-generate.
+
+2002-07-13  Andrew Cagney  <ac131313@redhat.com>
+
+	* configure.in (extra_subdirs): Mark d30v-*-* as obsolete.
+	* configure: Re-generate.
+	
+2002-06-16  Andrew Cagney  <ac131313@redhat.com>
+
+	* Makefile.in (autoconf-changelog autoheader-changelog): Let name,
+	id, date and host to be overriden by NAME, ID, DATE and HOST
+	respectfully.  Use ISO dates.
+
+Thu Jun  6 12:34:13 2002  Andrew Cagney  <cagney@redhat.com>
+
+	* Makefile.in (ChangeLog): New makefile variable.
+	* README-HACKING: Mention the ChangeLog makefile variable.
+
+2002-06-01  Andrew Cagney  <ac131313@redhat.com>
+
+	* tic80/: Delete directory.
+
+2002-05-16  Stephane Carrez  <stcarrez@nerim.fr>
+
+	* MAINTAINERS: Update my email address.
+
 2002-03-06  Stephane Carrez  <Stephane.Carrez@worldnet.fr>
 
 	* MAINTAINERS: Record self as maintainer of m68hc11 simulator.

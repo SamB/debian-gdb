@@ -1,0 +1,43 @@
+Debian-local:
+  Use the Development section.  Among other problems, the & caused debhelper
+to get confused.
+
+Index: gdb-6.1/gdb/doc/gdb.texinfo
+===================================================================
+--- gdb-6.1.orig/gdb/doc/gdb.texinfo	2004-04-05 13:26:42.000000000 -0400
++++ gdb-6.1/gdb/doc/gdb.texinfo	2004-04-05 13:26:46.000000000 -0400
+@@ -38,7 +38,7 @@
+ 
+ @c This is a dir.info fragment to support semi-automated addition of
+ @c manuals to an info tree.
+-@dircategory Programming & development tools.
++@dircategory Development
+ @direntry
+ * Gdb: (gdb).                     The @sc{gnu} debugger.
+ @end direntry
+Index: gdb-6.1/gdb/doc/gdbint.texinfo
+===================================================================
+--- gdb-6.1.orig/gdb/doc/gdbint.texinfo	2004-04-05 13:26:42.000000000 -0400
++++ gdb-6.1/gdb/doc/gdbint.texinfo	2004-04-05 13:26:46.000000000 -0400
+@@ -1,7 +1,7 @@
+ \input texinfo   @c -*- texinfo -*-
+ @setfilename gdbint.info
+ @include gdb-cfg.texi
+-@dircategory Programming & development tools.
++@dircategory Development
+ @direntry
+ * Gdb-Internals: (gdbint).	The GNU debugger's internals.
+ @end direntry
+Index: gdb-6.1/gdb/doc/stabs.texinfo
+===================================================================
+--- gdb-6.1.orig/gdb/doc/stabs.texinfo	2004-04-05 13:26:42.000000000 -0400
++++ gdb-6.1/gdb/doc/stabs.texinfo	2004-04-05 13:26:46.000000000 -0400
+@@ -5,7 +5,7 @@
+ 
+ @c This is a dir.info fragment to support semi-automated addition of
+ @c manuals to an info tree.
+-@dircategory Programming & development tools.
++@dircategory Development
+ @direntry
+ * Stabs: (stabs).                 The "stabs" debugging information format.   
+ @end direntry

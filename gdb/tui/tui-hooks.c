@@ -1,6 +1,6 @@
 /* GDB hooks for TUI.
 
-   Copyright 2001, 2002 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,23 +19,6 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-/* FIXME: cagney/2002-02-28: The GDB coding standard indicates that
-   "defs.h" should be included first.  Unfortunatly some systems
-   (currently Debian GNU/Linux) include the <stdbool.h> via <curses.h>
-   and they clash with "bfd.h"'s definiton of true/false.  The correct
-   fix is to remove true/false from "bfd.h", however, until that
-   happens, hack around it by including "config.h" and <curses.h>
-   first.  */
-
-#include "config.h"
-#ifdef HAVE_NCURSES_H
-#include <ncurses.h>
-#else
-#ifdef HAVE_CURSES_H
-#include <curses.h>
-#endif
-#endif
-
 #include "defs.h"
 #include "symtab.h"
 #include "inferior.h"
@@ -46,34 +29,38 @@
 #include "target.h"
 #include "gdbcore.h"
 #include "event-loop.h"
+#include "event-top.h"
 #include "frame.h"
 #include "breakpoint.h"
 #include "gdb-events.h"
+#include "ui-out.h"
+#include "top.h"
+#include "readline/readline.h"
 #include <unistd.h>
 #include <fcntl.h>
 
-#include "tui.h"
-#include "tuiData.h"
-#include "tuiLayout.h"
-#include "tuiIO.h"
-#include "tuiRegs.h"
-#include "tuiWin.h"
-#include "tuiStack.h"
-#include "tuiDataWin.h"
-#include "tuiSourceWin.h"
+#include "tui/tui.h"
+#include "tui/tui-hooks.h"
+#include "tui/tui-data.h"
+#include "tui/tui-layout.h"
+#include "tui/tui-io.h"
+#include "tui/tui-regs.h"
+#include "tui/tui-win.h"
+#include "tui/tui-stack.h"
+#include "tui/tui-windata.h"
+#include "tui/tui-winsource.h"
+
+#include "gdb_curses.h"
 
 int tui_target_has_run = 0;
 
 static void (* tui_target_new_objfile_chain) (struct objfile*);
-extern void (*selected_frame_level_changed_hook) (int);
 
 static void
 tui_new_objfile_hook (struct objfile* objfile)
 {
   if (tui_active)
-    {
-      tuiDisplayMainFunction ();
-    }
+    tui_display_main ();
   
   if (tui_target_new_objfile_chain)
     tui_target_new_objfile_chain (objfile);
@@ -144,12 +131,12 @@ tui_registers_changed_hook (void)
 {
   struct frame_info *fi;
 
-  fi = selected_frame;
+  fi = deprecated_selected_frame;
   if (fi && tui_refreshing_registers == 0)
     {
       tui_refreshing_registers = 1;
 #if 0
-      tuiCheckDataValues (fi);
+      tui_check_data_values (fi);
 #endif
       tui_refreshing_registers = 0;
     }
@@ -160,29 +147,13 @@ tui_register_changed_hook (int regno)
 {
   struct frame_info *fi;
 
-  fi = selected_frame;
+  fi = deprecated_selected_frame;
   if (fi && tui_refreshing_registers == 0)
     {
       tui_refreshing_registers = 1;
-      tuiCheckDataValues (fi);
+      tui_check_data_values (fi);
       tui_refreshing_registers = 0;
     }
-}
-
-extern struct breakpoint *breakpoint_chain;
-
-/* Find a breakpoint given its number.  Returns null if not found.  */
-static struct breakpoint *
-get_breakpoint (int number)
-{
-  struct breakpoint *bp;
-
-  for (bp = breakpoint_chain; bp; bp = bp->next)
-    {
-      if (bp->number == number)
-        return bp;
-    }
-  return 0;
 }
 
 /* Breakpoint creation hook.
@@ -190,23 +161,7 @@ get_breakpoint (int number)
 static void
 tui_event_create_breakpoint (int number)
 {
-  struct breakpoint *bp;
-
-  bp = get_breakpoint (number);
-  if (bp)
-    {
-      switch (bp->type)
-        {
-        case bp_breakpoint:
-        case bp_hardware_breakpoint:
-          tuiAllSetHasBreakAt (bp, 1);
-          tuiUpdateAllExecInfos ();
-          break;
-
-        default:
-          break;
-        }
-    }
+  tui_update_all_breakpoint_info ();
 }
 
 /* Breakpoint deletion hook.
@@ -214,35 +169,13 @@ tui_event_create_breakpoint (int number)
 static void
 tui_event_delete_breakpoint (int number)
 {
-  struct breakpoint *bp;
-  struct breakpoint *b;
-  int clearIt;
-
-  bp = get_breakpoint (number);
-  if (bp == 0)
-    return;
-
-  /* Before turning off the visuals for the bp, check to see that
-     there are no other bps at the same address. */
-  clearIt = 0;
-  for (b = breakpoint_chain; b; b = b->next)
-    {
-      clearIt = (b == bp || b->address != bp->address);
-      if (!clearIt)
-        break;
-    }
-
-  if (clearIt)
-    {
-      tuiAllSetHasBreakAt (bp, 0);
-      tuiUpdateAllExecInfos ();
-    }
+  tui_update_all_breakpoint_info ();
 }
 
 static void
 tui_event_modify_breakpoint (int number)
 {
-  ;
+  tui_update_all_breakpoint_info ();
 }
 
 static void
@@ -296,29 +229,29 @@ tui_selected_frame_level_changed_hook (int level)
 {
   struct frame_info *fi;
 
-  fi = selected_frame;
+  fi = deprecated_selected_frame;
   /* Ensure that symbols for this frame are read in.  Also, determine the
      source language of this frame, and switch to it if desired.  */
   if (fi)
     {
       struct symtab *s;
       
-      s = find_pc_symtab (fi->pc);
+      s = find_pc_symtab (get_frame_pc (fi));
       /* elz: this if here fixes the problem with the pc not being displayed
          in the tui asm layout, with no debug symbols. The value of s 
          would be 0 here, and select_source_symtab would abort the
          command by calling the 'error' function */
       if (s)
-	{
-          select_source_symtab (s);
-          tuiShowFrameInfo (fi);
-	}
+        select_source_symtab (s);
+
+      /* Display the frame position (even if there is no symbols).  */
+      tui_show_frame_info (fi);
 
       /* Refresh the register window if it's visible.  */
       if (tui_is_window_visible (DATA_WIN))
         {
           tui_refreshing_registers = 1;
-          tuiCheckDataValues (fi);
+          tui_check_data_values (fi);
           tui_refreshing_registers = 0;
         }
     }
@@ -330,7 +263,16 @@ tui_print_frame_info_listing_hook (struct symtab *s, int line,
                                    int stopline, int noerror)
 {
   select_source_symtab (s);
-  tuiShowFrameInfo (selected_frame);
+  tui_show_frame_info (deprecated_selected_frame);
+}
+
+/* Called when the target process died or is detached.
+   Update the status line.  */
+static void
+tui_detach_hook (void)
+{
+  tui_show_frame_info (0);
+  tui_display_main ();
 }
 
 /* Install the TUI specific hooks.  */
@@ -348,6 +290,7 @@ tui_install_hooks (void)
 
   registers_changed_hook = tui_registers_changed_hook;
   register_changed_hook = tui_register_changed_hook;
+  detach_hook = tui_detach_hook;
 }
 
 /* Remove the TUI specific hooks.  */
@@ -360,49 +303,18 @@ tui_remove_hooks (void)
   query_hook = 0;
   registers_changed_hook = 0;
   register_changed_hook = 0;
+  detach_hook = 0;
 
   /* Restore the previous event hooks.  */
   set_gdb_event_hooks (tui_old_event_hooks);
 }
 
-/* Cleanup the tui before exiting.  */
-static void
-tui_exit (void)
+void _initialize_tui_hooks (void);
+
+void
+_initialize_tui_hooks (void)
 {
-  /* Disable the tui.  Curses mode is left leaving the screen
-     in a clean state (see endwin()).  */
-  tui_disable ();
-}
-
-/* Initialize the tui by installing several gdb hooks, initializing
-   the tui IO and preparing the readline with the kind binding.  */
-static void
-tui_init_hook (char *argv0)
-{
-  /* Install exit handler to leave the screen in a good shape.  */
-  atexit (tui_exit);
-
-  initializeStaticData ();
-
   /* Install the permanent hooks.  */
   tui_target_new_objfile_chain = target_new_objfile_hook;
   target_new_objfile_hook = tui_new_objfile_hook;
-
-  tui_initialize_io ();
-  tui_initialize_readline ();
-
-  /* Decide in which mode to start using GDB (based on -tui).  */
-  if (tui_version)
-    {
-      tui_enable ();
-    }
 }
-
-/* Initialize the tui.  */
-void
-_initialize_tui (void)
-{
-  /* Setup initialization hook.  */
-  init_ui_hook = tui_init_hook;
-}
-

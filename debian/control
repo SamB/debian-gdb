@@ -3,14 +3,14 @@ Maintainer: Daniel Jacobowitz <dan@debian.org>
 Section: devel
 Priority: standard
 Standards-Version: 3.5.3
-Build-Depends: autoconf, libtool, texinfo, tetex-bin, libncurses5-dev, libreadline4-dev (>= 4.2a-1), bison, gettext, debhelper (>= 3), dejagnu
+Build-Depends: autoconf, libtool, texinfo (>= 4.6-1), tetex-bin, libncurses5-dev, libreadline4-dev (>= 4.2a-1), bison, gettext, debhelper (>= 4.1.46), dejagnu, gcj [i386 powerpc alpha ia64 s390], gobjc, mig [hurd-i386], cdbs (>= 0.4.17), quilt (>= 0.30-1)
 
 Package: gdb
 Architecture: any
 Section: devel
 Depends: ${shlibs:Depends}
 Conflicts: gdb-arm
-Replaces: gdb-arm
+Replaces: gdb-arm, insight (<< 6.1+cvs.2004.04.07-1)
 Description: The GNU Debugger
  GDB is a source-level debugger, capable of breaking programs at
  any specific line, displaying variable values, and determining
