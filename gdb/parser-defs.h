@@ -1,5 +1,5 @@
 /* Parser definitions for GDB.
-   Copyright (C) 1986, 1989, 1990, 1991 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1989, 1990, 1991, 1997 Free Software Foundation, Inc.
    Modified from expread.y by the Department of Computer Science at the
    State University of New York at Buffalo.
 
@@ -18,6 +18,8 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+
+/* Modified for GNAT by P. N. Hilfinger */
 
 #if !defined (PARSER_DEFS_H)
 #define PARSER_DEFS_H 1
@@ -87,6 +89,8 @@ union type_stack_elt {
 extern union type_stack_elt *type_stack;
 extern int type_stack_depth, type_stack_size;
 
+extern void add_name_string_cleanup PARAMS ((char*));
+
 extern void write_exp_elt PARAMS ((union exp_element));
 
 extern void write_exp_elt_opcode PARAMS ((enum exp_opcode));
@@ -109,6 +113,8 @@ extern void write_exp_elt_block PARAMS ((struct block *));
 
 extern void write_exp_msymbol PARAMS ((struct minimal_symbol *,
 				       struct type *, struct type *));
+
+extern void write_exp_elt_name PARAMS ((const char*));
 
 extern void write_dollar_variable PARAMS ((struct stoken str));
 

@@ -42,7 +42,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #include "target.h"
 
-^L
 /* This table must line up with REGISTER_NAMES in tm-m68k.h */
 static const int regmap[] = 
 {
@@ -98,7 +97,7 @@ supply_fpregset (fpregsetp)
   supply_register (FPS_REGNUM, (char *) &fpregsetp->fpcntl[1]);
   supply_register (FPI_REGNUM, (char *) &fpregsetp->fpcntl[2]);
 }
-^L
+
 int
 kernel_u_size ()
 {

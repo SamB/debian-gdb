@@ -656,11 +656,11 @@ target_read_string (memaddr, string, len, errnop)
 
   while (len > 0)
     {
-      tlen = MIN (len, 4 - (memaddr & 3));
       offset = memaddr & 3;
 
-      errcode = target_xfer_memory (memaddr & ~3, buf, 4, 0, NULL);
-      if (errcode != 0)
+      tlen = target_read_memory_partial (memaddr & ~3, buf, 4,
+					 &errcode);
+      if (tlen == 0 && errcode != 0)
 	goto done;
 
       if (bufptr - buffer + tlen > buffer_allocated)
@@ -678,6 +678,7 @@ target_read_string (memaddr, string, len, errnop)
 	  if (buf[i + offset] == '\000')
 	    {
 	      nbytes_read += i + 1;
+	      errcode = 0;
 	      goto done;
 	    }
 	}

@@ -1,5 +1,5 @@
 /* Multiple source language support for GDB.
-   Copyright 1991, 1992 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1997 Free Software Foundation, Inc.
    Contributed by the Department of Computer Science at the State University
    of New York at Buffalo.
 
@@ -26,6 +26,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 /* FIXME:  Most of these would be better organized as macros which
    return data out of a "language-specific" struct pointer that is set
    whenever the working language changes.  That would be a lot faster.  */
+
+/* Modified for GNAT by P. N. Hilfinger */
 
 #include "defs.h"
 #include <ctype.h>
@@ -495,6 +497,8 @@ binop_result_type (v1, v2)
       break;
    case language_chill:
       error ("Missing Chill support in function binop_result_check.");/*FIXME*/
+   case language_ada:
+      error ("Missing Ada support in function binop_result_check.");/*FIXME*/
    }
    abort();
    return (struct type *)0;	/* For lint */
@@ -673,6 +677,8 @@ integral_type (type)
       return TYPE_CODE(type) != TYPE_CODE_INT ? 0 : 1;
    case language_chill:
       error ("Missing Chill support in function integral_type.");  /*FIXME*/
+   case language_ada:
+      error ("Missing Ada support in function integral_type.");  /*FIXME*/
    default:
       error ("Language not supported.");
    }
@@ -732,8 +738,10 @@ string_type (type)
    case language_c:
    case language_cplus:
    case language_objc:
+   case language_ada:
       /* C does not have distinct string type. */
       return (0);
+
    default:
       return (0);
    }
@@ -752,6 +760,7 @@ boolean_type (type)
     case language_c:
     case language_cplus:
     case language_objc:
+    case language_ada:
       /* Might be more cleanly handled by having a TYPE_CODE_INT_NOT_BOOL
 	 for CHILL and such languages, or a TYPE_CODE_INT_OR_BOOL for C.  */
       if (TYPE_CODE (type) == TYPE_CODE_INT)
@@ -800,6 +809,8 @@ structured_type(type)
 	    (TYPE_CODE(type) == TYPE_CODE_ARRAY);
    case language_chill:
       error ("Missing Chill support in function structured_type.");  /*FIXME*/
+   case language_ada:
+      error ("Missing Ada support in function structured_type.");  /*FIXME*/
    default:
       return (0);
    }
@@ -1024,6 +1035,8 @@ binop_type_check(arg1,arg2,op)
        case language_chill:
 	 error ("Missing Chill support in function binop_type_check.");/*FIXME*/
 #endif
+       case language_ada:
+	 error ("Missing Ada support in function binop_type_check.");/*FIXME*/
 
       }
    }

@@ -499,7 +499,7 @@ do
     shlcoff_small_vec)		tb="$tb coff-sh.lo cofflink.lo" ;;
     som_vec)			tb="$tb som.lo" ;;
     sparcle_aout_vec)		tb="$tb aout-sparcle.lo aout32.lo" ;;
-    sparclinux_vec)		tb="$tb sparclinux.lo aout32.lo stab-syms.lo" ;;
+    sparclinux_vec)		tb="$tb sparclinux.lo aout32.lo" ;;
     sparclynx_aout_vec)		tb="$tb sparclynx.lo lynx-core.lo aout32.lo" ;;
     sparclynx_coff_vec)		tb="$tb cf-sparclynx.lo lynx-core.lo" ;;
     sparcnetbsd_vec)		tb="$tb sparcnetbsd.lo aout32.lo" ;;

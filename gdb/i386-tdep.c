@@ -38,6 +38,10 @@ static void codestream_seek PARAMS ((CORE_ADDR));
 
 static unsigned char codestream_fill PARAMS ((int));
 
+static void i386_print_register PARAMS ((char *, int, int));
+
+static void i386_print_status_word PARAMS ((char *, char *, long));
+
 /* Stdio style buffering was used to minimize calls to ptrace, but this
    buffering did not take into account that the code section being accessed
    may not be an even number of buffers long (even if the buffer is only
@@ -411,7 +415,7 @@ i386_frame_find_saved_regs (fip, fsrp)
     {
       /* all regs were saved by push_call_dummy () */
       adr = fip->frame;
-      for (i = 0; i < NUM_REGS; i++) 
+      for (i = 0; i < ARCH_NUM_REGS; i++) 
 	{
 	  adr -= REGISTER_RAW_SIZE (i);
 	  fsrp->regs[i] = adr;
@@ -538,7 +542,7 @@ i386_push_dummy_frame ()
   sp = push_word (sp, read_register (PC_REGNUM));
   sp = push_word (sp, read_register (FP_REGNUM));
   write_register (FP_REGNUM, sp);
-  for (regnum = 0; regnum < NUM_REGS; regnum++)
+  for (regnum = 0; regnum < ARCH_NUM_REGS; regnum++)
     {
       read_register_gen (regnum, regbuf);
       sp = push_bytes (sp, regbuf, REGISTER_RAW_SIZE (regnum));
@@ -557,7 +561,7 @@ i386_pop_frame ()
   
   fp = FRAME_FP (frame);
   get_frame_saved_regs (frame, &fsr);
-  for (regnum = 0; regnum < NUM_REGS; regnum++) 
+  for (regnum = 0; regnum < ARCH_NUM_REGS; regnum++) 
     {
       CORE_ADDR adr;
       adr = fsr.regs[regnum];
@@ -614,8 +618,9 @@ i386_extract_return_value(type, regbuf, valbuf)
      char regbuf[REGISTER_BYTES];
      char *valbuf;
 {
-/* On AIX, floating point values are returned in floating point registers.  */
-#ifdef I386_AIX_TARGET
+  /* On AIX and Linux, floating point values are returned in floating
+     point registers.  */
+#if defined(I386_AIX_TARGET) || defined(I386_LINUX_TARGET)
   if (TYPE_CODE_FLT == TYPE_CODE(type))
     {
       double d;
@@ -626,7 +631,7 @@ i386_extract_return_value(type, regbuf, valbuf)
       store_floating (valbuf, TYPE_LENGTH (type), d);
     }
   else
-#endif /* I386_AIX_TARGET */
+#endif /* I386_AIX_TARGET || I386_LINUX_TARGET*/
     { 
       memcpy (valbuf, regbuf, TYPE_LENGTH (type)); 
     }
@@ -718,4 +723,97 @@ _initialize_i386_tdep ()
 {
   tm_print_insn = print_insn_i386;
   tm_print_insn_info.mach = bfd_lookup_arch (bfd_arch_i386, 0)->mach;
+}
+
+/* Print the register regnum, or all registers if regnum is -1 */
+
+void
+i386_do_registers_info (regnum, fpregs)
+     int regnum;
+     int fpregs;
+{
+  char raw_regs [REGISTER_BYTES];
+  int numregs = RUNTIME_NUM_REGS (fpregs);
+  int i;
+
+  for (i = 0; i < numregs; i++)
+    read_relative_register_raw_bytes (INFO_REGMAP (i),
+				      raw_regs + REGISTER_BYTE (INFO_REGMAP (i)));
+
+  i386_print_register (raw_regs, regnum, NUM_REGS - NUM_FREGS);
+
+  if ((regnum == -1) && fpregs)
+    for (i = NUM_REGS - NUM_FREGS; i < numregs; i++)
+      i387_print_register (raw_regs, INFO_REGMAP (i));
+}
+
+static void
+i386_print_status_word (regname, string, status)
+     char *regname;
+     char *string;
+     long status;
+{
+  printf_filtered ("%8.8s: %10.10s IOPL: %d; flags:", regname, string,
+		   (status >> 12) & 0x3);
+  if (status & 0x1)
+    printf_unfiltered (" CF");
+  if (status & 0x4)
+    printf_unfiltered (" PF");
+  if (status & 0x10)
+    printf_unfiltered (" AF");
+  if (status & 0x40)
+    printf_unfiltered (" ZF");
+  if (status & 0x80)
+    printf_unfiltered (" SF");
+  if (status & 0x100)
+    printf_unfiltered (" TF");
+  if (status & 0x200)
+    printf_unfiltered (" IF");
+  if (status & 0x400)
+    printf_unfiltered (" DF");
+  if (status & 0x800)
+    printf_unfiltered (" OF");
+  if (status & 0x4000)
+    printf_unfiltered (" NT");
+  if (status & 0x10000)
+    printf_unfiltered (" RF");
+  if (status & 0x20000)
+    printf_unfiltered (" VM");
+  if (status & 0x40000)
+    printf_unfiltered (" AC");
+  if (status & 0x80000)
+    printf_unfiltered (" VIF");
+  if (status & 0x100000)
+    printf_unfiltered (" VIP");
+  if (status & 0x200000)
+    printf_unfiltered (" ID");
+  printf_unfiltered ("\n");
+}
+
+static void
+i386_print_register (raw_regs, regnum, numregs)
+     char *raw_regs;
+     int regnum;
+     int numregs;
+{
+  int i, j;
+  long val;
+  char string[24];
+
+  for (i = 0; i < numregs; i++)
+    {
+      j = INFO_REGMAP (i);
+
+      if ((regnum != -1) && (j != regnum))
+	continue;
+
+      val = extract_signed_integer (raw_regs + REGISTER_BYTE (j), 4);
+
+      sprintf(string, "0x%x", val);
+      if (j == PS_REGNUM)
+	i386_print_status_word (reg_names[j], string, val);
+      else
+	printf_filtered ("%8.8s: %10.10s %11d\n", reg_names[j],
+			 string, val);
+    }
 }

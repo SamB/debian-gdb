@@ -199,6 +199,9 @@ struct breakpoint
   /* Thread number for thread-specific breakpoint, or -1 if don't care */
   int thread;
 
+  /* Ada task number for task-specific breakpoint, or -1 if don't care */
+  int task;
+
   /* Count of the number of times this breakpoint was taken, dumped
      with the info, but not used for anything else.  Useful for
      seeing how many times you hit a break prior to the program
@@ -365,6 +368,8 @@ extern int breakpoint_inserted_here_p PARAMS ((CORE_ADDR));
 extern int frame_in_dummy PARAMS ((struct frame_info *));
 
 extern int breakpoint_thread_match PARAMS ((CORE_ADDR, int));
+
+extern int breakpoint_task_match PARAMS ((CORE_ADDR));
 
 extern void until_break_command PARAMS ((char *, int));
 

@@ -18,6 +18,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
+/* Modified for GNAT by P. N. Hilfinger */
+
 #include "defs.h"
 #include "value.h"
 #include "symtab.h"
@@ -37,6 +39,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 static value_ptr value_subscripted_rvalue PARAMS ((value_ptr, value_ptr, int));
 
+static struct type*
+base_type PARAMS ((struct type*));
+
 
 value_ptr
 value_add (arg1, arg2)
@@ -54,8 +59,8 @@ value_add (arg1, arg2)
   if ((TYPE_CODE (type1) == TYPE_CODE_PTR
        || TYPE_CODE (type2) == TYPE_CODE_PTR)
       &&
-      (TYPE_CODE (type1) == TYPE_CODE_INT
-       || TYPE_CODE (type2) == TYPE_CODE_INT))
+      (TYPE_CODE (base_type(type1)) == TYPE_CODE_INT
+       || TYPE_CODE (base_type(type2)) == TYPE_CODE_INT))
     /* Exactly one argument is a pointer, and one is an integer.  */
     {
       value_ptr retval;
@@ -97,7 +102,7 @@ value_sub (arg1, arg2)
 
   if (TYPE_CODE (type1) == TYPE_CODE_PTR)
     {
-      if (TYPE_CODE (type2) == TYPE_CODE_INT)
+      if (TYPE_CODE (base_type(type2)) == TYPE_CODE_INT)
 	{
 	  /* pointer - integer.  */
 	  LONGEST sz = TYPE_LENGTH (check_typedef (TYPE_TARGET_TYPE (type1)));
@@ -510,7 +515,7 @@ value_concat (arg1, arg2)
      to the second of the two concatenated values or the value to be 
      repeated. */
 
-  if (TYPE_CODE (type2) == TYPE_CODE_INT)
+  if (TYPE_CODE (base_type(type2)) == TYPE_CODE_INT)
     {
       struct type *tmp = type1;
       type1 = tmp;
@@ -526,7 +531,7 @@ value_concat (arg1, arg2)
 
   /* Now process the input values. */
 
-  if (TYPE_CODE (type1) == TYPE_CODE_INT)
+  if (TYPE_CODE (base_type(type1)) == TYPE_CODE_INT)
     {
       /* We have a repeat count.  Validate the second value and then
 	 construct a value repeated that many times. */
@@ -623,6 +628,10 @@ value_concat (arg1, arg2)
    Does not support addition and subtraction on pointers;
    use value_add or value_sub if you want to handle those possibilities.  */
 
+/* FIXME: There are several references in here to current_language -> 
+   la_language that ought to be references to the type of the current
+   expression.  At the moment, that information is not passed in. */
+
 value_ptr
 value_binop (arg1, arg2, op)
      value_ptr arg1, arg2;
@@ -651,7 +660,71 @@ value_binop (arg1, arg2, op)
        && TYPE_CODE (type2) != TYPE_CODE_RANGE))
     error ("Argument to arithmetic operation not a number or boolean.");
 
-  if (TYPE_CODE (type1) == TYPE_CODE_FLT
+   if (op == BINOP_EXP)
+     {
+       LONGEST n;
+       if (TYPE_CODE (base_type (VALUE_TYPE (arg2))) != TYPE_CODE_INT)
+       error ("Must raise to integral powers");
+       n = value_as_long (arg2);
+ 
+       if (TYPE_CODE (VALUE_TYPE (arg1)) == TYPE_CODE_FLT)
+       {
+         double v, v1;
+ 
+         v1 = value_as_double (arg1);
+         v = 1.0;
+ 
+         if (n < 0)
+           n = -n;
+ 
+         while (n != 0)
+           {
+             if (n & 1L) 
+               v *= v1;
+             n >>= 1;
+             if (n != 0)
+               v1 *= v1;
+           }
+ 
+         if (value_as_long (arg2) < 0)
+           v = 1.0/v;
+ 
+         val = allocate_value (builtin_type_double);
+         store_floating (VALUE_CONTENTS_RAW (val), 
+                         TYPE_LENGTH (VALUE_TYPE (val)),
+                         v);
+       }
+       else if (TYPE_CODE (base_type (VALUE_TYPE (arg1))) == TYPE_CODE_INT)
+       {
+         LONGEST v, v1;
+ 
+         if (n < 0)
+           error ("Must raise integers to non-negative powers.");
+         
+         v1 = value_as_double (arg1);
+         v = 1;
+ 
+         while (n = 0)
+           {
+             if (n & 1L) 
+               v *= v1;
+             n >>= 1;
+             if (n != 0)
+               v1 *= v1;
+           }
+ 
+         val = allocate_value
+           (sizeof (LONGEST) > TARGET_LONG_BIT / HOST_CHAR_BIT
+            ? builtin_type_long_long
+            : builtin_type_long);
+         store_signed_integer (VALUE_CONTENTS_RAW (val),
+                               TYPE_LENGTH (VALUE_TYPE (val)),
+                               v);
+       }
+       else
+       error ("Arguments to exponentiation must be FLOAT**INT or INT**INT.");
+     }
+   else if (TYPE_CODE (VALUE_TYPE (arg1)) == TYPE_CODE_FLT
       ||
       TYPE_CODE (type2) == TYPE_CODE_FLT)
     {
@@ -677,6 +750,14 @@ value_binop (arg1, arg2, op)
 
 	case BINOP_DIV:
 	  v = v1 / v2;
+	  break;
+
+	case BINOP_MIN:
+	  v = v1 < v2 ? v1 : v2;
+	  break;
+	      
+	case BINOP_MAX:
+	  v = v1 > v2 ? v1 : v2;
 	  break;
 
 	default:
@@ -811,8 +892,9 @@ value_binop (arg1, arg2, op)
 	    case BINOP_MOD:
 	      /* Knuth 1.2.4, integer only.  Note that unlike the C '%' op,
 	         v1 mod 0 has a defined value, v1. */
-	      /* Chill specifies that v2 must be > 0, so check for that. */
-	      if (current_language -> la_language == language_chill
+	      /* For Chill and Ada, check that v2 != 0 */
+	      if ((current_language -> la_language == language_chill
+		   || current_language -> la_language == language_ada)
 		  && value_as_long (arg2) <= 0)
 		{
 		  error ("Second operand of MOD must be greater than zero.");
@@ -916,20 +998,34 @@ value_binop (arg1, arg2, op)
 	      
 	    case BINOP_DIV:
 	      v = v1 / v2;
+	      /* In Ada, integer division always truncates towards 0. */
+	      if (! TRUNCATION_TOWARDS_ZERO 
+		  && current_language -> la_language == language_ada
+		  && v1 * (v1%v2) < 0)
+		  v += v > 0 ? -1 : 1;
 	      break;
 	      
 	    case BINOP_REM:
 	      v = v1 % v2;
+	      /* In Ada, REM has sign of v1. */
+	      if (current_language -> la_language == language_ada
+		  && v*v1 < 0)
+		v -= v2;		  
 	      break;
 	      
 	    case BINOP_MOD:
 	      /* Knuth 1.2.4, integer only.  Note that unlike the C '%' op,
 	         X mod 0 has a defined value, X. */
-	      /* Chill specifies that v2 must be > 0, so check for that. */
+	      /* Chill requires that v2 > 0 and Ada that v2 != 0. */
 	      if (current_language -> la_language == language_chill
 		  && v2 <= 0)
 		{
 		  error ("Second operand of MOD must be greater than zero.");
+		}
+	      else if (current_language -> la_language == language_ada
+		       && v2 == 0)
+		{
+		  error ("Second operand of MOD must not be zero.");
 		}
 	      if (v2 == 0)
 		{
@@ -1017,6 +1113,23 @@ value_binop (arg1, arg2, op)
   return val;
 }
 
+/* The identity on non-range types.  For range types, the underlying */
+/* non-range scalar type. */  
+
+static struct type*
+base_type (type)
+     struct type* type;
+{
+  while (type != NULL && TYPE_CODE (type) == TYPE_CODE_RANGE)
+    {
+      if (type == TYPE_TARGET_TYPE (type) 
+	  || TYPE_TARGET_TYPE (type) == NULL)	
+	return type;
+      type = TYPE_TARGET_TYPE (type);
+    }
+  return type;
+}
+
 /* Simulate the C operator ! -- return 1 if ARG1 contains zero.  */
 
 int
@@ -1064,8 +1177,8 @@ value_equal (arg1, arg2)
 
   type1 = check_typedef (VALUE_TYPE (arg1));
   type2 = check_typedef (VALUE_TYPE (arg2));
-  code1 = TYPE_CODE (type1);
-  code2 = TYPE_CODE (type2);
+  code1 = TYPE_CODE (base_type(type1));
+  code2 = TYPE_CODE (base_type(type2));
 
   if (code1 == TYPE_CODE_INT && code2 == TYPE_CODE_INT)
     return longest_to_int (value_as_long (value_binop (arg1, arg2,
@@ -1117,8 +1230,8 @@ value_less (arg1, arg2)
 
   type1 = check_typedef (VALUE_TYPE (arg1));
   type2 = check_typedef (VALUE_TYPE (arg2));
-  code1 = TYPE_CODE (type1);
-  code2 = TYPE_CODE (type2);
+  code1 = TYPE_CODE (base_type(type1));
+  code2 = TYPE_CODE (base_type(type2));
 
   if (code1 == TYPE_CODE_INT && code2 == TYPE_CODE_INT)
     return longest_to_int (value_as_long (value_binop (arg1, arg2,
@@ -1155,7 +1268,7 @@ value_neg (arg1)
   COERCE_REF (arg1);
   COERCE_ENUM (arg1);
 
-  type = check_typedef (VALUE_TYPE (arg1));
+  type = base_type(check_typedef (VALUE_TYPE (arg1)));
 
   if (TYPE_CODE (type) == TYPE_CODE_FLT)
     return value_from_double (result_type, - value_as_double (arg1));

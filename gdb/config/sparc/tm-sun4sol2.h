@@ -74,6 +74,9 @@ extern char *sunpro_static_transform_name PARAMS ((char *));
 /* Enable handling of shared libraries for a.out executables.  */
 #define HANDLE_SVR4_EXEC_EMULATORS
 
+/* The LBRAC bug is fixed. */
+#undef SUN_FIXED_LBRAC_BUG
+
 /* Macros to extract process id and thread id from a composite pid/tid */
 #define PIDGET(pid) ((pid) & 0xffff)
 #define TIDGET(pid) (((pid) >> 16) & 0xffff)

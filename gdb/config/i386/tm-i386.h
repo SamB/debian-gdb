@@ -112,7 +112,19 @@ extern int i386_skip_prologue PARAMS ((int));
 #define PS_REGNUM 9	/* (ps)  Contains processor status */
 
 #define FP0_REGNUM 16   /* (st0) 387 register */
-#define FPC_REGNUM 25	/* 80387 control register */
+#define FPC_REGNUM -1	/* 80387 control register */
+
+#define FPCWD_REGNUM FPC_REGNUM
+#define FPSWD_REGNUM -1	/* 80387 status register */
+#define FPTWD_REGNUM -1	/* 80387 tag register */
+#define FPIPO_REGNUM -1	/* 80387 instruction pointer offset register */
+#define FPIPS_REGNUM -1	/* 80387 instruction pointer selector egister */
+#define FPOOS_REGNUM -1	/* 80387 operand pointer offset register */
+#define FPOPS_REGNUM -1	/* 80387 operand pointer selector register */
+
+#define INFO_REGMAP(regno) regno
+
+#define RUNTIME_NUM_REGS(fp) NUM_REGS
 
 /* Total amount of space needed to store our copies of the machine's register
    state, the array `registers'. */

@@ -17,6 +17,8 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
+# Modified for GNAT by P. N. Hilfinger
+
 prefix = @prefix@
 exec_prefix = @exec_prefix@
 
@@ -71,6 +73,11 @@ srcdir = @srcdir@
 VPATH = @srcdir@
 
 YACC=@YACC@
+
+# If you wish to be able to rebuild ada-lex.c from ada-lex.l, FLEX must
+# be defined to the name for invoking flex.  Don't define it if FLEX is 
+# not present.
+FLEX = flex
 
 # where to find makeinfo, preferably one designed for texinfo-2
 MAKEINFO=makeinfo
@@ -140,7 +147,7 @@ GLOBAL_CFLAGS = $(MT_CFLAGS) $(MH_CFLAGS)
 #PROFILE_CFLAGS = -pg
 
 # CFLAGS is specifically reserved for setting from the command line
-# when running make.  I.E.  "make CFLAGS=-Wmissing-prototypes".
+# when running make.  E.G.  "make CFLAGS=-Wmissing-prototypes".
 CFLAGS = -g
 
 # Need to pass this to testsuite for "make check".  Probably should be
@@ -183,13 +190,13 @@ INSTALLED_LIBS=-lbfd -lreadline -lopcodes -liberty \
 CLIBS = $(SIM) $(BFD) $(READLINE) $(OPCODES) $(LIBIBERTY) \
 	$(TERMCAP) $(XM_CLIBS) $(TM_CLIBS) $(NAT_CLIBS) @LIBS@ \
 	$(MMALLOC) $(LIBIBERTY) $(WIN32LIBS)
-CDEPS = $(XM_CDEPS) $(TM_CDEPS) $(NAT_CDEPS) $(SIM) $(BFD) $(READLINE) \
+CDEPS = $(XM_CDEPS) $(TM_CDEPS) $(NAT_CDEPS) $(SIM) $(BFD)  \
 	$(OPCODES) $(MMALLOC) $(LIBIBERTY) @CONFIG_DEPS@
 
 ADD_FILES = $(REGEX) $(XM_ADD_FILES) $(TM_ADD_FILES) $(NAT_ADD_FILES)
 ADD_DEPS = $(REGEX1) $(XM_ADD_FILES) $(TM_ADD_FILES) $(NAT_ADD_FILES)
 
-VERSION=4.17
+VERSION=4.17.m68k.objc.threads.hwwp.fpu.gnat
 DIST=gdb
 
 LINT=/usr/5bin/lint
@@ -328,7 +335,8 @@ TARGET_FLAGS_TO_PASS = \
 # Links made at configuration time should not be specified here, since
 # SFILES is used in building the distribution archive.
 
-SFILES = bcache.c blockframe.c breakpoint.c buildsym.c c-exp.y \
+SFILES = ada-exp.y ada-lang.c ada-typeprint.c ada-valprint.c ada-tasks.c \
+        bcache.c blockframe.c breakpoint.c buildsym.c c-exp.y \
 	c-lang.c c-typeprint.c c-valprint.c ch-exp.c ch-lang.c \
 	ch-typeprint.c ch-valprint.c coffread.c command.c complaints.c \
 	corefile.c cp-valprint.c \
@@ -408,7 +416,7 @@ HFILES_NO_SRCDIR = bcache.h buildsym.h call-cmds.h coff-solib.h defs.h \
 	gdb-stabs.h $(inferior_h) language.h minimon.h monitor.h \
 	objfiles.h parser-defs.h partial-stab.h serial.h signals.h solib.h \
 	symfile.h stabsread.h target.h terminal.h typeprint.h xcoffsolib.h \
-	c-lang.h ch-lang.h f-lang.h jv-lang.h m2-lang.h objc-lang.h \
+	c-lang.h ch-lang.h f-lang.h jv-lang.h m2-lang.h objc-lang.h ada-lang.h \
 	complaints.h valprint.h \
 	29k-share/udi/udiids.h 29k-share/udi_soc nindy-share/b.out.h \
 	nindy-share/block_io.h nindy-share/coff.h \
@@ -454,6 +462,7 @@ COMMON_OBS = version.o blockframe.o breakpoint.o findvar.o stack.o thread.o \
 	exec.o bcache.o objfiles.o minsyms.o maint.o demangle.o \
 	dbxread.o coffread.o elfread.o \
 	dwarfread.o dwarf2read.o mipsread.o stabsread.o corefile.o \
+	ada-lang.o ada-typeprint.o ada-valprint.o ada-tasks.o \
 	c-lang.o ch-exp.o ch-lang.o f-lang.o \
 	jv-lang.o jv-valprint.o jv-typeprint.o m2-lang.o objc-lang.o \
 	scm-exp.o scm-lang.o scm-valprint.o complaints.o typeprint.o \
@@ -476,8 +485,8 @@ SUBDIRS = doc \
 	nlm
 
 # For now, shortcut the "configure GDB for fewer languages" stuff.
-YYFILES = c-exp.tab.c jv-exp.tab.c f-exp.tab.c m2-exp.tab.c
-YYOBJ = c-exp.tab.o jv-exp.tab.o f-exp.tab.o m2-exp.tab.o objc-exp.tab.o
+YYFILES = ada-exp.tab.c c-exp.tab.c jv-exp.tab.c f-exp.tab.c m2-exp.tab.c
+YYOBJ = ada-exp.tab.o c-exp.tab.o jv-exp.tab.o f-exp.tab.o m2-exp.tab.o objc-exp.tab.o
 
 # Things which need to be built when making a distribution.
 
@@ -716,7 +725,7 @@ maintainer-clean realclean: distclean clean
 	@echo "This command is intended for maintainers to use;"
 	@echo "it deletes files that may require special tools to rebuild."
 	@$(MAKE) $(FLAGS_TO_PASS) DO=maintainer-clean "DODIRS=$(SUBDIRS)" subdir_do
-	rm -f c-exp.tab.c jv-exp.tab.c f-exp.tab.c m2-exp.tab.c
+	rm -f c-exp.tab.c jv-exp.tab.c f-exp.tab.c m2-exp.tab.c ada-exp.tab.c
 	rm -f TAGS $(INFOFILES)
 	rm -f $(YYFILES)
 	rm -f nm.h tm.h xm.h config.status
@@ -853,8 +862,39 @@ m2-exp.tab.c: m2-exp.y
 	-rm y.tab.c
 	mv m2-exp.new ./m2-exp.tab.c
 
+# ada-exp.tab.c is generated in objdir from ada-exp.y if it doesn't exist
+# in srcdir, then compiled in objdir to ada-exp.tab.o.
+# Remove bogus decls for malloc/realloc/free which conflict with everything
+# else.
+# The dependency here on m2-exp.tab.c is artificial.  Without this
+# dependency, a parallel make will attempt to build both at the same
+# time and the second yacc will pollute the first y.tab.c file.
+ada-exp.tab.c: ada-exp.y m2-exp.tab.c
+	$(YACC) $(YFLAGS) $(srcdir)/ada-exp.y
+	-sed -e '/extern.*malloc/d' \
+	-e '/extern.*realloc/d' \
+	-e '/extern.*free/d' \
+	-e '/include.*malloc.h/d' \
+	-e 's/malloc/xmalloc/g' \
+	-e 's/realloc/xrealloc/g' \
+	< y.tab.c > ada-exp.new
+	-rm y.tab.c
+	mv ada-exp.new ./ada-exp.tab.c
+
+ada-lex.c: ada-lex.l
+	@if [ "$(FLEX)" ]; then \
+	echo $(FLEX) -Isit ada-lex.l ">" ada-lex.c; \
+	$(FLEX) -Isit ada-lex.l > ada-lex.c; \
+	elif [ ! -f ada-lex.c ]; then \
+	echo "ada-lex.c missing and flex not available."; \
+	false; \
+	else \
+	echo "Warning: ada-lex.c older than ada-lex.l and flex not available."; \
+	fi
+
+
 # These files are updated atomically, so make never has to remove them
-.PRECIOUS: m2-exp.tab.c jv-exp.tab.c f-exp.tab.c c-exp.tab.c
+.PRECIOUS: ada-exp.tab.c m2-exp.tab.c jv-exp.tab.c f-exp.tab.c c-exp.tab.c
 
 lint: $(LINTFILES)
 	$(LINT) $(INCLUDE_CFLAGS) $(LINTFLAGS) $(LINTFILES) \
@@ -934,6 +974,20 @@ a29k-tdep.o: a29k-tdep.c $(gdbcmd_h) $(gdbcore_h) $(inferior_h) $(defs_h)
 
 a68v-nat.o: a68v-nat.c $(defs_h) $(gdbcore_h) $(inferior_h)
 
+ada-lang.o: ada-lang.c ada-lang.h c-lang.h $(defs_h) $(expression_h) \
+	$(gdbtypes_h) $(inferior_h) language.h parser-defs.h $(symtab_h) \
+	symfile.h objfiles.h
+
+ada-tasks.o: ada-tasks.c ada-tasks.h $(defs_h) language.h $(value_h) \
+	$(command_h) $(value_h)
+
+ada-typeprint.o: ada-typeprint.c ada-lang.h $(defs_h) $(expression_h) \
+	$(gdbcmd_h) $(gdbcore_h) $(gdbtypes_h) language.h $(symtab_h) \
+	target.h typeprint.h $(value_h) ada-lang.h
+
+ada-valprint.o: ada-valprint.c $(defs_h) $(expression_h) $(gdbtypes_h) \
+	language.h $(symtab_h) valprint.h $(value_h) c-lang.h ada-lang.h
+
 alpha-nat.o: alpha-nat.c $(defs_h) $(gdbcore_h) $(inferior_h) target.h
 
 alpha-tdep.o: alpha-tdep.c $(defs_h) $(gdbcmd_h) $(gdbcore_h) \
@@ -952,7 +1006,8 @@ blockframe.o: blockframe.c $(defs_h) $(gdbcore_h) $(inferior_h) \
 	objfiles.h symfile.h target.h
 
 breakpoint.o: breakpoint.c $(defs_h) $(gdbcmd_h) $(gdbcore_h) \
-	$(inferior_h) language.h target.h gdbthread.h gdb_string.h
+	$(inferior_h) language.h target.h gdbthread.h gdb_string.h \
+	ada-tasks.h
 
 buildsym.o: buildsym.c $(bfd_h) buildsym.h complaints.h $(defs_h) \
 	objfiles.h symfile.h $(symtab_h) gdb_string.h
@@ -1063,7 +1118,7 @@ environ.o: environ.c $(defs_h) environ.h $(gdbcore_h) gdb_string.h
 
 eval.o: eval.c $(bfd_h) $(defs_h) $(expression_h) $(frame_h) \
 	$(gdbtypes_h) language.h $(symtab_h) target.h $(value_h) \
-	gdb_string.h
+	gdb_string.h 
 
 exec.o: exec.c $(defs_h) $(gdbcmd_h) $(gdbcore_h) $(inferior_h) \
 	target.h language.h gdb_string.h
@@ -1075,7 +1130,8 @@ findvar.o: findvar.c $(defs_h) $(gdbcore_h) $(inferior_h) target.h \
 	gdb_string.h
 
 fork-child.o: fork-child.c $(wait_h) $(defs_h) $(gdbcore_h) \
-	$(inferior_h) target.h terminal.h gdbthread.h gdb_string.h
+	$(inferior_h) target.h terminal.h gdbthread.h gdb_string.h \
+	ada-tasks.h
 
 
 gdbtypes.o: gdbtypes.c $(bfd_h) complaints.h $(defs_h) $(expression_h) \
@@ -1117,6 +1173,9 @@ i386aix-nat.o: i386aix-nat.c $(defs_h) $(frame_h) $(inferior_h) \
 
 i386b-nat.o: i386b-nat.c $(defs_h) 
 
+i386lnx-nat.o: i386lnx-nat.c $(floatformat_h) $(defs_h) $(gdbcore_h) \
+	$(inferior_h) language.h target.h
+
 i386ly-nat.o: i386ly-nat.c $(defs_h) $(frame_h) $(inferior_h) target.h
 
 i386ly-tdep.o: i386ly-tdep.c $(defs_h) $(inferior_h) target.h $(gdbcore_h)
@@ -1140,13 +1199,15 @@ infcmd.o: infcmd.c $(defs_h) environ.h $(gdbcmd_h) $(gdbcore_h) \
 	$(inferior_h) target.h language.h gdb_string.h
 
 inflow.o: inflow.c $(bfd_h) $(command_h) $(defs_h) $(inferior_h) \
-	signals.h target.h terminal.h gdbthread.h gdb_string.h
+	signals.h target.h terminal.h gdbthread.h gdb_string.h \
+	ada-tasks.h
 
 infptrace.o: infptrace.c $(defs_h) $(gdbcore_h) $(inferior_h) target.h \
 	gdb_string.h $(wait_h) $(command_h)
 
 infrun.o: infrun.c $(wait_h) $(defs_h) $(gdbcmd_h) $(gdbcore_h) \
-	$(inferior_h) target.h gdbthread.h gdb_string.h
+	$(inferior_h) target.h gdbthread.h gdb_string.h \
+	ada-tasks.h
 
 inftarg.o: inftarg.c $(wait_h) $(defs_h) $(gdbcore_h) $(inferior_h) \
 	target.h terminal.h $(command_h)
@@ -1272,7 +1333,7 @@ hpread.o: hpread.c $(bfd_h) buildsym.h complaints.h $(defs_h) \
 
 parse.o: parse.c $(command_h) $(defs_h) $(expression_h) $(frame_h) \
 	$(gdbtypes_h) language.h parser-defs.h $(symtab_h) $(value_h) \
-	gdb_string.h
+	gdb_string.h ada-lang.h
 
 ppc-bdm.o: ppc-bdm.c $(defs_h) $(gdbcore_h) gdb_string.h $(frame_h) \
 	$(inferior_h) $(bfd_h) symfile.h target.h $(wait_h) $(gdbcmd_h) \
@@ -1469,7 +1530,7 @@ symmisc.o: symmisc.c $(bfd_h) $(breakpoint_h) $(command_h) $(defs_h) \
 symtab.o: symtab.c call-cmds.h $(defs_h) $(expression_h) $(frame_h) \
 	$(gdbcmd_h) $(gdbcore_h) $(gdbtypes_h) language.h objfiles.h \
 	gnu-regex.h symfile.h $(symtab_h) target.h $(value_h) \
-	gdb_string.h
+	gdb_string.h ada-lang.h
 
 tahoe-tdep.o: tahoe-tdep.c $(OP_INCLUDE)/tahoe.h $(defs_h) \
 	$(symtab_h)
@@ -1503,7 +1564,7 @@ valarith.o: valarith.c $(bfd_h) $(defs_h) $(expression_h) \
 	gdb_string.h
 
 valops.o: valops.c $(defs_h) $(gdbcore_h) $(inferior_h) target.h \
-	gdb_string.h
+	gdb_string.h ada-lang.h
 
 valprint.o: valprint.c $(defs_h) $(expression_h) $(gdbcmd_h) \
 	$(gdbcore_h) $(gdbtypes_h) language.h $(symtab_h) target.h \
@@ -1518,7 +1579,7 @@ vax-tdep.o: vax-tdep.c $(OP_INCLUDE)/vax.h $(defs_h) $(symtab_h)
 w65-tdep.o : w65-tdep.c $(gdbcore_h)
 
 win32-nat.o: win32-nat.c $(gdbcmd_h) $(gdbcore_h) $(inferior_h) $(defs_h) \
-	gdb_string.h
+	gdb_string.h ada-tasks.h
 
 xdr_ld.o: vx-share/xdr_ld.c $(defs_h) vx-share/vxTypes.h \
 	vx-share/vxWorks.h vx-share/xdr_ld.h
@@ -1542,6 +1603,11 @@ xcoffsolib.o: xcoffsolib.c $(bfd_h) $(defs_h) xcoffsolib.h
 
 z8k-tdep.o: z8k-tdep.c $(bfd_h) $(dis-asm_h) $(defs_h) $(frame_h) \
 	$(gdbcmd_h) $(gdbtypes_h) $(symtab_h) $(gdbcore_h)
+
+ada-exp.tab.o: ada-exp.tab.c ada-lex.c ada-lang.h \
+	$(defs_h) $(expression_h) \
+	$(gdbtypes_h) language.h parser-defs.h $(symtab_h) $(value_h) \
+	$(bfd_h) objfiles.h symfile.h
 
 c-exp.tab.o: c-exp.tab.c c-lang.h $(defs_h) $(expression_h) \
 	$(gdbtypes_h) language.h parser-defs.h $(symtab_h) $(value_h) \

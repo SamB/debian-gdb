@@ -31,12 +31,10 @@ extern int kernel_u_size PARAMS ((void));
 /* Tell gdb that we can attach and detach other processes */
 #define ATTACH_DETACH
 
+#define FETCH_INFERIOR_REGISTERS
+
 #define U_REGS_OFFSET 0
 
-/* GNU/Linux uses the SYSV i386v-nat.c support, but doesn't have <sys/reg.h> */
-
-#define NO_SYS_REG_H
- 
 /* GNU/Linux supports the 386 hardware debugging registers.  */
 
 #define TARGET_HAS_HARDWARE_WATCHPOINTS
@@ -73,5 +71,13 @@ extern int
 i386_insert_watchpoint PARAMS ((int pid, CORE_ADDR addr, int len, int rw));
 extern int
 i386_remove_watchpoint PARAMS ((int pid, CORE_ADDR addr, int len));
+
+/* That is a kludge to work around a bug in glibc header files. */
+
+#ifndef HAVE_SYS_REG_H
+#include <sys/user.h>
+#endif
+
+#undef NO_PTRACE_H
 
 #endif /* #ifndef NM_LINUX_H */

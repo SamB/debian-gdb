@@ -18,6 +18,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
+/* Modified for GNAT by Arnaud Charlet, Roch-Alexandre Nomine Beguin */
+
 #include "defs.h"
 #include <ctype.h>
 #include "symtab.h"
@@ -38,6 +40,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "annotate.h"
 #include "symfile.h"
 #include "objfiles.h"
+#include "ada-tasks.h"
 
 /* local function prototypes */
 
@@ -945,6 +948,46 @@ breakpoint_thread_match (pc, pid)
   return 0;
 }
 
+/* breakpoint_task_match (PC) returns true if the breakpoint at PC
+   is valid for current task.  */
+
+static int current_task = -1;
+static int in_internal_get_current_task = 0;
+
+static int internal_get_current_task()
+{
+  if (current_task==-1) {
+    if (in_internal_get_current_task) return -1;
+    else in_internal_get_current_task = 1;
+
+    select_frame (get_current_frame (), 0);
+    current_task = get_current_task();
+    in_internal_get_current_task = 0;
+  }
+  return current_task;
+}
+
+int
+breakpoint_task_match (pc)
+     CORE_ADDR pc;
+{
+  struct breakpoint *b;
+  unsigned long task;
+
+  current_task = -1;
+
+  ALL_BREAKPOINTS (b) {
+    if (b->enable != disabled
+	&& b->enable != shlib_disabled
+	&& b->address == pc
+	&& (b->task == 0 || b->task == internal_get_current_task())) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
 
 /* bpstat stuff.  External routines' interfaces are documented
    in breakpoint.h.  */
@@ -1524,6 +1567,15 @@ bpstat_stop_status (pc, not_a_breakpoint)
 				/* FIXME-someday, should give breakpoint # */
 	      free_all_values ();
 	    }
+
+          if (!breakpoint_task_match (stop_pc - DECR_PC_AFTER_BREAK))
+            {
+              /* Saw a breakpoint, but it was hit by the wrong task.
+                 Just continue. */
+
+              bs->stop = 0;
+            }
+
 	  if (b->cond && value_is_zero)
 	    {
 	      bs->stop = 0;
@@ -2452,6 +2504,8 @@ break_command_1 (arg, flag, from_tty)
   char **canonical = (char **)NULL;
   int i;
   int thread;
+  int task;
+  char new_arg [128];
 
   hardwareflag = flag & BP_HARDWAREFLAG;
   tempflag = flag & BP_TEMPFLAG;
@@ -2482,6 +2536,41 @@ break_command_1 (arg, flag, from_tty)
     }
   else
     {
+      if (arg && !strncmp (arg, "exception", 9) &&
+         (arg[9] == ' ' || arg[9] == '\t' || arg[9] == '\0'))
+        {
+          if (strcmp(current_language->la_name, "ada") != 0)
+            error ("The current language does not support exceptions.\n");
+          else
+            {
+              char *exception_name;
+              char *tok, *end_tok;
+              int toklen;
+
+              tok = arg+10;
+	      while (*tok == ' ' || *tok == '\t')
+	        tok++;
+
+	      end_tok = tok;
+
+	      while (*end_tok != ' ' && *end_tok != '\t' &&
+                     *end_tok != '\000')
+	        end_tok++;
+
+	      toklen = end_tok - tok;
+
+              if (toklen == 0)
+                strcpy (new_arg, "__gnat_raise_nodefer_with_msg");
+              else if (!strncmp (tok, "unhandled", toklen))
+                strcpy (new_arg, "__gnat_unhandled_exception");
+              else
+                {
+                  sprintf (new_arg, "__gnat_raise_nodefer_with_msg "
+                                    "if except = &%.*s", toklen, tok);
+                }
+              arg = new_arg;
+            }
+        }
       addr_start = arg;
 
       /* Force almost all breakpoints to be in terms of the
@@ -2518,6 +2607,7 @@ break_command_1 (arg, flag, from_tty)
     }
 
   thread = -1;			/* No specific thread yet */
+  task = 0;			/* No specific task yet */
 
   /* Resolve all line numbers to PC's, and verify that conditions
      can be parsed, before setting any breakpoints.  */
@@ -2560,6 +2650,18 @@ break_command_1 (arg, flag, from_tty)
 	      if (!valid_thread_id (thread))
 		error ("Unknown thread %d\n", thread);
 	    }
+	  else if (toklen >= 1 && strncmp (tok, "task", toklen) == 0)
+	    {
+	      char *tmptok;
+
+	      tok = end_tok + 1;
+	      tmptok = tok;
+	      task = strtol (tok, &tok, 0);
+	      if (tok == tmptok)
+		error ("Junk after task keyword.");
+	      if (!valid_task_id (task))
+		error ("Unknown task %d\n", task);
+	    }
 	  else
 	    error ("Junk at end of arguments.");
 	}
@@ -2595,6 +2697,7 @@ break_command_1 (arg, flag, from_tty)
       b->type = hardwareflag ? bp_hardware_breakpoint : bp_breakpoint;
       b->cond = cond;
       b->thread = thread;
+      b->task = task;
 
       /* If a canonical line spec is needed use that instead of the
 	 command string.  */
@@ -2829,6 +2932,11 @@ watch_command_1 (arg, accessflag, from_tty)
   mention (b);
 }
 
+#ifndef VALUE_FIT_IN_REG
+#define VALUE_FIT_IN_REG(v) \
+  (TYPE_LENGTH (VALUE_TYPE (v)) <= REGISTER_SIZE)
+#endif
+
 /* Return count of locations need to be watched and can be handled
    in hardware.  If the watchpoint can not be handled
    in hardware return zero.  */
@@ -2847,7 +2955,7 @@ can_use_hardware_watchpoint (v)
     {
       if (v->lval == lval_memory)
 	{
-	  if (TYPE_LENGTH (VALUE_TYPE (v)) <= REGISTER_SIZE)
+	  if (VALUE_FIT_IN_REG (v))
 	    found_memory_cnt++;
         }
       else if (v->lval != not_lval && v->modifiable == 0)
@@ -3241,6 +3349,7 @@ set_breakpoint_sal (sal)
   b->type = bp_breakpoint;
   b->cond = 0;
   b->thread = -1;
+  b->task = 0;
   return b;
 }
 

@@ -14,9 +14,44 @@ SHELL+= -e
 
 dir=`pwd`
 arch=`./config.guess|sed -e 's/unknown/debian/'`
+ARCH=$(shell dpkg --print-architecture)
 p=gdb
 
-build: 
+# --- patch handling
+
+patch_dir = debian
+debian_patches = 
+ifeq ($(ARCH),i386)
+  debian_patches += i386-threads
+endif
+
+patched-%: $(patch_dir)/%.patch
+	patch -p1 < $< 2>&1 | tee $@ 
+	echo "$* patch applied." >> $@
+
+apply-patches: patched-stamp
+
+patched-stamp: $(foreach p,$(debian_patches),patched-$(p))
+	touch patched-stamp
+
+reverse-patches:
+	for stamp in patched-*; do \
+	  case "$$stamp" in patched-stamp|patched-\*) continue; esac; \
+	  patch=`echo $$stamp | sed -e 's/patched-//'`; \
+	  echo "trying to revert patch $$patch ..."; \
+	  if patch -p1 -R -E < $(patch_dir)/$$patch.patch; then \
+	    echo "reverted $$patch patch."; \
+	    rm -f $$stamp; \
+	  else \
+	    echo "error in reverting $$patch patch."; \
+	    exit 1; \
+	  fi; \
+	done
+	rm -f patched-stamp
+
+# --- end patch handling
+
+build: patched-stamp
 	$(checkdir)
 # Regenerate the configure scripts, so they contain our libtools brokenness
 # workarounds
@@ -31,12 +66,19 @@ build:
 	   fi ) ; \
 	done
 # Builds the binary package.
-	env INSTALL="$(install)" ./configure --prefix=/usr -v --enable-shared
+	env INSTALL="$(install)" ./configure --prefix=/usr -v --enable-shared `dpkg --print-architecture`-linux
+# Gross hack
+ifeq ($(ARCH),sparc)
+	make CC="$(CC)" CFLAGS="$(CFLAGS) -D_SYS_PTRACE_H -DPTRACE_ATTACH=16 -DPTRACE_DETACH=17" CXXFLAGS="$(CXXFLAGS)" \
+            LDFLAGS="$(LDFLAGS)" all info
+else
 	make CC="$(CC)" CFLAGS="$(CFLAGS)" CXXFLAGS="$(CXXFLAGS)" \
             LDFLAGS="$(LDFLAGS)" all info
+endif
+	cd gdb/doc && make refcard.dvi refcard.ps 
 	touch build
 
-clean:
+clean: reverse-patches
 # Undoes the effect of `make -f debian.rules build'.
 	$(checkdir)
 	-make distclean
@@ -45,7 +87,7 @@ clean:
 	-find . -name \*.tab.c -print | xargs rm -f
 	-rm -f gdb/xm.h gdb/tm.h gdb/nm.h readline/sysdep.h libiberty/alloca-conf.h config.log gdb/doc/GDBvn.texi
 	rm -f build
-	rm -rf debian/tmp debian/*~ debian/*.bak debian/files* debian/substvars
+	rm -rf debian/tmp debian/*~ debian/*.bak debian/files* debian/substvars gdb/doc/refcard.{ps,dvi}
 
 binary: checkroot build binary-indep binary-arch
 	$(checkdir)
@@ -80,11 +122,22 @@ binary-arch: checkroot build
 	rm -f debian/tmp/usr/man/man1/configure.1
 	chmod -R g-w debian/tmp
 	$(install) -d -m 755 debian/tmp/usr/doc/$(p)/applied-patches
+	$(install) -m 644 gdb/doc/refcard.tex debian/tmp/usr/doc/$(p)/
+	$(install) -m 644 gdb/doc/refcard.dvi debian/tmp/usr/doc/$(p)/
+	$(install) -m 644 gdb/doc/refcard.ps debian/tmp/usr/doc/$(p)/
 	$(install) -m 644 debian/copyright debian/tmp/usr/doc/$(p)/copyright
 	$(install) -m 644 debian/changelog debian/tmp/usr/doc/$(p)/changelog.Debian
 	$(install) -m 644 gdb/ChangeLog debian/tmp/usr/doc/$(p)/changelog
 	$(install) -m 644 debian/m68k.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
 	$(install) -m 644 debian/objc.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
+	$(install) -m 644 debian/objC2.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
+	$(install) -m 644 debian/4.17.gnat.diff.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
+	$(install) -m 644 debian/gdb-4.17-4.17.0.4.diff.bz2.uue debian/tmp/usr/doc/$(p)/applied-patches
+	for patch in none $(debian_patches); do \
+		case "$$patch" in none) continue; esac; \
+		$(install) -m 644 $(patch_dir)/$$patch.patch debian/tmp/usr/doc/$(p)/applied-patches; \
+		gzip -9f debian/tmp/usr/doc/$(p)/applied-patches/$$patch.patch; \
+	done
 	#install -m 644 debian/gnat.diff debian/tmp/usr/doc/$(p)/gnat.diff
 	$(install) -m 755 debian/postinst debian/tmp/DEBIAN/postinst
 	$(install) -m 755 debian/prerm debian/tmp/DEBIAN/prerm
@@ -102,8 +155,8 @@ source diff:
 	false
 
 checkroot:
-        $(checkdir)
-        test root = "`whoami`"
+	$(checkdir)
+	test root = "`whoami`"
 
 define checkdir
 	test -r config-ml.in

@@ -1,5 +1,5 @@
 /* Basic, host-specific, and target-specific definitions for GDB.
-   Copyright (C) 1986, 1989, 1991, 1992, 1993, 1994, 1995, 1996
+   Copyright (C) 1986, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997
    Free Software Foundation, Inc.
 
 This file is part of GDB.
@@ -17,6 +17,8 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+
+/* Modified for GNAT by P. N. Hilfinger */
 
 #ifndef DEFS_H
 #define DEFS_H
@@ -141,6 +143,7 @@ enum language
    language_asm,		/* Assembly language */
    language_scm,		/* Scheme / Guile */
    language_objc,		/* Objective C */
+   language_ada			/* Ada */
 };
 
 /* the cleanup list records things that have to be undone
@@ -216,6 +219,16 @@ extern int inside_main_func PARAMS ((CORE_ADDR pc));
 /* From ch-lang.c, for the moment. (FIXME) */
 
 extern char *chill_demangle PARAMS ((const char *));
+
+/* From ada-lang.c.  For some reason, it shouldn't be (see 
+   chill_demangle comment), but I have no idea what's wrong with this 
+   location for ada_demangle. */
+
+extern char *ada_demangle PARAMS ((const char*));
+
+extern int ada_match_name PARAMS ((const char*, const char*));
+
+extern const char *ada_attribute_name PARAMS ((int));
 
 /* From objc-lang.c, for the moment. (similarly FIXME) */
 

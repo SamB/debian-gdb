@@ -23,6 +23,8 @@
 
 /* We assume we're being built with and will be used for cygwin32.  */
 
+/* Modified for GNAT by Arnaud Charlet, Roch-Alexandre Nomine Beguin */
+
 #include "defs.h"
 #include "frame.h"		/* required by inferior.h */
 #include "inferior.h"
@@ -49,6 +51,7 @@
 #include "gdbcmd.h"
 #include <sys/param.h>
 #include <unistd.h>
+#include "ada-tasks.h"
 
 #define CHECK(x) 	check (x, __FILE__,__LINE__)
 #define DEBUG_EXEC(x)	if (debug_exec)		printf x
@@ -754,6 +757,7 @@ child_create_inferior (exec_file, allargs, env)
   current_thread_id = pi.dwThreadId;
   push_target (&child_ops);
   init_thread_list ();
+  init_task_list ();
   init_wait_for_inferior ();
   clear_proceed_status ();
   target_terminal_init ();

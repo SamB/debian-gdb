@@ -1,5 +1,5 @@
 /* Objective C language support definitions for GDB, the GNU debugger.
-   Copyright 1992 Free Software Foundation, Inc.
+   Copyright 1992, 1996 Free Software Foundation, Inc.
 
 This file is part of GDB.
 
@@ -40,4 +40,3 @@ c_value_print PARAMS ((struct value *, GDB_FILE *, int,
 
 extern CORE_ADDR lookup_objc_class     PARAMS ((char *classname));
 extern int       lookup_child_selector PARAMS ((char *methodname));
-

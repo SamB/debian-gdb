@@ -274,7 +274,7 @@ gdb_test "info files" "" "info files"
 if [istarget "arm-*-coff"] then {
     gdb_test "info float" "Software FPU type.*mask:.*flags:.*" "info float"
 } else {
-    gdb_test "info float" "No floating point info available for this processor." "info float"
+    gdb_test "info float" "No registers.|No floating point info available for this processor." "info float"
 }
 #test info functions
 gdb_test "info functions" "All defined functions:" "info functions"

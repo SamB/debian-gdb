@@ -1,5 +1,5 @@
 /* Generic symbol file reading for the GNU debugger, GDB.
-   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997
    Free Software Foundation, Inc.
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
@@ -18,6 +18,8 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+
+/* Modified for GNAT by P. N. Hilfinger */
 
 #include "defs.h"
 #include "symtab.h"
@@ -831,6 +833,7 @@ set_initial_language ()
       if (pst -> filename != NULL)
 	{
 	  lang = deduce_language_from_filename (pst -> filename);
+	  lang = ada_update_initial_language (lang, pst);
         }
       if (lang == language_unknown)
 	{
@@ -1428,6 +1431,8 @@ deduce_language_from_filename (filename)
     return language_m2;
   else if (STREQ (c, ".s") || STREQ (c, ".S"))
     return language_asm;
+  else if (STREQ (c,".adb") || STREQ (c,".ads"))
+    return language_ada;
 
   return language_unknown;		/* default */
 }

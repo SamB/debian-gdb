@@ -18,6 +18,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
+/* Modified for GNAT by Arnaud Charlet, Roch-Alexandre Nomine Beguin */
+
 #include "defs.h"
 #include "gdb_string.h"
 #include "frame.h"  /* required by inferior.h */
@@ -27,6 +29,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "gdbcore.h"
 #include "terminal.h"
 #include "gdbthread.h"
+#include "ada-tasks.h"
 
 #include <signal.h>
 #ifdef HAVE_UNISTD_H
@@ -228,6 +231,8 @@ fork_inferior (exec_file, allargs, env, traceme_fun, init_trace_fun,
   environ = save_our_env;
 
   init_thread_list();
+
+  init_task_list();
 
   inferior_pid = pid;		/* Needed for wait_for_inferior stuff below */
 

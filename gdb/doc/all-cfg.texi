@@ -61,11 +61,19 @@
 @c This is backward.  As time permits, change this to language-specific
 @c switches for what to include.
 @clear CONLY
+@c
+@c Discuss languages other than C and C++?  (This should be the "or"
+@c of the language settings below).
+@set OTHERLANG
+@c
 @c Discuss Fortran?
 @set FORTRAN
 @c
 @c Discuss Modula 2?
 @set MOD2
+@c
+@c Discuss Ada?
+@set ADA
 @c
 @c Specifically for host machine running DOS?
 @clear DOSHOST

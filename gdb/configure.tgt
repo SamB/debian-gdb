@@ -215,7 +215,8 @@ powerpc-*-netware*)	gdb_target=ppc-nw
 powerpc-*-aix*)		gdb_target=aix ;;
 powerpcle-*-cygwin32)	gdb_target=cygwin32 ;;
 powerpcle-*-solaris*)	gdb_target=solaris ;;
-powerpc-*-eabi* | powerpc-*-linux* | powerpc-*-sysv* | powerpc-*-elf*)
+powerpc-*-linux*)	gdb_target=linux ;;
+powerpc-*-eabi* | powerpc-*-sysv* | powerpc-*-elf*)
 			if test -f ../sim/ppc/Makefile; then
 			  gdb_target=ppc-sim
 			else

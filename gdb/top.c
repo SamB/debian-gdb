@@ -18,6 +18,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
+/* Modified for GNAT by P. N. Hilfinger */
+
 #include "defs.h"
 #include "gdbcmd.h"
 #include "call-cmds.h"
@@ -1184,8 +1186,9 @@ execute_user_command (c, args)
 
   /* Set the instream to 0, indicating execution of a
      user-defined function.  */
-  old_chain = make_cleanup (source_cleanup, instream);
+  make_cleanup (source_cleanup, instream);
   instream = (FILE *) 0;
+
   while (cmdlines)
     {
       ret = execute_control_command (cmdlines);
@@ -1196,6 +1199,7 @@ execute_user_command (c, args)
 	}
       cmdlines = cmdlines->next;
     }
+
   do_cleanups (old_chain);
 }
 
@@ -1229,8 +1233,22 @@ execute_command (p, from_tty)
   if (*p)
     {
       char *arg;
+      
+      if (current_language->la_language == language_ada)
+	{
+	  c = lookup_cmd (&p, cmdlist, "", 1, 1);
+	  if (c == NULL) 
+	    { 
+	      char* call_cmd = (char *) alloca (strlen(p) + 5);
+	      strcpy (call_cmd, "call ");
+	      strcat (call_cmd, p);
+	      execute_command (call_cmd, from_tty);
+	      return;
+	    }
+	}
+      else
+	c = lookup_cmd (&p, cmdlist, "", 0, 1);
 
-      c = lookup_cmd (&p, cmdlist, "", 0, 1);
       /* Pass null arg rather than an empty one.  */
       arg = *p ? p : 0;
 

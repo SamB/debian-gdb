@@ -96,6 +96,11 @@ c_typedef_print (type, new, stream)
       type_print(type,"",stream,0);
       break;
 #endif
+#ifdef _LANG_ada
+   case language_ada:
+     ada_typedef_print (type, new, stream);
+     break;
+#endif
    default:
       error("Language not supported.");
    }

@@ -24,6 +24,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
    COFF or ELF where the stabs data is placed in a special section.
    Avoid placing any object file format specific code in this file. */
 
+/* Modified for GNAT by P. N. Hilfinger */
+
 #include "defs.h"
 #include "gdb_string.h"
 #include "bfd.h"

@@ -135,6 +135,9 @@
 /* Define if you have the <sys/procfs.h> header file.  */
 #undef HAVE_SYS_PROCFS_H
 
+/* Define if you have the <sys/reg.h> header file.  */
+#undef HAVE_SYS_REG_H
+
 /* Define if you have the <termio.h> header file.  */
 #undef HAVE_TERMIO_H
 

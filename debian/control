@@ -11,4 +11,5 @@ Description: The GNU Debugger
  GDB is a source-level debugger, capable of breaking programs at
  any specific line, displaying variable values, and determining
  where errors occurred. Currently, it works for C, C++, Fortran
- and Objective-C programs. A must-have for any serious programmer.
+ Modula 2, Ada, Java and Objective-C programs. A must-have for any
+ serious programmer.

@@ -517,10 +517,25 @@ print_floating (valaddr, type, stream)
 	high &= 0xfffff;
       }
     else
-      /* Extended.  We can't detect NaNs for extendeds yet.  Also note
-	 that currently extendeds get nuked to double in
-	 REGISTER_CONVERTIBLE.  */
-      is_nan = 0;
+      {
+#if TARGET_LONG_DOUBLE_BIT == 80
+	unsigned expon;
+
+	low = extract_unsigned_integer (valaddr, 4);
+	high = extract_unsigned_integer (valaddr + 4, 4);
+	expon = extract_unsigned_integer (valaddr + 8, 2);
+
+	nonnegative = ((expon & 0x8000) == 0);
+	is_nan = ((expon & 0x7fff) == 0x7fff)
+	  && ((high & 0x80000000) == 0x80000000)
+	  && (((high & 0x7fffffff) | low) != 0);
+#else
+	/* Extended.  We can't detect NaNs for extendeds yet.  Also note
+	   that currently extendeds get nuked to double in
+	   REGISTER_CONVERTIBLE.  */
+	is_nan = 0;
+#endif
+      }
 
     if (is_nan)
       {
@@ -551,7 +566,12 @@ print_floating (valaddr, type, stream)
     fprintf_filtered (stream, "%.17g", (double) doub);
   else
 #ifdef PRINTF_HAS_LONG_DOUBLE
+#if TARGET_LONG_DOUBLE_BIT == 80
+    /* Looks like it is a 10 byte long double */
+    fprintf_filtered (stream, "%.22Lg", doub);
+#else
     fprintf_filtered (stream, "%.35Lg", doub);
+#endif
 #else
     /* This at least wins with values that are representable as doubles */
     fprintf_filtered (stream, "%.17g", (double) doub);

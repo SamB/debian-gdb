@@ -17,6 +17,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
+/* Modified for GNAT by P. N. Hilfinger */
+
 #include "defs.h"
 #include <ctype.h>
 #include "gdb_string.h"
@@ -2001,12 +2003,15 @@ fprintf_symbol_filtered (stream, name, lang, arg_mode)
 	    case language_objc:
 	      demangled = objc_demangle (name);
 	      break;
+	    case language_ada:
+	      demangled = ada_demangle (name);
+	      break;
 	    default:
 	      demangled = NULL;
 	      break;
 	    }
 	  fputs_filtered (demangled ? demangled : name, stream);
-	  if (demangled != NULL)
+	  if (demangled != NULL && lang != language_ada)
 	    {
 	      free (demangled);
 	    }

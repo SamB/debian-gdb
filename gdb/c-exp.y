@@ -997,6 +997,18 @@ parse_number (p, len, parsed_float, putithere)
 	break;
       }
 
+#ifdef HEX_LONG_DOUBLE_INPUT
+  {
+    long double val;
+    if (HEX_LONG_DOUBLE_INPUT(base, p, len, &val))
+      {
+	putithere->typed_val_float.dval = val;
+	putithere->typed_val_float.type = builtin_type_long_double;
+	return FLOAT;
+      }
+  }
+#endif /* HEX_LONG_DOUBLE_INPUT */
+
   while (len-- > 0)
     {
       c = *p++;

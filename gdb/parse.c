@@ -1,5 +1,5 @@
 /* Parse expressions for GDB.
-   Copyright (C) 1986, 1989, 1990, 1991, 1994 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1989, 1990, 1991, 1994, 1997 Free Software Foundation, Inc.
    Modified from expread.y by the Department of Computer Science at the
    State University of New York at Buffalo, 1991.
 
@@ -28,6 +28,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
    during the process of parsing; the lower levels of the tree always
    come first in the result.  */
    
+/* Modified for GNAT by P. N. Hilfinger */
+
 #include "defs.h"
 #include "gdb_string.h"
 #include "symtab.h"
@@ -38,6 +40,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "command.h"
 #include "language.h"
 #include "parser-defs.h"
+#include "ada-lang.h"
+
 
 /* Global variables declared in parser-defs.h (and commented there).  */
 struct expression *expout;
@@ -62,6 +66,12 @@ prefixify_expression PARAMS ((struct expression *));
 static void
 prefixify_subexp PARAMS ((struct expression *, struct expression *, int, int));
 
+static void 
+free_name_strings PARAMS ((void));
+
+void
+add_name_string_cleanup PARAMS ((char*));
+
 /* Data structure for saving values of arglist_len for function calls whose
    arguments contain other function calls.  */
 
@@ -72,6 +82,16 @@ struct funcall
   };
 
 static struct funcall *funcall_chain;
+
+/* List of strings. */
+
+struct name_list {
+  struct name_list* next;
+  char* name;
+};
+
+/* List of strings added by write_exp_elt_name. */
+static struct name_list *temp_name_list;
 
 /* Assign machine-independent names to certain registers 
    (unless overridden by the REGISTER_NAMES table) */
@@ -146,6 +166,9 @@ free_funcalls ()
     }
 }
 
+
+
+
 /* This page contains the functions for adding data to the  struct expression
    being constructed.  */
 
@@ -395,6 +418,54 @@ write_exp_msymbol (msymbol, text_symbol_type, data_symbol_type)
     }
   write_exp_elt_opcode (UNOP_MEMVAL);
 }
+
+/* Add the appropriate element to append a pointer to a copy of the 
+   contents of S to the end of the expression.  Add new string to the
+   list of strings `name_string_list.'   These strings are all
+   released after parsing and before expression evaluation. */
+
+extern void write_exp_elt_name (expelt)
+     const char* expelt;
+{
+  union exp_element tmp;
+
+  tmp.name = strsave (expelt);
+  add_name_string_cleanup (tmp.name);
+
+  write_exp_elt (tmp);
+}
+
+/* Add S to the list of strings that will eventually have to be 
+   released after parsing and must also be released on error. */
+void
+add_name_string_cleanup (s)
+     char* s;
+{
+  struct name_list* elt = 
+    (struct name_list*) xmalloc (sizeof (struct name_list));
+
+  elt -> name = s;
+  elt -> next = temp_name_list;
+  temp_name_list = elt;
+}
+
+/* Free temp_name_list. */
+
+static void 
+free_name_strings (void)
+{
+  while (temp_name_list != NULL)
+    {
+      struct name_list* next = temp_name_list -> next;
+      free (temp_name_list->name);
+      free (temp_name_list);
+      temp_name_list = next;
+    }
+  temp_name_list = NULL;
+}
+
+
+
 
 /* Recognize tokens that start with '$'.  These include:
 
@@ -547,6 +618,7 @@ length_of_subexp (expr, endpos)
     case OP_LONG:
     case OP_DOUBLE:
     case OP_VAR_VALUE:
+    case OP_UNRESOLVED_VALUE:
       oplen = 4;
       break;
 
@@ -572,6 +644,16 @@ length_of_subexp (expr, endpos)
     case OP_MSGCALL:	/* Objective C message (method) call */
       oplen = 4;
       args = 1 + longest_to_int (expr->elts[endpos - 2].longconst);
+      break;
+
+    case OP_ATTRIBUTE:
+      oplen = 4;
+      args = 1 + longest_to_int (expr->elts[endpos - 3].longconst);
+      break;
+
+    case UNOP_MBR:
+      oplen = 3;
+      args = 1;
       break;
 
     case UNOP_MAX:
@@ -623,12 +705,15 @@ length_of_subexp (expr, endpos)
       oplen = 4;
       args = longest_to_int (expr->elts[endpos - 2].longconst);
       args -= longest_to_int (expr->elts[endpos - 3].longconst);
+      if (args == 0)
+	args = 1;
       args += 1;
       break;
 
     case TERNOP_COND:
     case TERNOP_SLICE:
     case TERNOP_SLICE_COUNT:
+    case TERNOP_MBR:
       args = 3;
       break;
 
@@ -639,6 +724,7 @@ length_of_subexp (expr, endpos)
       break;
 
     case BINOP_ASSIGN_MODIFY:
+    case BINOP_MBR:
       oplen = 3;
       args = 2;
       break;
@@ -694,6 +780,7 @@ prefixify_subexp (inexpr, outexpr, inend, outbeg)
     case OP_LONG:
     case OP_DOUBLE:
     case OP_VAR_VALUE:
+    case OP_UNRESOLVED_VALUE:
       oplen = 4;
       break;
 
@@ -721,6 +808,11 @@ prefixify_subexp (inexpr, outexpr, inend, outbeg)
       args = 1 + longest_to_int (inexpr->elts[inend - 2].longconst);
       break;
 
+    case OP_ATTRIBUTE:
+      oplen = 4;
+      args = 1 + longest_to_int (inexpr->elts[inend - 3].longconst);
+      break;
+
     case UNOP_MIN:
     case UNOP_MAX:
       oplen = 3;
@@ -728,6 +820,7 @@ prefixify_subexp (inexpr, outexpr, inend, outbeg)
 
     case UNOP_CAST:
     case UNOP_MEMVAL:
+    case UNOP_MBR:
       oplen = 3;
       args = 1;
       break;
@@ -767,11 +860,14 @@ prefixify_subexp (inexpr, outexpr, inend, outbeg)
 
     case OP_ARRAY:
       oplen = 4;
-      args = longest_to_int (inexpr->elts[inend - 2].longconst);
+      args = longest_to_int (inexpr->elts[inend - 2].longconst) + 1;
       args -= longest_to_int (inexpr->elts[inend - 3].longconst);
-      args += 1;
+      /* A null array contains one dummy element to give the type. */
+      if (args == 0)
+	args = 1;
       break;
 
+    case TERNOP_MBR:
     case TERNOP_COND:
     case TERNOP_SLICE:
     case TERNOP_SLICE_COUNT:
@@ -779,6 +875,7 @@ prefixify_subexp (inexpr, outexpr, inend, outbeg)
       break;
 
     case BINOP_ASSIGN_MODIFY:
+    case BINOP_MBR:
       oplen = 3;
       args = 2;
       break;
@@ -860,7 +957,9 @@ parse_exp_1 (stringptr, block, comma)
     error_no_arg ("expression to compute");
 
   old_chain = make_cleanup (free_funcalls, 0);
-  funcall_chain = 0;
+  funcall_chain = NULL;
+  make_cleanup (free_name_strings, NULL);
+  temp_name_list = NULL;
 
   expression_context_block = block ? block : get_selected_block ();
 
@@ -875,23 +974,27 @@ parse_exp_1 (stringptr, block, comma)
   if (current_language->la_parser ())
     current_language->la_error (NULL);
 
-  discard_cleanups (old_chain);
-
-  /* Record the actual number of expression elements, and then
-     reallocate the expression memory so that we free up any
-     excess elements. */
+  /* Record the actual number of expression elements. */
 
   expout->nelts = expout_ptr;
-  expout = (struct expression *)
-    xrealloc ((char *) expout,
-	      sizeof (struct expression) + EXP_ELEM_TO_BYTES (expout_ptr));;
 
   /* Convert expression from postfix form as generated by yacc
      parser, to a prefix form. */
 
   DUMP_EXPRESSION (expout, gdb_stdout, "before conversion to prefix form");
   prefixify_expression (expout);
+  if (current_language->la_language == language_ada)
+      ada_resolve (&expout);
   DUMP_EXPRESSION (expout, gdb_stdout, "after conversion to prefix form");
+
+  free_name_strings ();
+  discard_cleanups (old_chain);
+
+  /* Reallocate the expression memory so that we free up any excess 
+     elements. */
+  expout = (struct expression *)
+    xrealloc ((char *) expout,
+	      sizeof (struct expression) + EXP_ELEM_TO_BYTES (expout->nelts));;
 
   *stringptr = lexptr;
   return expout;

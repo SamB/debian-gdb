@@ -18,6 +18,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
+/* Modified for GNAT by P. N. Hilfinger */
+
 #include "defs.h"
 #include "gdb_string.h"
 #include "bfd.h"
@@ -440,8 +442,11 @@ create_array_type (result_type, element_type, range_type)
   if (get_discrete_bounds (range_type, &low_bound, &high_bound) < 0)
     low_bound = high_bound = 0;
   CHECK_TYPEDEF (element_type);
-  TYPE_LENGTH (result_type) =
-    TYPE_LENGTH (element_type) * (high_bound - low_bound + 1);
+  if (high_bound < low_bound)
+	  TYPE_LENGTH (result_type) = 0;
+  else
+	  TYPE_LENGTH (result_type) =
+		  TYPE_LENGTH (element_type) * (high_bound - low_bound + 1);
   TYPE_NFIELDS (result_type) = 1;
   TYPE_FIELDS (result_type) =
     (struct field *) TYPE_ALLOC (result_type, sizeof (struct field));

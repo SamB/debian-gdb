@@ -18,6 +18,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
+/* Modified for GNAT by P. N. Hilfinger */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -34,6 +36,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "language.h"
 #include "demangle.h"
 #include "inferior.h"
+#include "ada-lang.h"
 
 #include "obstack.h"
 
@@ -1688,10 +1691,7 @@ find_pc_line_pc_range (pc, startptr, endptr)
    If the argument FUNFIRSTLINE is nonzero, we want the first line
    of real code inside the function.  */
 
-static struct symtab_and_line
-find_function_start_sal PARAMS ((struct symbol *sym, int));
-
-static struct symtab_and_line
+struct symtab_and_line
 find_function_start_sal (sym, funfirstline)
      struct symbol *sym;
      int funfirstline;
@@ -1998,9 +1998,11 @@ build_canonical_line_spec (sal, symname, canonical)
    FILE:LINENUM -- that line in that file.  PC returned is 0.
    FUNCTION -- line number of openbrace of that function.
       PC returned is the start of the function.
+   FILE:FUNCTION -- likewise, but prefer functions in that file.
+   FILE:FUNCTION:LINENUM -- likewise, but prefer function whose open
+      brace is "near" line.
    VARIABLE -- line number of definition of that variable.
       PC returned is 0.
-   FILE:FUNCTION -- likewise, but prefer functions in that file.
    *EXPR -- line in which address EXPR appears.
 
    FUNCTION may be an undebuggable function found in minimal symbol table.
@@ -2014,10 +2016,11 @@ build_canonical_line_spec (sal, symname, canonical)
    DEFAULT_LINE specifies the line number to use for relative
    line numbers (that start with signs).  Defaults to current_source_line.
    If CANONICAL is non-NULL, store an array of strings containing the canonical
-   line specs there if necessary. Currently overloaded member functions and
-   line numbers or static functions without a filename yield a canonical
-   line spec. The array and the line spec strings are allocated on the heap,
-   it is the callers responsibility to free them.
+   line specs there if necessary. Currently overloaded functions,
+   overloaded member functions, and line numbers or static functions
+   without a filename yield a canonical line spec. The array and the
+   line spec strings are allocated on the heap; it is the caller's
+   responsibility to free them. 
 
    Note that it is possible to return zero for the symtab
    if no file is validly specified.  Callers must check that.
@@ -2083,6 +2086,7 @@ decode_line_1 (argptr, funfirstline, default_symtab, default_line, canonical)
   char *copy;
   struct symbol *sym_class;
   int i1, i2;
+  int preferred_line;
   int has_parens;
   struct symbol **sym_arr;
   struct type *t;
@@ -2587,6 +2591,25 @@ decode_line_1 (argptr, funfirstline, default_symtab, default_line, canonical)
 	{
 	  return decode_line_2 (sym_arr, i2, funfirstline, canonical);
 	}
+    }
+
+  preferred_line = -1;
+  if ((*argptr)[0] == ':' && isdigit ((*argptr)[1]))
+    {
+      preferred_line = strtol (*argptr + 1, argptr, 10);
+      while (**argptr == ' ' || **argptr == '\t') 
+	*argptr += 1;
+    }
+  if (current_language->la_language == language_ada)
+    {
+      values =  
+	ada_finish_decode_line_1 (copy, preferred_line, funfirstline,
+				  (s ? BLOCKVECTOR_BLOCK (BLOCKVECTOR (s),
+							  STATIC_BLOCK) 
+				   : get_selected_block ()),
+				  canonical);
+      if (values.nelts != 0)
+	return values;
     }
 
 
@@ -3173,6 +3196,7 @@ list_symbols (regexp, class, bpt, from_tty)
 		QUIT;
 		sym = BLOCK_SYM (b, j);
 		if ((regexp == NULL || SYMBOL_MATCHES_REGEXP (sym))
+		    && ! SYMBOL_PRINTING_SUPPRESSED (sym)
 		    && ((class == 0 && SYMBOL_CLASS (sym) != LOC_TYPEDEF
 			 && SYMBOL_CLASS (sym) != LOC_BLOCK
 			 && SYMBOL_CLASS (sym) != LOC_CONST)
@@ -3212,7 +3236,8 @@ list_symbols (regexp, class, bpt, from_tty)
 		      }
 		    found_in_file = 1;
 		    
-		    if (class != 2 && i == STATIC_BLOCK)
+		    if (class != 2 && i == STATIC_BLOCK
+			&& current_language->la_language != language_ada)
 		      printf_filtered ("static ");
 		    
 		    /* Typedef that is not a C++ class */
@@ -3264,7 +3289,8 @@ list_symbols (regexp, class, bpt, from_tty)
   /* If there are no eyes, avoid all contact.  I mean, if there are
      no debug symbols, then print directly from the msymbol_vector.  */
 
-  if (found_misc || class != 1)
+  if ((found_misc || class != 1)
+      && current_language->la_language != language_ada)
     {
       found_in_file = 0;
       ALL_MSYMBOLS (objfile, msymbol)

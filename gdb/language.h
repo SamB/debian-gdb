@@ -1,5 +1,5 @@
 /* Source-language-related definitions for GDB.
-   Copyright 1991, 1992 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1997 Free Software Foundation, Inc.
    Contributed by the Department of Computer Science at the State University
    of New York at Buffalo.
 
@@ -19,6 +19,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
+/* Modified for GNAT by P. N. Hilfinger */
+
 #if !defined (LANGUAGE_H)
 #define LANGUAGE_H 1
 
@@ -36,6 +38,7 @@ struct expression;
 #define	_LANG_m2
 #define	_LANG_chill
 #define _LANG_fortran
+#define _LANG_ada
 
 #define MAX_FORTRAN_DIMS  7   /* Maximum number of F77 array dims */ 
 

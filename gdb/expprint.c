@@ -1,5 +1,5 @@
 /* Print in infix form a struct expression.
-   Copyright (C) 1986, 1989, 1991 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1989, 1991, 1997 Free Software Foundation, Inc.
 
 This file is part of GDB.
 
@@ -16,6 +16,8 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+
+/* Modified for GNAT by P. N. Hilfinger */
 
 #include "defs.h"
 #include "symtab.h"
@@ -157,6 +159,60 @@ print_subexp (exp, pos, stream, prec)
       fputs_filtered (&exp->elts[pc + 2].string, stream);
       return;
 
+    case UNOP_MBR:
+      (*pos) += 2;
+      print_subexp (exp, pos, stream, PREC_SUFFIX);
+      fputs_filtered (" in ", stream);
+      LA_PRINT_TYPE (exp->elts[pc + 1].type, "", stream, 1, 0);
+      return;
+
+    case BINOP_MBR:
+      (*pos) += 2;
+      print_subexp (exp, pos, stream, PREC_SUFFIX);
+      fputs_filtered (" in ", stream);
+      print_subexp (exp, pos, stream, PREC_SUFFIX);
+      fputs_filtered ("'range", stream);
+      if (exp->elts[pc + 1].longconst > 1)
+	fprintf_filtered (stream, "(%d)", exp->elts[pc + 1].longconst);
+      return;
+
+    case TERNOP_MBR:
+      if (prec >= PREC_EQUAL)
+	fputs_filtered ("(", stream);
+      print_subexp (exp, pos, stream, PREC_SUFFIX);
+      fputs_filtered (" in ", stream);
+      print_subexp (exp, pos, stream, PREC_EQUAL);
+      fputs_filtered (" .. ", stream);
+      print_subexp (exp, pos, stream, PREC_EQUAL);
+      if (prec >= PREC_EQUAL)
+	fputs_filtered (")", stream);
+      return;      
+
+    case OP_ATTRIBUTE: 
+      (*pos) += 3;
+      nargs = longest_to_int (exp->elts[pc + 1].longconst);
+      if (exp->elts[*pos].opcode == OP_TYPE)
+	{
+	  if (TYPE_CODE (exp->elts[*pos + 1].type) != TYPE_CODE_VOID)
+	    LA_PRINT_TYPE (exp->elts[*pos + 1].type, "", stream, 0, 0);
+	  *pos += 3;
+	}
+      else
+	print_subexp (exp, pos, stream, PREC_SUFFIX);
+      fprintf_filtered (stream, "'%s", 
+			ada_attribute_name 
+			 (longest_to_int (exp->elts[pc + 2].longconst)));
+      if (nargs > 0)
+	{
+	  for (tem = 0; tem < nargs; tem += 1)
+	    {
+	      fputs_filtered ( (tem == 0) ? " (" : ", ", stream);
+	      print_subexp (exp, pos, stream, PREC_ABOVE_COMMA);
+	    }
+	  fputs_filtered (")", stream);
+	}
+      return;
+
     case OP_STRING:
       nargs = longest_to_int (exp -> elts[pc + 1].longconst);
       (*pos) += 3 + BYTES_TO_EXP_ELEM (nargs + 1);
@@ -221,11 +277,14 @@ print_subexp (exp, pos, stream, prec)
       (*pos) += 3;
       nargs = longest_to_int (exp->elts[pc + 2].longconst);
       nargs -= longest_to_int (exp->elts[pc + 1].longconst);
-      nargs++;
+      nargs += 1;
+      if (nargs == 0) /* In a null array, there is a dummy element */
+	(*pos) += 1;
       tem = 0;
       if (exp->elts[pc + 4].opcode == OP_LONG
 	  && exp->elts[pc + 5].type == builtin_type_char
-	  && exp->language_defn->la_language == language_c)
+	  && (exp->language_defn->la_language == language_c
+	      || exp->language_defn->la_language == language_ada))
 	{
 	  /* Attempt to print C character arrays using string syntax.
 	     Walk through the args, picking up one character from each
@@ -619,6 +678,12 @@ dump_expression (exp, stream, note)
 	  case OP_REGISTER: opcode_name = "OP_REGISTER"; break;
 	  case OP_INTERNALVAR: opcode_name = "OP_INTERNALVAR"; break;
 	  case OP_FUNCALL: opcode_name = "OP_FUNCALL"; break;
+	  case UNOP_MBR: opcode_name = "UNOP_MBR"; break;
+	  case BINOP_MBR: opcode_name = "BINOP_MBR"; break;
+	  case TERNOP_MBR: opcode_name = "TERNOP_MBR"; break;
+ 	  case OP_ATTRIBUTE: opcode_name = "OP_ATTRIBUTE"; break;
+	  case OP_LWB: opcode_name = "OP_LWB"; break;
+	  case OP_UPB: opcode_name = "OP_UPB"; break;
 	  case OP_STRING: opcode_name = "OP_STRING"; break;
 	  case OP_BITSTRING: opcode_name = "OP_BITSTRING"; break;
 	  case OP_ARRAY: opcode_name = "OP_ARRAY"; break;

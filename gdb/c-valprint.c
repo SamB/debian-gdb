@@ -65,9 +65,9 @@ c_val_print (type, valaddr, address, stream, format, deref_ref, recurse,
   switch (TYPE_CODE (type))
     {
     case TYPE_CODE_ARRAY:
+      elttype = check_typedef (TYPE_TARGET_TYPE (type));
       if (TYPE_LENGTH (type) > 0 && TYPE_LENGTH (TYPE_TARGET_TYPE (type)) > 0)
 	{
-	  elttype = check_typedef (TYPE_TARGET_TYPE (type));
 	  eltlen = TYPE_LENGTH (elttype);
 	  len = TYPE_LENGTH (type) / eltlen;
 	  if (prettyprint_arrays)

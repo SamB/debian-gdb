@@ -1,5 +1,5 @@
 /* Definitions for expressions stored in reversed prefix form, for GDB.
-   Copyright 1986, 1989, 1992, 1994 Free Software Foundation, Inc.
+   Copyright 1986, 1989, 1992, 1994, 1997 Free Software Foundation, Inc.
 
 This file is part of GDB.
 
@@ -16,6 +16,8 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+
+/* Modified for GNAT by P. N. Hilfinger */
 
 #if !defined (EXPRESSION_H)
 #define EXPRESSION_H 1
@@ -79,6 +81,10 @@ enum exp_opcode
   BINOP_MAX,		/* >? */
   BINOP_SCOPE,		/* :: */
 
+/* Ada:  exp IN exp'RANGE(N).  N is an immediate operand, surrounded by 
+   BINOP_MBR before and after.  */
+  BINOP_MBR,
+
   /* STRUCTOP_MEMBER is used for pointer-to-member constructs.
      X . * Y translates into X STRUCTOP_MEMBER Y.  */
   STRUCTOP_MEMBER,
@@ -128,6 +134,9 @@ enum exp_opcode
      Return OP3 elements of OP1, starting with element OP2. */
   TERNOP_SLICE_COUNT,
 
+  /* Ada: exp IN exp .. exp */
+  TERNOP_MBR,
+
   /* Multidimensional subscript operator, such as Modula-2 x[a,b,...].
      The dimensionality is encoded in the operator, like the number of
      function arguments in OP_FUNCALL, I.E. <OP><dimension><OP>.
@@ -154,6 +163,18 @@ enum exp_opcode
      non-NULL, evaluate the symbol relative to the innermost frame
      executing in that block; if the block is NULL use the selected frame.  */
   OP_VAR_VALUE,
+
+/* OP_UNRESOLVED_VALUE takes a single struct block* and a char* in the 
+   following exp_elements, followed by another OP_UNRESOLVED_VALUE.   The
+   block indicates where to begin looking for matching symbols.
+   This is for use with overloaded names in GNAT, and must 
+   be resolved into an OP_VAR_VALUE before evaluation in EVAL_NORMAL
+   mode.  When evaluated in EVAL_AVOID_SIDE_EFFECTS mode, it is
+   resolved (if possible) to an OP_VAR_VALUE entry, with its block and
+   symbol entries replaced by the block and symbol from the resolving
+   entry. */
+
+  OP_UNRESOLVED_VALUE,
 
   /* OP_LAST is followed by an integer in the next exp_element.
      The integer is zero for the last value printed,
@@ -194,6 +215,14 @@ enum exp_opcode
   /* The following OP is a special one, it introduces a F77 complex
      literal. It is followed by exactly two args that are doubles.  */ 
   OP_COMPLEX,
+
+  /* GNAT attribute call.  OP_ATTRIBUTE is followed by an integer in the
+     next exp_element, which is the number of extra arguments to the attribute
+     (thus, x'tag would specify 0, whereas x'length would specify 1).  
+     The integer is followed by another integer indicating the identity of 
+     the attribute (of type enum ada_attribute, see ada-lang.h), and then
+     by a repeat of OP_ATTRIBUTE */
+  OP_ATTRIBUTE,
 
   /* OP_STRING represents a string constant.
      Its format is the same as that of a STRUCTOP, but the string
@@ -262,6 +291,10 @@ enum exp_opcode
   OP_BOOL,		/* Modula-2 builtin BOOLEAN type */
   OP_M2_STRING,		/* Modula-2 string constants */
 
+  /* Ada: exp IN type.  The `type' argument is immediate, with UNOP_MBR before 
+     and after it. */
+  UNOP_MBR,
+
   /* STRUCTOP_... operate on a value from a following subexpression
      by extracting a structure component specified by a string
      that appears in the following exp_elements (as many as needed).
@@ -272,7 +305,6 @@ enum exp_opcode
      The length of the string follows the opcode, followed by
      BYTES_TO_EXP_ELEM(length) elements containing the data of the
      string, followed by the length again and the opcode again.  */
-
   STRUCTOP_STRUCT,
   STRUCTOP_PTR,
 
@@ -326,6 +358,7 @@ union exp_element
   struct type *type;
   struct internalvar *internalvar;
   struct block *block;
+  char* name;
 };
 
 struct expression

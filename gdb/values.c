@@ -18,6 +18,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
+/* Modified for GNAT by P. N. Hilfinger */
+
 #include "defs.h"
 #include "gdb_string.h"
 #include "symtab.h"
@@ -1337,7 +1339,7 @@ value_being_returned (valtype, retbuf, struct_return)
      int struct_return;
      /*ARGSUSED*/
 {
-  register value_ptr val;
+  value_ptr val;
   CORE_ADDR addr;
 
 #if defined (EXTRACT_STRUCT_VALUE_ADDRESS)
@@ -1346,7 +1348,12 @@ value_being_returned (valtype, retbuf, struct_return)
     addr = EXTRACT_STRUCT_VALUE_ADDRESS (retbuf);
     if (!addr)
       error ("Function return value unknown");
-    return value_at (valtype, addr, NULL);
+      val = value_at (valtype, addr, NULL);
+      /* The memory location containing this value must be assumed to 
+         vanish, so make sure nobody is fooled into thinking this value
+         is addressable. */
+     VALUE_LVAL (val) = not_lval;
+     return val;
   }
 #endif
 

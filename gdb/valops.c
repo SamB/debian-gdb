@@ -18,6 +18,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
+/* Modified for GNAT by P. N. Hilfinger */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -28,6 +30,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "target.h"
 #include "demangle.h"
 #include "language.h"
+#include "ada-lang.h"   /* For ada_convert_actuals */
 
 #include <errno.h>
 #include "gdb_string.h"
@@ -1104,8 +1107,8 @@ call_function_by_hand (function, nargs, args)
      int nargs;
      value_ptr *args;
 {
-  register CORE_ADDR sp;
-  register int i;
+  CORE_ADDR sp;
+  int i;
   CORE_ADDR start_sp;
   /* CALL_DUMMY is an array of words (REGISTER_SIZE), but each word
      is in host byte order.  Before calling FIX_CALL_DUMMY, we byteswap it
@@ -1135,7 +1138,10 @@ call_function_by_hand (function, nargs, args)
      they are saved on the stack in the inferior.  */
   PUSH_DUMMY_FRAME;
 
-  old_sp = sp = read_sp ();
+  sp = read_sp ();
+  ada_convert_actuals (function, nargs, args, &sp);
+
+  old_sp = sp;
 
 #if 1 INNER_THAN 2		/* Stack grows down */
   sp -= sizeof dummy1;
@@ -1476,10 +1482,11 @@ call_function_by_hand (function, nargs, args)
    the data into that space, and then setting up an array value.
 
    The array bounds are set from LOWBOUND and HIGHBOUND, and the array is
-   populated from the values passed in ELEMVEC.
+   populated from the values passed in ELEMVEC.  There must always be at 
+   least one element in ELEMVEC, even if LOWBOUND > HIGHBOUND.
 
-   The element type of the array is inherited from the type of the
-   first element, and all elements must have the same size (though we
+   The element type of the array is inherited from the type of 
+   ELEMVEC[0], and all elements must have the same size (though we
    don't currently enforce any restriction on their types). */
 
 value_ptr
@@ -1500,7 +1507,7 @@ value_array (lowbound, highbound, elemvec)
      have the same size. */
 
   nelem = highbound - lowbound + 1;
-  if (nelem <= 0)
+  if (nelem < 0)
     {
       error ("bad array bounds (%d, %d)", lowbound, highbound);
     }

@@ -246,6 +246,8 @@ objc_demangle (mangled)
     return NULL;	/* not an objc mangled name */
 }
 
+static void emit_char PARAMS ((int, GDB_FILE *, int));
+
 /* Print the character C on STREAM as part of the contents of a literal
    string whose delimiter is QUOTER.  Note that that format for printing
    characters and strings is language specific. */
@@ -590,7 +592,7 @@ static const struct op_print objc_op_print_tab[] =
     {NULL, 0, 0, 0}
 };
 
-struct type ** const (objc_builtin_types[]) = 
+struct type ** CONST_PTR (objc_builtin_types[]) =
 {
   &builtin_type_int,
   &builtin_type_long,
@@ -1212,4 +1214,3 @@ _initialize_objc_language ()
   add_info ("classes", classes_info, 		/* INFO CLASSES   command */
 	    "All Objective C classes, or those matching REGEXP.");
 }
-

@@ -312,7 +312,8 @@ extract_floating (addr, len)
       else
 	floatformat_to_doublest (TARGET_DOUBLE_FORMAT, addr, &dretval);
     }
-  else if (len == sizeof (DOUBLEST))
+  else if (len == sizeof (DOUBLEST)
+	   || len == (TARGET_LONG_DOUBLE_BIT / 8))
     {
       if (HOST_LONG_DOUBLE_FORMAT == TARGET_LONG_DOUBLE_FORMAT)
 	{
@@ -360,7 +361,8 @@ store_floating (addr, len, val)
       else
 	floatformat_from_doublest (TARGET_DOUBLE_FORMAT, &val, addr);
     }
-  else if (len == sizeof (DOUBLEST))
+  else if (len == sizeof (DOUBLEST)
+	   || len == (TARGET_LONG_DOUBLE_BIT / 8))
     {
       if (HOST_LONG_DOUBLE_FORMAT == TARGET_LONG_DOUBLE_FORMAT)
 	memcpy (addr, &val, sizeof (val));
@@ -660,7 +662,7 @@ read_register_bytes (inregbyte, myaddr, inlen)
   /* See if we are trying to read bytes from out-of-date registers.  If so,
      update just those registers.  */
 
-  for (regno = 0; regno < NUM_REGS; regno++)
+  for (regno = 0; regno < ARCH_NUM_REGS; regno++)
     {
       int regstart, regend;
       int startin, endin;
@@ -772,7 +774,7 @@ write_register_bytes (myregstart, myaddr, inlen)
      like handling threads, and avoiding updates when the new and old contents
      are the same.  */
 
-  for (regno = 0; regno < NUM_REGS; regno++)
+  for (regno = 0; regno < ARCH_NUM_REGS; regno++)
     {
       int regstart, regend;
       int startin, endin;

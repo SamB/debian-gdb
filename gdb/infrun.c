@@ -18,6 +18,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
+/* Modified for GNAT by Arnaud Charlet, Roch-Alexandre Nomine Beguin */
+
 #include "defs.h"
 #include "gdb_string.h"
 #include <ctype.h>
@@ -32,6 +34,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "gdbthread.h"
 #include "annotate.h"
 #include "symfile.h" /* for overlay functions */
+#include "ada-tasks.h"
 
 #include <signal.h>
 
@@ -123,6 +126,16 @@ static void delete_breakpoint_current_contents PARAMS ((PTR));
 
 #ifndef INSTRUCTION_NULLIFIED
 #define INSTRUCTION_NULLIFIED 0
+#endif
+
+/* Hook for determining whether we've performed a subroutine call while
+   debugging assembly language code about which little is known. 
+   (I.e, no symbols are available for determining starting addresses
+   of subroutines.) Defining this hook properly will make "nexti"
+   behave better in such code.  */
+
+#ifndef AT_SUBROUTINE_CALL_INSTRUCTION_TARGET
+#define AT_SUBROUTINE_CALL_INSTRUCTION_TARGET(prevpc,stoppc) 1
 #endif
 
 /* Tables of how to react to signals; the user sets them.  */
@@ -414,6 +427,7 @@ void
 start_remote ()
 {
   init_thread_list ();
+  init_task_list ();
   init_wait_for_inferior ();
   clear_proceed_status ();
   stop_soon_quietly = 1;
@@ -1366,7 +1380,9 @@ wait_for_inferior ()
 	{
 	  /* It's a subroutine call.  */
 
-	  if (step_over_calls == 0)
+	  if (step_over_calls == 0
+	      || (step_range_end == 1
+	          && !AT_SUBROUTINE_CALL_INSTRUCTION_TARGET (prev_pc, stop_pc)))
 	    {
 	      /* I presume that step_over_calls is only 0 when we're
 		 supposed to be stepping at the assembly language level

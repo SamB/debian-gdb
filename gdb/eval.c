@@ -1848,11 +1848,9 @@ evaluate_subexp_for_address (exp, pos, noside)
       if (noside == EVAL_AVOID_SIDE_EFFECTS)
 	{
 	  value_ptr x = evaluate_subexp (NULL_TYPE, exp, pos, noside);
-	  if (VALUE_LVAL (x) == lval_memory)
-	    return value_zero (lookup_pointer_type (VALUE_TYPE (x)),
-			       not_lval);
-	  else
-	    error ("Attempt to take address of non-lval");
+	  /* This COULD be an error, if x is not an lvalue.  However, in */
+	  /* EVAL_AVOID_SIDE_EFFECTS mode, we will be lenient. */
+	  return value_zero (lookup_pointer_type (VALUE_TYPE (x)), not_lval);
 	}
       return value_addr (evaluate_subexp (NULL_TYPE, exp, pos, noside));
     }

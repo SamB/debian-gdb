@@ -1,3 +1,70 @@
+gdb (4.17-4.m68k.objc.threads.hwwp.fpu.gnat.3.1) frozen unstable; urgency=low
+
+  * Fix compilation on sparc
+
+ -- Roman Hodek <Roman.Hodek@informatik.uni-erlangen.de>  Sat, 13 Feb 1999 13:59:10 -0500
+
+gdb (4.17-4.m68k.objc.threads.hwwp.fpu.gnat.3) frozen unstable; urgency=low
+
+  * Non-maintainer upload.
+  * Apply threads patch (dynamically) only if building on i386; the patch
+    works currently only correct on i386 and breaks compilation at least
+    on m68k and sparc.
+
+ -- Roman Hodek <Roman.Hodek@informatik.uni-erlangen.de>  Fri, 11 Dec 1998 13:56:00 +0100
+
+gdb (4.17-4.m68k.objc.threads.hwwp.fpu.gnat.2) unstable; urgency=low
+
+  * Non-maintainer upload.
+  * debian/rules (checkroot): use tab not spaces, thanks to Roman Hodek
+    <Roman.Hodek@informatik.uni-erlangen.de>. [#26798]
+
+ -- James Troup <james@nocrew.org>  Tue, 20 Oct 1998 02:41:26 +0100
+
+gdb (4.17-4.m68k.objc.threads.hwwp.fpu.gnat.1) unstable; urgency=low
+
+  * NMU with yet more hideous revision.
+  * PowerPC support via Matt McLean.
+  * Clean up corrupted m68k files a little bit - move config/m68k/* to
+    gdb/config/m68k/* and remove literal ^L's.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Fri, 11 Sep 1998 22:40:22 -0400
+
+gdb (4.17-4.m68k.objc.threads.hwwp.fpu.gnat) unstable; urgency=low
+
+  * Apply yet another patch to improve Objective-C support (Fix #24599).
+
+ -- Vincent Renardias <vincent@waw.com>  Wed, 15 Jul 1998 12:34:47 +0200
+
+gdb (4.17-3.m68k.objc.threads.hwwp.fpu.gnat) unstable; urgency=low
+
+  * re-integrated gnat support.
+    (Was repported as a bug against 4.16, patch had been integrated then,
+    but dropped while switching to version 4.17).
+    (NB: Not being an ADA expert, I'd appreciate if s/o could confirm
+    it now works properly, thanx)
+
+ -- Vincent Renardias <vincent@waw.com>  Fri,  3 Jul 1998 18:46:28 +0200
+
+gdb (4.17-2.m68k.objc.threads.hwwp.fpu) unstable; urgency=low
+
+  * Include patch to support debugging of multithreaded programs
+    (Bug #23823)
+    Note: Needs a patch to libc6 to work (submitted as #24213).
+  * Include JH Lu patch to have hardware watchpoint and FPU support
+    (Fix bug #660!! (40 months old!!!) & bug #16435)
+  * Bug #8861 also appears to be fixed... Isn't that great? :)
+  * Now provide the reference card (Bug #20772).
+
+ -- Vincent Renardias <vincent@waw.com>  Fri,  3 Jul 1998 18:46:28 +0200
+
+gdb (4.17-1) unstable; urgency=low
+
+  * Fix #22555 (enable building on sparc)
+  * Fix #21932 (acknowledge NMU)
+
+ -- Vincent Renardias <vincent@waw.com>  Mon, 18 May 1998 17:56:10 +0200
+
 gdb (4.17-0.1) frozen unstable; urgency=low
 
   * New upstream release (differences with upstream 4.16.98 are negligable).

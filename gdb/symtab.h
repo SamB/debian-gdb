@@ -1,5 +1,6 @@
 /* Symbol table definitions for GDB.
-   Copyright 1986, 1989, 1991, 1992, 1993, 1994, 1995, 1996 Free Software Foundation, Inc.
+   Copyright 1986, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997
+   Free Software Foundation, Inc.
 
 This file is part of GDB.
 
@@ -16,6 +17,8 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+
+/* Modified for GNAT by P. N. Hilfinger */
 
 #if !defined (SYMTAB_H)
 #define SYMTAB_H 1
@@ -98,6 +101,10 @@ struct general_symbol_info
 	{
 	  char *demangled_name;
 	} objc_specific;
+      struct ada_specific      /* For Ada */
+        {
+          char *demangled_name;
+        } ada_specific;
     } language_specific;
 
   /* Record the source code language that applies to this symbol.
@@ -141,6 +148,10 @@ extern CORE_ADDR symbol_overlayed_address PARAMS((CORE_ADDR, asection *));
 #define SYMBOL_OBJC_DEMANGLED_NAME(symbol)	\
   (symbol)->ginfo.language_specific.objc_specific.demangled_name
 
+#define SYMBOL_ADA_DEMANGLED_NAME(symbol)       \
+  (symbol)->ginfo.language_specific.ada_specific.demangled_name
+
+  
 /* Macro that initializes the language dependent portion of a symbol
    depending upon the language for the symbol. */
 
@@ -159,6 +170,10 @@ extern CORE_ADDR symbol_overlayed_address PARAMS((CORE_ADDR, asection *));
     else if (SYMBOL_LANGUAGE (symbol) == language_objc)			\
       {									\
 	SYMBOL_OBJC_DEMANGLED_NAME (symbol) = NULL;			\
+      }									\
+    else if (SYMBOL_LANGUAGE (symbol) == language_ada)  		\
+      {									\
+	SYMBOL_ADA_DEMANGLED_NAME (symbol) = NULL;			\
       }									\
     else								\
       {									\
@@ -266,6 +281,23 @@ extern CORE_ADDR symbol_overlayed_address PARAMS((CORE_ADDR, asection *));
 	    free (demangled);						\
 	  }								\
       }									\
+    if (demangled == NULL						\
+	&& (SYMBOL_LANGUAGE (symbol) == language_ada			\
+	    || SYMBOL_LANGUAGE (symbol) == language_auto))		\
+      {									\
+	demangled =							\
+	  ada_demangle (SYMBOL_NAME (symbol));				\
+	if (demangled != NULL)						\
+	  {								\
+	    SYMBOL_LANGUAGE (symbol) = language_ada;			\
+	    SYMBOL_ADA_DEMANGLED_NAME (symbol) = 			\
+	      obsavestring (demangled, strlen (demangled), (obstack));	\
+	  }								\
+	else								\
+	  {								\
+	    SYMBOL_ADA_DEMANGLED_NAME (symbol) = NULL;			\
+	  }								\
+      }									\
     if (SYMBOL_LANGUAGE (symbol) == language_auto)			\
       {									\
 	SYMBOL_LANGUAGE (symbol) = language_unknown;			\
@@ -284,7 +316,9 @@ extern CORE_ADDR symbol_overlayed_address PARAMS((CORE_ADDR, asection *));
       ? SYMBOL_CHILL_DEMANGLED_NAME (symbol)				\
       : (SYMBOL_LANGUAGE (symbol) == language_objc			\
 	 ? SYMBOL_OBJC_DEMANGLED_NAME (symbol)				\
-	 : NULL)))
+         : (SYMBOL_LANGUAGE (symbol) == language_ada                    \
+           ? SYMBOL_ADA_DEMANGLED_NAME (symbol)                         \
+	   : NULL))))
 
 /* Macro that returns the "natural source name" of a symbol.  In C++ this is
    the "demangled" form of the name if demangle is on and the "mangled" form
@@ -317,7 +351,9 @@ extern CORE_ADDR symbol_overlayed_address PARAMS((CORE_ADDR, asection *));
 #define SYMBOL_MATCHES_NAME(symbol, name)				\
   (STREQ (SYMBOL_NAME (symbol), (name))					\
    || (SYMBOL_DEMANGLED_NAME (symbol) != NULL				\
-       && strcmp_iw (SYMBOL_DEMANGLED_NAME (symbol), (name)) == 0))
+       && strcmp_iw (SYMBOL_DEMANGLED_NAME (symbol), (name)) == 0)      \
+   || (SYMBOL_LANGUAGE (symbol) == language_ada 			\
+       && ada_match_name (SYMBOL_SOURCE_NAME (symbol), (name))))
    
 /* Macro that tests a symbol for an re-match against the last compiled regular
    expression.  First test the unencoded name, then look for and test a C++
@@ -329,6 +365,14 @@ extern CORE_ADDR symbol_overlayed_address PARAMS((CORE_ADDR, asection *));
    || (SYMBOL_DEMANGLED_NAME (symbol) != NULL				\
        && re_exec (SYMBOL_DEMANGLED_NAME (symbol)) != 0))
    
+/* Macro that tests whether symbol represents an entity that is
+   supposed to be seen by the user in the current language.   Used to
+   filter symbols during printing. */
+
+#define SYMBOL_PRINTING_SUPPRESSED(symbol)				\
+  (current_language->la_language == language_ada			\
+   && ada_suppress_symbol_printing (symbol))
+
 /* Define a simple structure used to hold some very basic information about
    all defined global symbols (text, data, bss, abs, etc).  The only required
    information is the general_symbol_info.
@@ -1291,6 +1335,13 @@ struct symtabs_and_lines
   int nelts;
 };
 
+/* Given a function symbol SYM, find the symtab and line for the start
+   of the function.  If the argument FUNFIRSTLINE is nonzero, we want the 
+   first line of real code inside the function.  */
+
+extern struct symtab_and_line
+find_function_start_sal PARAMS ((struct symbol *sym, int));
+
 /* Given a pc value, return line number it is in.  Second arg nonzero means
    if pc is on the boundary use the previous statement's line number.  */
 
@@ -1410,6 +1461,17 @@ clear_symtab_users PARAMS ((void));
 
 extern enum language
 deduce_language_from_filename PARAMS ((char *));
+
+/* ada-lang.c */
+
+extern int
+ada_match_name PARAMS ((const char*, const char*));
+
+extern enum language
+ada_update_initial_language PARAMS ((enum language, struct partial_symtab*));
+
+extern int
+ada_suppress_symbol_printing PARAMS ((struct symbol*));
 
 /* symtab.c */
 

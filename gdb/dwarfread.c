@@ -679,6 +679,8 @@ set_cu_language (dip)
 	cu_language = language_fortran;
 	break;
       case LANG_ADA83:
+	cu_language = language_ada;
+	break;
       case LANG_COBOL74:
       case LANG_COBOL85:
       case LANG_PASCAL83:
