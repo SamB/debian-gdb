@@ -1,0 +1,10 @@
+#! /bin/sh
+
+set -e
+
+install-info --quiet --section "Development" "Development" \
+ /usr/info/gdb.info.gz
+install-info --quiet --section "Development" "Development" \
+ /usr/info/gdbint.info.gz
+install-info --quiet --section "Development" "Development" \
+ /usr/info/stabs.info.gz

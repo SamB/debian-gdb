@@ -1,0 +1,18 @@
+gdb (4.16-2) unstable; urgency=MEDIUM
+
+  * New caretaker: Stuart Lamble (note: this package is still up
+    for adoption, as I would prefer not to be maintaining it
+    full-time.)
+  * Upgraded to the 2.1.1.0 source format.
+  * Recompiled, with a corrected procfs.h, to correct problems with
+    ELF coredumps.
+  * Reformatted the changelog :-)
+
+ -- Stuart Lamble <lamble@yoyo.cc.monash.edu.au>  Sun, 20 Oct 1996 18:48:40 +1000
+
+gdb (4.16-1) unstable; urgency=low
+
+  * Updated to new upstream version (Bug#4373)
+  * Added a simple extended description (Bug#3599)
+
+ -- David Engel
