@@ -21,7 +21,7 @@ CFLAGS = -O2
 LDFLAGS = -s
 
 dir=`pwd`
-arch=`config.guess|sed -e 's/unknown/debian/'`
+arch=`./config.guess|sed -e 's/unknown/debian/'`
 p=gdb
 
 build:
@@ -58,22 +58,29 @@ binary-arch:
 # We need not distribute the includes and libraries.
 	rm -rf debian/tmp/usr/$(arch)
 	rm -rf debian/tmp/usr/include
-	rm -f debian/tmp/usr/info/bfd.*
-	rm -f debian/tmp/usr/info/cfg-paper.*
-	rm -f debian/tmp/usr/info/configure.*
-	rm -f debian/tmp/usr/info/history.*
-	rm -f debian/tmp/usr/info/mmalloc.*
-	rm -f debian/tmp/usr/info/readline.*
-	rm -f debian/tmp/usr/info/standards.*
+	rm -f debian/tmp/usr/info/[^gs]*.*
+	rm -f debian/tmp/usr/info/standard*.*
+	#rm -f debian/tmp/usr/info/bfd.*
+	#rm -f debian/tmp/usr/info/cfg-paper.*
+	#rm -f debian/tmp/usr/info/configure.*
+	#rm -f debian/tmp/usr/info/history.*
+	#rm -f debian/tmp/usr/info/mmalloc.*
+	#rm -f debian/tmp/usr/info/readline.*
+	#rm -f debian/tmp/usr/info/standards.*
 	rm -rf debian/tmp/usr/lib
 	rm -f debian/tmp/usr/man/man1/configure.1
 	chmod -R g-w debian/tmp
 	install -d -m 755 debian/tmp/usr/doc/$(p)
 	install -m 644 debian/copyright debian/tmp/usr/doc/$(p)/copyright
+	install -m 644 debian/changelog debian/tmp/usr/doc/$(p)/changelog.Debian
+	install -m 644 gdb/ChangeLog debian/tmp/usr/doc/$(p)/changelog.upstream
+	install -m 644 gdb/README.objc debian/tmp/usr/doc/$(p)/README.objc
+	install -m 644 debian/gdb-glibc2.diff debian/tmp/usr/doc/$(p)/gdb-glibc2.diff
 	install -m 755 debian/postinst debian/tmp/DEBIAN/postinst
 	install -m 755 debian/prerm debian/tmp/DEBIAN/prerm
-	gzip -9f debian/tmp/usr/info/*
+	-gzip -9f debian/tmp/usr/info/*
 	-gzip -9 debian/tmp/usr/man/man*/*
+	-gzip -9 debian/tmp/usr/doc/$(p)/changelog*
 	dpkg-shlibdeps gdb/gdb
 	dpkg-gencontrol
 	chown -R root.root debian/tmp

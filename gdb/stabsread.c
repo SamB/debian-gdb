@@ -1122,7 +1122,8 @@ define_symbol (valu, string, desc, type, objfile)
 	 a typedef for "foo".  Unfortunately, cfront never makes the typedef
 	 when translating C++ into C.  We make the typedef here so that
 	 "ptype foo" works as expected for cfront translated code.  */
-      else if (current_subfile->language == language_cplus)
+      else if (current_subfile->language == language_cplus ||
+	       current_subfile->language == language_objc)
 	synonym = 1;
 
       SYMBOL_TYPE (sym) = read_type (&p, objfile);

@@ -1,3 +1,29 @@
+gdb (4.16-6) unstable; urgency=low
+
+  * Corrected texinfo documentation (Fixes bug #3823).
+  * Added upstream ChangeLog file.
+
+ -- Vincent Renardias <vincent@waw.com>  Sun, 16 Mar 1997 18:32:23 +0100
+
+gdb (4.16-5) unstable; urgency=low
+
+  * Included patch for glibc-2.0 support.
+
+ -- Vincent Renardias <vincent@waw.com>  Sun, 16 Mar 1997 07:46:29 +0100
+
+gdb (4.16-4) unstable; urgency=low
+
+  * Included patch for Objective-C support (Fixes bug #7063).
+
+ -- Vincent Renardias <vincent@waw.com>  Sun, 16 Mar 1997 03:12:13 +0100
+
+gdb (4.16-3) unstable; urgency=low
+
+  * New maintainer.
+  * Included patches for m68k support.
+
+ -- Vincent Renardias <vincent@waw.com>  Fri, 14 Mar 1997 22:07:58 +0100
+
 gdb (4.16-2) unstable; urgency=MEDIUM
 
   * New caretaker: Stuart Lamble (note: this package is still up

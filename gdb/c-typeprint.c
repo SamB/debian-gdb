@@ -67,6 +67,7 @@ c_typedef_print (type, new, stream)
 #ifdef _LANG_c
    case language_c:
    case language_cplus:
+   case language_objc:
       fprintf_filtered(stream, "typedef ");
       type_print(type,"",stream,0);
       if(TYPE_NAME ((SYMBOL_TYPE (new))) == 0

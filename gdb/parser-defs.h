@@ -75,6 +75,13 @@ struct symtoken
     int is_a_field_of_this;
   };
 
+struct objc_class
+  {
+    struct stoken stoken;
+    struct type *type;
+    int    class;
+  };
+
 /* For parsing of complicated types.
    An array should be preceded in the list by the size of the array.  */
 enum type_pieces
@@ -187,5 +194,10 @@ struct op_print
      For a unary operator:  1 iff postfix. */
   int right_assoc;
 };
+
+/* for parsing Objective C */
+extern void start_msglist();
+extern void add_msglist PARAMS((struct stoken *str, int addcolon));
+extern int end_msglist();
 
 #endif	/* PARSER_DEFS_H */

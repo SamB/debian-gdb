@@ -165,6 +165,7 @@ myresume (step, signal)
     - KERNEL_U_ADDR
 #endif
 
+#ifdef __i386__
 /* this table must line up with REGISTER_NAMES in tm-i386v.h */
 /* symbols like 'EAX' come from <sys/reg.h> */
 static int regmap[] = 
@@ -198,6 +199,32 @@ i386_register_u_addr (blockend, regnum)
     return (blockend + 4 * regmap[regnum]);
   
 }
+#endif
+
+#ifdef __mc68000__
+/* This table must line up with REGISTER_NAMES in tm-m68k.h */
+static int regmap[] = 
+{
+  PT_D0, PT_D1, PT_D2, PT_D3, PT_D4, PT_D5, PT_D6, PT_D7,
+  PT_A0, PT_A1, PT_A2, PT_A3, PT_A4, PT_A5, PT_A6, PT_USP,
+  PT_SR, PT_PC,
+  /* PT_FP0, ..., PT_FP7 */
+  21, 24, 27, 30, 33, 36, 39, 42,
+  /* PT_FPCR, PT_FPSR, PT_FPIAR */
+  45, 46, 47
+};
+
+/* BLOCKEND is the value of u.u_ar0, and points to the place where GS
+   is stored.  */
+
+int
+m68k_linux_register_u_addr (blockend, regnum)
+     int blockend;
+     int regnum;
+{
+    return (blockend + 4 * regmap[regnum]);
+}
+#endif
 
 unsigned int
 register_addr (regno, blockend)

@@ -1,0 +1,117 @@
+
+GDB Language Support for Objective C
+Submitted by Michael Snyder
+NeXT Software, Inc.
+
+This is a portable implementation of NeXT's gdb support for debugging
+Objective C.  This has only been tested with Gnu's GCC-based Objective
+C compiler, and may not work with other compilers or runtime
+libraries.  It has been tested to a limited extent with the public
+version of GCC and GnuStep, with the majority of the testing being
+done under NeXT's proprietary versions of the compiler and OpenStep.
+It has been tested on Microsoft Windows NT (Gnu and NeXT compilers),
+Solaris (NeXT compiler), and HPUX (NeXT compiler).  I expect it to
+work on other platforms in the Gnu environment, but would not be
+surprised if some tweaking were required.
+
+Language specific features:
+ * Auto-recognition of Objective C source code (by the ".m" extension)
+ * Demangling of Objective C mangled method names in backtraces etc.
+ * Accepts demangled (native) form for Objective C method names
+   for setting breakpoints etc.
+ * Understands class scope for instance variables in expressions 
+   (automatically dereferences things from the "self" pointer)
+ * Step into Objective C message calls
+ * Call Objective C methods and print their return values 
+   (in native syntax, eg. "print [MyClass myMethod:42]")
+ * LIST or BREAK on selectors gives a list of matching implementations 
+   (just like what happens with overloaded C++ member functions)
+ * Tab-completion on methods and selectors
+ * @selector operator
+ * INFO CLASS and INFO SELECTOR commands
+ * NSString literals in expressions (eg. @"foo")
+ * Class names recognised with or without the keyword "struct"
+
+
+
+Auto language recognition:
+Objective C is a first-class language in gdb (just like C++ or
+FORTRAN).  Gdb auto-detects Objective C source files by the ".m"
+extension, enabling name demangling and other language features.
+Should you need to force the current language to Objective C (eg. for
+programs compiled with no symbol information), use:
+	 "SET LANGUAGE objective-c".
+
+
+Symbol Demangling:
+Objective C methods names are mangled by GCC into a form that looks
+like (for example) "_i_Classname_Categoryname_Selectorname__" where
+colons (":") in the selector name are replaced with underscores ("_").
+Gdb will reverse this mangling to present the method name as
+"-[Classname(Categoryname) Selectorname::]".  Unfortunately this
+mangling scheme is not uniquely reversable if class, category or
+selector names contain underscores, so gdb will demangle such names
+incorrectly.  
+
+
+Native-form Names of Objective C Methods:
+Breakpoint commands etc. can refer to Objective C methods in their
+demangled form:
+	(gdb) BREAK +[Classname Selector:withArg:andArg:]
+
+
+Class scope:
+If you are debugging in an Objective C method of a class that has an
+instance variable (eg. "foo"), you can refer to that variable by name,
+	(gdb) print foo
+without having to refer to it thru the self pointer:
+	(gdb) print self->foo	// C++ analogy: this->foo
+
+
+
+Calls to Objective C Methods in expressions:
+The PRINT and CALL commands can be used to call Objective C methods
+using the native syntax (and print their return values):
+	(gdb) call  [foo withBar: 12 andBaz: 14]
+	(gdb) print $myfoo = [[Foo alloc] init]
+
+
+Selectors treated as overloaded functions:
+The BREAK and LIST commands can take a raw selector as an argument.
+If the selector is implemented by more than one class, gdb will
+present a list of the possible matches, just as it would in the case
+of a C++ overloaded member function.  The user can select one,
+several, or all of the matches from the list.
+	(gdb) break init
+	[0] cancel
+	[1] all
+	[2] -[Change init] at Change.m:20
+	[3] -[ChangeManager init] at ChangeManage.m:30
+	[4] -[DrawApp init] at DrawApp.m:130
+	>
+
+
+INFO CLASS and INFO SELECTOR commands:
+By analogy with the INFO FUNCTION and INFO TYPE commands, these accept
+a regular expression and print a list of Objective C classes or selectors
+that match.
+
+
+NSString literals:
+Many Objective C methods expect an NSString literal as an argument, 
+and many expressions that might be cut-and-paste evaluated from an
+Objective C program contain such literals.  As a convenience, GDB 
+will accept such a literal, and build an NSString constant in the
+child process address space.
+	(gdb) print [NSImage imageNamed: @"Cross.tiff"]
+
+
+Builtin typedefs for classes:
+As with C++, the Objective C language does not expect you to use 
+the keyword "struct" in front of a class name.  However the GCC
+compiler emits the type symbols for classes as structs.  GDB will
+automatically create an internal typedef symbol that might look like:
+	typedef struct NSString NSString;
+so that the user can use casts like "(NSString *) 0" instead of 
+having to type "(struct NSString *) 0" (although the later will 
+still be accepted too).

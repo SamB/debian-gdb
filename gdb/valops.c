@@ -95,7 +95,10 @@ find_function_in_inferior (name)
 	{
 	  struct type *type;
 	  LONGEST maddr;
-	  type = lookup_pointer_type (builtin_type_char);
+	  /* Invent a type, function returning void*, for this minsym.
+	     A void* return value can be cast to anything.  A char* return
+	     type is dangerous, because gdb will attempt to print a string */
+	  type = lookup_pointer_type (builtin_type_void);
 	  type = lookup_function_type (type);
 	  type = lookup_pointer_type (type);
 	  maddr = (LONGEST) SYMBOL_VALUE_ADDRESS (msymbol);
@@ -187,8 +190,9 @@ value_cast (type, arg2)
 	}
     }
 
-  if (current_language->c_style_arrays
-      && TYPE_CODE (type2) == TYPE_CODE_ARRAY)
+  if (current_language->c_style_arrays &&
+     (TYPE_CODE (type2) == TYPE_CODE_ARRAY ||
+      TYPE_CODE (type2) == TYPE_CODE_STRING))	/* a string is an array */
     arg2 = value_coerce_array (arg2);
 
   if (TYPE_CODE (type2) == TYPE_CODE_FUNC)
@@ -2131,6 +2135,13 @@ value_struct_elt_for_reference (domain, offset, curtype, name, intype)
   return 0;
 }
 
+/* actually, I would think this would be a valuable function in general */
+static value_ptr value_of_local PARAMS ((char *name, int complain));
+
+/* Objective C: return the value of the class instance variable, if 
+   one exists.  Flag COMPLAIN signals an error if the request is 
+   made in an inappropriate context.  */
+
 /* C++: return the value of the class instance variable, if one exists.
    Flag COMPLAIN signals an error if the request is made in an
    inappropriate context.  */
@@ -2139,11 +2150,20 @@ value_ptr
 value_of_this (complain)
      int complain;
 {
+  if (current_language->la_language == language_objc)
+    return value_of_local("self", complain);
+  else
+    return value_of_local("this", complain);
+}
+
+static value_ptr
+value_of_local(name, complain)
+     char *name;
+     int   complain;
+{
   struct symbol *func, *sym;
   struct block *b;
-  int i;
-  static const char funny_this[] = "this";
-  value_ptr this;
+  value_ptr ret;
 
   if (selected_frame == 0)
     if (complain)
@@ -2154,20 +2174,19 @@ value_of_this (complain)
   if (!func)
     {
       if (complain)
-	error ("no `this' in nameless context");
+	error ("no %s in nameless context", name);
       else return 0;
     }
 
   b = SYMBOL_BLOCK_VALUE (func);
-  i = BLOCK_NSYMS (b);
-  if (i <= 0)
+  if (BLOCK_NSYMS (b) <= 0)
     if (complain)
-      error ("no args, no `this'");
+      error ("no args, no %s", name);
     else return 0;
 
   /* Calling lookup_block_symbol is necessary to get the LOC_REGISTER
      symbol instead of the LOC_ARG one (if both exist).  */
-  sym = lookup_block_symbol (b, funny_this, VAR_NAMESPACE);
+  sym = lookup_block_symbol (b, name, VAR_NAMESPACE);
   if (sym == NULL)
     {
       if (complain)
@@ -2176,10 +2195,10 @@ value_of_this (complain)
 	return NULL;
     }
 
-  this = read_var_value (sym, selected_frame);
-  if (this == 0 && complain)
-    error ("`this' argument at unknown address");
-  return this;
+  ret = read_var_value (sym, selected_frame);
+  if (ret == 0 && complain)
+    error ("%s argument unreadable", name);
+  return ret;
 }
 
 /* Create a slice (sub-string, sub-array) of ARRAY, that is LENGTH elements

@@ -38,6 +38,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #define	BYTE_BITFIELD	/*nothing*/
 #endif
 
+extern char *objc_demangle PARAMS ((const char *));
+
 /* Define a structure for the information that is common to all symbol types,
    including minimal symbols, partial symbols, and full symbols.  In a
    multilanguage environment, some language specific information may need to
@@ -84,14 +86,18 @@ struct general_symbol_info
 
   union
     {
-      struct cplus_specific      /* For C++ */
+      struct cplus_specific	/* For C++ */
 	{
 	  char *demangled_name;
 	} cplus_specific;
-      struct chill_specific      /* For Chill */
+      struct chill_specific	/* For Chill */
 	{
 	  char *demangled_name;
 	} chill_specific;
+      struct objc_specific	/* For Objective C */
+	{
+	  char *demangled_name;
+	} objc_specific;
     } language_specific;
 
   /* Record the source code language that applies to this symbol.
@@ -122,6 +128,12 @@ struct general_symbol_info
 #define SYMBOL_CPLUS_DEMANGLED_NAME(symbol)	\
   (symbol)->ginfo.language_specific.cplus_specific.demangled_name
 
+#define SYMBOL_CHILL_DEMANGLED_NAME(symbol)	\
+  (symbol)->ginfo.language_specific.chill_specific.demangled_name
+
+#define SYMBOL_OBJC_DEMANGLED_NAME(symbol)	\
+  (symbol)->ginfo.language_specific.objc_specific.demangled_name
+
 /* Macro that initializes the language dependent portion of a symbol
    depending upon the language for the symbol. */
 
@@ -135,6 +147,10 @@ struct general_symbol_info
     else if (SYMBOL_LANGUAGE (symbol) == language_chill)		\
       {									\
 	SYMBOL_CHILL_DEMANGLED_NAME (symbol) = NULL;			\
+      }									\
+    else if (SYMBOL_LANGUAGE (symbol) == language_objc)			\
+      {									\
+	SYMBOL_OBJC_DEMANGLED_NAME (symbol) = NULL;			\
       }									\
     else								\
       {									\
@@ -155,8 +171,8 @@ struct general_symbol_info
 #define SYMBOL_INIT_DEMANGLED_NAME(symbol,obstack)			\
   do {									\
     char *demangled = NULL;						\
-    if (SYMBOL_LANGUAGE (symbol) == language_cplus			\
-	|| SYMBOL_LANGUAGE (symbol) == language_auto)			\
+    if (SYMBOL_LANGUAGE (symbol) == language_cplus ||			\
+	SYMBOL_LANGUAGE (symbol) == language_auto)			\
       {									\
 	demangled =							\
 	  cplus_demangle (SYMBOL_NAME (symbol), DMGL_PARAMS | DMGL_ANSI);\
@@ -172,9 +188,9 @@ struct general_symbol_info
 	    SYMBOL_CPLUS_DEMANGLED_NAME (symbol) = NULL;		\
 	  }								\
       }									\
-    if (demangled == NULL						\
-	&& (SYMBOL_LANGUAGE (symbol) == language_chill			\
-	    || SYMBOL_LANGUAGE (symbol) == language_auto))		\
+    if (demangled == NULL &&						\
+	(SYMBOL_LANGUAGE (symbol) == language_chill ||			\
+	 SYMBOL_LANGUAGE (symbol) == language_auto))			\
       {									\
 	demangled =							\
 	  chill_demangle (SYMBOL_NAME (symbol));			\
@@ -190,6 +206,41 @@ struct general_symbol_info
 	    SYMBOL_CHILL_DEMANGLED_NAME (symbol) = NULL;		\
 	  }								\
       }									\
+    if (demangled == NULL &&						\
+	(SYMBOL_LANGUAGE (symbol) == language_objc ||			\
+	 SYMBOL_LANGUAGE (symbol) == language_auto))			\
+      {									\
+	demangled =							\
+	  objc_demangle (SYMBOL_NAME (symbol));				\
+	if (demangled != NULL)						\
+	  {								\
+	    SYMBOL_LANGUAGE (symbol) = language_objc;			\
+	    SYMBOL_OBJC_DEMANGLED_NAME (symbol) = 			\
+	      obsavestring (demangled, strlen (demangled), (obstack));	\
+	    free (demangled);						\
+	  }								\
+	else								\
+	  {								\
+	    SYMBOL_OBJC_DEMANGLED_NAME (symbol) = NULL;			\
+	  }								\
+      }									\
+    if (demangled &&							\
+	SYMBOL_LANGUAGE (symbol) != language_objc &&			\
+       (demangled = SYMBOL_NAME (symbol)) && 				\
+	demangled[0] == '_' &&						\
+       (demangled[1] == 'i' || demangled[1] == 'c') &&			\
+	demangled[2] == '_')						\
+      {	/* some other demangling succeeded, yet it looks like ObjC   */	\
+	demangled =							\
+	  objc_demangle (SYMBOL_NAME (symbol));				\
+	if (demangled != NULL)  /*  yes, it was ObjC: let ObjC win   */	\
+	  {			/* (C++ demangling is too forgiving) */	\
+	    SYMBOL_LANGUAGE (symbol) = language_objc;			\
+	    SYMBOL_OBJC_DEMANGLED_NAME (symbol) = 			\
+	      obsavestring (demangled, strlen (demangled), (obstack));	\
+	    free (demangled);						\
+	  }								\
+      }									\
     if (SYMBOL_LANGUAGE (symbol) == language_auto)			\
       {									\
 	SYMBOL_LANGUAGE (symbol) = language_unknown;			\
@@ -198,16 +249,16 @@ struct general_symbol_info
 
 /* Macro that returns the demangled name for a symbol based on the language
    for that symbol.  If no demangled name exists, returns NULL. */
+/* FIXME: getting to where we could use a switch for this, isn't it? */
 
 #define SYMBOL_DEMANGLED_NAME(symbol)					\
   (SYMBOL_LANGUAGE (symbol) == language_cplus				\
    ? SYMBOL_CPLUS_DEMANGLED_NAME (symbol)				\
    : (SYMBOL_LANGUAGE (symbol) == language_chill			\
       ? SYMBOL_CHILL_DEMANGLED_NAME (symbol)				\
-      : NULL))
-
-#define SYMBOL_CHILL_DEMANGLED_NAME(symbol)				\
-  (symbol)->ginfo.language_specific.chill_specific.demangled_name
+      : (SYMBOL_LANGUAGE (symbol) == language_objc			\
+	 ? SYMBOL_OBJC_DEMANGLED_NAME (symbol)				\
+	 : NULL)))
 
 /* Macro that returns the "natural source name" of a symbol.  In C++ this is
    the "demangled" form of the name if demangle is on and the "mangled" form

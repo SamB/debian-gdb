@@ -178,7 +178,7 @@ evaluate_struct_tuple (struct_val, exp, pos, noside, nargs)
   int fieldno = -1;
   int variantno = -1;
   int subfieldno = -1;
-   while (--nargs >= 0)
+  while (--nargs >= 0)
     {
       int pc = *pos;
       value_ptr val = NULL;
@@ -467,6 +467,17 @@ evaluate_subexp_standard (expect_type, exp, pos, noside)
       if (noside == EVAL_SKIP)
 	goto nosideret;
       return value_string (&exp->elts[pc + 2].string, tem);
+      /* NOTE: I think the above call is wrong, and that it should be 
+	 value_string(..., tem + 1);  I can't easily test it, since 
+	 while Fortran and Chill still use OP_STRING, C and C++ do not.
+	 This needs to be verified.  Michael Snyder  */
+
+    case OP_NSSTRING:	/* Objective C Foundation Class NSString constant */
+      tem = longest_to_int (exp->elts[pc + 1].longconst);
+      (*pos) += 3 + BYTES_TO_EXP_ELEM (tem + 1);
+      if (noside == EVAL_SKIP)
+	goto nosideret;
+      return (value_ptr) value_nsstring (&exp->elts[pc + 2].string, tem + 1);
 
     case OP_BITSTRING:
       tem = longest_to_int (exp->elts[pc + 1].longconst);
@@ -633,6 +644,180 @@ evaluate_subexp_standard (expect_type, exp, pos, noside)
 	  evaluate_subexp (NULL_TYPE, exp, pos, EVAL_SKIP);
 	  return arg2;
 	}
+
+    case OP_SELECTOR: {	/* Objective C @selector operator */
+      char *sel = &exp->elts[pc+2].string;
+      int   len = longest_to_int(exp->elts[pc+1].longconst);
+
+      (*pos) += 3 + BYTES_TO_EXP_ELEM (len + 1);
+      if (noside == EVAL_SKIP)
+	goto nosideret;
+
+      if (sel[len] != 0)
+	sel[len] = 0;		/* make sure terminated */
+      return value_from_longest(lookup_pointer_type(builtin_type_void), 
+				lookup_child_selector(sel));
+    }
+
+    case OP_MSGCALL: {		/* Objective C message (method) call */
+				/* User wants to call an objc method */
+      value_ptr find_function_in_inferior PARAMS((char *));
+      value_ptr ret;
+      struct symbol *sym;
+      value_ptr gnu_runtime = 0;
+      CORE_ADDR addr;
+
+      /* First evaluate the target (class or object) of the message */
+      (*pos) += 3;
+      nargs = exp->elts[pc + 2].longconst;
+      argvec = (value_ptr *) alloca (sizeof (value_ptr) * (nargs + 5));
+      argvec[1] = evaluate_subexp(0, exp, pos, noside);	/* target */
+
+      if (!value_as_long(argvec[1]))			/* null target */
+	return value_from_longest(builtin_type_long, 0);
+
+      /* Now lookup the ObjC runtime message dispatcher */
+      if (lookup_minimal_symbol("objc_msgSend", 0, 0))
+	argvec[0] = find_function_in_inferior("objc_msgSend");
+      else	/* NeXT version not found, try GNU variant */
+	{
+	  argvec[0] = find_function_in_inferior("objc_msg_lookup");
+	  gnu_runtime = argvec[0];
+	}
+
+      /* Verify target responds to method selector */
+
+      if ((tem = lookup_child_selector("respondsTo:"))         == 0 &&
+	  (tem = lookup_child_selector("respondsToSelector:")) == 0)
+	/* This logic needs work: not sure of GNU variant's name */
+	/* Must also account for new (NSObject) and old (Object) worlds */
+	error ("no 'respondsTo:' or 'respondsToSelector:' method");
+
+      /* call "respondsToSelector:" method, to make sure that 
+       * the target class implements the user's desired method selector
+       */
+      argvec[2] = value_from_longest(builtin_type_long, tem);
+      argvec[3] = value_from_longest(builtin_type_long, /* user's selector */
+				     exp->elts[pc + 1].longconst);
+      argvec[4] = 0;		/* see if target responds to selector */
+      ret = call_function_by_hand(argvec[0], 3, argvec + 1);
+      if (gnu_runtime)
+	{
+	  /* Whereas the NeXT objc runtime function objc_msgSend actually
+	   * calls the method, the GNU runtime function objc_msg_lookup
+	   * only returns a pointer to it.  We still have to call it.
+	   */
+	  argvec[0] = ret;		/* prepare to call the method */
+	  ret = call_function_by_hand(argvec[0], 3, argvec + 1);
+	  argvec[0] = gnu_runtime;	/* prepare to call objc_msg_lookup */
+	}
+
+      if (!value_as_long(ret))		/* no, it doesn't! */
+	error("Target does not respond to this message selector.");
+
+      /* Try to lookup the method implementation; do we have a symbol? */
+      /* FIXME: which one of these should I try first!?! */
+      if (gnu_runtime)	/* look for methodFor: first */
+	{
+	  if ((tem = lookup_child_selector("methodFor:")) == 0)
+	    tem = lookup_child_selector("methodForSelector:");
+	}
+      else		/* look for methodForSelector: first */
+	{
+	  if ((tem = lookup_child_selector("methodForSelector:")) == 0)
+	    tem = lookup_child_selector("methodFor:");
+	}
+      if (!tem)
+	error ("no 'methodFor:' or 'methodForSelector:' method");
+
+      /* call "methodForSelector:" method, to get the address of a 
+       * function method that implements this selector for this class.
+       * If we can find a symbol at that address, then we know the 
+       * return type, parameter types etc.  (that's a good thing).
+       */
+      argvec[2] = value_from_longest(builtin_type_long, tem);
+      ret = call_function_by_hand(argvec[0], 3, argvec + 1);
+      if (gnu_runtime)
+	{
+	  /* Whereas the NeXT objc runtime function objc_msgSend actually
+	   * calls the method, the GNU runtime function objc_msg_lookup
+	   * only returns a pointer to it.  We still have to call it.
+	   */
+	  argvec[0] = ret;		/* prepare to call the method */
+	  ret = call_function_by_hand(argvec[0], 3, argvec + 1);
+	  argvec[0] = gnu_runtime;	/* prepare to call objc_msg_lookup */
+	}
+
+      if (addr = value_as_long(ret))		/* got an address */
+	{				/* is it a high_level symbol? */
+#ifdef GDB_TARGET_IS_HPPA
+	  CORE_ADDR tmp;
+	  /* code and comment lifted from hppa-tdep.c -- unfortunately 
+	     there is no builtin function to do this for me. */
+	  /* If bit 30 (counting from the left) is on, then addr is the 
+	     address of the PLT entry for this function, not the address 
+	     of the function itself.  Bit 31 has meaning too, but only 
+	     for MPE.  */
+	  if (addr & 0x2)
+	    addr = (CORE_ADDR) read_memory_integer (addr & ~0x3, 4);
+	  if (tmp = skip_trampoline_code(addr, 0))
+	    addr = tmp;	/* in case of trampoline code */
+#endif
+	  sym = find_pc_function(addr);
+	  /* 
+	   * Found a function symbol.  Now we will substitute its
+	   * value in place of the message dispatcher (obj_msgSend),
+	   * so that we call the method directly instead of thru
+	   * the dispatcher.  The main reason for doing this is that
+	   * we can now evaluate the return value and parameter values
+	   * according to their known data types, in case we need to
+	   * do things like promotion, dereferencing, special handling
+	   * of structs and doubles, etc.
+	   */
+	  if (sym)			/* yes; we will call it directly */
+	    argvec[0] = value_of_variable(sym, 0);
+	}
+
+      /* So now we actually call the selector.  Move it's value into [2] */
+      argvec[2] = argvec[3];		/* selector */
+      /* Evaluate the method's user-supplied arguments */
+      for (tem=0; tem < nargs; tem++)	/* args, if any */
+	argvec[tem+3] = evaluate_subexp_with_coercion (exp, pos, noside);
+      argvec[tem+3] = 0;
+      /* Now depending on whether we found a symbol for the method, 
+       * we will either call the runtime dispatcher or the method directly.
+       */
+      if (noside == EVAL_SKIP)
+	goto nosideret;
+      if (noside == EVAL_AVOID_SIDE_EFFECTS)
+	{
+	  /* If the return type doesn't look like a function type, call an
+	     error.  This can happen if somebody tries to turn a variable into
+	     a function call. This is here because people often want to
+	     call, eg, strcmp, which gdb doesn't know is a function.  If
+	     gdb isn't asked for it's opinion (ie. through "whatis"),
+	     it won't offer it. */
+
+	  struct type *ftype = TYPE_TARGET_TYPE (VALUE_TYPE (argvec[0]));
+
+	  if (ftype)
+	    return allocate_value (TYPE_TARGET_TYPE (VALUE_TYPE (argvec[0])));
+	  else
+	    error ("Expression of type other than \"Method returning ...\" used as a method");
+	}
+      ret = call_function_by_hand (argvec[0], nargs + 2, argvec + 1);
+      if (gnu_runtime && argvec[0] == gnu_runtime)
+	{
+	  /* Whereas the NeXT objc runtime function objc_msgSend actually
+	   * calls the method, the GNU runtime function objc_msg_lookup
+	   * only returns a pointer to it.  We still have to call it.
+	   */
+	  argvec[0] = ret;		/* prepare to call the method */
+	  return call_function_by_hand(argvec[0], nargs + 2, argvec + 1);
+	}
+      else
+	return ret;
+    } break;
 
     case OP_FUNCALL:
       (*pos) += 2;

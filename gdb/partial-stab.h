@@ -444,7 +444,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 		     never makes the typedef when translating from C++ to C.
 		     We make the typedef here so that "ptype foo" works as
 		     expected for cfront translated code.  */
-		  else if (psymtab_language == language_cplus)
+		  else if (psymtab_language == language_cplus ||
+			   psymtab_language == language_objc)
 		   {
 		      /* Also a typedef with the same name.  */
 		      add_psymbol_to_list (namestring, p - namestring,

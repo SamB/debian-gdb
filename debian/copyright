@@ -4,6 +4,9 @@ The package was originally put together by David Engel <david@ods.com>,
 from sources obtained from:
   prep.ai.mit.edu:/pub/gnu/gdb-4.16.tar.gz
 
+Patch for Objective-C from:
+ ftp://ftp.es.ele.tue.nl/pub/objc/gdb-gnu-objc.diff.gz.uue
+
 Stuart Lamble <lamble@yoyo.cc.monash.edu.au> took David's
 modifications, and updated them for the version 2.1.1.0 source format.
 

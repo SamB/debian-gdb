@@ -1310,6 +1310,8 @@ deduce_language_from_filename (filename)
     ; /* Get default. */
   else if (STREQ (c, ".c"))
     return language_c;
+  else if (STREQ (c, ".m") || STREQ (c, ".M"))
+    return language_objc;
   else if (STREQ (c, ".cc") || STREQ (c, ".C") || STREQ (c, ".cxx")
 	   || STREQ (c, ".cpp") || STREQ (c, ".cp") || STREQ (c, ".c++"))
     return language_cplus;

@@ -115,7 +115,19 @@ maintenance_demangle (args, from_tty)
     }
   else
     {
-      demangled = cplus_demangle (args, DMGL_ANSI | DMGL_PARAMS);
+      switch (current_language->la_language) {
+      case language_cplus:
+      default:
+	demangled = cplus_demangle (args, DMGL_ANSI | DMGL_PARAMS);
+	break;
+      case language_objc:
+	demangled = objc_demangle (args);
+	break;
+      case language_chill:
+	demangled = chill_demangle (args);
+	break;
+      }
+
       if (demangled != NULL)
 	{
 	  printf_unfiltered ("%s\n", demangled);
@@ -279,7 +291,7 @@ _initialize_maint_cmds ()
 		  "Commands for use by GDB maintainers.\n\
 Includes commands to dump specific internal GDB structures in\n\
 a human readable form, to cause GDB to deliberately dump core,\n\
-to test internal functions such as the C++ demangler, etc.",
+to test internal functions such as the C++/Objc/Chill demangler, etc.",
 		  &maintenancelist, "maintenance ", 0,
 		  &cmdlist);
 
@@ -306,9 +318,9 @@ itself a SIGQUIT signal.",
 	   &maintenancelist);
 
   add_cmd ("demangle", class_maintenance, maintenance_demangle,
-	   "Demangle a C++ mangled name.\n\
-Call internal GDB demangler routine to demangle a C++ link name\n\
-and prints the result.",
+	   "Demangle a C++/Objc/Chill mangled name.\n\
+Call internal GDB demangler routine to demangle a mangled link name\n\
+and print the result.",
 	   &maintenancelist);
 
   add_cmd ("time", class_maintenance, maintenance_time_display,

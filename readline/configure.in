@@ -33,6 +33,7 @@ case "${host}" in
   i[345]86-*-isc*)	host_makefile_frag=config/mh-sysv ;;
   *-*-go32)		host_makefile_frag=config/mh-go32 ;;
   m68k-apollo-sysv*)	host_makefile_frag=config/mh-apollo68v ;;    
+  m68k-*-linux*)	host_makefile_frag=config/mh-posix ;;
   *-*-sysv*)		host_makefile_frag=config/mh-sysv ;;
   *-*-m88kbcs*)		host_makefile_frag=config/mh-sysv ;;
   i[345]86-*-linux*)	host_makefile_frag=config/mh-posix ;;

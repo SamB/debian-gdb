@@ -128,7 +128,8 @@ enum language
    language_fortran,		/* Fortran */
    language_m2,			/* Modula-2 */
    language_asm,		/* Assembly language */
-   language_scm			/* Scheme / Guile */
+   language_scm,		/* Scheme / Guile */
+   language_objc,		/* Objective C */
 };
 
 /* the cleanup list records things that have to be undone
@@ -204,6 +205,10 @@ extern int inside_main_func PARAMS ((CORE_ADDR pc));
 /* From ch-lang.c, for the moment. (FIXME) */
 
 extern char *chill_demangle PARAMS ((const char *));
+
+/* From objc-lang.c, for the moment. (similarly FIXME) */
+
+extern char *objc_demangle PARAMS ((const char *));
 
 /* From utils.c */
 

@@ -924,6 +924,42 @@ wait_for_inferior ()
 	  goto check_sigtramp2;
 	}
 
+#ifdef GDB_TARGET_IS_HPPA
+      /* This seems to be required on HPPA, not on other architectures.
+	 I hope there's a way to resolve the conflict... */
+      /* If we have stepped into objc_msgSend or one of its cousins, 
+         we treat it as if it were an extension of the line we are 
+	 currently stepping in.  That means: if it calls a function that
+	 has line numbers, we will stop in that function (hopefully a
+	 method called by our user code), and if it calls a function that
+	 doesn't have line numbers, we will step over that function.  */
+
+      if (step_over_calls < 0 && step_range_start != 0 &&
+	  stop_func_start != prev_func_start &&
+	  stop_func_name != 0)	/* ought to check current_language */
+	{
+	  char *p = stop_func_name;
+	  while (*p && *p == '_')
+	    ++p;
+
+	  if (strncmp(p,   "objc_msg", 8) == 0 &&
+	     (strncmp(p+8, "Send",     4) == 0 ||
+	      strncmp(p+8, "_send",    5) == 0 ||
+	      strncmp(p+8, "Forward",  7) == 0))
+	    {
+	      stop_func_start = prev_func_start;  /* pretend we are still */
+	      stop_func_name  = prev_func_name;   /* in the previous func */
+	      if (step_resume_breakpoint &&
+		  step_resume_breakpoint->address == stop_pc)
+		{
+		  delete_breakpoint (step_resume_breakpoint);
+		  step_resume_breakpoint = NULL;
+		}
+	      goto keep_going;
+	    }
+	}
+#endif /* HPPA */
+
       /* Handle cases caused by hitting a breakpoint.  */
       {
 	CORE_ADDR jmp_buf_pc;
@@ -1337,6 +1373,56 @@ wait_for_inferior ()
 	    tmp_sal = find_pc_line (stop_func_start, 0);
 	    if (tmp_sal.line != 0)
 	      goto step_into_function;
+
+	    /* Check for trampoline code pointing to objc_msgSend && friends.
+	     * We must catch this and step into those functions, instead of 
+	     * over them, so we can step into the method they eventually call.
+	     */
+	    if (stop_func_start != 0)	/* do we have a clue where we are? */
+	      {
+		char      *name = stop_func_name;
+		CORE_ADDR start = stop_func_start;
+		CORE_ADDR end   = stop_func_end;
+
+		if (tmp)	/* skip_trampoline_code scored */
+		  find_pc_partial_function(tmp, &name, &start, &end);
+
+		while (name && *name && *name == '_')
+		  name++;
+		if (strncmp(name,   "objc_msg", 8) == 0 &&
+		    (strncmp(name+8, "Send",     4) == 0 ||
+		     strncmp(name+8, "Forward",  7) == 0))
+		  {
+		    /* OK: These are method dispatcher functions in the 
+		     * ObjC runtime library.  This is how dynamic method
+		     * binding happens.  Whenever a method is called, the
+		     * call actually goes thru one of these functions, 
+		     * which actually decides what method to call and
+		     * then calls it.
+		     *
+		     * In order for GDB to step into the actual method, 
+		     * we are going to treat the function that we have 
+		     * just stepped into (objc_msgSend etc.) as an
+		     * extension of the source line that we have been
+		     * stepping in (by setting step_range_start and
+		     * step_range_end).  That way, GDB will continue
+		     * single-stepping until this function either returns,
+		     * or calls into a function for which we have 
+		     * line information (ie. the target method).
+		     *
+		     * NOTE: this scheme depends on the ObjC runtime library
+		     * being built without debugging symbols.  Otherwise, 
+		     * gdb will simply step into it like any other function
+		     * (which might be what you want if you are debugging
+		     * the runtime library, but not otherwise!) */
+
+		    if (tmp)
+		      write_pc(tmp);	/* jump directly to the function */
+		    step_range_start = start;
+		    step_range_end   = end;
+		    goto keep_going;
+		  }
+	      }
 	  }
 
 step_over_function:

@@ -3093,7 +3093,7 @@ the defined types of signals.
 @kindex handle
 @item handle @var{signal} @var{keywords}@dots{}
 Change the way @value{GDBN} handles signal @var{signal}.  @var{signal} can 
-be the number of a signal or its name (with or without the @samp{SIG} at the
+be the number of a signal or its name (with the @samp{SIG} at the
 beginning).  The @var{keywords} say what change to make.
 @end table
 

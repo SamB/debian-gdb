@@ -2364,9 +2364,10 @@ break_command_1 (arg, flag, from_tty)
 	 current_source_symtab (which is decode_line_1's default).  This
 	 should produce the results we want almost all of the time while
 	 leaving default_breakpoint_* alone.  */
-      if (default_breakpoint_valid
-	  && (!current_source_symtab
-	      || (arg && (*arg == '+' || *arg == '-'))))
+      if (default_breakpoint_valid &&
+	  (!current_source_symtab ||
+	   (arg && (*arg == '+' || *arg == '-') && 
+	    arg[1] != '[')))	/* arg might be an objc method name */
 	sals = decode_line_1 (&arg, 1, default_breakpoint_symtab,
 			      default_breakpoint_line, &canonical);
       else

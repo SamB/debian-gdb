@@ -173,6 +173,50 @@ print_subexp (exp, pos, stream, prec)
       fprintf (stream, "B'<unimplemented>'");
       return;
 
+    case OP_NSSTRING:	/* Objective C Foundation Class NSString constant */
+      nargs = longest_to_int (exp -> elts[pc + 1].longconst);
+      (*pos) += 3 + BYTES_TO_EXP_ELEM (nargs + 1);
+      fputs_filtered ("@\"", stream);
+      LA_PRINT_STRING (stream, &exp->elts[pc + 2].string, nargs, 0);
+      fputs_filtered ("\"", stream);
+      return;
+
+    case OP_MSGCALL: {	/* Objective C message (method) call */
+      char *selector, *strchr();
+      (*pos) += 3;
+      nargs = longest_to_int (exp->elts[pc + 2].longconst);
+      fprintf_unfiltered (stream, "[");
+      print_subexp (exp, pos, stream, PREC_SUFFIX);
+      if (0 == target_read_string (exp->elts[pc + 1].longconst, 
+				   &selector, 1024, NULL))
+	{
+	  error("bad selector");
+	  return;
+	}
+      /* NOTE: "selector" was malloc'd by target_read_string; must be freed */
+      if (nargs)
+        {
+	  char *s, *nextS;
+	  s = alloca(strlen(selector) + 1);
+	  strcpy(s, selector);
+	  for (tem = 0; tem < nargs; tem++)
+	    {
+	      nextS = strchr(s, ':');
+	      *nextS = '\0';
+	      fprintf_unfiltered (stream, " %s: ", s);
+	      s = nextS + 1;
+	      print_subexp (exp, pos, stream, PREC_ABOVE_COMMA);
+	    }
+	}
+      else
+	{
+	  fprintf_unfiltered (stream, " %s", selector);
+	}
+      fprintf_unfiltered (stream, "]");
+      free(selector);
+      return;
+    }
+
     case OP_ARRAY:
       (*pos) += 3;
       nargs = longest_to_int (exp->elts[pc + 2].longconst);
@@ -377,7 +421,10 @@ print_subexp (exp, pos, stream, prec)
 
     case OP_THIS:
       ++(*pos);
-      fputs_filtered ("this", stream);
+      if (current_language->la_language == language_objc)
+	fputs_filtered ("self", stream);   /* the ObjC equivalent of "this" */
+      else
+	fputs_filtered ("this", stream);
       return;
 
     /* Modula-2 ops */
