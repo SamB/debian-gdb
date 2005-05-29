@@ -21,3 +21,5 @@ dwarf2-cfi-warning.patch
 linux-use-underscore-exit.patch 
 bfd-no-kylix-crash.patch 
 disable-linux-fork-messages.patch 
+bfd-security-fixes.patch
+gdbinit-ownership.patch

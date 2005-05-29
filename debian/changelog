@@ -1,3 +1,11 @@
+gdb (6.3-6) unstable; urgency=high
+
+  * Do not crash on certain malformed input files [CAN-2005-1704]
+    (Closes: #308624, #310972).
+  * Do not load untrusted .gdbinit files [CAN-2005-1705] (Closes: #310728).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun, 29 May 2005 18:55:44 -0400
+
 gdb (6.3-5) unstable; urgency=low
 
   * Fix NPTL debugging using gdbserver.
