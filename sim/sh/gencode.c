@@ -102,8 +102,8 @@ op tab[] =
 
   { "", "n", "bit32 #imm3,@(disp12,<REG_N>)", "0011nnnni8*11001",
     "/* 32-bit logical bit-manipulation instructions.  */",
-    "RAISE_EXCEPTION_IF_IN_DELAY_SLOT ();",
     "int word2 = RIAT (nip);",
+    "RAISE_EXCEPTION_IF_IN_DELAY_SLOT ();",
     "i >>= 4;	/* BOGUS: Using only three bits of 'i'.  */",
     "/* MSB of 'i' must be zero.  */",
     "if (i > 7)",
@@ -215,7 +215,9 @@ op tab[] =
     "RAISE_EXCEPTION_IF_IN_DELAY_SLOT ();",
     "if (R0 == 0)",
     "  R[n] = 0xffffffff;",
-    "else (unsigned int) R[n] = (unsigned int) R[n] / (unsigned int) R0;",
+    "/* FIXME: The result may be implementation-defined if it is outside */",
+    "/* the range of signed int (i.e. if R[n] was negative and R0 == 1).  */",
+    "else R[n] = R[n] / (unsigned int) R0;",
     "L (n);",
   },
   { "n", "0n", "mulr R0,<REG_N>", "0100nnnn10000000",
@@ -238,9 +240,9 @@ op tab[] =
     "saved_state.asregs.regstack[bankn].regs[regn] = R0;",
   },
   { "", "", "resbank", "0000000001011011",
+    "int i;",
     "RAISE_EXCEPTION_IF_IN_DELAY_SLOT ();",
     /* FIXME: cdef all */
-    "int i;",
     "if (BO) {	/* Bank Overflow */",
     /* FIXME: how do we know when to reset BO?  */
     "  for (i = 0; i <= 14; i++) {",
@@ -587,8 +589,8 @@ op tab[] =
     "   and mov.bwl <REG_N>, @(disp12,<REG_M>)",
     "   and mov.bwl @(disp12,<REG_N>),<REG_M>",
     "   and movu.bw @(disp12,<REG_N>),<REG_M>.  */",
-    "RAISE_EXCEPTION_IF_IN_DELAY_SLOT ();",
     "int word2 = RIAT (nip);",
+    "RAISE_EXCEPTION_IF_IN_DELAY_SLOT ();",
     "SET_NIP (nip + 2);	/* Consume 2 more bytes.  */",
     "MA (1);",
     "do_long_move_insn (word2 & 0xf000, word2 & 0x0fff, m, n, &thislock);",
@@ -1493,8 +1495,8 @@ op tab[] =
   },
 
   { "0", "", "trapa #<imm>", "11000011i8*1....", 
-    "RAISE_EXCEPTION_IF_IN_DELAY_SLOT ();",
     "long imm = 0xff & i;",
+    "RAISE_EXCEPTION_IF_IN_DELAY_SLOT ();",
     "if (i < 20 || i == 33 || i == 34 || i == 0xc3)",
     "  nip += trap (i, &R0, PC, memory, maskl, maskw, endianw);",
 #if 0

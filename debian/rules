@@ -25,11 +25,11 @@ DEB_HOST_GNU_TYPE := $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 run_tests := yes
 run_thread_tests := yes
 
-ifneq ($(DEB_HOST_GNU_SYSTEM),linux)
+ifneq ($(DEB_HOST_GNU_SYSTEM),linux-gnu)
   run_tests := no
 endif
 
-ifeq ($(findstring z$(DEB_HOST_GNU_CPU)z,zpowerpcz zi386z zalphaz zia64z zhppaz zs390z zsparcz),)
+ifeq ($(filter $(DEB_HOST_GNU_CPU),alpha i486 hppa ia64 powerpc s390 sparc x86_64),)
   run_tests := no
 endif
 
@@ -84,6 +84,10 @@ clean::
 #	# which include .gmo files.
 #	find -type f -name '*.gmo' | xargs rm -f
 
+	# Prevent gratuitous rebuilds of the BFD documentation, since it
+	# updates the copy in the source directory.
+	find bfd -name bfd.info\* | xargs --no-run-if-empty touch
+
 	rm -f check-stamp
 
 binary-post-install/gdb ::
@@ -98,6 +102,9 @@ ifeq ($(run_tests),yes)
 	install -m 644 objdir/check.log \
 		debian/gdb/usr/share/doc/gdb/check.log
 endif
+
+	$(INSTALL) -m 755 -o root -g root \
+		gdb/gdb_gcore.sh debian/gdb/usr/bin/gcore
 
 	rm -rf debian/gdb/usr/include \
 		debian/gdb/usr/lib/lib*.* \

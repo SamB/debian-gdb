@@ -1,3 +1,59 @@
+2005-07-15  Ben Elliston  <bje@au.ibm.com>
+
+	* hw_htab.c (bfd_get_section_lma): Remove macro; use BFD's.
+
+2005-07-15  Ben Elliston  <bje@au.ibm.com>
+
+	* hw_init.c: Comment out tokens after #endif directive.
+	* hw_register.c: Likewise.
+	* hw_trace.c: Likewise.
+	* hw_vm.c: Likewise.
+
+2005-04-20  Manoj Iyer  <manjo@austin.ibm.com>
+
+	* psim.c: Added libiberty.h header file.
+
+2005-04-18  Manoj Iyer  <manjo@austin.ibm.com>
+
+	* configure.ac: Added check for long long.
+	* config.in: Regenerated.
+	* configure: Regenerated.
+	* words.h: Modified logic to check for HAVE_LONG_LONG instead of
+	__GNUC__, added config.h header file.
+
+2005-03-25  Anthony Green  <green@redhat.com>
+
+	* tree.c (parse_reg_property): Fix memset usage.
+
+2005-03-23  Mark Kettenis  <kettenis@gnu.org>
+
+	* configure: Regenerate.
+
+2005-01-11  Andrew Cagney  <cagney@localhost.localdomain>
+
+	* configure.ac: Delete AC_CONFIG_AUX_DIR.
+	* configure: Re-generate.
+
+2005-01-07  Andrew Cagney  <cagney@gnu.org>
+
+	* configure.ac: Rename configure.in, require autoconf 2.59.
+	* configure: Re-generate.
+
+2005-01-03  Andreas Schwab  <schwab@suse.de>
+
+	* Makefile.in (hw_com.o, hw_eeprom.o): Depend on
+	$(DEVICE_TABLE_H).
+
+2004-11-16  Andreas Schwab  <schwab@suse.de>
+
+	* Makefile.in (defines.h): Depend on tmp-defines.
+	(hw.c hw.h): Depend on tmp-hw.
+	(pk.h): Depend on tmp-pk.
+
+2004-11-11  Andreas Schwab  <schwab@suse.de>
+
+	* sim_calls.c: Include "libiberty.h".
+
 2004-09-24  Ian Lance Taylor <ian@wasabisystems.com>
 
 	Committed by Andrew Cagney.

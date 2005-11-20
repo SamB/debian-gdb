@@ -1,3 +1,26 @@
+gdb (6.3.90.20051119-1) unstable; urgency=low
+
+  * New upstream snapshot (6.4 branch prerelease).
+    - Many Debian patches merged.
+    - Selected frame and C++ pass-by-reference patches updated.
+    - Fixes segfault when executing malformed TUI window commands
+      (Closes: #317317).
+    - Behaves more gracefully when the executable disappears, et cetera
+      (Closes: #293637, #323217, #332184).
+    - Handle vfork from threaded programs using NPTL (Closes: #320391).
+  * Do not rebuild bfd.info.
+  * Build depend on a version of debhelper which will put menu fils
+    in /usr/share.
+  * Don't build depend on gcj on the Hurd (Closes: #298088).
+  * Prevent unnecessary SIGTTOU when resolving pending breakpoints
+    (Closes: #306267).
+  * Enable the testsuite on amd64.
+  * Use libreadline5 instead of libreadline4 (Closes: #309538, #326358).
+  * Install gdb_gcore.sh as gcore (Closes: #328580).
+  * Add GPC support (Closes: #261330).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun, 20 Nov 2005 13:40:44 -0500
+
 gdb (6.3-6) unstable; urgency=high
 
   * Do not crash on certain malformed input files [CAN-2005-1704]

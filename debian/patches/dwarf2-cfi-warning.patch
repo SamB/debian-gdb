@@ -17,23 +17,16 @@ ARM has a complex algorithm for handling this, involving scanning all CIEs -
 benefit not completely clear outside of the ARM context of flexible register
 sets.
 
-Index: gdb-6.3/gdb/dwarf2-frame.c
+Index: gdb-6.3.90.20051119/gdb/dwarf2-frame.c
 ===================================================================
---- gdb-6.3.orig/gdb/dwarf2-frame.c	2004-11-15 11:54:57.000000000 -0500
-+++ gdb-6.3/gdb/dwarf2-frame.c	2004-12-08 18:02:23.896409471 -0500
-@@ -705,9 +705,12 @@ dwarf2_frame_cache (struct frame_info *n
- 	   table.  We need a way of iterating through all the valid
+--- gdb-6.3.90.20051119.orig/gdb/dwarf2-frame.c	2005-08-01 00:06:27.000000000 -0400
++++ gdb-6.3.90.20051119/gdb/dwarf2-frame.c	2005-11-20 00:11:37.000000000 -0500
+@@ -738,7 +738,7 @@ dwarf2_frame_cache (struct frame_info *n
  	   DWARF2 register numbers.  */
  	if (fs->regs.reg[column].how == DWARF2_FRAME_REG_UNSPECIFIED)
--	  complaint (&symfile_complaints,
--		     "Incomplete CFI data; unspecified registers at 0x%s",
--		     paddr (fs->pc));
-+	  {
-+	    if (0)
-+	      complaint (&symfile_complaints,
-+			 "Incomplete CFI data; unspecified registers at 0x%s",
-+			 paddr (fs->pc));
-+	  }
- 	else
- 	  cache->reg[regnum] = fs->regs.reg[column];
-       }
+ 	  {
+-	    if (cache->reg[regnum].how == DWARF2_FRAME_REG_UNSPECIFIED)
++	    if (0 && cache->reg[regnum].how == DWARF2_FRAME_REG_UNSPECIFIED)
+ 	      complaint (&symfile_complaints, _("\
+ incomplete CFI data; unspecified registers (e.g., %s) at 0x%s"),
+ 			 gdbarch_register_name (gdbarch, regnum),

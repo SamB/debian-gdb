@@ -16,8 +16,8 @@
 
    You should have received a copy of the GNU General Public
    License along with this program; if not, write to the Free
-   Software Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
+   Boston, MA 02110-1301, USA.  */
 
 /* This file provides the interface between the simulator and
    run.c and gdb (when the simulator is linked with gdb).
@@ -37,6 +37,14 @@
 #include "sim-utils.h"
 #include "run-sim.h"
 #include "gdb/sim-arm.h"
+
+#ifndef SIGTRAP
+#define SIGTRAP 5
+#endif
+
+#ifndef SIGBUS
+#define SIGBUS SIGSEGV
+#endif
 
 host_callback *sim_callback;
 
@@ -267,7 +275,7 @@ sim_create_inferior (sd, abfd, argv, env)
 	 removes the FPE emulator, since it conflicts with its coprocessors.
 	 For the most generic ARM support, we want the FPE emulator in place.  */
     case bfd_mach_arm_XScale:
-      ARMul_SelectProcessor (state, ARM_v5_Prop | ARM_v5e_Prop | ARM_XScale_Prop);
+      ARMul_SelectProcessor (state, ARM_v5_Prop | ARM_v5e_Prop | ARM_XScale_Prop | ARM_v6_Prop);
       break;
 
     case bfd_mach_arm_iWMMXt:

@@ -1,0 +1,21 @@
+Don't generate SIGTTOU when resolving a pending breakpoint.
+
+Index: gdb-6.3.90.20051119/gdb/infrun.c
+===================================================================
+--- gdb-6.3.90.20051119.orig/gdb/infrun.c	2005-11-19 22:56:43.000000000 -0500
++++ gdb-6.3.90.20051119/gdb/infrun.c	2005-11-20 00:19:55.000000000 -0500
+@@ -2171,12 +2171,13 @@ process_event_stop_test:
+ #else
+ 	  solib_add (NULL, 0, &current_target, auto_solib_add);
+ #endif
+-	  target_terminal_inferior ();
+ 
+ 	  /* Try to reenable shared library breakpoints, additional
+ 	     code segments in shared libraries might be mapped in now. */
+ 	  re_enable_breakpoints_in_shlibs ();
+ 
++	  target_terminal_inferior ();
++
+ 	  /* If requested, stop when the dynamic linker notifies
+ 	     gdb of events.  This allows the user to get control
+ 	     and place breakpoints in initializer routines for

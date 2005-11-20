@@ -1,3 +1,52 @@
+2005-07-08  Ben Elliston  <bje@au.ibm.com>
+
+	* func.c: Remove ANSI_PROTOTYPES conditional code.
+
+2005-03-23  Mark Kettenis  <kettenis@gnu.org>
+
+	* configure: Regenerate.
+
+2005-03-07  Jerome Guitton  <guitton@gnat.com>
+
+	* sim/erc32/float.c (set_fsr): Do not use deprecated multi-line
+	strings.
+	(clear_accex): Ditto.
+	* sim/erc32/interf.c: Remove the redeclaration of fprintf.
+	* sim/erc32/sis.c: Ditto.
+	* sim/erc32/exec.c: Add missing semicolon.
+	* sim/erc32/func.c: Remove definitions of generic_print_address,
+	generic_symbol_at_address, buffer_read_memory and perror_memory, as
+	they are already defined in opcodes/dis-buf.c.
+
+2005-01-14  Andrew Cagney  <cagney@gnu.org>
+
+	* configure.ac: Sinclude aclocal.m4 before common.m4.  Add
+	explicit call to AC_CONFIG_HEADER.
+	* configure: Regenerate.
+
+2005-01-12  Andrew Cagney  <cagney@gnu.org>
+
+	* configure.ac: Update to use ../common/common.m4.
+	* configure: Re-generate.
+
+2005-01-11  Andrew Cagney  <cagney@localhost.localdomain>
+
+	* configure: Regenerated to track ../common/aclocal.m4 changes.
+
+2005-01-07  Andrew Cagney  <cagney@gnu.org>
+
+	* configure.ac: Rename configure.in, require autoconf 2.59.
+	* configure: Re-generate.
+
+2004-12-08  Hans-Peter Nilsson  <hp@axis.com>
+
+	* configure: Regenerate for ../common/aclocal.m4 update.
+
+2004-11-11  Andreas Schwab  <schwab@suse.de>
+
+	* interf.c: Include "libiberty.h" instead of declaring buildargv
+	ourselves.
+
 2003-02-27  Andrew Cagney  <cagney@redhat.com>
 
 	* interf.c (sim_open, sim_create_inferior): Rename _bfd to bfd.

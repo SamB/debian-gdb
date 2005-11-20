@@ -27,21 +27,16 @@
 #include <time.h>
 #include <sys/fcntl.h>
 #include "sis.h"
+#include "libiberty.h"
 #include "bfd.h"
 #include <dis-asm.h>
 #include "sim-config.h"
 
 #include "gdb/remote-sim.h"
 
-#ifndef fprintf
-extern          fprintf();
-#endif
-
 #define PSR_CWP 0x7
 
 #define	VAL(x)	strtol(x,(char **)NULL,0)
-
-extern char   **buildargv(char *input);
 
 extern struct disassemble_info dinfo;
 extern struct pstate sregs;
