@@ -1,0 +1,60 @@
+Index: gdb-6.4/gdb/inf-ptrace.c
+===================================================================
+--- gdb-6.4.orig/gdb/inf-ptrace.c	2005-11-21 04:16:07.000000000 -0500
++++ gdb-6.4/gdb/inf-ptrace.c	2005-12-11 13:08:51.000000000 -0500
+@@ -228,10 +228,6 @@ inf_ptrace_attach (char *args, int from_
+ 
+   inferior_ptid = pid_to_ptid (pid);
+   push_target (ptrace_ops_hack);
+-
+-  /* Do this first, before anything has had a chance to query the
+-     inferior's symbol table or similar.  */
+-  observer_notify_inferior_created (&current_target, from_tty);
+ }
+ 
+ #ifdef PT_GET_PROCESS_STATE
+Index: gdb-6.4/gdb/inf-ttrace.c
+===================================================================
+--- gdb-6.4.orig/gdb/inf-ttrace.c	2005-10-29 17:22:39.000000000 -0400
++++ gdb-6.4/gdb/inf-ttrace.c	2005-12-11 13:10:29.000000000 -0500
+@@ -727,10 +727,6 @@ inf_ttrace_attach (char *args, int from_
+ 
+   inferior_ptid = pid_to_ptid (pid);
+   push_target (ttrace_ops_hack);
+-
+-  /* Do this first, before anything has had a chance to query the
+-     inferior's symbol table or similar.  */
+-  observer_notify_inferior_created (&current_target, from_tty);
+ }
+ 
+ static void
+Index: gdb-6.4/gdb/infcmd.c
+===================================================================
+--- gdb-6.4.orig/gdb/infcmd.c	2005-12-07 20:37:42.000000000 -0500
++++ gdb-6.4/gdb/infcmd.c	2005-12-11 13:09:33.000000000 -0500
+@@ -1878,6 +1878,10 @@ attach_command (char *args, int from_tty
+       reread_symbols ();
+     }
+ 
++  /* Do this first, before anything has had a chance to query the
++     inferior's symbol table or similar.  */
++  observer_notify_inferior_created (&current_target, from_tty);
++
+ #ifdef SOLIB_ADD
+   /* Add shared library symbols from the newly attached process, if any.  */
+   SOLIB_ADD ((char *) 0, from_tty, &current_target, auto_solib_add);
+Index: gdb-6.4/gdb/inftarg.c
+===================================================================
+--- gdb-6.4.orig/gdb/inftarg.c	2005-09-04 12:18:19.000000000 -0400
++++ gdb-6.4/gdb/inftarg.c	2005-12-11 13:10:37.000000000 -0500
+@@ -211,10 +211,6 @@ child_attach (char *args, int from_tty)
+   
+   inferior_ptid = pid_to_ptid (pid);
+   push_target (&deprecated_child_ops);
+-
+-  /* Do this first, before anything has had a chance to query the
+-     inferior's symbol table or similar.  */
+-  observer_notify_inferior_created (&current_target, from_tty);
+ }
+ 
+ #if !defined(CHILD_POST_ATTACH)

@@ -65,7 +65,8 @@ ifeq ($(run_thread_tests),no)
 	echo "	$(foreach exp,$(wildcard gdb/testsuite/gdb.threads/*.exp),mv $(exp) $(exp).disabled;)"
 	$(foreach exp,$(wildcard gdb/testsuite/gdb.threads/*.exp),mv $(exp) $(exp).disabled;)
 endif
-	-$(MAKE) -C objdir/gdb check \
+	-ulimit -c unlimited; \
+	$(MAKE) -C objdir/gdb check \
 		2>&1 | tee objdir/check.log
 ifeq ($(run_thread_tests),no)
 	$(foreach exp,$(wildcard gdb/testsuite/gdb.threads/*.exp.disabled),mv $(exp) $(subst .disabled,,$(exp);))

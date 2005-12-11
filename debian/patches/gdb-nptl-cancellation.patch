@@ -1,0 +1,31 @@
+2005-12-07  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* linux-nat.c (lin_thread_get_thread_signals): Default to __SIGRTMIN
+	and __SIGRTMIN + 1.
+
+Index: gdb-6.4/gdb/linux-nat.c
+===================================================================
+--- gdb-6.4.orig/gdb/linux-nat.c	2005-11-03 14:51:40.000000000 -0500
++++ gdb-6.4/gdb/linux-nat.c	2005-12-07 21:44:12.000000000 -0500
+@@ -3284,12 +3284,18 @@ lin_thread_get_thread_signals (sigset_t 
+   sigemptyset (set);
+ 
+   restart = get_signo ("__pthread_sig_restart");
++  cancel = get_signo ("__pthread_sig_cancel");
++
++  /* LinuxThreads normally uses the first two RT signals, but in some legacy
++     cases may use SIGUSR1/SIGUSR2.  NPTL always uses RT signals, but does
++     not provide any way for the debugger to query the signal numbers -
++     fortunately they don't change!  */
++
+   if (restart == 0)
+-    return;
++    restart = __SIGRTMIN;
+ 
+-  cancel = get_signo ("__pthread_sig_cancel");
+   if (cancel == 0)
+-    return;
++    cancel = __SIGRTMIN + 1;
+ 
+   sigaddset (set, restart);
+   sigaddset (set, cancel);

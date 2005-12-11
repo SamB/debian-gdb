@@ -1,0 +1,24 @@
+Index: gdb-6.4/gdb/linux-thread-db.c
+===================================================================
+--- gdb-6.4.orig/gdb/linux-thread-db.c	2005-12-07 20:37:42.000000000 -0500
++++ gdb-6.4/gdb/linux-thread-db.c	2005-12-11 12:33:04.000000000 -0500
+@@ -842,6 +842,9 @@ thread_db_detach (char *args, int from_t
+      inferior is supposed to be survive this function call.  */
+   inferior_ptid = lwp_from_thread (inferior_ptid);
+ 
++  /* Destroy thread info; it's no longer valid.  */
++  init_thread_list ();
++
+   /* Forget about the child's process ID.  We shouldn't need it
+      anymore.  */
+   proc_handle.pid = 0;
+@@ -1138,6 +1141,9 @@ thread_db_mourn_inferior (void)
+ {
+   remove_thread_event_breakpoints ();
+ 
++  /* Destroy thread info; it's no longer valid.  */
++  init_thread_list ();
++
+   /* Forget about the child's process ID.  We shouldn't need it
+      anymore.  */
+   proc_handle.pid = 0;

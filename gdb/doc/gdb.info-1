@@ -9,7 +9,7 @@ END-INFO-DIR-ENTRY
    This file documents the GNU debugger GDB.
 
    This is the Ninth Edition, of `Debugging with GDB: the GNU
-Source-Level Debugger' for GDB Version 6.3.90_20051119.
+Source-Level Debugger' for GDB Version 6.4.
 
    Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
 1998,
@@ -36,7 +36,7 @@ Debugging with GDB
 
 This file describes GDB, the GNU symbolic debugger.
 
-   This is the Ninth Edition, for GDB Version 6.3.90_20051119.
+   This is the Ninth Edition, for GDB Version 6.4.
 
    Copyright (C) 1988-2005 Free Software Foundation, Inc.
 
@@ -435,7 +435,7 @@ Let us use GDB to try to see what is going on.
      There is absolutely no warranty for GDB; type "show warranty"
       for details.
 
-     GDB 6.3.90_20051119, Copyright 1999 Free Software Foundation, Inc...
+     GDB 6.4, Copyright 1999 Free Software Foundation, Inc...
      (gdb)
 
 GDB reads only enough symbol data to know where to find the rest when

@@ -1,3 +1,18 @@
+gdb (6.4-1) unstable; urgency=low
+
+  * New upstream release.
+  * Reset core ulimit before running the testsuite (Closes: #342343).
+  * Ignore cancellation signal for NPTL by default (Closes: #324683).
+  * Include a description of the front cover texts, et cetera for the
+    manual in the copyright file (Closes: #321803).
+  * Set the default name of main to MAIN__ for Fortran programs
+    (Closes: #319520).
+  * Handle PowerPC PIC prologues a little better (Closes: #312059).
+  * Cope with attaching to threaded programs after the exit of a threaded
+    program (Closes: #303736).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun, 11 Dec 2005 13:14:04 -0500
+
 gdb (6.3.90.20051119-1) unstable; urgency=low
 
   * New upstream snapshot (6.4 branch prerelease).

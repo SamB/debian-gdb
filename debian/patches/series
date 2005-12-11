@@ -11,3 +11,8 @@ dwarf2-cfi-warning.patch
 gdbinit-ownership.patch
 pending-breakpoints-and-sigttou.patch
 gdb-pascal-support.patch
+gdb-nptl-cancellation.patch
+gdb-fortran-main.patch -p0
+gdb-powerpc-pic-prologue.patch
+linux-clear-thread-list.patch
+fix-attach-inferior-notification.patch
