@@ -11,6 +11,10 @@ include /usr/share/cdbs/1/class/autotools.mk
 # Quilt-based patches in debian/patches.
 include /usr/share/cdbs/1/rules/patchsys-quilt.mk
 
+# Override CDBS's default CFLAGS, which also includes -Wall; gdb
+# does not handle -Wunused well with -Werror, but defaults to
+# -Werror.
+CFLAGS = -g $(DEB_OPT_FLAG)
 
 install = /usr/bin/install -p
 
@@ -116,9 +120,13 @@ endif
 		debian/gdb/usr/share/info/standards.info* \
 		debian/gdb/usr/share/locale
 
+	# Remove the entire info directory; it only contains dummy files,
+	# not the real manuals.
+	rm -rf debian/gdb/usr/share/info
+
 debian/control:: debian/control.in
 	cat debian/control.in \
-		| sed "s/@kfreebsd@/`type-handling any kfreebsd-gnu`/g" \
+		| sed "s/@kfreebsd@/`type-handling any kfreebsd`/g" \
 		| sed "s/@gnu@/`type-handling any gnu`/g" \
 		> debian/control
 

@@ -8,11 +8,11 @@ is an improvement over deprecated_selected_frame.
 
 Patch updated, but still not submitted.
 
-Index: gdb-6.3.90.20051119/gdb/breakpoint.c
+Index: gdb-dfsg-6.4.50.20060511/gdb/breakpoint.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/breakpoint.c	2005-11-20 11:39:21.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/breakpoint.c	2005-11-20 11:39:22.000000000 -0500
-@@ -932,7 +932,7 @@ insert_bp_location (struct bp_location *
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/breakpoint.c	2006-05-11 11:14:38.000000000 -0400
++++ gdb-dfsg-6.4.50.20060511/gdb/breakpoint.c	2006-05-11 11:14:43.000000000 -0400
+@@ -928,7 +928,7 @@ insert_bp_location (struct bp_location *
        /* FIXME drow/2003-09-09: It would be nice if evaluate_expression
  	 took a frame parameter, so that we didn't have to change the
  	 selected frame.  */
@@ -21,7 +21,7 @@ Index: gdb-6.3.90.20051119/gdb/breakpoint.c
  
        /* Determine if the watchpoint is within scope.  */
        if (bpt->owner->exp_valid_block == NULL)
-@@ -5927,7 +5927,7 @@ until_break_command (char *arg, int from
+@@ -5928,7 +5928,7 @@ until_break_command (char *arg, int from
  {
    struct symtabs_and_lines sals;
    struct symtab_and_line sal;
@@ -30,7 +30,7 @@ Index: gdb-6.3.90.20051119/gdb/breakpoint.c
    struct breakpoint *breakpoint;
    struct cleanup *old_chain;
    struct continuation_arg *arg1;
-@@ -5964,7 +5964,7 @@ until_break_command (char *arg, int from
+@@ -5965,7 +5965,7 @@ until_break_command (char *arg, int from
      /* Otherwise, specify the current frame, because we want to stop only
         at the very same frame.  */
      breakpoint = set_momentary_breakpoint (sal,
@@ -39,11 +39,11 @@ Index: gdb-6.3.90.20051119/gdb/breakpoint.c
  					   bp_until);
  
    if (!target_can_async_p ())
-Index: gdb-6.3.90.20051119/gdb/cli/cli-cmds.c
+Index: gdb-dfsg-6.4.50.20060511/gdb/cli/cli-cmds.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/cli/cli-cmds.c	2005-11-20 11:39:21.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/cli/cli-cmds.c	2005-11-20 11:39:22.000000000 -0500
-@@ -846,10 +846,7 @@ disassemble_command (char *arg, int from
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/cli/cli-cmds.c	2006-05-11 11:14:38.000000000 -0400
++++ gdb-dfsg-6.4.50.20060511/gdb/cli/cli-cmds.c	2006-05-11 11:14:43.000000000 -0400
+@@ -862,10 +862,7 @@ disassemble_command (char *arg, int from
    name = NULL;
    if (!arg)
      {
@@ -55,10 +55,10 @@ Index: gdb-6.3.90.20051119/gdb/cli/cli-cmds.c
        if (find_pc_partial_function (pc, &name, &low, &high) == 0)
  	error (_("No function contains program counter for selected frame."));
  #if defined(TUI)
-Index: gdb-6.3.90.20051119/gdb/f-valprint.c
+Index: gdb-dfsg-6.4.50.20060511/gdb/f-valprint.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/f-valprint.c	2005-11-20 11:39:21.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/f-valprint.c	2005-11-20 11:39:22.000000000 -0500
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/f-valprint.c	2006-05-11 11:14:38.000000000 -0400
++++ gdb-dfsg-6.4.50.20060511/gdb/f-valprint.c	2006-05-11 11:14:43.000000000 -0400
 @@ -71,7 +71,7 @@ f77_get_dynamic_lowerbound (struct type 
    switch (TYPE_ARRAY_LOWER_BOUND_TYPE (type))
      {
@@ -95,7 +95,7 @@ Index: gdb-6.3.90.20051119/gdb/f-valprint.c
        if (current_frame_addr > 0)
  	{
  	  ptr_to_upper_bound =
-@@ -619,10 +619,7 @@ info_common_command (char *comname, int 
+@@ -643,10 +643,7 @@ info_common_command (char *comname, int 
       first make sure that it is visible and if so, let 
       us display its contents */
  
@@ -107,7 +107,7 @@ Index: gdb-6.3.90.20051119/gdb/f-valprint.c
  
    /* The following is generally ripped off from stack.c's routine 
       print_frame_info() */
-@@ -711,10 +708,7 @@ there_is_a_visible_common_named (char *c
+@@ -735,10 +732,7 @@ there_is_a_visible_common_named (char *c
    if (comname == NULL)
      error (_("Cannot deal with NULL common name!"));
  
@@ -119,11 +119,11 @@ Index: gdb-6.3.90.20051119/gdb/f-valprint.c
  
    /* The following is generally ripped off from stack.c's routine 
       print_frame_info() */
-Index: gdb-6.3.90.20051119/gdb/infcmd.c
+Index: gdb-dfsg-6.4.50.20060511/gdb/infcmd.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/infcmd.c	2005-11-20 11:39:21.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/infcmd.c	2005-11-20 11:39:22.000000000 -0500
-@@ -1244,10 +1244,8 @@ finish_command (char *arg, int from_tty)
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/infcmd.c	2006-05-11 11:14:38.000000000 -0400
++++ gdb-dfsg-6.4.50.20060511/gdb/infcmd.c	2006-05-11 11:14:43.000000000 -0400
+@@ -1284,10 +1284,8 @@ finish_command (char *arg, int from_tty)
      error (_("The \"finish\" command does not take any arguments."));
    if (!target_has_execution)
      error (_("The program is not running."));
@@ -135,7 +135,7 @@ Index: gdb-6.3.90.20051119/gdb/infcmd.c
    if (frame == 0)
      error (_("\"finish\" not meaningful in the outermost frame."));
  
-@@ -1265,7 +1263,7 @@ finish_command (char *arg, int from_tty)
+@@ -1305,7 +1303,7 @@ finish_command (char *arg, int from_tty)
  
    /* Find the function we will return from.  */
  
@@ -144,7 +144,7 @@ Index: gdb-6.3.90.20051119/gdb/infcmd.c
  
    /* Print info on the selected frame, including level number but not
       source.  */
-@@ -1631,13 +1629,12 @@ registers_info (char *addr_exp, int fpre
+@@ -1671,13 +1669,12 @@ registers_info (char *addr_exp, int fpre
  
    if (!target_has_registers)
      error (_("The program has no registers now."));
@@ -160,7 +160,7 @@ Index: gdb-6.3.90.20051119/gdb/infcmd.c
        return;
      }
  
-@@ -1670,12 +1667,12 @@ registers_info (char *addr_exp, int fpre
+@@ -1710,12 +1707,12 @@ registers_info (char *addr_exp, int fpre
  
        /* A register name?  */
        {
@@ -175,7 +175,7 @@ Index: gdb-6.3.90.20051119/gdb/infcmd.c
  	    continue;
  	  }
        }
-@@ -1689,7 +1686,7 @@ registers_info (char *addr_exp, int fpre
+@@ -1729,7 +1726,7 @@ registers_info (char *addr_exp, int fpre
  	    && regnum < NUM_REGS + NUM_PSEUDO_REGS)
  	  {
  	    gdbarch_print_registers_info (current_gdbarch, gdb_stdout,
@@ -184,7 +184,7 @@ Index: gdb-6.3.90.20051119/gdb/infcmd.c
  	    continue;
  	  }
        }
-@@ -1715,7 +1712,7 @@ registers_info (char *addr_exp, int fpre
+@@ -1755,7 +1752,7 @@ registers_info (char *addr_exp, int fpre
  		if (gdbarch_register_reggroup_p (current_gdbarch, regnum,
  						 group))
  		  gdbarch_print_registers_info (current_gdbarch,
@@ -193,7 +193,7 @@ Index: gdb-6.3.90.20051119/gdb/infcmd.c
  						regnum, fpregs);
  	      }
  	    continue;
-@@ -1745,8 +1742,6 @@ print_vector_info (struct gdbarch *gdbar
+@@ -1785,8 +1782,6 @@ print_vector_info (struct gdbarch *gdbar
  {
    if (!target_has_registers)
      error (_("The program has no registers now."));
@@ -202,7 +202,7 @@ Index: gdb-6.3.90.20051119/gdb/infcmd.c
  
    if (gdbarch_print_vector_info_p (gdbarch))
      gdbarch_print_vector_info (gdbarch, file, frame, args);
-@@ -1771,7 +1766,7 @@ print_vector_info (struct gdbarch *gdbar
+@@ -1811,7 +1806,7 @@ print_vector_info (struct gdbarch *gdbar
  static void
  vector_info (char *args, int from_tty)
  {
@@ -211,7 +211,7 @@ Index: gdb-6.3.90.20051119/gdb/infcmd.c
  }
  
  
-@@ -1965,8 +1960,6 @@ print_float_info (struct gdbarch *gdbarc
+@@ -1999,8 +1994,6 @@ print_float_info (struct gdbarch *gdbarc
  {
    if (!target_has_registers)
      error (_("The program has no registers now."));
@@ -220,7 +220,7 @@ Index: gdb-6.3.90.20051119/gdb/infcmd.c
  
    if (gdbarch_print_float_info_p (gdbarch))
      gdbarch_print_float_info (gdbarch, file, frame, args);
-@@ -1993,7 +1986,7 @@ static void
+@@ -2027,7 +2020,7 @@ static void
  float_info (char *args, int from_tty)
  {
    print_float_info (current_gdbarch, gdb_stdout, 
@@ -229,11 +229,11 @@ Index: gdb-6.3.90.20051119/gdb/infcmd.c
  }
  
  static void
-Index: gdb-6.3.90.20051119/gdb/inflow.c
+Index: gdb-dfsg-6.4.50.20060511/gdb/inflow.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/inflow.c	2005-11-20 11:39:21.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/inflow.c	2005-11-20 11:45:45.000000000 -0500
-@@ -591,7 +591,7 @@ kill_command (char *arg, int from_tty)
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/inflow.c	2006-05-11 11:14:38.000000000 -0400
++++ gdb-dfsg-6.4.50.20060511/gdb/inflow.c	2006-05-11 11:14:43.000000000 -0400
+@@ -588,7 +588,7 @@ kill_command (char *arg, int from_tty)
    if (target_has_stack)
      {
        printf_filtered (_("In %s,\n"), target_longname);
@@ -242,11 +242,11 @@ Index: gdb-6.3.90.20051119/gdb/inflow.c
  	fputs_filtered ("No selected stack frame.\n", gdb_stdout);
        else
  	print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC);
-Index: gdb-6.3.90.20051119/gdb/infrun.c
+Index: gdb-dfsg-6.4.50.20060511/gdb/infrun.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/infrun.c	2005-11-20 11:39:21.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/infrun.c	2005-11-20 11:39:22.000000000 -0500
-@@ -3584,7 +3584,7 @@ save_inferior_status (int restore_stack_
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/infrun.c	2006-05-11 11:14:38.000000000 -0400
++++ gdb-dfsg-6.4.50.20060511/gdb/infrun.c	2006-05-11 11:14:43.000000000 -0400
+@@ -3596,7 +3596,7 @@ save_inferior_status (int restore_stack_
  
    inf_status->registers = regcache_dup (current_regcache);
  
@@ -255,11 +255,11 @@ Index: gdb-6.3.90.20051119/gdb/infrun.c
    return inf_status;
  }
  
-Index: gdb-6.3.90.20051119/gdb/stack.c
+Index: gdb-dfsg-6.4.50.20060511/gdb/stack.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/stack.c	2005-11-20 11:39:21.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/stack.c	2005-11-20 11:39:22.000000000 -0500
-@@ -1909,7 +1909,7 @@ func_command (char *arg, int from_tty)
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/stack.c	2006-05-11 11:14:38.000000000 -0400
++++ gdb-dfsg-6.4.50.20060511/gdb/stack.c	2006-05-11 11:14:43.000000000 -0400
+@@ -1907,7 +1907,7 @@ func_command (char *arg, int from_tty)
  
    if (!found)
      printf_filtered (_("'%s' not within current stack frame.\n"), arg);
@@ -268,7 +268,7 @@ Index: gdb-6.3.90.20051119/gdb/stack.c
      select_and_print_frame (frame);
  }
  
-@@ -1918,7 +1918,7 @@ func_command (char *arg, int from_tty)
+@@ -1916,7 +1916,7 @@ func_command (char *arg, int from_tty)
  enum language
  get_frame_language (void)
  {
@@ -277,10 +277,10 @@ Index: gdb-6.3.90.20051119/gdb/stack.c
  
    if (frame)
      {
-Index: gdb-6.3.90.20051119/gdb/tui/tui-disasm.c
+Index: gdb-dfsg-6.4.50.20060511/gdb/tui/tui-disasm.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/tui/tui-disasm.c	2005-11-20 11:39:21.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/tui/tui-disasm.c	2005-11-20 11:39:22.000000000 -0500
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/tui/tui-disasm.c	2006-05-11 11:14:38.000000000 -0400
++++ gdb-dfsg-6.4.50.20060511/gdb/tui/tui-disasm.c	2006-05-11 11:14:43.000000000 -0400
 @@ -386,7 +386,7 @@ tui_vertical_disassem_scroll (enum tui_s
  
        content = (tui_win_content) TUI_DISASM_WIN->generic.content;
@@ -290,10 +290,10 @@ Index: gdb-6.3.90.20051119/gdb/tui/tui-disasm.c
        else
  	s = cursal.symtab;
  
-Index: gdb-6.3.90.20051119/gdb/tui/tui-source.c
+Index: gdb-dfsg-6.4.50.20060511/gdb/tui/tui-source.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/tui/tui-source.c	2005-11-20 11:39:21.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/tui/tui-source.c	2005-11-20 11:39:22.000000000 -0500
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/tui/tui-source.c	2006-05-11 11:14:38.000000000 -0400
++++ gdb-dfsg-6.4.50.20060511/gdb/tui/tui-source.c	2006-05-11 11:14:43.000000000 -0400
 @@ -330,7 +330,7 @@ tui_vertical_source_scroll (enum tui_scr
        struct symtab_and_line cursal = get_current_source_symtab_and_line ();
  
@@ -303,10 +303,10 @@ Index: gdb-6.3.90.20051119/gdb/tui/tui-source.c
        else
  	s = cursal.symtab;
  
-Index: gdb-6.3.90.20051119/gdb/tui/tui-winsource.c
+Index: gdb-dfsg-6.4.50.20060511/gdb/tui/tui-winsource.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/tui/tui-winsource.c	2005-11-20 11:39:21.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/tui/tui-winsource.c	2005-11-20 11:39:22.000000000 -0500
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/tui/tui-winsource.c	2006-05-11 11:14:38.000000000 -0400
++++ gdb-dfsg-6.4.50.20060511/gdb/tui/tui-winsource.c	2006-05-11 11:14:43.000000000 -0400
 @@ -314,7 +314,7 @@ tui_horizontal_source_scroll (struct tui
        struct symtab_and_line cursal = get_current_source_symtab_and_line ();
  
@@ -316,10 +316,10 @@ Index: gdb-6.3.90.20051119/gdb/tui/tui-winsource.c
        else
  	s = cursal.symtab;
  
-Index: gdb-6.3.90.20051119/gdb/valops.c
+Index: gdb-dfsg-6.4.50.20060511/gdb/valops.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/valops.c	2005-11-20 11:39:21.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/valops.c	2005-11-20 11:49:37.000000000 -0500
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/valops.c	2006-05-11 11:14:38.000000000 -0400
++++ gdb-dfsg-6.4.50.20060511/gdb/valops.c	2006-05-11 11:14:43.000000000 -0400
 @@ -544,7 +544,7 @@ value_assign (struct value *toval, struc
    /* Since modifying a register can trash the frame chain, and modifying memory
       can trash the frame cache, we save the old frame and then restore the new
@@ -362,10 +362,10 @@ Index: gdb-6.3.90.20051119/gdb/valops.c
    if (ret == 0 && complain)
      error (_("`%s' argument unreadable"), name);
    return ret;
-Index: gdb-6.3.90.20051119/gdb/varobj.c
+Index: gdb-dfsg-6.4.50.20060511/gdb/varobj.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/varobj.c	2005-11-20 11:39:21.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/varobj.c	2005-11-20 11:39:22.000000000 -0500
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/varobj.c	2006-05-11 11:14:38.000000000 -0400
++++ gdb-dfsg-6.4.50.20060511/gdb/varobj.c	2006-05-11 11:14:43.000000000 -0400
 @@ -498,7 +498,7 @@ varobj_create (char *objname,
        if (fi != NULL)
  	{
@@ -375,10 +375,10 @@ Index: gdb-6.3.90.20051119/gdb/varobj.c
  	  select_frame (fi);
  	}
  
-Index: gdb-6.3.90.20051119/gdb/testsuite/gdb.base/default.exp
+Index: gdb-dfsg-6.4.50.20060511/gdb/testsuite/gdb.base/default.exp
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/testsuite/gdb.base/default.exp	2005-11-20 11:39:21.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/testsuite/gdb.base/default.exp	2005-11-20 11:39:22.000000000 -0500
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/testsuite/gdb.base/default.exp	2006-05-11 11:14:38.000000000 -0400
++++ gdb-dfsg-6.4.50.20060511/gdb/testsuite/gdb.base/default.exp	2006-05-11 11:14:43.000000000 -0400
 @@ -167,7 +167,7 @@ gdb_test "disable breakpoints" "" "disab
  #test disable display
  gdb_test "disable display" "" "disable display"

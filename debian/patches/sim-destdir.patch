@@ -2,22 +2,22 @@ Fix some missing uses of DESTDIR in the sim/ directories.  The Debian
 packages use DESTDIR to build.
 
 %patch
-Index: gdb-6.3/sim/Makefile.in
+Index: gdb-dfsg-6.4.50.20060511/sim/Makefile.in
 ===================================================================
---- gdb-6.3.orig/sim/Makefile.in	2003-09-03 14:46:52.000000000 -0400
-+++ gdb-6.3/sim/Makefile.in	2004-11-10 00:39:25.381315738 -0500
-@@ -93,6 +93,7 @@ FLAGS_TO_PASS = \
- 	"CC=$(CC)" \
+--- gdb-dfsg-6.4.50.20060511.orig/sim/Makefile.in	2006-05-05 13:11:19.000000000 -0400
++++ gdb-dfsg-6.4.50.20060511/sim/Makefile.in	2006-05-11 12:29:51.000000000 -0400
+@@ -91,6 +91,7 @@ FLAGS_TO_PASS = \
  	"CC_FOR_BUILD=$(CC_FOR_BUILD)" \
  	"CFLAGS=$(CFLAGS)" \
+ 	"CFLAGS_FOR_BUILD=$(CFLAGS_FOR_BUILD)" \
 +	"DESTDIR=$(DESTDIR)" \
  	"RANLIB=$(RANLIB)" \
  	"MAKEINFO=$(MAKEINFO)" \
  	"INSTALL=$(INSTALL)" \
-Index: gdb-6.3/sim/erc32/Makefile.in
+Index: gdb-dfsg-6.4.50.20060511/sim/erc32/Makefile.in
 ===================================================================
---- gdb-6.3.orig/sim/erc32/Makefile.in	2000-03-07 10:32:49.000000000 -0500
-+++ gdb-6.3/sim/erc32/Makefile.in	2004-11-10 00:39:25.385314957 -0500
+--- gdb-dfsg-6.4.50.20060511.orig/sim/erc32/Makefile.in	2000-03-07 10:32:49.000000000 -0500
++++ gdb-dfsg-6.4.50.20060511/sim/erc32/Makefile.in	2006-05-11 12:29:31.000000000 -0400
 @@ -53,7 +53,7 @@ end.h: end
  # Copy the files into directories where they will be run.
  install-sis: installdirs

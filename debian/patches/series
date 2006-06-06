@@ -1,7 +1,5 @@
 10.selected-frame.patch 
 13.use-dynamic-readline.patch 
-static-thread-db.patch 
-34.info-section.patch 
 sim-destdir.patch 
 member-field-symtab.patch 
 cp-pass-by-reference.patch 
@@ -11,8 +9,5 @@ dwarf2-cfi-warning.patch
 gdbinit-ownership.patch
 pending-breakpoints-and-sigttou.patch
 gdb-pascal-support.patch
-gdb-nptl-cancellation.patch
 gdb-fortran-main.patch -p0
-gdb-powerpc-pic-prologue.patch
 linux-clear-thread-list.patch
-fix-attach-inferior-notification.patch

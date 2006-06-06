@@ -1,59 +1,17 @@
-From:
+Originally from:
   http://www.math.uni.wroc.pl/~hebisch/gpc/
 
 I believe this patch was posted to gdb-patches and never reviewed.
+But M2 support added set types just before GDB 6.5, and now there's
+not much left of this.
 
-Index: gdb-6.3.90.20051119/gdb/dwarf2read.c
+Index: gdb-6.4.90.dfsg/gdb/dwarf2read.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/dwarf2read.c	2005-11-20 13:15:44.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/dwarf2read.c	2005-11-20 13:36:49.000000000 -0500
-@@ -911,6 +911,8 @@ static const char *namespace_name (struc
- 
- static void read_enumeration_type (struct die_info *, struct dwarf2_cu *);
- 
-+static void read_set_type (struct die_info *, struct dwarf2_cu *);
-+
- static void process_enumeration_scope (struct die_info *, struct dwarf2_cu *);
- 
- static struct type *dwarf_base_type (int, int, struct dwarf2_cu *);
-@@ -2648,6 +2650,9 @@ process_die (struct die_info *die, struc
-       read_enumeration_type (die, cu);
-       process_enumeration_scope (die, cu);
-       break;
-+    case DW_TAG_set_type:
-+      read_set_type (die, cu);
-+      break;
- 
-     /* FIXME drow/2004-03-14: These initialize die->type, but do not create
-        a symbol or process any children.  Therefore it doesn't do anything
-@@ -4031,6 +4036,24 @@ determine_class_name (struct die_info *d
-   return new_prefix;
- }
- 
-+static void
-+read_set_type (struct die_info * die, struct dwarf2_cu *cu)
-+{
-+  struct type *domain_type;
-+
-+  /* Return if we've already decoded this type. */
-+  if (die->type)
-+    {
-+      return;
-+    }
-+
-+  domain_type = die_type (die, cu);
-+
-+  die->type = create_set_type (NULL, domain_type);
-+
-+}
-+
-+
- /* Given a pointer to a die which begins an enumeration, process all
-    the dies that define the members of the enumeration, and create the
-    symbol for the enumeration type.
-@@ -6113,9 +6136,11 @@ set_cu_language (unsigned int lang, stru
-     case DW_LANG_Ada95:
-       cu->language = language_ada;
+--- gdb-6.4.90.dfsg.orig/gdb/dwarf2read.c	2006-06-06 09:17:40.000000000 -0400
++++ gdb-6.4.90.dfsg/gdb/dwarf2read.c	2006-06-06 09:20:50.000000000 -0400
+@@ -6193,9 +6193,11 @@ set_cu_language (unsigned int lang, stru
+     case DW_LANG_Modula2:
+       cu->language = language_m2;
        break;
 +    case DW_LANG_Pascal83:
 +      cu->language = language_pascal;
@@ -61,28 +19,10 @@ Index: gdb-6.3.90.20051119/gdb/dwarf2read.c
      case DW_LANG_Cobol74:
      case DW_LANG_Cobol85:
 -    case DW_LANG_Pascal83:
-     case DW_LANG_Modula2:
      default:
        cu->language = language_minimal;
-@@ -6904,6 +6929,7 @@ new_symbol (struct die_info *die, struct
- 	case DW_TAG_structure_type:
- 	case DW_TAG_union_type:
- 	case DW_TAG_enumeration_type:
-+        case DW_TAG_set_type:
- 	  SYMBOL_CLASS (sym) = LOC_TYPEDEF;
- 	  SYMBOL_DOMAIN (sym) = STRUCT_DOMAIN;
- 
-@@ -7225,6 +7251,9 @@ read_type_die (struct die_info *die, str
-     case DW_TAG_enumeration_type:
-       read_enumeration_type (die, cu);
        break;
-+    case DW_TAG_set_type:
-+      read_set_type (die, cu);
-+      break;
-     case DW_TAG_subprogram:
-     case DW_TAG_subroutine_type:
-       read_subroutine_type (die, cu);
-@@ -7282,7 +7311,8 @@ determine_prefix (struct die_info *die, 
+@@ -7368,7 +7370,8 @@ determine_prefix (struct die_info *die, 
    struct die_info *parent;
  
    if (cu->language != language_cplus

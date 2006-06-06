@@ -1,3 +1,24 @@
+gdb (6.4.90.dfsg-1) unstable; urgency=low
+
+  * New upstream snapshot (GDB 6.5 prerelease).
+    - BFD build fix for GCC 4.2 (Closes: #364124).
+    - xstrvprintf error message corrected (Closes: #296483).
+    - Rewritten printf command (Closes: #186037, #231162).
+    - Build fix for hurd-i386 (Closes: #345108).
+  * Split the GDB package into DFSG and non-DFSG portions (Closes: #212522).
+    The documentation has been moved to the new gdb-doc package, which
+    this one Suggests.
+    - Remove packaging for info files.
+    - Remove GFDL section from debian/copyright.
+    - Update README.Debian.
+  * Correct control.in to also use libreadline5-dev.
+  * Update type-handling usage.
+  * Update copyright file with the new FSF address.
+  * Update gcj build dependency (allow mips and mipsel, skip kfreebsd)
+    (Closes: #343199).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Tue,  6 Jun 2006 09:23:45 -0400
+
 gdb (6.4-1) unstable; urgency=low
 
   * New upstream release.

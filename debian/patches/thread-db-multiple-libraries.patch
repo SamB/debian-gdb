@@ -1,10 +1,10 @@
 Support loading two libthread_db DSOs.  In this case, the LinuxThreads
 and NPTL ones.
 
-Index: gdb-6.3.90.20051119/gdb/linux-thread-db.c
+Index: gdb-dfsg-6.4.50.20060511/gdb/linux-thread-db.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/linux-thread-db.c	2005-11-19 22:42:24.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/linux-thread-db.c	2005-11-19 22:53:02.000000000 -0500
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/linux-thread-db.c	2006-05-05 18:42:43.000000000 -0400
++++ gdb-dfsg-6.4.50.20060511/gdb/linux-thread-db.c	2006-05-11 12:34:29.000000000 -0400
 @@ -82,53 +82,63 @@ static td_thragent_t *thread_agent;
  
  /* Pointers to the libthread_db functions.  */
@@ -329,7 +329,7 @@ Index: gdb-6.3.90.20051119/gdb/linux-thread-db.c
    /* Delete thread event breakpoints, if any.  */
    remove_thread_event_breakpoints ();
 @@ -634,7 +665,6 @@ check_thread_signals (void)
- static void
+ void
  check_for_thread_db (void)
  {
 -  td_err_e err;
@@ -410,7 +410,7 @@ Index: gdb-6.3.90.20051119/gdb/linux-thread-db.c
      }
  }
  
-@@ -765,7 +790,7 @@ attach_thread (ptid_t ptid, const td_thr
+@@ -759,7 +784,7 @@ attach_thread (ptid_t ptid, const td_thr
  #endif
  
    /* Enable thread event reporting for this thread.  */
@@ -419,7 +419,7 @@ Index: gdb-6.3.90.20051119/gdb/linux-thread-db.c
    if (err != TD_OK)
      error (_("Cannot enable thread event reporting for %s: %s"),
  	   target_pid_to_str (ptid), thread_db_err_str (err));
-@@ -891,7 +916,7 @@ check_event (ptid_t ptid)
+@@ -885,7 +910,7 @@ check_event (ptid_t ptid)
  
    do
      {
@@ -428,7 +428,7 @@ Index: gdb-6.3.90.20051119/gdb/linux-thread-db.c
        if (err != TD_OK)
  	{
  	  if (err == TD_NOMSG)
-@@ -901,7 +926,7 @@ check_event (ptid_t ptid)
+@@ -895,7 +920,7 @@ check_event (ptid_t ptid)
  		 thread_db_err_str (err));
  	}
  
@@ -437,7 +437,7 @@ Index: gdb-6.3.90.20051119/gdb/linux-thread-db.c
        if (err != TD_OK)
  	error (_("Cannot get thread info: %s"), thread_db_err_str (err));
  
-@@ -1014,12 +1039,14 @@ thread_db_fetch_registers (int regno)
+@@ -1008,12 +1033,14 @@ thread_db_fetch_registers (int regno)
    thread_info = find_thread_pid (inferior_ptid);
    thread_db_map_id2thr (thread_info, 1);
  
@@ -454,7 +454,7 @@ Index: gdb-6.3.90.20051119/gdb/linux-thread-db.c
    if (err != TD_OK)
      error (_("Cannot get floating-point registers for thread %ld: %s"),
  	   (long) GET_THREAD (inferior_ptid), thread_db_err_str (err));
-@@ -1061,11 +1088,13 @@ thread_db_store_registers (int regno)
+@@ -1055,11 +1082,13 @@ thread_db_store_registers (int regno)
    fill_gregset ((gdb_gregset_t *) gregset, -1);
    fill_fpregset (&fpregset, -1);
  
@@ -470,7 +470,7 @@ Index: gdb-6.3.90.20051119/gdb/linux-thread-db.c
    if (err != TD_OK)
      error (_("Cannot store floating-point registers  for thread %ld: %s"),
  	   (long) GET_THREAD (inferior_ptid), thread_db_err_str (err));
-@@ -1135,15 +1164,14 @@ thread_db_thread_alive (ptid_t ptid)
+@@ -1131,15 +1160,14 @@ thread_db_thread_alive (ptid_t ptid)
        if (!thread_info->private->th_valid)
  	return 0;
  
@@ -489,7 +489,7 @@ Index: gdb-6.3.90.20051119/gdb/linux-thread-db.c
  	  if (err != TD_OK)
  	    return 0;
  	  thread_info->private->ti_valid = 1;
-@@ -1169,7 +1197,7 @@ find_new_threads_callback (const td_thrh
+@@ -1165,7 +1193,7 @@ find_new_threads_callback (const td_thrh
    td_err_e err;
    ptid_t ptid;
  
@@ -498,7 +498,7 @@ Index: gdb-6.3.90.20051119/gdb/linux-thread-db.c
    if (err != TD_OK)
      error (_("find_new_threads_callback: cannot get thread info: %s"),
  	   thread_db_err_str (err));
-@@ -1191,9 +1219,10 @@ thread_db_find_new_threads (void)
+@@ -1187,9 +1215,10 @@ thread_db_find_new_threads (void)
    td_err_e err;
  
    /* Iterate over all user-space threads to discover new threads.  */
@@ -512,7 +512,7 @@ Index: gdb-6.3.90.20051119/gdb/linux-thread-db.c
    if (err != TD_OK)
      error (_("Cannot find new threads: %s"), thread_db_err_str (err));
  }
-@@ -1255,7 +1284,7 @@ thread_db_get_thread_local_address (ptid
+@@ -1251,7 +1280,7 @@ thread_db_get_thread_local_address (ptid
        struct thread_info *thread_info;
  
        /* glibc doesn't provide the needed interface.  */
@@ -521,7 +521,7 @@ Index: gdb-6.3.90.20051119/gdb/linux-thread-db.c
  	throw_error (TLS_NO_LIBRARY_SUPPORT_ERROR,
  		     _("No TLS library support"));
  
-@@ -1267,8 +1296,8 @@ thread_db_get_thread_local_address (ptid
+@@ -1263,8 +1292,8 @@ thread_db_get_thread_local_address (ptid
        thread_db_map_id2thr (thread_info, 1);
  
        /* Finally, get the address of the variable.  */
@@ -532,7 +532,7 @@ Index: gdb-6.3.90.20051119/gdb/linux-thread-db.c
  
  #ifdef THREAD_DB_HAS_TD_NOTALLOC
        /* The memory hasn't been allocated, yet.  */
-@@ -1330,17 +1359,49 @@ init_thread_db_ops (void)
+@@ -1326,14 +1355,46 @@ init_thread_db_ops (void)
  void
  _initialize_thread_db (void)
  {
@@ -541,18 +541,12 @@ Index: gdb-6.3.90.20051119/gdb/linux-thread-db.c
 +
    /* Only initialize the module if we can load libthread_db.  */
 -  if (thread_db_load ())
--    {
--      init_thread_db_ops ();
--      add_target (&thread_db_ops);
 +  ptrs = thread_db_load (LIBTHREAD_DB_SO);
 +  if (ptrs == NULL)
 +    return;
 +
 +  all_pointers = ptrs;
- 
--      /* Add ourselves to objfile event chain.  */
--      target_new_objfile_chain = deprecated_target_new_objfile_hook;
--      deprecated_target_new_objfile_hook = thread_db_new_objfile;
++
 +  /* Some GNU/Linux systems have more than one binary-compatible copy
 +     of libthread_db.  If we can find a second one, load that too.
 +     The inferior may force the use of a different threading package
@@ -562,11 +556,14 @@ Index: gdb-6.3.90.20051119/gdb/linux-thread-db.c
 +     the LinuxThreads copy.  */
 +  p = strrchr (ptrs->filename, '/');
 +  while (p != NULL && p > ptrs->filename)
-+    {
+     {
+-      init_thread_db_ops ();
+-      add_target (&thread_db_ops);
 +      const char *component;
  
--      /* Register ourselves for the new inferior observer.  */
--      observer_attach_inferior_created (check_for_thread_db_observer);
+-      /* Add ourselves to objfile event chain.  */
+-      target_new_objfile_chain = deprecated_target_new_objfile_hook;
+-      deprecated_target_new_objfile_hook = thread_db_new_objfile;
 +      component = memrchr (ptrs->filename, '/', p - ptrs->filename);
 +      if (component != NULL && strncmp (component, "/lib", 4) == 0)
 +	{
@@ -587,7 +584,4 @@ Index: gdb-6.3.90.20051119/gdb/linux-thread-db.c
 +  /* Add ourselves to objfile event chain.  */
 +  target_new_objfile_chain = deprecated_target_new_objfile_hook;
 +  deprecated_target_new_objfile_hook = thread_db_new_objfile;
-+
-+  /* Register ourselves for the new inferior observer.  */
-+  observer_attach_inferior_created (check_for_thread_db_observer);
  }

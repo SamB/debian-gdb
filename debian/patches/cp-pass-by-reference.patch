@@ -5,10 +5,10 @@ already in the GDB testsuite (currently disabled) that it would probably fix.
 
 Patch updated, but still not submitted.
 
-Index: gdb-6.3.90.20051119/gdb/infcall.c
+Index: gdb-dfsg-6.4.50.20060511/gdb/infcall.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/infcall.c	2005-11-20 11:39:20.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/infcall.c	2005-11-20 12:42:22.000000000 -0500
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/infcall.c	2005-12-17 17:34:01.000000000 -0500
++++ gdb-dfsg-6.4.50.20060511/gdb/infcall.c	2006-05-11 12:30:17.000000000 -0400
 @@ -36,6 +36,7 @@
  #include "gdb_string.h"
  #include "infcall.h"
@@ -167,10 +167,10 @@ Index: gdb-6.3.90.20051119/gdb/infcall.c
  	  {
  	  case RETURN_VALUE_REGISTER_CONVENTION:
  	  case RETURN_VALUE_ABI_RETURNS_ADDRESS:
-Index: gdb-6.3.90.20051119/gdb/cp-abi.h
+Index: gdb-dfsg-6.4.50.20060511/gdb/cp-abi.h
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/cp-abi.h	2005-11-20 11:39:20.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/cp-abi.h	2005-11-20 11:50:11.000000000 -0500
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/cp-abi.h	2005-12-17 17:33:59.000000000 -0500
++++ gdb-dfsg-6.4.50.20060511/gdb/cp-abi.h	2006-05-11 12:30:17.000000000 -0400
 @@ -147,6 +147,10 @@ extern struct type *value_rtti_type (str
  extern int baseclass_offset (struct type *type, int index,
  			     const bfd_byte *valaddr, CORE_ADDR address);
@@ -190,10 +190,10 @@ Index: gdb-6.3.90.20051119/gdb/cp-abi.h
  };
  
  
-Index: gdb-6.3.90.20051119/gdb/cp-abi.c
+Index: gdb-dfsg-6.4.50.20060511/gdb/cp-abi.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/cp-abi.c	2005-11-20 11:39:20.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/cp-abi.c	2005-11-20 11:50:11.000000000 -0500
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/cp-abi.c	2005-12-17 17:33:59.000000000 -0500
++++ gdb-dfsg-6.4.50.20060511/gdb/cp-abi.c	2006-05-11 12:30:17.000000000 -0400
 @@ -95,6 +95,14 @@ value_rtti_type (struct value *v, int *f
    return (*current_cp_abi.rtti_type) (v, full, top, using_enc);
  }
@@ -209,10 +209,10 @@ Index: gdb-6.3.90.20051119/gdb/cp-abi.c
  /* Set the current C++ ABI to SHORT_NAME.  */
  
  static int
-Index: gdb-6.3.90.20051119/gdb/gnu-v3-abi.c
+Index: gdb-dfsg-6.4.50.20060511/gdb/gnu-v3-abi.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/gnu-v3-abi.c	2005-11-20 11:39:20.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/gnu-v3-abi.c	2005-11-20 11:50:11.000000000 -0500
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/gnu-v3-abi.c	2005-12-17 17:34:00.000000000 -0500
++++ gdb-dfsg-6.4.50.20060511/gdb/gnu-v3-abi.c	2006-05-11 12:30:17.000000000 -0400
 @@ -416,6 +416,84 @@ gnuv3_baseclass_offset (struct type *typ
    return base_offset;
  }
@@ -306,11 +306,11 @@ Index: gdb-6.3.90.20051119/gdb/gnu-v3-abi.c
  }
  
  extern initialize_file_ftype _initialize_gnu_v3_abi; /* -Wmissing-prototypes */
-Index: gdb-6.3.90.20051119/gdb/Makefile.in
+Index: gdb-dfsg-6.4.50.20060511/gdb/Makefile.in
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/Makefile.in	2005-11-20 11:50:11.000000000 -0500
-+++ gdb-6.3.90.20051119/gdb/Makefile.in	2005-11-20 12:41:06.000000000 -0500
-@@ -2114,7 +2114,7 @@ ia64-tdep.o: ia64-tdep.c $(defs_h) $(inf
+--- gdb-dfsg-6.4.50.20060511.orig/gdb/Makefile.in	2006-05-11 11:15:17.000000000 -0400
++++ gdb-dfsg-6.4.50.20060511/gdb/Makefile.in	2006-05-11 12:30:17.000000000 -0400
+@@ -2131,7 +2131,7 @@ ia64-tdep.o: ia64-tdep.c $(defs_h) $(inf
  infcall.o: infcall.c $(defs_h) $(breakpoint_h) $(target_h) $(regcache_h) \
  	$(inferior_h) $(gdb_assert_h) $(block_h) $(gdbcore_h) $(language_h) \
  	$(objfiles_h) $(gdbcmd_h) $(command_h) $(gdb_string_h) $(infcall_h) \
@@ -319,10 +319,10 @@ Index: gdb-6.3.90.20051119/gdb/Makefile.in
  inf-child.o: inf-child.c $(defs_h) $(regcache_h) $(memattr_h) $(symtab_h) \
  	$(target_h) $(inferior_h) $(gdb_string_h)
  infcmd.o: infcmd.c $(defs_h) $(gdb_string_h) $(symtab_h) $(gdbtypes_h) \
-Index: gdb-6.3.90.20051119/gdb/testsuite/gdb.cp/pass-by-ref.exp
+Index: gdb-dfsg-6.4.50.20060511/gdb/testsuite/gdb.cp/pass-by-ref.exp
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ gdb-6.3.90.20051119/gdb/testsuite/gdb.cp/pass-by-ref.exp	2005-11-20 12:29:39.000000000 -0500
++++ gdb-dfsg-6.4.50.20060511/gdb/testsuite/gdb.cp/pass-by-ref.exp	2006-05-11 12:30:17.000000000 -0400
 @@ -0,0 +1,38 @@
 +# This testcase is part of GDB, the GNU debugger.
 +
@@ -362,10 +362,10 @@ Index: gdb-6.3.90.20051119/gdb/testsuite/gdb.cp/pass-by-ref.exp
 +}
 +
 +gdb_test "print foo (global_obj)" " = 3" "call function"
-Index: gdb-6.3.90.20051119/gdb/testsuite/gdb.cp/pass-by-ref.cc
+Index: gdb-dfsg-6.4.50.20060511/gdb/testsuite/gdb.cp/pass-by-ref.cc
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ gdb-6.3.90.20051119/gdb/testsuite/gdb.cp/pass-by-ref.cc	2005-11-20 11:50:11.000000000 -0500
++++ gdb-dfsg-6.4.50.20060511/gdb/testsuite/gdb.cp/pass-by-ref.cc	2006-05-11 12:30:17.000000000 -0400
 @@ -0,0 +1,57 @@
 +/* This testcase is part of GDB, the GNU debugger.
 +
