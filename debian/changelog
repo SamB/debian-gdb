@@ -1,3 +1,13 @@
+gdb (6.5.dfsg-1) unstable; urgency=low
+
+  * New upstream release (Closes: #386586).
+  * Update Standards-Version to 3.7.2 (no changes required).
+  * Mention --args in the man page (Closes: #394150).
+  * Mention gdbtui and -tui (Closes: #362795).
+  * Correctly detect changed executables when rerunning.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun,  5 Nov 2006 18:33:48 -0500
+
 gdb (6.4.90.dfsg-1) unstable; urgency=low
 
   * New upstream snapshot (GDB 6.5 prerelease).

@@ -2,7 +2,7 @@ Source: gdb
 Maintainer: Daniel Jacobowitz <dan@debian.org>
 Section: devel
 Priority: standard
-Standards-Version: 3.5.3
+Standards-Version: 3.7.2
 Build-Depends: autoconf, libtool, texinfo (>= 4.7-2.2), tetex-bin, libncurses5-dev, libreadline5-dev, bison, gettext, debhelper (>= 4.9.0), dejagnu, gcj [!kfreebsd-amd64 !kfreebsd-i386 !hurd-i386], gobjc, mig [hurd-i386 hurd-ia64 hurd-alpha hurd-amd64 hurd-armeb hurd-arm hurd-hppa hurd-m32r hurd-m68k hurd-mips hurd-mipsel hurd-powerpc hurd-ppc64 hurd-s390 hurd-s390x hurd-sh3 hurd-sh3eb hurd-sh4 hurd-sh4eb hurd-sparc], cdbs (>= 0.4.17), quilt (>= 0.30-1), libkvm-dev [kfreebsd-i386 kfreebsd-ia64 kfreebsd-alpha kfreebsd-amd64 kfreebsd-armeb kfreebsd-arm kfreebsd-hppa kfreebsd-m32r kfreebsd-m68k kfreebsd-mips kfreebsd-mipsel kfreebsd-powerpc kfreebsd-ppc64 kfreebsd-s390 kfreebsd-s390x kfreebsd-sh3 kfreebsd-sh3eb kfreebsd-sh4 kfreebsd-sh4eb kfreebsd-sparc], type-handling (>= 0.2.1), libunwind7-dev [ia64], flex | flex-old
 
 Package: gdb
