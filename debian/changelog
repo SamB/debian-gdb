@@ -1,3 +1,10 @@
+gdb (6.5.dfsg-2) unstable; urgency=low
+
+  * Backport a patch to fix GDB segfaults on threaded programs.
+  * Backport a patch to fix errors on fork/vfork in threaded programs.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Thu, 16 Nov 2006 11:06:50 -0500
+
 gdb (6.5.dfsg-1) unstable; urgency=low
 
   * New upstream release (Closes: #386586).
