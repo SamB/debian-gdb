@@ -1,10 +1,16 @@
 This patch was not popular upstream; there was no fundamental objection, but
 several problems with the implementation.  It needs to be revisited.
 
-Index: gdb-dfsg-6.4.50.20060511/gdb/cli/cli-cmds.c
+---
+ gdb/Makefile.in    |    2 +-
+ gdb/cli/cli-cmds.c |   41 +++++++++++++++++++++++++++++++++++++----
+ gdb/main.c         |    4 ++--
+ 3 files changed, 40 insertions(+), 7 deletions(-)
+
+Index: gdb-6.6.dfsg/gdb/cli/cli-cmds.c
 ===================================================================
---- gdb-dfsg-6.4.50.20060511.orig/gdb/cli/cli-cmds.c	2006-05-11 15:20:06.000000000 -0400
-+++ gdb-dfsg-6.4.50.20060511/gdb/cli/cli-cmds.c	2006-05-11 15:23:08.000000000 -0400
+--- gdb-6.6.dfsg.orig/gdb/cli/cli-cmds.c	2007-01-27 20:35:28.000000000 -0500
++++ gdb-6.6.dfsg/gdb/cli/cli-cmds.c	2007-01-27 20:35:32.000000000 -0500
 @@ -38,6 +38,7 @@
  #include "objfiles.h"
  #include "source.h"
@@ -22,7 +28,7 @@ Index: gdb-dfsg-6.4.50.20060511/gdb/cli/cli-cmds.c
  /* Prototypes for local command functions */
  
  static void complete_command (char *, int);
-@@ -423,6 +426,10 @@ cd_command (char *dir, int from_tty)
+@@ -432,6 +435,10 @@ cd_command (char *dir, int from_tty)
      pwd_command ((char *) 0, 1);
  }
  
@@ -31,20 +37,20 @@ Index: gdb-dfsg-6.4.50.20060511/gdb/cli/cli-cmds.c
 +   be paranoid about unsafe files.  */
 +
  void
- source_command (char *args, int from_tty)
+ source_script (char *file, int from_tty)
  {
-@@ -433,9 +440,7 @@ source_command (char *args, int from_tty
+@@ -441,9 +448,7 @@ source_script (char *file, int from_tty)
    int fd;
  
-   if (file == NULL)
+   if (file == NULL || *file == 0)
 -    {
--      error (_("source command requires pathname of file to source."));
+-      error (_("source command requires file name of file to source."));
 -    }
-+    error (_("source command requires pathname of file to source."));
++    error (_("source command requires file name of file to source."));
  
    file = tilde_expand (file);
    old_cleanups = make_cleanup (xfree, file);
-@@ -453,13 +458,41 @@ source_command (char *args, int from_tty
+@@ -461,13 +466,41 @@ source_script (char *file, int from_tty)
  
    if (fd == -1)
      {
@@ -87,33 +93,33 @@ Index: gdb-dfsg-6.4.50.20060511/gdb/cli/cli-cmds.c
    script_from_file (stream, file);
  
    do_cleanups (old_cleanups);
-Index: gdb-dfsg-6.4.50.20060511/gdb/main.c
+Index: gdb-6.6.dfsg/gdb/main.c
 ===================================================================
---- gdb-dfsg-6.4.50.20060511.orig/gdb/main.c	2006-05-11 15:20:04.000000000 -0400
-+++ gdb-dfsg-6.4.50.20060511/gdb/main.c	2006-05-11 15:20:11.000000000 -0400
-@@ -643,7 +643,7 @@ extern int gdbtk_test (char *);
+--- gdb-6.6.dfsg.orig/gdb/main.c	2007-01-27 20:35:19.000000000 -0500
++++ gdb-6.6.dfsg/gdb/main.c	2007-01-27 20:35:32.000000000 -0500
+@@ -644,7 +644,7 @@ extern int gdbtk_test (char *);
  
        if (!inhibit_gdbinit)
  	{
--	  catch_command_errors (source_command, homeinit, 0, RETURN_MASK_ALL);
-+	  catch_command_errors (source_command, homeinit, -1, RETURN_MASK_ALL);
+-	  catch_command_errors (source_script, homeinit, 0, RETURN_MASK_ALL);
++	  catch_command_errors (source_script, homeinit, -1, RETURN_MASK_ALL);
  	}
  
        /* Do stats; no need to do them elsewhere since we'll only
-@@ -730,7 +730,7 @@ extern int gdbtk_test (char *);
+@@ -722,7 +722,7 @@ extern int gdbtk_test (char *);
        || memcmp ((char *) &homebuf, (char *) &cwdbuf, sizeof (struct stat)))
      if (!inhibit_gdbinit)
        {
--	catch_command_errors (source_command, gdbinit, 0, RETURN_MASK_ALL);
-+	catch_command_errors (source_command, gdbinit, -1, RETURN_MASK_ALL);
+-	catch_command_errors (source_script, gdbinit, 0, RETURN_MASK_ALL);
++	catch_command_errors (source_script, gdbinit, -1, RETURN_MASK_ALL);
        }
  
    for (i = 0; i < ncmd; i++)
-Index: gdb-dfsg-6.4.50.20060511/gdb/Makefile.in
+Index: gdb-6.6.dfsg/gdb/Makefile.in
 ===================================================================
---- gdb-dfsg-6.4.50.20060511.orig/gdb/Makefile.in	2006-05-11 15:20:09.000000000 -0400
-+++ gdb-dfsg-6.4.50.20060511/gdb/Makefile.in	2006-05-11 15:20:11.000000000 -0400
-@@ -2837,7 +2837,7 @@ cli-cmds.o: $(srcdir)/cli/cli-cmds.c $(d
+--- gdb-6.6.dfsg.orig/gdb/Makefile.in	2007-01-27 20:35:30.000000000 -0500
++++ gdb-6.6.dfsg/gdb/Makefile.in	2007-01-27 20:35:32.000000000 -0500
+@@ -2905,7 +2905,7 @@ cli-cmds.o: $(srcdir)/cli/cli-cmds.c $(d
  	$(expression_h) $(frame_h) $(value_h) $(language_h) $(filenames_h) \
  	$(objfiles_h) $(source_h) $(disasm_h) $(ui_out_h) $(top_h) \
  	$(cli_decode_h) $(cli_script_h) $(cli_setshow_h) $(cli_cmds_h) \

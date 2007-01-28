@@ -13,5 +13,4 @@ gdb-fortran-main.patch -p0
 linux-clear-thread-list.patch
 man-page-args.patch
 bfd-get-mtime-less.patch
-thread-db-live-threads.patch
-fork-context-switch.patch
+dwarf2-long-size.patch

@@ -1,11 +1,11 @@
 Source: gdb
 Maintainer: Daniel Jacobowitz <dan@debian.org>
 Section: devel
-Priority: standard
+Priority: optional
 Standards-Version: 3.7.2
 Build-Depends: autoconf, libtool, texinfo (>= 4.7-2.2), tetex-bin, libncurses5-dev, libreadline5-dev, bison, gettext, debhelper (>= 4.9.0), dejagnu, gcj [!kfreebsd-amd64 !kfreebsd-i386 !hurd-i386], gobjc, mig [@gnu@], cdbs (>= 0.4.17), quilt (>= 0.30-1), libkvm-dev [@kfreebsd@], type-handling (>= 0.2.1), libunwind7-dev [ia64], flex | flex-old
 
-Package: gdb
+Package: gdb@TS@
 Architecture: any
 Section: devel
 Depends: ${shlibs:Depends}

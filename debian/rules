@@ -26,6 +26,36 @@ DEB_HOST_GNU_SYSTEM := $(shell dpkg-architecture -qDEB_HOST_GNU_SYSTEM)
 DEB_HOST_GNU_CPU := $(shell dpkg-architecture -qDEB_HOST_GNU_CPU)
 DEB_HOST_GNU_TYPE := $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 
+# Cross configuration support.  Check for an environment variable
+# $GDB_TARGET, or a file debian/target.
+ifndef GDB_TARGET
+DEBIAN_TARGET_FILE := $(strip $(shell cat debian/target 2>/dev/null))
+ifneq ($(DEBIAN_TARGET_FILE),)
+GDB_TARGET := $(DEBIAN_TARGET_FILE)
+endif
+endif
+
+DEB_TARGET_ARCH	:= $(shell dpkg-architecture -f \
+		     -a$(GDB_TARGET) -qDEB_HOST_ARCH 2>/dev/null)
+DEB_TARGET_GNU_TYPE := $(shell dpkg-architecture -f \
+			 -a$(DEB_TARGET_ARCH) -qDEB_HOST_GNU_TYPE 2>/dev/null)
+DEB_TARGET_ALIAS ?= $(DEB_TARGET_GNU_TYPE)
+
+ifeq ($(DEB_TARGET_ARCH),)
+$(error GDB_TARGET value "$(GDB_TARGET)" is not a valid Debian architecture)
+endif
+
+ifdef GDB_TARGET
+  DEB_CROSS = yes
+  # TP: Target Prefix. Used primarily as a prefix for cross tool
+  #     names (e.g. powerpc-linux-gcc).
+  # TS: Target Suffix. Used primarily at the end of cross compiler
+  #     package names (e.g. gcc-powerpc).
+  TP = $(DEB_TARGET_ALIAS)-
+  TS = -$(DEB_TARGET_ALIAS)
+  CROSS_FORCE = FORCE
+endif
+
 run_tests := yes
 run_thread_tests := yes
 
@@ -39,6 +69,13 @@ endif
 
 ifeq ($(DEB_HOST_GNU_CPU),ia64)
   arch_config_args := --with-libunwind
+endif
+
+ifdef GDB_TARGET
+  run_tests := no
+
+  arch_config_args += --program-prefix=$(TP) \
+    --target=$(DEB_TARGET_ALIAS) --with-sysroot=/usr/$(DEB_TARGET_ALIAS)
 endif
 
 INSTALL = $(install)
@@ -60,7 +97,7 @@ post-patches::
 
 # This should probably be common-post-build-arch, but that runs during
 # install, under fakeroot, in CDBS 0.4.21.
-build/gdb:: check-stamp
+build/gdb$(TS):: check-stamp
 	$(MAKE) -C objdir/gdb/doc refcard.dvi refcard.ps
 
 check-stamp:
@@ -95,42 +132,46 @@ clean::
 
 	rm -f check-stamp
 
-binary-post-install/gdb ::
-	if [ -x debian/gdb/usr/bin/run ]; then					\
-		mv debian/gdb/usr/bin/run					\
-		  debian/gdb/usr/bin/$(DEB_HOST_GNU_TYPE)-run;			\
-		mv debian/gdb/usr/share/man/man1/run.1				\
-		  debian/gdb/usr/share/man/man1/$(DEB_HOST_GNU_TYPE)-run.1;	\
+binary-post-install/gdb$(TS) ::
+	if [ -x debian/gdb$(TS)/usr/bin/run ]; then				\
+		mv debian/gdb$(TS)/usr/bin/run					\
+		  debian/gdb$(TS)/usr/bin/$(DEB_TARGET_ALIAS)-run;		\
+		mv debian/gdb$(TS)/usr/share/man/man1/run.1			\
+		  debian/gdb$(TS)/usr/share/man/man1/$(DEB_TARGET_ALIAS)-run.1;	\
 	fi
 ifeq ($(run_tests),yes)
-	install -d debian/gdb/usr/share/doc/gdb
+	install -d debian/gdb$(TS)/usr/share/doc/gdb
 	install -m 644 objdir/check.log \
-		debian/gdb/usr/share/doc/gdb/check.log
+		debian/gdb$(TS)/usr/share/doc/gdb/check.log
 endif
 
 	$(INSTALL) -m 755 -o root -g root \
-		gdb/gdb_gcore.sh debian/gdb/usr/bin/gcore
+		gdb/gdb_gcore.sh debian/gdb$(TS)/usr/bin/$(TP)gcore
 
-	rm -rf debian/gdb/usr/include \
-		debian/gdb/usr/lib/lib*.* \
-		debian/gdb/usr/share/info/annotate.info* \
-		debian/gdb/usr/share/info/bfd.info* \
-		debian/gdb/usr/share/info/configure.info* \
-		debian/gdb/usr/share/info/mmalloc.info* \
-		debian/gdb/usr/share/info/standards.info* \
-		debian/gdb/usr/share/locale
+	rm -rf debian/gdb$(TS)/usr/include \
+		debian/gdb$(TS)/usr/lib/lib*.* \
+		debian/gdb$(TS)/usr/share/info/annotate.info* \
+		debian/gdb$(TS)/usr/share/info/bfd.info* \
+		debian/gdb$(TS)/usr/share/info/configure.info* \
+		debian/gdb$(TS)/usr/share/info/mmalloc.info* \
+		debian/gdb$(TS)/usr/share/info/standards.info* \
+		debian/gdb$(TS)/usr/share/locale
 
 	# Remove the entire info directory; it only contains dummy files,
 	# not the real manuals.
-	rm -rf debian/gdb/usr/share/info
+	rm -rf debian/gdb$(TS)/usr/share/info
 
-debian/control:: debian/control.in
+debian/control:: debian/control.in $(CROSS_FORCE)
 	cat debian/control.in \
 		| sed "s/@kfreebsd@/`type-handling any kfreebsd`/g" \
 		| sed "s/@gnu@/`type-handling any gnu`/g" \
+		| sed "s/@TS@/$(TS)/g" \
 		> debian/control
 
-DEB_INSTALL_DOCS_gdb = gdb/NEWS gdb/README gdb/doc/refcard.tex \
+DEB_INSTALL_DOCS_gdb$(TS) = gdb/NEWS gdb/README gdb/doc/refcard.tex \
 		objdir/gdb/doc/refcard.dvi objdir/gdb/doc/refcard.ps
 
-DEB_INSTALL_CHANGELOGS_gdb = gdb/ChangeLog
+DEB_INSTALL_CHANGELOGS_gdb$(TS) = gdb/ChangeLog
+
+.PHONY: FORCE
+FORCE:

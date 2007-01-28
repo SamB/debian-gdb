@@ -15,86 +15,72 @@ testcases.
 P.S: if there is a symbol named "MAIN__" in sources of other languages, it 
 might disturb the debugging.  But I am not sure how much it is.
 
+---
+ gdb/symtab.c                       |    8 +++++--
+ gdb/testsuite/gdb.fortran/lang.exp |   40 +++++++++++++++++++++++++++++++++++++
+ 2 files changed, 46 insertions(+), 2 deletions(-)
+
 Index: gdb/symtab.c
 ===================================================================
-RCS file: /cvs/src/src/gdb/symtab.c,v
-retrieving revision 1.145
-diff -c -p -r1.145 symtab.c
-*** gdb/symtab.c	8 Mar 2005 04:34:44 -0000	1.145
---- gdb/symtab.c	28 Jul 2005 03:16:48 -0000
-*************** find_main_name (void)
-*** 4125,4132 ****
-      }
-  
-    /* The languages above didn't identify the name of the main procedure.
-!      Fallback to "main".  */
-!   set_main_name ("main");
-  }
-  
-  char *
---- 4125,4136 ----
-      }
-  
-    /* The languages above didn't identify the name of the main procedure.
-!      Fallback to "MAIN__" (g77 and gfortran) if we can find it in the 
-!      minimal symtab, to "main" otherwise.  */
-!   if (lookup_minimal_symbol ("MAIN__", NULL, NULL))
-!     set_main_name ("MAIN__");
-!   else
-!     set_main_name ("main");
-  }
-  
-  char *
-
-Testcase lang.exp to verify the above patch:
-===========================================================
-*** /dev/null	Mon Jul 25 13:51:17 2005
---- gdb/testsuite/gdb.fortran/lang.exp	Mon Jul 25 06:50:20 2005
-***************
-*** 0 ****
---- 1,40 ----
-+ # Copyright 2005 Free Software Foundation, Inc.
-+ 
-+ # This program is free software; you can redistribute it and/or modify
-+ # it under the terms of the GNU General Public License as published by
-+ # the Free Software Foundation; either version 2 of the License, or
-+ # (at your option) any later version.
-+ # 
-+ # This program is distributed in the hope that it will be useful,
-+ # but WITHOUT ANY WARRANTY; without even the implied warranty of
-+ # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-+ # GNU General Public License for more details.
-+ # 
-+ # You should have received a copy of the GNU General Public License
-+ # along with this program; if not, write to the Free Software
-+ # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
-+ 
-+ # This file was written by Wu Zhou. (woodzltc@cn.ibm.com)
-+ 
-+ # This file is part of the gdb testsuite.  It is intended to test that gdb
-+ # could recognize the Fortran language after loading the binary
-+ 
-+ if $tracelevel then {
-+ 	strace $tracelevel
-+ }
-+ 
-+ set testfile "array-element"
-+ set srcfile ${srcdir}/${subdir}/${testfile}.f
-+ set binfile ${objdir}/${subdir}/${testfile}
-+ 
-+ if  { [gdb_compile "${srcfile}" "${binfile}" executable {debug f77}] != "" } {
-+     untested "Couldn't compile ${srcfile}"
-+     return -1
-+ }
-+ 
-+ gdb_exit
-+ gdb_start
-+ gdb_reinitialize_dir $srcdir/$subdir
-+ gdb_load ${binfile}
-+ 
-+ gdb_test "show language" ".*currently fortran.*" "show language(fortran)"
-
-
-Regards
-- Wu Zhou
-
+--- gdb/symtab.c.orig	2007-01-27 20:35:18.000000000 -0500
++++ gdb/symtab.c	2007-01-27 20:35:34.000000000 -0500
+@@ -4189,8 +4189,12 @@ find_main_name (void)
+     }
+ 
+   /* The languages above didn't identify the name of the main procedure.
+-     Fallback to "main".  */
+-  set_main_name ("main");
++     Fallback to "MAIN__" (g77 and gfortran) if we can find it in the 
++     minimal symtab, to "main" otherwise.  */
++  if (lookup_minimal_symbol ("MAIN__", NULL, NULL))
++    set_main_name ("MAIN__");
++  else
++    set_main_name ("main");
+ }
+ 
+ char *
+Index: gdb/testsuite/gdb.fortran/lang.exp
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ gdb/testsuite/gdb.fortran/lang.exp	2007-01-27 20:35:34.000000000 -0500
+@@ -0,0 +1,40 @@
++# Copyright 2005 Free Software Foundation, Inc.
++
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++# 
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++# 
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
++
++# This file was written by Wu Zhou. (woodzltc@cn.ibm.com)
++
++# This file is part of the gdb testsuite.  It is intended to test that gdb
++# could recognize the Fortran language after loading the binary
++
++if $tracelevel then {
++	strace $tracelevel
++}
++
++set testfile "array-element"
++set srcfile ${srcdir}/${subdir}/${testfile}.f
++set binfile ${objdir}/${subdir}/${testfile}
++
++if  { [gdb_compile "${srcfile}" "${binfile}" executable {debug f77}] != "" } {
++    untested "Couldn't compile ${srcfile}"
++    return -1
++}
++
++gdb_exit
++gdb_start
++gdb_reinitialize_dir $srcdir/$subdir
++gdb_load ${binfile}
++
++gdb_test "show language" ".*currently fortran.*" "show language(fortran)"

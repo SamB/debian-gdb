@@ -1,0 +1,31 @@
+2007-01-27  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* dwarf2loc.h (struct dwarf2_locexpr_baton): Change size to a long.
+	(struct dwarf2_loclist_baton): Likewise.
+
+---
+ gdb/dwarf2loc.h |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+Index: gdb-6.6.dfsg/gdb/dwarf2loc.h
+===================================================================
+--- gdb-6.6.dfsg.orig/gdb/dwarf2loc.h	2005-12-17 17:33:59.000000000 -0500
++++ gdb-6.6.dfsg/gdb/dwarf2loc.h	2007-01-27 20:45:11.000000000 -0500
+@@ -39,7 +39,7 @@ struct dwarf2_locexpr_baton
+   gdb_byte *data;
+ 
+   /* Length of the location expression.  */
+-  unsigned short size;
++  unsigned long size;
+ 
+   /* The objfile containing the symbol whose location we're computing.  */
+   struct objfile *objfile;
+@@ -55,7 +55,7 @@ struct dwarf2_loclist_baton
+   gdb_byte *data;
+ 
+   /* Length of the location list.  */
+-  unsigned short size;
++  unsigned long size;
+ 
+   /* The objfile containing the symbol whose location we're computing.  */
+   /* Used (only???) by thread local variables.  The objfile in which

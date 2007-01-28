@@ -1,3 +1,44 @@
+2006-11-07  Thiemo Seufer  <ths@mips.com>
+
+	* dsp.igen (do_w_op): Fix compiler warning.
+
+2006-08-29  Thiemo Seufer  <ths@mips.com>
+            David Ung  <davidu@mips.com>
+
+	* configure.ac (mipsisa32r2*-*-*, mipsisa32*-*-*): Add smartmips to
+	sim_igen_machine.
+	* configure: Regenerate.
+	* mips.igen (model): Add smartmips.
+	(MADDU): Increment ACX if carry.
+	(do_mult): Clear ACX.
+	(ROR,RORV): Add smartmips.
+	(include): Include smartmips.igen.	
+	* sim-main.h (ACX): Set to REGISTERS[89].
+	* smartmips.igen: New file.
+
+2006-08-29  Thiemo Seufer  <ths@mips.com>
+            David Ung  <davidu@mips.com>
+
+	* Makefile.in (IGEN_INCLUDE): Add missing includes for m16e.igen and
+	mips3264r2.igen. Add missing dependency rules.
+	* m16e.igen: Support for mips16e save/restore instructions.
+
+2006-06-13  Richard Earnshaw  <rearnsha@arm.com>
+
+	* configure: Regenerated.
+
+2006-06-05  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* configure: Regenerated.
+
+2006-05-31  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* configure: Regenerated.
+
+2006-05-15 Chao-ying Fu  <fu@mips.com>
+
+	* dsp.igen (do_ph_shift, do_w_shra): Fix bugs for rounding instructions.
+
 2006-04-18  Nick Clifton  <nickc@redhat.com>
 
 	* dv-tx3904tmr.c (deliver_tx3904tmr_tick): Add missing break

@@ -1,3 +1,20 @@
+2006-07-13  Yoshinori Sato <ysato@users.sourceforge.jp>
+
+	* compile.c (OBITOP): Bit address mask low three bit.
+	* compile.c (decode): Fix warning.
+
+2006-06-13  Richard Earnshaw  <rearnsha@arm.com>
+
+	* configure: Regenerated.
+
+2006-06-05  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* configure: Regenerated.
+
+2006-05-31  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* configure: Regenerated.
+
 2005-03-23  Mark Kettenis  <kettenis@gnu.org>
 
 	* configure: Regenerate.

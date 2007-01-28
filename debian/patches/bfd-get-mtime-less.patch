@@ -5,10 +5,10 @@
  gdb/source.c   |    4 ++--
  4 files changed, 10 insertions(+), 4 deletions(-)
 
-Index: gdb-6.5.dfsg/gdb/corefile.c
+Index: gdb-6.6.dfsg/gdb/corefile.c
 ===================================================================
---- gdb-6.5.dfsg.orig/gdb/corefile.c	2006-11-05 18:31:45.000000000 -0500
-+++ gdb-6.5.dfsg/gdb/corefile.c	2006-11-05 18:32:19.000000000 -0500
+--- gdb-6.6.dfsg.orig/gdb/corefile.c	2007-01-27 20:35:18.000000000 -0500
++++ gdb-6.6.dfsg/gdb/corefile.c	2007-01-27 20:35:35.000000000 -0500
 @@ -163,10 +163,9 @@ reopen_exec_file (void)
    /* If the timestamp of the exec file has changed, reopen it. */
    filename = xstrdup (bfd_get_filename (exec_bfd));
@@ -18,13 +18,13 @@ Index: gdb-6.5.dfsg/gdb/corefile.c
  
 -  if (mtime && mtime != st.st_mtime)
 +  if (exec_bfd_mtime && exec_bfd_mtime != st.st_mtime)
-     {
-       exec_open (filename, 0);
-     }
-Index: gdb-6.5.dfsg/gdb/exec.c
+     exec_file_attach (filename, 0);
+ #endif
+ }
+Index: gdb-6.6.dfsg/gdb/exec.c
 ===================================================================
---- gdb-6.5.dfsg.orig/gdb/exec.c	2006-11-05 18:30:37.000000000 -0500
-+++ gdb-6.5.dfsg/gdb/exec.c	2006-11-05 18:32:50.000000000 -0500
+--- gdb-6.6.dfsg.orig/gdb/exec.c	2007-01-27 20:35:18.000000000 -0500
++++ gdb-6.6.dfsg/gdb/exec.c	2007-01-27 20:35:35.000000000 -0500
 @@ -70,6 +70,7 @@ struct target_ops exec_ops;
  /* The Binary File Descriptor handle for the executable file.  */
  
@@ -41,7 +41,7 @@ Index: gdb-6.5.dfsg/gdb/exec.c
      }
  
    if (exec_ops.to_sections)
-@@ -259,6 +261,8 @@ exec_file_attach (char *filename, int fr
+@@ -261,6 +263,8 @@ exec_file_attach (char *filename, int fr
  		 scratch_pathname, bfd_errmsg (bfd_get_error ()));
  	}
  
@@ -50,10 +50,10 @@ Index: gdb-6.5.dfsg/gdb/exec.c
        validate_files ();
  
        set_gdbarch_from_file (exec_bfd);
-Index: gdb-6.5.dfsg/gdb/gdbcore.h
+Index: gdb-6.6.dfsg/gdb/gdbcore.h
 ===================================================================
---- gdb-6.5.dfsg.orig/gdb/gdbcore.h	2006-11-05 18:29:41.000000000 -0500
-+++ gdb-6.5.dfsg/gdb/gdbcore.h	2006-11-05 18:30:01.000000000 -0500
+--- gdb-6.6.dfsg.orig/gdb/gdbcore.h	2007-01-27 20:35:18.000000000 -0500
++++ gdb-6.6.dfsg/gdb/gdbcore.h	2007-01-27 20:35:35.000000000 -0500
 @@ -117,6 +117,9 @@ extern void specify_exec_file_hook (void
  extern bfd *core_bfd;
  extern bfd *exec_bfd;
@@ -64,11 +64,11 @@ Index: gdb-6.5.dfsg/gdb/gdbcore.h
  /* Whether to open exec and core files read-only or read-write.  */
  
  extern int write_files;
-Index: gdb-6.5.dfsg/gdb/source.c
+Index: gdb-6.6.dfsg/gdb/source.c
 ===================================================================
---- gdb-6.5.dfsg.orig/gdb/source.c	2006-11-05 18:28:31.000000000 -0500
-+++ gdb-6.5.dfsg/gdb/source.c	2006-11-05 18:29:23.000000000 -0500
-@@ -1001,9 +1001,9 @@ find_source_lines (struct symtab *s, int
+--- gdb-6.6.dfsg.orig/gdb/source.c	2007-01-27 20:35:18.000000000 -0500
++++ gdb-6.6.dfsg/gdb/source.c	2007-01-27 20:35:35.000000000 -0500
+@@ -1115,9 +1115,9 @@ find_source_lines (struct symtab *s, int
      perror_with_name (s->filename);
  
    if (s && s->objfile && s->objfile->obfd)

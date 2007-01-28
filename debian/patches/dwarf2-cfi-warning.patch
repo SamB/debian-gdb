@@ -17,11 +17,15 @@ ARM has a complex algorithm for handling this, involving scanning all CIEs -
 benefit not completely clear outside of the ARM context of flexible register
 sets.
 
-Index: gdb-6.3.90.20051119/gdb/dwarf2-frame.c
+---
+ gdb/dwarf2-frame.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Index: gdb-6.6.dfsg/gdb/dwarf2-frame.c
 ===================================================================
---- gdb-6.3.90.20051119.orig/gdb/dwarf2-frame.c	2005-08-01 00:06:27.000000000 -0400
-+++ gdb-6.3.90.20051119/gdb/dwarf2-frame.c	2005-11-20 00:11:37.000000000 -0500
-@@ -738,7 +738,7 @@ dwarf2_frame_cache (struct frame_info *n
+--- gdb-6.6.dfsg.orig/gdb/dwarf2-frame.c	2007-01-27 20:35:19.000000000 -0500
++++ gdb-6.6.dfsg/gdb/dwarf2-frame.c	2007-01-27 20:35:32.000000000 -0500
+@@ -850,7 +850,7 @@ dwarf2_frame_cache (struct frame_info *n
  	   DWARF2 register numbers.  */
  	if (fs->regs.reg[column].how == DWARF2_FRAME_REG_UNSPECIFIED)
  	  {

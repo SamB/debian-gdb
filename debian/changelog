@@ -1,3 +1,24 @@
+gdb (6.6.dfsg-1) unstable; urgency=low
+
+  [ Matthias Klose ]
+  * New upstream version.
+    - Prints a newline after EOF (Closes: #233467).
+  * sim-destdir.patch, gdbinit-ownership.patch, bfd-get-mtime-less.patch,
+    pie-support.patch, thread-db-multiple-libraries.patch: Update.
+  * thread-db-live-threads.patch, fork-context-switch.patch: Remove,
+    applied upstream.
+
+  [ Daniel Jacobowitz ]
+  * Merge changes from Matthias Klose (thanks).
+  * Refresh all patches.
+  * Fix "corrupted DWARF expression" error (Closes: #405116).
+  * Do not crash if loading libthread_db failed (Closes: #408402).
+  * Initial support for building cross-GDB packages, based on the work of
+    Raphael Bossek and Kazuhiro Inaoka (Closes: #313340, #343419, #373927).
+  * Change priority to optional (since ftpmaster did).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sat, 27 Jan 2007 21:59:06 -0500
+
 gdb (6.5.dfsg-2) unstable; urgency=low
 
   * Backport a patch to fix GDB segfaults on threaded programs.
