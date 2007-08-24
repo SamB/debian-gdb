@@ -1,3 +1,9 @@
+gdb (6.6.dfsg-3) unstable; urgency=low
+
+  * Correct signedness error in ia64-tdep.c (Closes: #423631) (again).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Fri, 24 Aug 2007 15:48:11 -0400
+
 gdb (6.6.dfsg-2) unstable; urgency=low
 
   * Check PC_REGNUM before using it (Closes: #423631).
