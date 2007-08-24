@@ -1,3 +1,9 @@
+gdb (6.6.dfsg-2) unstable; urgency=low
+
+  * Check PC_REGNUM before using it (Closes: #423631).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Thu, 23 Aug 2007 22:26:20 -0400
+
 gdb (6.6.dfsg-1) unstable; urgency=low
 
   [ Matthias Klose ]

@@ -1,0 +1,33 @@
+2007-01-11  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* frame.c (get_prev_frame_1): Check PC_REGNUM before using it.
+
+---
+ gdb/frame.c |   13 ++++++++++---
+ 1 file changed, 10 insertions(+), 3 deletions(-)
+
+Index: gdb-6.6.dfsg/gdb/frame.c
+===================================================================
+--- gdb-6.6.dfsg.orig/gdb/frame.c	2006-11-10 15:11:35.000000000 -0500
++++ gdb-6.6.dfsg/gdb/frame.c	2007-08-23 22:25:53.000000000 -0400
+@@ -1146,10 +1146,17 @@ get_prev_frame_1 (struct frame_info *thi
+      have different frame IDs, the new frame will be bogus; two
+      functions can't share a register save slot for the PC.  This can
+      happen when the prologue analyzer finds a stack adjustment, but
+-     no PC save.  This check does assume that the "PC register" is
+-     roughly a traditional PC, even if the gdbarch_unwind_pc method
+-     frobs it.  */
++     no PC save.
++
++     This check does assume that the "PC register" is roughly a
++     traditional PC, even if the gdbarch_unwind_pc method adjusts
++     it (we do not rely on the value, only on the unwound PC being
++     dependent on this value).  A potential improvement would be
++     to have the frame prev_pc method and the gdbarch unwind_pc
++     method set the same lval and location information as
++     frame_register_unwind.  */
+   if (this_frame->level > 0
++      && PC_REGNUM >= 0
+       && get_frame_type (this_frame) == NORMAL_FRAME
+       && get_frame_type (this_frame->next) == NORMAL_FRAME)
+     {
