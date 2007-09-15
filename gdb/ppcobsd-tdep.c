@@ -1,12 +1,12 @@
 /* Target-dependent code for OpenBSD/powerpc.
 
-   Copyright (C) 2004, 2005, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,15 +15,13 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "arch-utils.h"
-#include "floatformat.h"
 #include "frame.h"
 #include "frame-unwind.h"
+#include "gdbtypes.h"
 #include "osabi.h"
 #include "regcache.h"
 #include "regset.h"
@@ -53,18 +51,6 @@ ppcobsd_supply_gregset (const struct regset *regset,
 			struct regcache *regcache, int regnum,
 			const void *gregs, size_t len)
 {
-  /* FIXME: jimb/2004-05-05: Some PPC variants don't have floating
-     point registers.  Traditionally, GDB's register set has still
-     listed the floating point registers for such machines, so this
-     code is harmless.  However, the new E500 port actually omits the
-     floating point registers entirely from the register set --- they
-     don't even have register numbers assigned to them.
-
-     It's not clear to me how best to update this code, so this assert
-     will alert the first person to encounter the OpenBSD/E500
-     combination to the problem.  */
-  gdb_assert (ppc_floating_point_unit_p (current_gdbarch));
-
   ppc_supply_gregset (regset, regcache, regnum, gregs, len);
   ppc_supply_fpregset (regset, regcache, regnum, gregs, len);
 }
@@ -79,18 +65,6 @@ ppcobsd_collect_gregset (const struct regset *regset,
 			 const struct regcache *regcache, int regnum,
 			 void *gregs, size_t len)
 {
-  /* FIXME: jimb/2004-05-05: Some PPC variants don't have floating
-     point registers.  Traditionally, GDB's register set has still
-     listed the floating point registers for such machines, so this
-     code is harmless.  However, the new E500 port actually omits the
-     floating point registers entirely from the register set --- they
-     don't even have register numbers assigned to them.
-
-     It's not clear to me how best to update this code, so this assert
-     will alert the first person to encounter the OpenBSD/E500
-     combination to the problem.  */
-  gdb_assert (ppc_floating_point_unit_p (current_gdbarch));
-
   ppc_collect_gregset (regset, regcache, regnum, gregs, len);
   ppc_collect_fpregset (regset, regcache, regnum, gregs, len);
 }
@@ -211,7 +185,8 @@ ppcobsd_sigtramp_frame_cache (struct frame_info *next_frame, void **this_cache)
   insn = extract_unsigned_integer (buf, PPC_INSN_SIZE);
   sigcontext_offset = (0x10000 - (insn & 0x0000ffff)) + 8;
 
-  base = frame_unwind_register_unsigned (next_frame, SP_REGNUM);
+  base = frame_unwind_register_unsigned (next_frame,
+					 gdbarch_sp_regnum (current_gdbarch));
   addr = base + sigcontext_offset + 2 * tdep->wordsize;
   for (i = 0; i < ppc_num_gprs; i++, addr += tdep->wordsize)
     {
@@ -226,7 +201,8 @@ ppcobsd_sigtramp_frame_cache (struct frame_info *next_frame, void **this_cache)
   addr += tdep->wordsize;
   trad_frame_set_reg_addr (cache, tdep->ppc_ctr_regnum, addr);
   addr += tdep->wordsize;
-  trad_frame_set_reg_addr (cache, PC_REGNUM, addr); /* SRR0? */
+  trad_frame_set_reg_addr (cache, gdbarch_pc_regnum (current_gdbarch), addr);
+  /* SRR0? */
   addr += tdep->wordsize;
 
   /* Construct the frame ID using the function start.  */
@@ -280,7 +256,7 @@ ppcobsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
   /* OpenBSD doesn't support the 128-bit `long double' from the psABI.  */
   set_gdbarch_long_double_bit (gdbarch, 64);
-  set_gdbarch_long_double_format (gdbarch, &floatformat_ieee_double_big);
+  set_gdbarch_long_double_format (gdbarch, floatformats_ieee_double);
 
   /* OpenBSD currently uses a broken GCC.  */
   set_gdbarch_return_value (gdbarch, ppc_sysv_abi_broken_return_value);
@@ -331,6 +307,8 @@ _initialize_ppcobsd_tdep (void)
     {
       /* General-purpose registers.  */
       ppcobsd_reg_offsets.r0_offset = 0;
+      ppcobsd_reg_offsets.gpr_size = 4;
+      ppcobsd_reg_offsets.xr_size = 4;
       ppcobsd_reg_offsets.pc_offset = 384;
       ppcobsd_reg_offsets.ps_offset = 388;
       ppcobsd_reg_offsets.cr_offset = 392;
@@ -354,5 +332,6 @@ _initialize_ppcobsd_tdep (void)
       /* Floating-point registers.  */
       ppcobsd_reg_offsets.f0_offset = 0;
       ppcobsd_reg_offsets.fpscr_offset = 256;
+      ppcobsd_reg_offsets.fpscr_size = 4;
     }
 }

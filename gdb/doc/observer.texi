@@ -21,3 +21,4 @@
 @deftypefun void inferior_created (struct target_ops *@var{objfile}, int @var{from_tty})
 @deftypefun void solib_loaded (struct so_list *@var{solib})
 @deftypefun void solib_unloaded (struct so_list *@var{solib})
+@deftypefun void new_objfile (struct objfile *@var{objfile})

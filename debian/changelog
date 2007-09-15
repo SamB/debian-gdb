@@ -1,3 +1,18 @@
+gdb (6.6.dfsg.90.20070912-1) unstable; urgency=low
+
+  * New upstream snapshot (pre-release for GDB 6.7).
+    - Patches 10.selected-frame.patch, dwarf2-long-size.patch merged upstream.
+    - Backports unwind-check-pc-regnum.patch, ia64-unwind-signedness.patch
+      removed.
+    - Patch 13.use-dynamic-readline.patch replaced by
+      --with-system-readline.
+    - Patch sim-destdir.patch unnecessary.
+  * Disable gcj and gobjc build dependencies for armel (Closes: #441741).
+  * Replace tetex-bin build dependency with texlive-base.
+  * Include kernel offsets for HPPA.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sat, 15 Sep 2007 13:40:34 -0400
+
 gdb (6.6.dfsg-3) unstable; urgency=low
 
   * Correct signedness error in ia64-tdep.c (Closes: #423631) (again).

@@ -1,22 +1,21 @@
 /* CRIS exception, interrupt, and trap (EIT) support
-   Copyright (C) 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007 Free Software Foundation, Inc.
    Contributed by Axis Communications.
 
 This file is part of the GNU simulators.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2, or (at your option)
-any later version.
+the Free Software Foundation; either version 3 of the License, or
+(at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License along
-with this program; if not, write to the Free Software Foundation, Inc.,
-59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "sim-main.h"
 #include "sim-options.h"
@@ -870,25 +869,25 @@ dump_statistics (SIM_CPU *current_cpu)
 
   /* For v32, unaligned_mem_dword_count should always be 0.  For
      v10, memsrc_stall_count should always be 0.  */
-  sim_io_eprintf (sd, "Memory source stall cycles: %lld\n",
-		  profp->memsrc_stall_count
-		  + profp->unaligned_mem_dword_count);
-  sim_io_eprintf (sd, "Memory read-after-write stall cycles: %lld\n",
-		  profp->memraw_stall_count);
-  sim_io_eprintf (sd, "Movem source stall cycles: %lld\n",
-		  profp->movemsrc_stall_count);
-  sim_io_eprintf (sd, "Movem destination stall cycles: %lld\n",
-		  profp->movemdst_stall_count);
-  sim_io_eprintf (sd, "Movem address stall cycles: %lld\n",
-		  profp->movemaddr_stall_count);
-  sim_io_eprintf (sd, "Multiplication source stall cycles: %lld\n",
-		  profp->mulsrc_stall_count);
-  sim_io_eprintf (sd, "Jump source stall cycles: %lld\n",
-		  profp->jumpsrc_stall_count);
-  sim_io_eprintf (sd, "Branch misprediction stall cycles: %lld\n",
-		  profp->branch_stall_count);
-  sim_io_eprintf (sd, "Jump target stall cycles: %lld\n",
-		  profp->jumptarget_stall_count);
+  sim_io_eprintf (sd, "Memory source stall cycles: %llu\n",
+		  (unsigned long long) (profp->memsrc_stall_count
+					+ profp->unaligned_mem_dword_count));
+  sim_io_eprintf (sd, "Memory read-after-write stall cycles: %llu\n",
+		  (unsigned long long) profp->memraw_stall_count);
+  sim_io_eprintf (sd, "Movem source stall cycles: %llu\n",
+		  (unsigned long long) profp->movemsrc_stall_count);
+  sim_io_eprintf (sd, "Movem destination stall cycles: %llu\n",
+		  (unsigned long long) profp->movemdst_stall_count);
+  sim_io_eprintf (sd, "Movem address stall cycles: %llu\n",
+		  (unsigned long long) profp->movemaddr_stall_count);
+  sim_io_eprintf (sd, "Multiplication source stall cycles: %llu\n",
+		  (unsigned long long) profp->mulsrc_stall_count);
+  sim_io_eprintf (sd, "Jump source stall cycles: %llu\n",
+		  (unsigned long long) profp->jumpsrc_stall_count);
+  sim_io_eprintf (sd, "Branch misprediction stall cycles: %llu\n",
+		  (unsigned long long) profp->branch_stall_count);
+  sim_io_eprintf (sd, "Jump target stall cycles: %llu\n",
+		  (unsigned long long) profp->jumptarget_stall_count);
 }
 
 /* Check whether any part of [addr .. addr + len - 1] is already mapped.

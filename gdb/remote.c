@@ -1,14 +1,14 @@
 /* Remote target communications for serial-line targets in custom GDB protocol
 
-   Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+   Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* See the GDB User Guide for details of the GDB remote protocol.  */
 
@@ -45,6 +43,7 @@
 #include "solib.h"
 #include "cli/cli-decode.h"
 #include "cli/cli-setshow.h"
+#include "target-descriptions.h"
 
 #include <ctype.h>
 #include <sys/time.h>
@@ -84,13 +83,11 @@ static void handle_remote_sigint_twice (int);
 static void async_remote_interrupt (gdb_client_data);
 void async_remote_interrupt_twice (gdb_client_data);
 
-static void build_remote_gdbarch_data (void);
-
 static void remote_files_info (struct target_ops *ignore);
 
-static void remote_prepare_to_store (void);
+static void remote_prepare_to_store (struct regcache *regcache);
 
-static void remote_fetch_registers (int regno);
+static void remote_fetch_registers (struct regcache *regcache, int regno);
 
 static void remote_resume (ptid_t ptid, int step,
                            enum target_signal siggnal);
@@ -107,7 +104,7 @@ static void remote_open_1 (char *, int, struct target_ops *, int extended_p,
 
 static void remote_close (int quitting);
 
-static void remote_store_registers (int regno);
+static void remote_store_registers (struct regcache *regcache, int regno);
 
 static void remote_mourn (void);
 static void remote_async_mourn (void);
@@ -259,7 +256,8 @@ struct packet_reg
   int in_g_packet; /* Always part of G packet.  */
   /* long size in bytes;  == register_size (current_gdbarch, regnum);
      at present.  */
-  /* char *name; == REGISTER_NAME (regnum); at present.  */
+  /* char *name; == gdbarch_register_name (current_gdbarch, regnum);
+     at present.  */
 };
 
 struct remote_arch_state
@@ -268,7 +266,7 @@ struct remote_arch_state
   long sizeof_g_packet;
 
   /* Description of the remote protocol registers indexed by REGNUM
-     (making an array of NUM_REGS + NUM_PSEUDO_REGS in size).  */
+     (making an array gdbarch_num_regs in size).  */
   struct packet_reg *regs;
 
   /* This is the size (in chars) of the first response to the ``g''
@@ -309,33 +307,73 @@ get_remote_state (void)
   return get_remote_state_raw ();
 }
 
+static int
+compare_pnums (const void *lhs_, const void *rhs_)
+{
+  const struct packet_reg * const *lhs = lhs_;
+  const struct packet_reg * const *rhs = rhs_;
+
+  if ((*lhs)->pnum < (*rhs)->pnum)
+    return -1;
+  else if ((*lhs)->pnum == (*rhs)->pnum)
+    return 0;
+  else
+    return 1;
+}
+
 static void *
 init_remote_state (struct gdbarch *gdbarch)
 {
-  int regnum;
+  int regnum, num_remote_regs, offset;
   struct remote_state *rs = get_remote_state_raw ();
   struct remote_arch_state *rsa;
+  struct packet_reg **remote_regs;
 
   rsa = GDBARCH_OBSTACK_ZALLOC (gdbarch, struct remote_arch_state);
 
-  rsa->sizeof_g_packet = 0;
-
-  /* Assume a 1:1 regnum<->pnum table.  */
-  rsa->regs = GDBARCH_OBSTACK_CALLOC (gdbarch, NUM_REGS + NUM_PSEUDO_REGS,
+  /* Use the architecture to build a regnum<->pnum table, which will be
+     1:1 unless a feature set specifies otherwise.  */
+  rsa->regs = GDBARCH_OBSTACK_CALLOC (gdbarch,
+				      gdbarch_num_regs (current_gdbarch),
 				      struct packet_reg);
-  for (regnum = 0; regnum < NUM_REGS + NUM_PSEUDO_REGS; regnum++)
+  for (regnum = 0; regnum < gdbarch_num_regs (current_gdbarch); regnum++)
     {
       struct packet_reg *r = &rsa->regs[regnum];
-      r->pnum = regnum;
-      r->regnum = regnum;
-      r->offset = DEPRECATED_REGISTER_BYTE (regnum);
-      r->in_g_packet = (regnum < NUM_REGS);
-      /* ...name = REGISTER_NAME (regnum); */
 
-      /* Compute packet size by accumulating the size of all registers.  */
-      if (regnum < NUM_REGS)
-	rsa->sizeof_g_packet += register_size (current_gdbarch, regnum);
+      if (register_size (current_gdbarch, regnum) == 0)
+	/* Do not try to fetch zero-sized (placeholder) registers.  */
+	r->pnum = -1;
+      else
+	r->pnum = gdbarch_remote_register_number (gdbarch, regnum);
+
+      r->regnum = regnum;
     }
+
+  /* Define the g/G packet format as the contents of each register
+     with a remote protocol number, in order of ascending protocol
+     number.  */
+
+  remote_regs = alloca (gdbarch_num_regs (current_gdbarch) 
+			* sizeof (struct packet_reg *));
+  for (num_remote_regs = 0, regnum = 0;
+       regnum < gdbarch_num_regs (current_gdbarch);
+       regnum++)
+    if (rsa->regs[regnum].pnum != -1)
+      remote_regs[num_remote_regs++] = &rsa->regs[regnum];
+
+  qsort (remote_regs, num_remote_regs, sizeof (struct packet_reg *),
+	 compare_pnums);
+
+  for (regnum = 0, offset = 0; regnum < num_remote_regs; regnum++)
+    {
+      remote_regs[regnum]->in_g_packet = 1;
+      remote_regs[regnum]->offset = offset;
+      offset += register_size (current_gdbarch, remote_regs[regnum]->regnum);
+    }
+
+  /* Record the maximum possible size of the g packet - it may turn out
+     to be smaller.  */
+  rsa->sizeof_g_packet = offset;
 
   /* Default maximum number of characters in a packet body. Many
      remote stubs have a hardwired buffer size of 400 bytes
@@ -387,7 +425,7 @@ get_remote_packet_size (void)
 static struct packet_reg *
 packet_reg_from_regnum (struct remote_arch_state *rsa, long regnum)
 {
-  if (regnum < 0 && regnum >= NUM_REGS + NUM_PSEUDO_REGS)
+  if (regnum < 0 && regnum >= gdbarch_num_regs (current_gdbarch))
     return NULL;
   else
     {
@@ -401,7 +439,7 @@ static struct packet_reg *
 packet_reg_from_pnum (struct remote_arch_state *rsa, LONGEST pnum)
 {
   int i;
-  for (i = 0; i < NUM_REGS + NUM_PSEUDO_REGS; i++)
+  for (i = 0; i < gdbarch_num_regs (current_gdbarch); i++)
     {
       struct packet_reg *r = &rsa->regs[i];
       if (r->pnum == pnum)
@@ -864,9 +902,14 @@ enum {
   PACKET_Z3,
   PACKET_Z4,
   PACKET_qXfer_auxv,
+  PACKET_qXfer_features,
+  PACKET_qXfer_libraries,
   PACKET_qXfer_memory_map,
+  PACKET_qXfer_spu_read,
+  PACKET_qXfer_spu_write,
   PACKET_qGetTLSAddr,
   PACKET_qSupported,
+  PACKET_QPassSignals,
   PACKET_MAX
 };
 
@@ -966,8 +1009,8 @@ static int use_threadinfo_query;
 static int use_threadextra_query;
 
 /* Tokens for use by the asynchronous signal handlers for SIGINT.  */
-static void *sigint_remote_twice_token;
-static void *sigint_remote_token;
+static struct async_signal_handler *sigint_remote_twice_token;
+static struct async_signal_handler *sigint_remote_token;
 
 /* These are pointers to hook functions that may be set in order to
    modify resume/wait behavior for a particular architecture.  */
@@ -1001,6 +1044,65 @@ record_currthread (int currthread)
       ui_out_text (uiout, "[New ");
       ui_out_text (uiout, target_pid_to_str (pid_to_ptid (currthread)));
       ui_out_text (uiout, "]\n");
+    }
+}
+
+static char *last_pass_packet;
+
+/* If 'QPassSignals' is supported, tell the remote stub what signals
+   it can simply pass through to the inferior without reporting.  */
+
+static void
+remote_pass_signals (void)
+{
+  if (remote_protocol_packets[PACKET_QPassSignals].support != PACKET_DISABLE)
+    {
+      char *pass_packet, *p;
+      int numsigs = (int) TARGET_SIGNAL_LAST;
+      int count = 0, i;
+
+      gdb_assert (numsigs < 256);
+      for (i = 0; i < numsigs; i++)
+	{
+	  if (signal_stop_state (i) == 0
+	      && signal_print_state (i) == 0
+	      && signal_pass_state (i) == 1)
+	    count++;
+	}
+      pass_packet = xmalloc (count * 3 + strlen ("QPassSignals:") + 1);
+      strcpy (pass_packet, "QPassSignals:");
+      p = pass_packet + strlen (pass_packet);
+      for (i = 0; i < numsigs; i++)
+	{
+	  if (signal_stop_state (i) == 0
+	      && signal_print_state (i) == 0
+	      && signal_pass_state (i) == 1)
+	    {
+	      if (i >= 16)
+		*p++ = tohex (i >> 4);
+	      *p++ = tohex (i & 15);
+	      if (count)
+		*p++ = ';';
+	      else
+		break;
+	      count--;
+	    }
+	}
+      *p = 0;
+      if (!last_pass_packet || strcmp (last_pass_packet, pass_packet))
+	{
+	  struct remote_state *rs = get_remote_state ();
+	  char *buf = rs->buf;
+
+	  putpkt (pass_packet);
+	  getpkt (&rs->buf, &rs->buf_size, 0);
+	  packet_ok (buf, &remote_protocol_packets[PACKET_QPassSignals]);
+	  if (last_pass_packet)
+	    xfree (last_pass_packet);
+	  last_pass_packet = pass_packet;
+	}
+      else
+	xfree (pass_packet);
     }
 }
 
@@ -1911,9 +2013,13 @@ get_offsets (void)
   struct remote_state *rs = get_remote_state ();
   char *buf;
   char *ptr;
-  int lose;
-  CORE_ADDR text_addr, data_addr, bss_addr;
+  int lose, num_segments = 0, do_sections, do_segments;
+  CORE_ADDR text_addr, data_addr, bss_addr, segments[2];
   struct section_offsets *offs;
+  struct symfile_segment_data *data;
+
+  if (symfile_objfile == NULL)
+    return;
 
   putpkt ("qOffsets");
   getpkt (&rs->buf, &rs->buf_size, 0);
@@ -1942,47 +2048,109 @@ get_offsets (void)
       /* Don't use strtol, could lose on big values.  */
       while (*ptr && *ptr != ';')
 	text_addr = (text_addr << 4) + fromhex (*ptr++);
-    }
-  else
-    lose = 1;
 
-  if (!lose && strncmp (ptr, ";Data=", 6) == 0)
-    {
-      ptr += 6;
-      while (*ptr && *ptr != ';')
-	data_addr = (data_addr << 4) + fromhex (*ptr++);
-    }
-  else
-    lose = 1;
+      if (strncmp (ptr, ";Data=", 6) == 0)
+	{
+	  ptr += 6;
+	  while (*ptr && *ptr != ';')
+	    data_addr = (data_addr << 4) + fromhex (*ptr++);
+	}
+      else
+	lose = 1;
 
-  if (!lose && strncmp (ptr, ";Bss=", 5) == 0)
+      if (!lose && strncmp (ptr, ";Bss=", 5) == 0)
+	{
+	  ptr += 5;
+	  while (*ptr && *ptr != ';')
+	    bss_addr = (bss_addr << 4) + fromhex (*ptr++);
+
+	  if (bss_addr != data_addr)
+	    warning (_("Target reported unsupported offsets: %s"), buf);
+	}
+      else
+	lose = 1;
+    }
+  else if (strncmp (ptr, "TextSeg=", 8) == 0)
     {
-      ptr += 5;
+      ptr += 8;
+      /* Don't use strtol, could lose on big values.  */
       while (*ptr && *ptr != ';')
-	bss_addr = (bss_addr << 4) + fromhex (*ptr++);
+	text_addr = (text_addr << 4) + fromhex (*ptr++);
+      num_segments = 1;
+
+      if (strncmp (ptr, ";DataSeg=", 9) == 0)
+	{
+	  ptr += 9;
+	  while (*ptr && *ptr != ';')
+	    data_addr = (data_addr << 4) + fromhex (*ptr++);
+	  num_segments++;
+	}
     }
   else
     lose = 1;
 
   if (lose)
     error (_("Malformed response to offset query, %s"), buf);
-
-  if (symfile_objfile == NULL)
-    return;
+  else if (*ptr != '\0')
+    warning (_("Target reported unsupported offsets: %s"), buf);
 
   offs = ((struct section_offsets *)
 	  alloca (SIZEOF_N_SECTION_OFFSETS (symfile_objfile->num_sections)));
   memcpy (offs, symfile_objfile->section_offsets,
 	  SIZEOF_N_SECTION_OFFSETS (symfile_objfile->num_sections));
 
-  offs->offsets[SECT_OFF_TEXT (symfile_objfile)] = text_addr;
+  data = get_symfile_segment_data (symfile_objfile->obfd);
+  do_segments = (data != NULL);
+  do_sections = num_segments == 0;
 
-  /* This is a temporary kludge to force data and bss to use the same offsets
-     because that's what nlmconv does now.  The real solution requires changes
-     to the stub and remote.c that I don't have time to do right now.  */
+  /* Text= and Data= specify offsets for the text and data sections,
+     but symfile_map_offsets_to_segments expects base addresses
+     instead of offsets.  If we have two segments, we can still
+     try to relocate the whole segments instead of just ".text"
+     and ".data".  */
+  if (num_segments == 0)
+    {
+      do_sections = 1;
+      if (data == NULL || data->num_segments != 2)
+	do_segments = 0;
+      else
+	{
+	  segments[0] = data->segment_bases[0] + text_addr;
+	  segments[1] = data->segment_bases[1] + data_addr;
+	}
+    }
+  else
+    {
+      do_sections = 0;
+      segments[0] = text_addr;
+      segments[1] = data_addr;
+    }
 
-  offs->offsets[SECT_OFF_DATA (symfile_objfile)] = data_addr;
-  offs->offsets[SECT_OFF_BSS (symfile_objfile)] = data_addr;
+  if (do_segments)
+    {
+      int ret = symfile_map_offsets_to_segments (symfile_objfile->obfd, data,
+						 offs, num_segments, segments);
+
+      if (ret == 0 && !do_sections)
+	error (_("Can not handle qOffsets TextSeg response with this symbol file"));
+
+      if (ret > 0)
+	do_sections = 0;
+    }
+
+  free_symfile_segment_data (data);
+
+  if (do_sections)
+    {
+      offs->offsets[SECT_OFF_TEXT (symfile_objfile)] = text_addr;
+
+      /* This is a temporary kludge to force data and bss to use the same offsets
+	 because that's what nlmconv does now.  The real solution requires changes
+	 to the stub and remote.c that I don't have time to do right now.  */
+
+      offs->offsets[SECT_OFF_DATA (symfile_objfile)] = data_addr;
+      offs->offsets[SECT_OFF_BSS (symfile_objfile)] = data_addr;
+    }
 
   objfile_relocate (symfile_objfile, offs);
 }
@@ -2089,9 +2257,19 @@ remote_check_symbols (struct objfile *objfile)
       if (sym == NULL)
 	xsnprintf (msg, get_remote_packet_size (), "qSymbol::%s", &reply[8]);
       else
-	xsnprintf (msg, get_remote_packet_size (), "qSymbol:%s:%s",
-		   paddr_nz (SYMBOL_VALUE_ADDRESS (sym)),
-		   &reply[8]);
+	{
+	  CORE_ADDR sym_addr = SYMBOL_VALUE_ADDRESS (sym);
+
+	  /* If this is a function address, return the start of code
+	     instead of any data function descriptor.  */
+	  sym_addr = gdbarch_convert_from_func_ptr_addr (current_gdbarch,
+							 sym_addr,
+							 &current_target);
+
+	  xsnprintf (msg, get_remote_packet_size (), "qSymbol:%s:%s",
+		     paddr_nz (sym_addr), &reply[8]);
+	}
+  
       putpkt (msg);
       getpkt (&rs->buf, &rs->buf_size, 0);
       reply = rs->buf;
@@ -2205,8 +2383,18 @@ static struct protocol_feature remote_protocol_features[] = {
   { "PacketSize", PACKET_DISABLE, remote_packet_size, -1 },
   { "qXfer:auxv:read", PACKET_DISABLE, remote_supported_packet,
     PACKET_qXfer_auxv },
+  { "qXfer:features:read", PACKET_DISABLE, remote_supported_packet,
+    PACKET_qXfer_features },
+  { "qXfer:libraries:read", PACKET_DISABLE, remote_supported_packet,
+    PACKET_qXfer_libraries },
   { "qXfer:memory-map:read", PACKET_DISABLE, remote_supported_packet,
-    PACKET_qXfer_memory_map }
+    PACKET_qXfer_memory_map },
+  { "qXfer:spu:read", PACKET_DISABLE, remote_supported_packet,
+    PACKET_qXfer_spu_read },
+  { "qXfer:spu:write", PACKET_DISABLE, remote_supported_packet,
+    PACKET_qXfer_spu_write },
+  { "QPassSignals", PACKET_DISABLE, remote_supported_packet,
+    PACKET_QPassSignals },
 };
 
 static void
@@ -2260,14 +2448,14 @@ remote_query_supported (void)
 	}
       else
 	{
+	  *end = '\0';
+	  next = end + 1;
+
 	  if (end == p)
 	    {
 	      warning (_("empty item in \"qSupported\" response"));
 	      continue;
 	    }
-
-	  *end = '\0';
-	  next = end + 1;
 	}
 
       name_end = strchr (p, '=');
@@ -2354,6 +2542,10 @@ remote_open_1 (char *name, int from_tty, struct target_ops *target,
 
   unpush_target (target);
 
+  /* Make sure we send the passed signals list the next time we resume.  */
+  xfree (last_pass_packet);
+  last_pass_packet = NULL;
+
   remote_fileio_reset ();
   reopen_exec_file ();
   reread_symbols ();
@@ -2406,6 +2598,10 @@ remote_open_1 (char *name, int from_tty, struct target_ops *target,
      packets" request.  If the target can answer this, it will tell us
      which later probes to skip.  */
   remote_query_supported ();
+
+  /* Next, if the target can specify a description, read it.  We do
+     this before anything involving memory or registers.  */
+  target_find_description ();
 
   /* Without this, some commands which require an active target (such
      as kill) won't work.  This variable serves (at least) double duty
@@ -2491,7 +2687,11 @@ remote_detach (char *args, int from_tty)
 
   /* Tell the remote target to detach.  */
   strcpy (rs->buf, "D");
-  remote_send (&rs->buf, &rs->buf_size);
+  putpkt (rs->buf);
+  getpkt (&rs->buf, &rs->buf_size, 0);
+
+  if (rs->buf[0] == 'E')
+    error (_("Can't detach process."));
 
   /* Unregister the file descriptor from the event loop.  */
   if (target_is_async_p ())
@@ -2728,6 +2928,9 @@ remote_resume (ptid_t ptid, int step, enum target_signal siggnal)
   if (deprecated_target_resume_hook)
     (*deprecated_target_resume_hook) ();
 
+  /* Update the inferior on signals to silently pass, if they've changed.  */
+  remote_pass_signals ();
+
   /* The vCont packet doesn't need to specify threads via Hc.  */
   if (remote_vcont_resume (ptid, step, siggnal))
     return;
@@ -2843,11 +3046,9 @@ cleanup_sigint_signal_handler (void *dummy)
 {
   signal (SIGINT, handle_sigint);
   if (sigint_remote_twice_token)
-    delete_async_signal_handler ((struct async_signal_handler **)
-				 &sigint_remote_twice_token);
+    delete_async_signal_handler (&sigint_remote_twice_token);
   if (sigint_remote_token)
-    delete_async_signal_handler ((struct async_signal_handler **)
-				 &sigint_remote_token);
+    delete_async_signal_handler (&sigint_remote_token);
 }
 
 /* Send ^C to target to halt it.  Target will respond, and send us a
@@ -2991,6 +3192,7 @@ remote_wait (ptid_t ptid, struct target_waitstatus *status)
   struct remote_arch_state *rsa = get_remote_arch_state ();
   ULONGEST thread_num = -1;
   ULONGEST addr;
+  int solibs_changed = 0;
 
   status->kind = TARGET_WAITKIND_EXITED;
   status->value.integer = 0;
@@ -3076,6 +3278,16 @@ Packet: '%s'\n"),
 			p = unpack_varlen_hex (++p1, &addr);
 			remote_watch_data_address = (CORE_ADDR)addr;
 		      }
+		    else if (strncmp (p, "library", p1 - p) == 0)
+		      {
+			p1++;
+			p_temp = p1;
+			while (*p_temp && *p_temp != ';')
+			  p_temp++;
+
+			solibs_changed = 1;
+			p = p_temp;
+		      }
 		    else
  		      {
  			/* Silently skip unknown optional info.  */
@@ -3106,7 +3318,7 @@ Packet: '%s'\n"),
 		    if (fieldsize < register_size (current_gdbarch,
 						   reg->regnum))
 		      warning (_("Remote reply is too short: %s"), buf);
-		    regcache_raw_supply (current_regcache,
+		    regcache_raw_supply (get_current_regcache (),
 					 reg->regnum, regs);
 		  }
 
@@ -3117,9 +3329,14 @@ Packet: '%s'\n"),
 	  }
 	  /* fall through */
 	case 'S':		/* Old style status, just signal only.  */
-	  status->kind = TARGET_WAITKIND_STOPPED;
-	  status->value.sig = (enum target_signal)
-	    (((fromhex (buf[1])) << 4) + (fromhex (buf[2])));
+	  if (solibs_changed)
+	    status->kind = TARGET_WAITKIND_LOADED;
+	  else
+	    {
+	      status->kind = TARGET_WAITKIND_STOPPED;
+	      status->value.sig = (enum target_signal)
+		(((fromhex (buf[1])) << 4) + (fromhex (buf[2])));
+	    }
 
 	  if (buf[3] == 'p')
 	    {
@@ -3182,6 +3399,7 @@ remote_async_wait (ptid_t ptid, struct target_waitstatus *status)
   struct remote_arch_state *rsa = get_remote_arch_state ();
   ULONGEST thread_num = -1;
   ULONGEST addr;
+  int solibs_changed = 0;
 
   status->kind = TARGET_WAITKIND_EXITED;
   status->value.integer = 0;
@@ -3243,7 +3461,7 @@ remote_async_wait (ptid_t ptid, struct target_waitstatus *status)
 		/* If this packet is an awatch packet, don't parse the 'a'
 		   as a register number.  */
 
-		if (!strncmp (p, "awatch", strlen ("awatch")) != 0)
+		if (strncmp (p, "awatch", strlen("awatch")) != 0)
 		  {
 		    /* Read the register number.  */
 		    pnum = strtol (p, &p_temp, 16);
@@ -3272,6 +3490,16 @@ Packet: '%s'\n"),
 			remote_stopped_by_watchpoint_p = 1;
 			p = unpack_varlen_hex (++p1, &addr);
 			remote_watch_data_address = (CORE_ADDR)addr;
+		      }
+		    else if (strncmp (p, "library", p1 - p) == 0)
+		      {
+			p1++;
+			p_temp = p1;
+			while (*p_temp && *p_temp != ';')
+			  p_temp++;
+
+			solibs_changed = 1;
+			p = p_temp;
 		      }
 		    else
  		      {
@@ -3303,7 +3531,8 @@ Packet: '%s'\n"),
 		    if (fieldsize < register_size (current_gdbarch,
 						   reg->regnum))
 		      warning (_("Remote reply is too short: %s"), buf);
-		    regcache_raw_supply (current_regcache, reg->regnum, regs);
+		    regcache_raw_supply (get_current_regcache (),
+					 reg->regnum, regs);
 		  }
 
 		if (*p++ != ';')
@@ -3313,9 +3542,14 @@ Packet: '%s'\n"),
 	  }
 	  /* fall through */
 	case 'S':		/* Old style status, just signal only.  */
-	  status->kind = TARGET_WAITKIND_STOPPED;
-	  status->value.sig = (enum target_signal)
-	    (((fromhex (buf[1])) << 4) + (fromhex (buf[2])));
+	  if (solibs_changed)
+	    status->kind = TARGET_WAITKIND_LOADED;
+	  else
+	    {
+	      status->kind = TARGET_WAITKIND_STOPPED;
+	      status->value.sig = (enum target_signal)
+		(((fromhex (buf[1])) << 4) + (fromhex (buf[2])));
+	    }
 
 	  if (buf[3] == 'p')
 	    {
@@ -3373,39 +3607,45 @@ got_status:
   return inferior_ptid;
 }
 
-/* Number of bytes of registers this stub implements.  */
-
-static int register_bytes_found;
-
-/* Read the remote registers into the block REGS.  */
-/* Currently we just read all the registers, so we don't use regnum.  */
+/* Fetch a single register using a 'p' packet.  */
 
 static int
-fetch_register_using_p (int regnum)
+fetch_register_using_p (struct regcache *regcache, struct packet_reg *reg)
 {
   struct remote_state *rs = get_remote_state ();
   char *buf, *p;
   char regp[MAX_REGISTER_SIZE];
   int i;
 
+  if (remote_protocol_packets[PACKET_p].support == PACKET_DISABLE)
+    return 0;
+
+  if (reg->pnum == -1)
+    return 0;
+
   p = rs->buf;
   *p++ = 'p';
-  p += hexnumstr (p, regnum);
+  p += hexnumstr (p, reg->pnum);
   *p++ = '\0';
   remote_send (&rs->buf, &rs->buf_size);
 
   buf = rs->buf;
 
-  /* If the stub didn't recognize the packet, or if we got an error,
-     tell our caller.  */
-  if (buf[0] == '\0' || buf[0] == 'E')
-    return 0;
+  switch (packet_ok (buf, &remote_protocol_packets[PACKET_p]))
+    {
+    case PACKET_OK:
+      break;
+    case PACKET_UNKNOWN:
+      return 0;
+    case PACKET_ERROR:
+      error (_("Could not fetch register \"%s\""),
+	     gdbarch_register_name (current_gdbarch, reg->regnum));
+    }
 
   /* If this register is unfetchable, tell the regcache.  */
   if (buf[0] == 'x')
     {
-      regcache_raw_supply (current_regcache, regnum, NULL);
-      set_register_cached (regnum, -1);
+      regcache_raw_supply (regcache, reg->regnum, NULL);
       return 1;
     }
 
@@ -3415,109 +3655,109 @@ fetch_register_using_p (int regnum)
   while (p[0] != 0)
     {
       if (p[1] == 0)
-        {
-          error (_("fetch_register_using_p: early buf termination"));
-          return 0;
-        }
+	error (_("fetch_register_using_p: early buf termination"));
 
       regp[i++] = fromhex (p[0]) * 16 + fromhex (p[1]);
       p += 2;
     }
-  regcache_raw_supply (current_regcache, regnum, regp);
+  regcache_raw_supply (regcache, reg->regnum, regp);
   return 1;
 }
 
-static void
-remote_fetch_registers (int regnum)
+/* Fetch the registers included in the target's 'g' packet.  */
+
+static int
+send_g_packet (void)
 {
   struct remote_state *rs = get_remote_state ();
-  struct remote_arch_state *rsa = get_remote_arch_state ();
-  char *buf;
-  int i;
+  int i, buf_len;
   char *p;
-  char *regs = alloca (rsa->sizeof_g_packet);
-
-  set_thread (PIDGET (inferior_ptid), 1);
-
-  if (regnum >= 0)
-    {
-      struct packet_reg *reg = packet_reg_from_regnum (rsa, regnum);
-      gdb_assert (reg != NULL);
-      if (!reg->in_g_packet)
-	internal_error (__FILE__, __LINE__,
-			_("Attempt to fetch a non G-packet register when this "
-			"remote.c does not support the p-packet."));
-    }
-      switch (remote_protocol_packets[PACKET_p].support)
-	{
-	case PACKET_DISABLE:
-	  break;
-	case PACKET_ENABLE:
-	  if (fetch_register_using_p (regnum))
-	    return;
-	  else
-	    error (_("Protocol error: p packet not recognized by stub"));
-	case PACKET_SUPPORT_UNKNOWN:
-	  if (fetch_register_using_p (regnum))
-	    {
-	      /* The stub recognized the 'p' packet.  Remember this.  */
-	      remote_protocol_packets[PACKET_p].support = PACKET_ENABLE;
-	      return;
-	    }
-	  else
-	    {
-	      /* The stub does not support the 'P' packet.  Use 'G'
-	         instead, and don't try using 'P' in the future (it
-	         will just waste our time).  */
-	      remote_protocol_packets[PACKET_p].support = PACKET_DISABLE;
-	      break;
-	    }
-	}
+  char *regs;
 
   sprintf (rs->buf, "g");
   remote_send (&rs->buf, &rs->buf_size);
-  buf = rs->buf;
-
-  /* Save the size of the packet sent to us by the target.  Its used
-     as a heuristic when determining the max size of packets that the
-     target can safely receive.  */
-  if ((rsa->actual_register_packet_size) == 0)
-    (rsa->actual_register_packet_size) = strlen (buf);
-
-  /* Unimplemented registers read as all bits zero.  */
-  memset (regs, 0, rsa->sizeof_g_packet);
 
   /* We can get out of synch in various cases.  If the first character
      in the buffer is not a hex character, assume that has happened
      and try to fetch another packet to read.  */
-  while ((buf[0] < '0' || buf[0] > '9')
-	 && (buf[0] < 'A' || buf[0] > 'F')
-	 && (buf[0] < 'a' || buf[0] > 'f')
-	 && buf[0] != 'x')	/* New: unavailable register value.  */
+  while ((rs->buf[0] < '0' || rs->buf[0] > '9')
+	 && (rs->buf[0] < 'A' || rs->buf[0] > 'F')
+	 && (rs->buf[0] < 'a' || rs->buf[0] > 'f')
+	 && rs->buf[0] != 'x')	/* New: unavailable register value.  */
     {
       if (remote_debug)
 	fprintf_unfiltered (gdb_stdlog,
 			    "Bad register packet; fetching a new packet\n");
       getpkt (&rs->buf, &rs->buf_size, 0);
-      buf = rs->buf;
     }
+
+  buf_len = strlen (rs->buf);
+
+  /* Sanity check the received packet.  */
+  if (buf_len % 2 != 0)
+    error (_("Remote 'g' packet reply is of odd length: %s"), rs->buf);
+
+  return buf_len / 2;
+}
+
+static void
+process_g_packet (struct regcache *regcache)
+{
+  struct remote_state *rs = get_remote_state ();
+  struct remote_arch_state *rsa = get_remote_arch_state ();
+  int i, buf_len;
+  char *p;
+  char *regs;
+
+  buf_len = strlen (rs->buf);
+
+  /* Further sanity checks, with knowledge of the architecture.  */
+  if (buf_len > 2 * rsa->sizeof_g_packet)
+    error (_("Remote 'g' packet reply is too long: %s"), rs->buf);
+
+  /* Save the size of the packet sent to us by the target.  It is used
+     as a heuristic when determining the max size of packets that the
+     target can safely receive.  */
+  if (rsa->actual_register_packet_size == 0)
+    rsa->actual_register_packet_size = buf_len;
+
+  /* If this is smaller than we guessed the 'g' packet would be,
+     update our records.  A 'g' reply that doesn't include a register's
+     value implies either that the register is not available, or that
+     the 'p' packet must be used.  */
+  if (buf_len < 2 * rsa->sizeof_g_packet)
+    {
+      rsa->sizeof_g_packet = buf_len / 2;
+
+      for (i = 0; i < gdbarch_num_regs (current_gdbarch); i++)
+	{
+	  if (rsa->regs[i].pnum == -1)
+	    continue;
+
+	  if (rsa->regs[i].offset >= rsa->sizeof_g_packet)
+	    rsa->regs[i].in_g_packet = 0;
+	  else
+	    rsa->regs[i].in_g_packet = 1;
+	}
+    }
+
+  regs = alloca (rsa->sizeof_g_packet);
+
+  /* Unimplemented registers read as all bits zero.  */
+  memset (regs, 0, rsa->sizeof_g_packet);
 
   /* Reply describes registers byte by byte, each byte encoded as two
      hex characters.  Suck them all up, then supply them to the
      register cacheing/storage mechanism.  */
 
-  p = buf;
+  p = rs->buf;
   for (i = 0; i < rsa->sizeof_g_packet; i++)
     {
-      if (p[0] == 0)
-	break;
-      if (p[1] == 0)
-	{
-	  warning (_("Remote reply is of odd length: %s"), buf);
-	  /* Don't change register_bytes_found in this case, and don't
-	     print a second warning.  */
-	  goto supply_them;
-	}
+      if (p[0] == 0 || p[1] == 0)
+	/* This shouldn't happen - we adjusted sizeof_g_packet above.  */
+	internal_error (__FILE__, __LINE__,
+			"unexpected end of 'g' packet reply");
+
       if (p[0] == 'x' && p[1] == 'x')
 	regs[i] = 0;		/* 'x' */
       else
@@ -3525,42 +3765,82 @@ remote_fetch_registers (int regnum)
       p += 2;
     }
 
-  if (i != register_bytes_found)
-    {
-      register_bytes_found = i;
-      if (REGISTER_BYTES_OK_P ()
-	  && !REGISTER_BYTES_OK (i))
-	warning (_("Remote reply is wrong length: %s"), buf);
-    }
-
- supply_them:
   {
     int i;
-    for (i = 0; i < NUM_REGS + NUM_PSEUDO_REGS; i++)
+    for (i = 0; i < gdbarch_num_regs (current_gdbarch); i++)
       {
 	struct packet_reg *r = &rsa->regs[i];
 	if (r->in_g_packet)
 	  {
-	    if (r->offset * 2 >= strlen (buf))
-	      /* A short packet that didn't include the register's
-                 value, this implies that the register is zero (and
-                 not that the register is unavailable).  Supply that
-                 zero value.  */
-	      regcache_raw_supply (current_regcache, r->regnum, NULL);
-	    else if (buf[r->offset * 2] == 'x')
+	    if (r->offset * 2 >= strlen (rs->buf))
+	      /* This shouldn't happen - we adjusted in_g_packet above.  */
+	      internal_error (__FILE__, __LINE__,
+			      "unexpected end of 'g' packet reply");
+	    else if (rs->buf[r->offset * 2] == 'x')
 	      {
-		gdb_assert (r->offset * 2 < strlen (buf));
+		gdb_assert (r->offset * 2 < strlen (rs->buf));
 		/* The register isn't available, mark it as such (at
                    the same time setting the value to zero).  */
-		regcache_raw_supply (current_regcache, r->regnum, NULL);
-		set_register_cached (i, -1);
+		regcache_raw_supply (regcache, r->regnum, NULL);
 	      }
 	    else
-	      regcache_raw_supply (current_regcache, r->regnum,
+	      regcache_raw_supply (regcache, r->regnum,
 				   regs + r->offset);
 	  }
       }
   }
+}
+
+static void
+fetch_registers_using_g (struct regcache *regcache)
+{
+  send_g_packet ();
+  process_g_packet (regcache);
+}
+
+static void
+remote_fetch_registers (struct regcache *regcache, int regnum)
+{
+  struct remote_state *rs = get_remote_state ();
+  struct remote_arch_state *rsa = get_remote_arch_state ();
+  int i;
+
+  set_thread (PIDGET (inferior_ptid), 1);
+
+  if (regnum >= 0)
+    {
+      struct packet_reg *reg = packet_reg_from_regnum (rsa, regnum);
+      gdb_assert (reg != NULL);
+
+      /* If this register might be in the 'g' packet, try that first -
+	 we are likely to read more than one register.  If this is the
+	 first 'g' packet, we might be overly optimistic about its
+	 contents, so fall back to 'p'.  */
+      if (reg->in_g_packet)
+	{
+	  fetch_registers_using_g (regcache);
+	  if (reg->in_g_packet)
+	    return;
+	}
+
+      if (fetch_register_using_p (regcache, reg))
+	return;
+
+      /* This register is not available.  */
+      regcache_raw_supply (regcache, reg->regnum, NULL);
+
+      return;
+    }
+
+  fetch_registers_using_g (regcache);
+
+  for (i = 0; i < gdbarch_num_regs (current_gdbarch); i++)
+    if (!rsa->regs[i].in_g_packet)
+      if (!fetch_register_using_p (regcache, &rsa->regs[i]))
+	{
+	  /* This register is not available.  */
+	  regcache_raw_supply (regcache, i, NULL);
+	}
 }
 
 /* Prepare to store registers.  Since we may send them all (using a
@@ -3568,7 +3848,7 @@ remote_fetch_registers (int regnum)
    first.  */
 
 static void
-remote_prepare_to_store (void)
+remote_prepare_to_store (struct regcache *regcache)
 {
   struct remote_arch_state *rsa = get_remote_arch_state ();
   int i;
@@ -3580,9 +3860,9 @@ remote_prepare_to_store (void)
     case PACKET_DISABLE:
     case PACKET_SUPPORT_UNKNOWN:
       /* Make sure all the necessary registers are cached.  */
-      for (i = 0; i < NUM_REGS; i++)
+      for (i = 0; i < gdbarch_num_regs (current_gdbarch); i++)
 	if (rsa->regs[i].in_g_packet)
-	  regcache_raw_read (current_regcache, rsa->regs[i].regnum, buf);
+	  regcache_raw_read (regcache, rsa->regs[i].regnum, buf);
       break;
     case PACKET_ENABLE:
       break;
@@ -3593,67 +3873,51 @@ remote_prepare_to_store (void)
    packet was not recognized.  */
 
 static int
-store_register_using_P (int regnum)
+store_register_using_P (const struct regcache *regcache, struct packet_reg *reg)
 {
   struct remote_state *rs = get_remote_state ();
   struct remote_arch_state *rsa = get_remote_arch_state ();
-  struct packet_reg *reg = packet_reg_from_regnum (rsa, regnum);
   /* Try storing a single register.  */
   char *buf = rs->buf;
   gdb_byte regp[MAX_REGISTER_SIZE];
   char *p;
 
+  if (remote_protocol_packets[PACKET_P].support == PACKET_DISABLE)
+    return 0;
+
+  if (reg->pnum == -1)
+    return 0;
+
   xsnprintf (buf, get_remote_packet_size (), "P%s=", phex_nz (reg->pnum, 0));
   p = buf + strlen (buf);
-  regcache_raw_collect (current_regcache, reg->regnum, regp);
+  regcache_raw_collect (regcache, reg->regnum, regp);
   bin2hex (regp, p, register_size (current_gdbarch, reg->regnum));
   remote_send (&rs->buf, &rs->buf_size);
 
-  return rs->buf[0] != '\0';
+  switch (packet_ok (rs->buf, &remote_protocol_packets[PACKET_P]))
+    {
+    case PACKET_OK:
+      return 1;
+    case PACKET_ERROR:
+      error (_("Could not write register \"%s\""),
+	     gdbarch_register_name (current_gdbarch, reg->regnum));
+    case PACKET_UNKNOWN:
+      return 0;
+    default:
+      internal_error (__FILE__, __LINE__, _("Bad result from packet_ok"));
+    }
 }
-
 
 /* Store register REGNUM, or all registers if REGNUM == -1, from the
    contents of the register cache buffer.  FIXME: ignores errors.  */
 
 static void
-remote_store_registers (int regnum)
+store_registers_using_G (const struct regcache *regcache)
 {
   struct remote_state *rs = get_remote_state ();
   struct remote_arch_state *rsa = get_remote_arch_state ();
   gdb_byte *regs;
   char *p;
-
-  set_thread (PIDGET (inferior_ptid), 1);
-
-  if (regnum >= 0)
-    {
-      switch (remote_protocol_packets[PACKET_P].support)
-	{
-	case PACKET_DISABLE:
-	  break;
-	case PACKET_ENABLE:
-	  if (store_register_using_P (regnum))
-	    return;
-	  else
-	    error (_("Protocol error: P packet not recognized by stub"));
-	case PACKET_SUPPORT_UNKNOWN:
-	  if (store_register_using_P (regnum))
-	    {
-	      /* The stub recognized the 'P' packet.  Remember this.  */
-	      remote_protocol_packets[PACKET_P].support = PACKET_ENABLE;
-	      return;
-	    }
-	  else
-	    {
-	      /* The stub does not support the 'P' packet.  Use 'G'
-	         instead, and don't try using 'P' in the future (it
-	         will just waste our time).  */
-	      remote_protocol_packets[PACKET_P].support = PACKET_DISABLE;
-	      break;
-	    }
-	}
-    }
 
   /* Extract all the registers in the regcache copying them into a
      local buffer.  */
@@ -3661,11 +3925,11 @@ remote_store_registers (int regnum)
     int i;
     regs = alloca (rsa->sizeof_g_packet);
     memset (regs, 0, rsa->sizeof_g_packet);
-    for (i = 0; i < NUM_REGS + NUM_PSEUDO_REGS; i++)
+    for (i = 0; i < gdbarch_num_regs (current_gdbarch); i++)
       {
 	struct packet_reg *r = &rsa->regs[i];
 	if (r->in_g_packet)
-	  regcache_raw_collect (current_regcache, r->regnum, regs + r->offset);
+	  regcache_raw_collect (regcache, r->regnum, regs + r->offset);
       }
   }
 
@@ -3673,9 +3937,54 @@ remote_store_registers (int regnum)
      each byte encoded as two hex characters.  */
   p = rs->buf;
   *p++ = 'G';
-  /* remote_prepare_to_store insures that register_bytes_found gets set.  */
-  bin2hex (regs, p, register_bytes_found);
+  /* remote_prepare_to_store insures that rsa->sizeof_g_packet gets
+     updated.  */
+  bin2hex (regs, p, rsa->sizeof_g_packet);
   remote_send (&rs->buf, &rs->buf_size);
+}
+
+/* Store register REGNUM, or all registers if REGNUM == -1, from the contents
+   of the register cache buffer.  FIXME: ignores errors.  */
+
+static void
+remote_store_registers (struct regcache *regcache, int regnum)
+{
+  struct remote_state *rs = get_remote_state ();
+  struct remote_arch_state *rsa = get_remote_arch_state ();
+  int i;
+
+  set_thread (PIDGET (inferior_ptid), 1);
+
+  if (regnum >= 0)
+    {
+      struct packet_reg *reg = packet_reg_from_regnum (rsa, regnum);
+      gdb_assert (reg != NULL);
+
+      /* Always prefer to store registers using the 'P' packet if
+	 possible; we often change only a small number of registers.
+	 Sometimes we change a larger number; we'd need help from a
+	 higher layer to know to use 'G'.  */
+      if (store_register_using_P (regcache, reg))
+	return;
+
+      /* For now, don't complain if we have no way to write the
+	 register.  GDB loses track of unavailable registers too
+	 easily.  Some day, this may be an error.  We don't have
+	 any way to read the register, either... */
+      if (!reg->in_g_packet)
+	return;
+
+      store_registers_using_G (regcache);
+      return;
+    }
+
+  store_registers_using_G (regcache);
+
+  for (i = 0; i < gdbarch_num_regs (current_gdbarch); i++)
+    if (!rsa->regs[i].in_g_packet)
+      if (!store_register_using_P (regcache, &rsa->regs[i]))
+	/* See above for why we do not issue an error here.  */
+	continue;
 }
 
 
@@ -3725,13 +4034,18 @@ hexnumnstr (char *buf, ULONGEST num, int width)
 static CORE_ADDR
 remote_address_masked (CORE_ADDR addr)
 {
-  if (remote_address_size > 0
-      && remote_address_size < (sizeof (ULONGEST) * 8))
+  int address_size = remote_address_size;
+  /* If "remoteaddresssize" was not set, default to target address size.  */
+  if (!address_size)
+    address_size = gdbarch_addr_bit (current_gdbarch);
+
+  if (address_size > 0
+      && address_size < (sizeof (ULONGEST) * 8))
     {
       /* Only create a mask when that mask can safely be constructed
          in a ULONGEST variable.  */
       ULONGEST mask = 1;
-      mask = (mask << remote_address_size) - 1;
+      mask = (mask << address_size) - 1;
       addr &= mask;
     }
   return addr;
@@ -3916,12 +4230,6 @@ remote_write_bytes_aux (const char *header, CORE_ADDR memaddr,
   if (packet_format != 'X' && packet_format != 'M')
     internal_error (__FILE__, __LINE__,
 		    "remote_write_bytes_aux: bad packet format");
-
-  /* Should this be the selected frame?  */
-  gdbarch_remote_translate_xfer_address (current_gdbarch,
-					 current_regcache,
-					 memaddr, len,
-					 &memaddr, &len);
 
   if (len <= 0)
     return 0;
@@ -4114,12 +4422,6 @@ remote_read_bytes (CORE_ADDR memaddr, gdb_byte *myaddr, int len)
   struct remote_state *rs = get_remote_state ();
   int max_buf_size;		/* Max size of packet output buffer.  */
   int origlen;
-
-  /* Should this be the selected frame?  */
-  gdbarch_remote_translate_xfer_address (current_gdbarch,
-					 current_regcache,
-					 memaddr, len,
-					 &memaddr, &len);
 
   if (len <= 0)
     return 0;
@@ -4867,6 +5169,14 @@ extended_remote_create_inferior (char *exec_file, char *args,
   /* Now restart the remote server.  */
   extended_remote_restart ();
 
+  /* NOTE: We don't need to recheck for a target description here; but
+     if we gain the ability to switch the remote executable we may
+     need to, if for instance we are running a process which requested
+     different emulated hardware from the operating system.  A
+     concrete example of this is ARM GNU/Linux, where some binaries
+     will have a legacy FPA coprocessor emulated and others may have
+     access to a hardware VFP unit.  */
+
   /* Now put the breakpoints back in.  This way we're safe if the
      restart function works via a unix fork on the remote side.  */
   insert_breakpoints ();
@@ -4892,6 +5202,14 @@ extended_remote_async_create_inferior (char *exec_file, char *args,
   /* Now restart the remote server.  */
   extended_remote_restart ();
 
+  /* NOTE: We don't need to recheck for a target description here; but
+     if we gain the ability to switch the remote executable we may
+     need to, if for instance we are running a process which requested
+     different emulated hardware from the operating system.  A
+     concrete example of this is ARM GNU/Linux, where some binaries
+     will have a legacy FPA coprocessor emulated and others may have
+     access to a hardware VFP unit.  */
+
   /* Now put the breakpoints back in.  This way we're safe if the
      restart function works via a unix fork on the remote side.  */
   insert_breakpoints ();
@@ -4900,35 +5218,6 @@ extended_remote_async_create_inferior (char *exec_file, char *args,
   clear_proceed_status ();
 }
 
-
-/* On some machines, e.g. 68k, we may use a different breakpoint
-   instruction than other targets; in those use
-   DEPRECATED_REMOTE_BREAKPOINT instead of just BREAKPOINT_FROM_PC.
-   Also, bi-endian targets may define
-   DEPRECATED_LITTLE_REMOTE_BREAKPOINT and
-   DEPRECATED_BIG_REMOTE_BREAKPOINT.  If none of these are defined, we
-   just call the standard routines that are in mem-break.c.  */
-
-/* NOTE: cagney/2003-06-08: This is silly.  A remote and simulator
-   target should use an identical BREAKPOINT_FROM_PC.  As for native,
-   the ARCH-OS-tdep.c code can override the default.  */
-
-#if defined (DEPRECATED_LITTLE_REMOTE_BREAKPOINT) && defined (DEPRECATED_BIG_REMOTE_BREAKPOINT) && !defined(DEPRECATED_REMOTE_BREAKPOINT)
-#define DEPRECATED_REMOTE_BREAKPOINT
-#endif
-
-#ifdef DEPRECATED_REMOTE_BREAKPOINT
-
-/* If the target isn't bi-endian, just pretend it is.  */
-#if !defined (DEPRECATED_LITTLE_REMOTE_BREAKPOINT) && !defined (DEPRECATED_BIG_REMOTE_BREAKPOINT)
-#define DEPRECATED_LITTLE_REMOTE_BREAKPOINT DEPRECATED_REMOTE_BREAKPOINT
-#define DEPRECATED_BIG_REMOTE_BREAKPOINT DEPRECATED_REMOTE_BREAKPOINT
-#endif
-
-static unsigned char big_break_insn[] = DEPRECATED_BIG_REMOTE_BREAKPOINT;
-static unsigned char little_break_insn[] = DEPRECATED_LITTLE_REMOTE_BREAKPOINT;
-
-#endif /* DEPRECATED_REMOTE_BREAKPOINT */
 
 /* Insert a breakpoint.  On targets that have software breakpoint
    support, we ask the remote target to do the work; on targets
@@ -4939,9 +5228,6 @@ remote_insert_breakpoint (struct bp_target_info *bp_tgt)
 {
   CORE_ADDR addr = bp_tgt->placed_address;
   struct remote_state *rs = get_remote_state ();
-#ifdef DEPRECATED_REMOTE_BREAKPOINT
-  int val;
-#endif
 
   /* Try the "Z" s/w breakpoint packet if it is not already disabled.
      If it succeeds, then set the support to PACKET_ENABLE.  If it
@@ -4955,7 +5241,8 @@ remote_insert_breakpoint (struct bp_target_info *bp_tgt)
       *(p++) = 'Z';
       *(p++) = '0';
       *(p++) = ',';
-      BREAKPOINT_FROM_PC (&bp_tgt->placed_address, &bp_tgt->placed_size);
+      gdbarch_breakpoint_from_pc
+	(current_gdbarch, &bp_tgt->placed_address, &bp_tgt->placed_size);
       addr = (ULONGEST) remote_address_masked (bp_tgt->placed_address);
       p += hexnumstr (p, addr);
       sprintf (p, ",%d", bp_tgt->placed_size);
@@ -4974,24 +5261,7 @@ remote_insert_breakpoint (struct bp_target_info *bp_tgt)
 	}
     }
 
-#ifdef DEPRECATED_REMOTE_BREAKPOINT
-  bp_tgt->placed_size = bp_tgt->shadow_len = sizeof big_break_insn;
-  val = target_read_memory (addr, bp_tgt->shadow_contents, bp_tgt->shadow_len);
-
-  if (val == 0)
-    {
-      if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
-	val = target_write_memory (addr, (char *) big_break_insn,
-				   sizeof big_break_insn);
-      else
-	val = target_write_memory (addr, (char *) little_break_insn,
-				   sizeof little_break_insn);
-    }
-
-  return val;
-#else
   return memory_insert_breakpoint (bp_tgt);
-#endif /* DEPRECATED_REMOTE_BREAKPOINT */
 }
 
 static int
@@ -5019,12 +5289,7 @@ remote_remove_breakpoint (struct bp_target_info *bp_tgt)
       return (rs->buf[0] == 'E');
     }
 
-#ifdef DEPRECATED_REMOTE_BREAKPOINT
-  return target_write_memory (bp_tgt->placed_address, bp_tgt->shadow_contents,
-			      bp_tgt->shadow_len);
-#else
   return memory_remove_breakpoint (bp_tgt);
-#endif /* DEPRECATED_REMOTE_BREAKPOINT */
 }
 
 static int
@@ -5172,7 +5437,8 @@ remote_insert_hw_breakpoint (struct bp_target_info *bp_tgt)
   /* The length field should be set to the size of a breakpoint
      instruction, even though we aren't inserting one ourselves.  */
 
-  BREAKPOINT_FROM_PC (&bp_tgt->placed_address, &bp_tgt->placed_size);
+  gdbarch_breakpoint_from_pc
+    (current_gdbarch, &bp_tgt->placed_address, &bp_tgt->placed_size);
 
   if (remote_protocol_packets[PACKET_Z1].support == PACKET_DISABLE)
     return -1;
@@ -5371,6 +5637,45 @@ the loaded file\n"));
     printf_filtered (_("No loaded section named '%s'.\n"), args);
 }
 
+/* Write LEN bytes from WRITEBUF into OBJECT_NAME/ANNEX at OFFSET
+   into remote target.  The number of bytes written to the remote
+   target is returned, or -1 for error.  */
+
+static LONGEST
+remote_write_qxfer (struct target_ops *ops, const char *object_name,
+                    const char *annex, const gdb_byte *writebuf, 
+                    ULONGEST offset, LONGEST len, 
+                    struct packet_config *packet)
+{
+  int i, buf_len;
+  ULONGEST n;
+  gdb_byte *wbuf;
+  struct remote_state *rs = get_remote_state ();
+  int max_size = get_memory_write_packet_size (); 
+
+  if (packet->support == PACKET_DISABLE)
+    return -1;
+
+  /* Insert header.  */
+  i = snprintf (rs->buf, max_size, 
+		"qXfer:%s:write:%s:%s:",
+		object_name, annex ? annex : "",
+		phex_nz (offset, sizeof offset));
+  max_size -= (i + 1);
+
+  /* Escape as much data as fits into rs->buf.  */
+  buf_len = remote_escape_output 
+    (writebuf, len, (rs->buf + i), &max_size, max_size);
+
+  if (putpkt_binary (rs->buf, i + buf_len) < 0
+      || getpkt_sane (&rs->buf, &rs->buf_size, 0) < 0
+      || packet_ok (rs->buf, packet) != PACKET_OK)
+    return -1;
+
+  unpack_varlen_hex (rs->buf, &n);
+  return n;
+}
+
 /* Read OBJECT_NAME/ANNEX from the remote target using a qXfer packet.
    Data at OFFSET, of up to LEN bytes, is read into READBUF; the
    number of bytes read is returned, or 0 for EOF, or -1 for error.
@@ -5443,9 +5748,9 @@ remote_read_qxfer (struct target_ops *ops, const char *object_name,
   i = remote_unescape_input (rs->buf + 1, packet_len - 1, readbuf, n);
 
   /* 'l' is an EOF marker, possibly including a final block of data,
-     or possibly empty.  Record it to bypass the next read, if one is
-     issued.  */
-  if (rs->buf[0] == 'l')
+     or possibly empty.  If we have the final block of a non-empty
+     object, record this fact to bypass a subsequent partial read.  */
+  if (rs->buf[0] == 'l' && offset + i > 0)
     {
       finished_object = xstrdup (object_name);
       finished_annex = xstrdup (annex ? annex : "");
@@ -5484,6 +5789,19 @@ remote_xfer_partial (struct target_ops *ops, enum target_object object,
 	return -1;
     }
 
+  /* Handle SPU memory using qxfer packets. */
+  if (object == TARGET_OBJECT_SPU)
+    {
+      if (readbuf)
+	return remote_read_qxfer (ops, "spu", annex, readbuf, offset, len,
+				  &remote_protocol_packets
+				    [PACKET_qXfer_spu_read]);
+      else
+	return remote_write_qxfer (ops, "spu", annex, writebuf, offset, len,
+				   &remote_protocol_packets
+				     [PACKET_qXfer_spu_write]);
+    }
+
   /* Only handle flash writes.  */
   if (writebuf != NULL)
     {
@@ -5518,6 +5836,16 @@ remote_xfer_partial (struct target_ops *ops, enum target_object object,
       gdb_assert (annex == NULL);
       return remote_read_qxfer (ops, "auxv", annex, readbuf, offset, len,
 				&remote_protocol_packets[PACKET_qXfer_auxv]);
+
+    case TARGET_OBJECT_AVAILABLE_FEATURES:
+      return remote_read_qxfer
+	(ops, "features", annex, readbuf, offset, len,
+	 &remote_protocol_packets[PACKET_qXfer_features]);
+
+    case TARGET_OBJECT_LIBRARIES:
+      return remote_read_qxfer
+	(ops, "libraries", annex, readbuf, offset, len,
+	 &remote_protocol_packets[PACKET_qXfer_libraries]);
 
     case TARGET_OBJECT_MEMORY_MAP:
       gdb_assert (annex == NULL);
@@ -5875,6 +6203,83 @@ remote_get_thread_local_address (ptid_t ptid, CORE_ADDR lm, CORE_ADDR offset)
   return 0;
 }
 
+/* Support for inferring a target description based on the current
+   architecture and the size of a 'g' packet.  While the 'g' packet
+   can have any size (since optional registers can be left off the
+   end), some sizes are easily recognizable given knowledge of the
+   approximate architecture.  */
+
+struct remote_g_packet_guess
+{
+  int bytes;
+  const struct target_desc *tdesc;
+};
+typedef struct remote_g_packet_guess remote_g_packet_guess_s;
+DEF_VEC_O(remote_g_packet_guess_s);
+
+struct remote_g_packet_data
+{
+  VEC(remote_g_packet_guess_s) *guesses;
+};
+
+static struct gdbarch_data *remote_g_packet_data_handle;
+
+static void *
+remote_g_packet_data_init (struct obstack *obstack)
+{
+  return OBSTACK_ZALLOC (obstack, struct remote_g_packet_data);
+}
+
+void
+register_remote_g_packet_guess (struct gdbarch *gdbarch, int bytes,
+				const struct target_desc *tdesc)
+{
+  struct remote_g_packet_data *data
+    = gdbarch_data (gdbarch, remote_g_packet_data_handle);
+  struct remote_g_packet_guess new_guess, *guess;
+  int ix;
+
+  gdb_assert (tdesc != NULL);
+
+  for (ix = 0;
+       VEC_iterate (remote_g_packet_guess_s, data->guesses, ix, guess);
+       ix++)
+    if (guess->bytes == bytes)
+      internal_error (__FILE__, __LINE__,
+		      "Duplicate g packet description added for size %d",
+		      bytes);
+
+  new_guess.bytes = bytes;
+  new_guess.tdesc = tdesc;
+  VEC_safe_push (remote_g_packet_guess_s, data->guesses, &new_guess);
+}
+
+static const struct target_desc *
+remote_read_description (struct target_ops *target)
+{
+  struct remote_g_packet_data *data
+    = gdbarch_data (current_gdbarch, remote_g_packet_data_handle);
+
+  if (!VEC_empty (remote_g_packet_guess_s, data->guesses))
+    {
+      struct remote_g_packet_guess *guess;
+      int ix;
+      int bytes = send_g_packet ();
+
+      for (ix = 0;
+	   VEC_iterate (remote_g_packet_guess_s, data->guesses, ix, guess);
+	   ix++)
+	if (guess->bytes == bytes)
+	  return guess->tdesc;
+
+      /* We discard the g packet.  A minor optimization would be to
+	 hold on to it, and fill the register cache once we have selected
+	 an architecture, but it's too tricky to do safely.  */
+    }
+
+  return NULL;
+}
+
 static void
 init_remote_ops (void)
 {
@@ -5926,6 +6331,7 @@ Specify the serial device it is connected to\n\
   remote_ops.to_memory_map = remote_memory_map;
   remote_ops.to_flash_erase = remote_flash_erase;
   remote_ops.to_flash_done = remote_flash_done;
+  remote_ops.to_read_description = remote_read_description;
 }
 
 /* Set up the extended remote vector by making a copy of the standard
@@ -6058,6 +6464,7 @@ Specify the serial device it is connected to (e.g. /dev/ttya).";
   remote_async_ops.to_memory_map = remote_memory_map;
   remote_async_ops.to_flash_erase = remote_flash_erase;
   remote_async_ops.to_flash_done = remote_flash_done;
+  remote_async_ops.to_read_description = remote_read_description;
 }
 
 /* Set up the async extended remote vector by making a copy of the standard
@@ -6119,26 +6526,13 @@ show_remote_cmd (char *args, int from_tty)
   do_cleanups (showlist_chain);
 }
 
-static void
-build_remote_gdbarch_data (void)
-{
-  remote_address_size = TARGET_ADDR_BIT;
-}
-
-/* Saved pointer to previous owner of the new_objfile event.  */
-static void (*remote_new_objfile_chain) (struct objfile *);
 
 /* Function to be called whenever a new objfile (shlib) is detected.  */
 static void
 remote_new_objfile (struct objfile *objfile)
 {
   if (remote_desc != 0)		/* Have a remote connection.  */
-    {
-      remote_check_symbols (objfile);
-    }
-  /* Call predecessor on chain, if any.  */
-  if (remote_new_objfile_chain)
-    remote_new_objfile_chain (objfile);
+    remote_check_symbols (objfile);
 }
 
 void
@@ -6149,11 +6543,8 @@ _initialize_remote (void)
   /* architecture specific data */
   remote_gdbarch_data_handle =
     gdbarch_data_register_post_init (init_remote_state);
-
-  /* Old tacky stuff.  NOTE: This comes after the remote protocol so
-     that the remote protocol has been initialized.  */
-  DEPRECATED_REGISTER_GDBARCH_SWAP (remote_address_size);
-  deprecated_register_gdbarch_swap (NULL, 0, build_remote_gdbarch_data);
+  remote_g_packet_data_handle =
+    gdbarch_data_register_pre_init (remote_g_packet_data_init);
 
   /* Initialize the per-target state.  At the moment there is only one
      of these, not one per target.  Only one target is active at a
@@ -6176,8 +6567,7 @@ _initialize_remote (void)
   add_target (&extended_async_remote_ops);
 
   /* Hook into new objfile notification.  */
-  remote_new_objfile_chain = deprecated_target_new_objfile_hook;
-  deprecated_target_new_objfile_hook  = remote_new_objfile;
+  observer_attach_new_objfile (remote_new_objfile);
 
 #if 0
   init_remote_threadtests ();
@@ -6281,6 +6671,9 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
   add_packet_config_cmd (&remote_protocol_packets[PACKET_vCont],
 			 "vCont", "verbose-resume", 0);
 
+  add_packet_config_cmd (&remote_protocol_packets[PACKET_QPassSignals],
+			 "QPassSignals", "pass-signals", 0);
+
   add_packet_config_cmd (&remote_protocol_packets[PACKET_qSymbol],
 			 "qSymbol", "symbol-lookup", 0);
 
@@ -6308,8 +6701,20 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
   add_packet_config_cmd (&remote_protocol_packets[PACKET_qXfer_auxv],
 			 "qXfer:auxv:read", "read-aux-vector", 0);
 
+  add_packet_config_cmd (&remote_protocol_packets[PACKET_qXfer_features],
+			 "qXfer:features:read", "target-features", 0);
+
+  add_packet_config_cmd (&remote_protocol_packets[PACKET_qXfer_libraries],
+			 "qXfer:libraries:read", "library-info", 0);
+
   add_packet_config_cmd (&remote_protocol_packets[PACKET_qXfer_memory_map],
 			 "qXfer:memory-map:read", "memory-map", 0);
+
+  add_packet_config_cmd (&remote_protocol_packets[PACKET_qXfer_spu_read],
+                         "qXfer:spu:read", "read-spu-object", 0);
+
+  add_packet_config_cmd (&remote_protocol_packets[PACKET_qXfer_spu_write],
+                         "qXfer:spu:write", "write-spu-object", 0);
 
   add_packet_config_cmd (&remote_protocol_packets[PACKET_qGetTLSAddr],
 			 "qGetTLSAddr", "get-thread-local-storage-address",

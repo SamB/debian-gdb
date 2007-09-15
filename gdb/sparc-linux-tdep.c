@@ -1,12 +1,12 @@
 /* Target-dependent code for GNU/Linux SPARC.
 
-   Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,15 +15,13 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "dwarf2-frame.h"
-#include "floatformat.h"
 #include "frame.h"
 #include "frame-unwind.h"
+#include "gdbtypes.h"
 #include "regset.h"
 #include "gdbarch.h"
 #include "gdbcore.h"
@@ -131,22 +129,18 @@ sparc32_linux_sigframe_init (const struct tramp_frame *self,
    address.  */
 
 static CORE_ADDR
-sparc32_linux_step_trap (unsigned long insn)
+sparc32_linux_step_trap (struct frame_info *frame, unsigned long insn)
 {
   if (insn == 0x91d02010)
     {
-      ULONGEST sc_num;
-
-      regcache_cooked_read_unsigned (current_regcache,
-				     SPARC_G1_REGNUM, &sc_num);
+      ULONGEST sc_num = get_frame_register_unsigned (frame, SPARC_G1_REGNUM);
 
       /* __NR_rt_sigreturn is 101 and __NR_sigreturn is 216  */
       if (sc_num == 101 || sc_num == 216)
 	{
 	  ULONGEST sp, pc_offset;
 
-	  regcache_cooked_read_unsigned (current_regcache,
-					 SPARC_SP_REGNUM, &sp);
+	  sp = get_frame_register_unsigned (frame, SPARC_SP_REGNUM);
 
 	  /* The kernel puts the sigreturn registers on the stack,
 	     and this is where the signal unwinding state is take from
@@ -246,7 +240,7 @@ sparc32_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   /* GNU/Linux doesn't support the 128-bit `long double' from the psABI.  */
   set_gdbarch_long_double_bit (gdbarch, 64);
-  set_gdbarch_long_double_format (gdbarch, &floatformat_ieee_double_big);
+  set_gdbarch_long_double_format (gdbarch, floatformats_ieee_double);
 
   /* Enable TLS support.  */
   set_gdbarch_fetch_tls_load_module_address (gdbarch,

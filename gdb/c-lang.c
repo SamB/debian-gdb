@@ -1,13 +1,13 @@
 /* C language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2002,
-   2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2002, 2003,
+   2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -33,6 +31,7 @@
 #include "charset.h"
 #include "gdb_string.h"
 #include "demangle.h"
+#include "cp-abi.h"
 #include "cp-support.h"
 
 extern void _initialize_c_language (void);
@@ -218,7 +217,7 @@ c_create_fundamental_type (struct objfile *objfile, int typeid)
          name "<?type?>".  When all the dust settles from the type
          reconstruction work, this should probably become an error. */
       type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
+			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "<?type?>", objfile);
       warning (_("internal error: no C/C++ fundamental type %d"), typeid);
       break;
@@ -249,101 +248,112 @@ c_create_fundamental_type (struct objfile *objfile, int typeid)
       break;
     case FT_SHORT:
       type = init_type (TYPE_CODE_INT,
-			TARGET_SHORT_BIT / TARGET_CHAR_BIT,
+			gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "short", objfile);
       break;
     case FT_SIGNED_SHORT:
       type = init_type (TYPE_CODE_INT,
-			TARGET_SHORT_BIT / TARGET_CHAR_BIT,
+			gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "short", objfile);	/* FIXME-fnf */
       break;
     case FT_UNSIGNED_SHORT:
       type = init_type (TYPE_CODE_INT,
-			TARGET_SHORT_BIT / TARGET_CHAR_BIT,
+			gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			TYPE_FLAG_UNSIGNED, "unsigned short", objfile);
       break;
     case FT_INTEGER:
       type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
+			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "int", objfile);
       break;
     case FT_SIGNED_INTEGER:
       type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
+			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "int", objfile);	/* FIXME -fnf */
       break;
     case FT_UNSIGNED_INTEGER:
       type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
+			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			TYPE_FLAG_UNSIGNED, "unsigned int", objfile);
       break;
     case FT_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "long", objfile);
       break;
     case FT_SIGNED_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "long", objfile);	/* FIXME -fnf */
       break;
     case FT_UNSIGNED_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			TYPE_FLAG_UNSIGNED, "unsigned long", objfile);
       break;
     case FT_LONG_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_long_bit (current_gdbarch) 
+			  / TARGET_CHAR_BIT,
 			0, "long long", objfile);
       break;
     case FT_SIGNED_LONG_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_long_bit (current_gdbarch) 
+			  / TARGET_CHAR_BIT,
 			0, "signed long long", objfile);
       break;
     case FT_UNSIGNED_LONG_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_long_bit (current_gdbarch) 
+			  / TARGET_CHAR_BIT,
 			TYPE_FLAG_UNSIGNED, "unsigned long long", objfile);
       break;
     case FT_FLOAT:
       type = init_type (TYPE_CODE_FLT,
-			TARGET_FLOAT_BIT / TARGET_CHAR_BIT,
+			gdbarch_float_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "float", objfile);
       break;
     case FT_DBL_PREC_FLOAT:
       type = init_type (TYPE_CODE_FLT,
-			TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
+			gdbarch_double_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "double", objfile);
       break;
     case FT_EXT_PREC_FLOAT:
       type = init_type (TYPE_CODE_FLT,
-			TARGET_LONG_DOUBLE_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_double_bit (current_gdbarch)
+			  / TARGET_CHAR_BIT,
 			0, "long double", objfile);
       break;
     case FT_COMPLEX:
       type = init_type (TYPE_CODE_FLT,
-			2 * TARGET_FLOAT_BIT / TARGET_CHAR_BIT,
+			2 * gdbarch_float_bit (current_gdbarch)
+			  / TARGET_CHAR_BIT,
 			0, "complex float", objfile);
       TYPE_TARGET_TYPE (type)
-	= init_type (TYPE_CODE_FLT, TARGET_FLOAT_BIT / TARGET_CHAR_BIT,
+	= init_type (TYPE_CODE_FLT,
+		     gdbarch_float_bit (current_gdbarch) / TARGET_CHAR_BIT,
 		     0, "float", objfile);
       break;
     case FT_DBL_PREC_COMPLEX:
       type = init_type (TYPE_CODE_FLT,
-			2 * TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
+			2 * gdbarch_double_bit (current_gdbarch)
+			  / TARGET_CHAR_BIT,
 			0, "complex double", objfile);
       TYPE_TARGET_TYPE (type)
-	= init_type (TYPE_CODE_FLT, TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
+	= init_type (TYPE_CODE_FLT,
+		     gdbarch_double_bit (current_gdbarch) / TARGET_CHAR_BIT,
 		     0, "double", objfile);
       break;
     case FT_EXT_PREC_COMPLEX:
       type = init_type (TYPE_CODE_FLT,
-			2 * TARGET_LONG_DOUBLE_BIT / TARGET_CHAR_BIT,
+			2 * gdbarch_long_double_bit (current_gdbarch)
+			  / TARGET_CHAR_BIT,
 			0, "complex long double", objfile);
       TYPE_TARGET_TYPE (type)
-	= init_type (TYPE_CODE_FLT, TARGET_LONG_DOUBLE_BIT / TARGET_CHAR_BIT,
+	= init_type (TYPE_CODE_FLT,
+		     gdbarch_long_double_bit (current_gdbarch)
+		       / TARGET_CHAR_BIT,
 		     0, "long double", objfile);
       break;
     case FT_TEMPLATE_ARG:
@@ -561,7 +571,7 @@ c_language_arch_info (struct gdbarch *gdbarch,
   lai->primitive_type_vector [c_primitive_type_long_double] = builtin->builtin_long_double;
   lai->primitive_type_vector [c_primitive_type_complex] = builtin->builtin_complex;
   lai->primitive_type_vector [c_primitive_type_double_complex] = builtin->builtin_double_complex;
-};
+}
 
 const struct language_defn c_language_defn =
 {
@@ -599,34 +609,80 @@ const struct language_defn c_language_defn =
   LANG_MAGIC
 };
 
-struct type **const (cplus_builtin_types[]) =
-{
-  &builtin_type_int,
-  &builtin_type_long,
-  &builtin_type_short,
-  &builtin_type_char,
-  &builtin_type_float,
-  &builtin_type_double,
-  &builtin_type_void,
-  &builtin_type_long_long,
-  &builtin_type_signed_char,
-  &builtin_type_unsigned_char,
-  &builtin_type_unsigned_short,
-  &builtin_type_unsigned_int,
-  &builtin_type_unsigned_long,
-  &builtin_type_unsigned_long_long,
-  &builtin_type_long_double,
-  &builtin_type_complex,
-  &builtin_type_double_complex,
-  &builtin_type_bool,
-  0
+enum cplus_primitive_types {
+  cplus_primitive_type_int,
+  cplus_primitive_type_long,
+  cplus_primitive_type_short,
+  cplus_primitive_type_char,
+  cplus_primitive_type_float,
+  cplus_primitive_type_double,
+  cplus_primitive_type_void,
+  cplus_primitive_type_long_long,
+  cplus_primitive_type_signed_char,
+  cplus_primitive_type_unsigned_char,
+  cplus_primitive_type_unsigned_short,
+  cplus_primitive_type_unsigned_int,
+  cplus_primitive_type_unsigned_long,
+  cplus_primitive_type_unsigned_long_long,
+  cplus_primitive_type_long_double,
+  cplus_primitive_type_complex,
+  cplus_primitive_type_double_complex,
+  cplus_primitive_type_bool,
+  nr_cplus_primitive_types
 };
+
+static void
+cplus_language_arch_info (struct gdbarch *gdbarch,
+			  struct language_arch_info *lai)
+{
+  const struct builtin_type *builtin = builtin_type (gdbarch);
+  lai->string_char_type = builtin->builtin_char;
+  lai->primitive_type_vector
+    = GDBARCH_OBSTACK_CALLOC (gdbarch, nr_cplus_primitive_types + 1,
+			      struct type *);
+  lai->primitive_type_vector [cplus_primitive_type_int]
+    = builtin->builtin_int;
+  lai->primitive_type_vector [cplus_primitive_type_long]
+    = builtin->builtin_long;
+  lai->primitive_type_vector [cplus_primitive_type_short]
+    = builtin->builtin_short;
+  lai->primitive_type_vector [cplus_primitive_type_char]
+    = builtin->builtin_char;
+  lai->primitive_type_vector [cplus_primitive_type_float]
+    = builtin->builtin_float;
+  lai->primitive_type_vector [cplus_primitive_type_double]
+    = builtin->builtin_double;
+  lai->primitive_type_vector [cplus_primitive_type_void]
+    = builtin->builtin_void;
+  lai->primitive_type_vector [cplus_primitive_type_long_long]
+    = builtin->builtin_long_long;
+  lai->primitive_type_vector [cplus_primitive_type_signed_char]
+    = builtin->builtin_signed_char;
+  lai->primitive_type_vector [cplus_primitive_type_unsigned_char]
+    = builtin->builtin_unsigned_char;
+  lai->primitive_type_vector [cplus_primitive_type_unsigned_short]
+    = builtin->builtin_unsigned_short;
+  lai->primitive_type_vector [cplus_primitive_type_unsigned_int]
+    = builtin->builtin_unsigned_int;
+  lai->primitive_type_vector [cplus_primitive_type_unsigned_long]
+    = builtin->builtin_unsigned_long;
+  lai->primitive_type_vector [cplus_primitive_type_unsigned_long_long]
+    = builtin->builtin_unsigned_long_long;
+  lai->primitive_type_vector [cplus_primitive_type_long_double]
+    = builtin->builtin_long_double;
+  lai->primitive_type_vector [cplus_primitive_type_complex]
+    = builtin->builtin_complex;
+  lai->primitive_type_vector [cplus_primitive_type_double_complex]
+    = builtin->builtin_double_complex;
+  lai->primitive_type_vector [cplus_primitive_type_bool]
+    = builtin->builtin_bool;
+}
 
 const struct language_defn cplus_language_defn =
 {
   "c++",			/* Language name */
   language_cplus,
-  cplus_builtin_types,
+  NULL,
   range_check_off,
   type_check_off,
   case_sensitive_on,
@@ -642,7 +698,7 @@ const struct language_defn cplus_language_defn =
   c_print_type,			/* Print a type using appropriate syntax */
   c_val_print,			/* Print a value using appropriate syntax */
   c_value_print,		/* Print a top-level value */
-  NULL,				/* Language specific skip_trampoline */
+  cplus_skip_trampoline,	/* Language specific skip_trampoline */
   value_of_this,		/* value_of_this */
   cp_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   cp_lookup_transparent_type,   /* lookup_transparent_type */
@@ -651,9 +707,9 @@ const struct language_defn cplus_language_defn =
   c_op_print_tab,		/* expression operators for printing */
   1,				/* c-style arrays */
   0,				/* String lower bound */
-  &builtin_type_char,		/* Type of string elements */
+  NULL,
   default_word_break_characters,
-  NULL, /* FIXME: la_language_arch_info.  */
+  cplus_language_arch_info,
   default_print_array_index,
   LANG_MAGIC
 };

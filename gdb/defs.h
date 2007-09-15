@@ -1,14 +1,14 @@
 /* *INDENT-OFF* */ /* ATTR_FORMAT confuses indent, avoid running it for now */
 /* Basic, host-specific, and target-specific definitions for GDB.
    Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef DEFS_H
 #define DEFS_H
@@ -167,6 +165,9 @@ extern int dbx_commands;
 /* System root path, used to find libraries etc.  */
 extern char *gdb_sysroot;
 
+/* Search path for separate debug files.  */
+extern char *debug_file_directory;
+
 extern int quit_flag;
 extern int immediate_quit;
 extern int sevenbit_strings;
@@ -207,9 +208,9 @@ enum language
     language_fortran,		/* Fortran */
     language_m2,		/* Modula-2 */
     language_asm,		/* Assembly language */
-    language_scm,    		/* Scheme / Guile */
     language_pascal,		/* Pascal */
     language_ada,		/* Ada */
+    language_scm,		/* Guile Scheme */
     language_minimal,		/* All other languages, minimal support only */
     nr_languages
   };
@@ -342,8 +343,6 @@ extern int subset_compare (char *, char *);
 
 extern char *safe_strerror (int);
 
-extern void request_quit (int);
-
 #define	ALL_CLEANUPS	((struct cleanup *)0)
 
 extern void do_cleanups (struct cleanup *);
@@ -416,6 +415,8 @@ extern unsigned long gnu_debuglink_crc32 (unsigned long crc,
                                           unsigned char *buf, size_t len);
 
 ULONGEST strtoulst (const char *num, const char **trailer, int base);
+
+char *ldirname (const char *filename);
 
 /* From demangle.c */
 
@@ -688,6 +689,7 @@ enum command_control_type
     continue_control,
     while_control,
     if_control,
+    commands_control,
     invalid_control
   };
 
@@ -977,9 +979,7 @@ enum gdb_osabi
   GDB_OSABI_OPENBSD_ELF,
   GDB_OSABI_WINCE,
   GDB_OSABI_GO32,
-  GDB_OSABI_NETWARE,
   GDB_OSABI_IRIX,
-  GDB_OSABI_LYNXOS,
   GDB_OSABI_INTERIX,
   GDB_OSABI_HPUX_ELF,
   GDB_OSABI_HPUX_SOM,
@@ -1070,7 +1070,7 @@ enum { MAX_REGISTER_SIZE = 16 };
    from byte/word byte order.  */
 
 #if !defined (BITS_BIG_ENDIAN)
-#define BITS_BIG_ENDIAN (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+#define BITS_BIG_ENDIAN (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
 #endif
 
 /* In findvar.c.  */
@@ -1133,7 +1133,6 @@ extern void (*deprecated_create_breakpoint_hook) (struct breakpoint * b);
 extern void (*deprecated_delete_breakpoint_hook) (struct breakpoint * bpt);
 extern void (*deprecated_modify_breakpoint_hook) (struct breakpoint * bpt);
 extern void (*deprecated_interactive_hook) (void);
-extern void (*deprecated_registers_changed_hook) (void);
 extern void (*deprecated_readline_begin_hook) (char *, ...)
      ATTRIBUTE_FPTR_PRINTF_1;
 extern char *(*deprecated_readline_hook) (char *);

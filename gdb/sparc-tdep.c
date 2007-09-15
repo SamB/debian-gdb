@@ -1,12 +1,12 @@
 /* Target-dependent code for SPARC.
 
-   Copyright (C) 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "arch-utils.h"
@@ -65,7 +63,7 @@ struct regset;
 
 /* The SPARC Floating-Point Quad-Precision format is similar to
    big-endian IA-64 Quad-recision format.  */
-#define floatformat_sparc_quad floatformat_ia64_quad_big
+#define floatformats_sparc_quad floatformats_ia64_quad
 
 /* The stack pointer is offset from the stack frame by a BIAS of 2047
    (0x7ff) for 64-bit code.  BIAS is likely to be defined on SPARC
@@ -82,6 +80,7 @@ struct regset;
 #define X_IMM22(i) ((i) & 0x3fffff)
 #define X_OP3(i) (((i) >> 19) & 0x3f)
 #define X_RS1(i) (((i) >> 14) & 0x1f)
+#define X_RS2(i) ((i) & 0x1f)
 #define X_I(i) (((i) >> 13) & 1)
 /* Sign extension macros.  */
 #define X_DISP22(i) ((X_IMM22 (i) ^ 0x200000) - 0x200000)
@@ -166,18 +165,6 @@ sparc_fetch_wcookie (void)
   gdb_assert (len == 4 || len == 8);
 
   return extract_unsigned_integer (buf, len);
-}
-
-
-/* Return the contents if register REGNUM as an address.  */
-
-CORE_ADDR
-sparc_address_from_register (int regnum)
-{
-  ULONGEST addr;
-
-  regcache_cooked_read_unsigned (current_regcache, regnum, &addr);
-  return addr;
 }
 
 
@@ -294,6 +281,48 @@ sparc32_register_name (int regnum)
 
   return NULL;
 }
+
+
+/* Type for %psr.  */
+struct type *sparc_psr_type;
+
+/* Type for %fsr.  */
+struct type *sparc_fsr_type;
+
+/* Construct types for ISA-specific registers.  */
+
+static void
+sparc_init_types (void)
+{
+  struct type *type;
+
+  type = init_flags_type ("builtin_type_sparc_psr", 4);
+  append_flags_type_flag (type, 5, "ET");
+  append_flags_type_flag (type, 6, "PS");
+  append_flags_type_flag (type, 7, "S");
+  append_flags_type_flag (type, 12, "EF");
+  append_flags_type_flag (type, 13, "EC");
+  sparc_psr_type = type;
+
+  type = init_flags_type ("builtin_type_sparc_fsr", 4);
+  append_flags_type_flag (type, 0, "NXA");
+  append_flags_type_flag (type, 1, "DZA");
+  append_flags_type_flag (type, 2, "UFA");
+  append_flags_type_flag (type, 3, "OFA");
+  append_flags_type_flag (type, 4, "NVA");
+  append_flags_type_flag (type, 5, "NXC");
+  append_flags_type_flag (type, 6, "DZC");
+  append_flags_type_flag (type, 7, "UFC");
+  append_flags_type_flag (type, 8, "OFC");
+  append_flags_type_flag (type, 9, "NVC");
+  append_flags_type_flag (type, 22, "NS");
+  append_flags_type_flag (type, 23, "NXM");
+  append_flags_type_flag (type, 24, "DZM");
+  append_flags_type_flag (type, 25, "UFM");
+  append_flags_type_flag (type, 26, "OFM");
+  append_flags_type_flag (type, 27, "NVM");
+  sparc_fsr_type = type;
+}
 
 /* Return the GDB type object for the "standard" data type of data in
    register REGNUM. */
@@ -312,6 +341,12 @@ sparc32_register_type (struct gdbarch *gdbarch, int regnum)
 
   if (regnum == SPARC32_PC_REGNUM || regnum == SPARC32_NPC_REGNUM)
     return builtin_type_void_func_ptr;
+
+  if (regnum == SPARC32_PSR_REGNUM)
+    return sparc_psr_type;
+
+  if (regnum == SPARC32_FSR_REGNUM)
+    return sparc_fsr_type;
 
   return builtin_type_int32;
 }
@@ -346,7 +381,8 @@ sparc32_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp,
 			 CORE_ADDR funcaddr, int using_gcc,
 			 struct value **args, int nargs,
 			 struct type *value_type,
-			 CORE_ADDR *real_pc, CORE_ADDR *bp_addr)
+			 CORE_ADDR *real_pc, CORE_ADDR *bp_addr,
+			 struct regcache *regcache)
 {
   *bp_addr = sp - 4;
   *real_pc = funcaddr;
@@ -523,6 +559,156 @@ sparc_alloc_frame_cache (void)
   return cache;
 }
 
+/* GCC generates several well-known sequences of instructions at the begining
+   of each function prologue when compiling with -fstack-check.  If one of
+   such sequences starts at START_PC, then return the address of the
+   instruction immediately past this sequence.  Otherwise, return START_PC.  */
+   
+static CORE_ADDR
+sparc_skip_stack_check (const CORE_ADDR start_pc)
+{
+  CORE_ADDR pc = start_pc;
+  unsigned long insn;
+  int offset_stack_checking_sequence = 0;
+
+  /* With GCC, all stack checking sequences begin with the same two
+     instructions.  */
+
+  /* sethi <some immediate>,%g1 */
+  insn = sparc_fetch_instruction (pc);
+  pc = pc + 4;
+  if (!(X_OP (insn) == 0 && X_OP2 (insn) == 0x4 && X_RD (insn) == 1))
+    return start_pc;
+
+  /* sub %sp, %g1, %g1 */
+  insn = sparc_fetch_instruction (pc);
+  pc = pc + 4;
+  if (!(X_OP (insn) == 2 && X_OP3 (insn) == 0x4 && !X_I(insn)
+        && X_RD (insn) == 1 && X_RS1 (insn) == 14 && X_RS2 (insn) == 1))
+    return start_pc;
+
+  insn = sparc_fetch_instruction (pc);
+  pc = pc + 4;
+
+  /* First possible sequence:
+         [first two instructions above]
+         clr [%g1 - some immediate]  */
+
+  /* clr [%g1 - some immediate]  */
+  if (X_OP (insn) == 3 && X_OP3(insn) == 0x4 && X_I(insn)
+      && X_RS1 (insn) == 1 && X_RD (insn) == 0)
+    {
+      /* Valid stack-check sequence, return the new PC.  */
+      return pc;
+    }
+
+  /* Second possible sequence: A small number of probes.
+         [first two instructions above]
+         clr [%g1]
+         add   %g1, -<some immediate>, %g1
+         clr [%g1]
+         [repeat the two instructions above any (small) number of times]
+         clr [%g1 - some immediate]  */
+
+  /* clr [%g1] */
+  else if (X_OP (insn) == 3 && X_OP3(insn) == 0x4 && !X_I(insn)
+      && X_RS1 (insn) == 1 && X_RD (insn) == 0)
+    {
+      while (1)
+        {
+          /* add %g1, -<some immediate>, %g1 */
+          insn = sparc_fetch_instruction (pc);
+          pc = pc + 4;
+          if (!(X_OP (insn) == 2  && X_OP3(insn) == 0 && X_I(insn)
+                && X_RS1 (insn) == 1 && X_RD (insn) == 1))
+            break;
+
+          /* clr [%g1] */
+          insn = sparc_fetch_instruction (pc);
+          pc = pc + 4;
+          if (!(X_OP (insn) == 3 && X_OP3(insn) == 0x4 && !X_I(insn)
+                && X_RD (insn) == 0 && X_RS1 (insn) == 1))
+            return start_pc;
+        }
+
+      /* clr [%g1 - some immediate] */
+      if (!(X_OP (insn) == 3 && X_OP3(insn) == 0x4 && X_I(insn)
+            && X_RS1 (insn) == 1 && X_RD (insn) == 0))
+        return start_pc;
+
+      /* We found a valid stack-check sequence, return the new PC.  */
+      return pc;
+    }
+  
+  /* Third sequence: A probing loop.
+         [first two instructions above]
+         sethi  <some immediate>, %g4
+         sub  %g1, %g4, %g4
+         cmp  %g1, %g4
+         be  <disp>
+         add  %g1, -<some immediate>, %g1
+         ba  <disp>
+         clr  [%g1]
+         clr [%g4 - some immediate]  */
+
+  /* sethi  <some immediate>, %g4 */
+  else if (X_OP (insn) == 0 && X_OP2 (insn) == 0x4 && X_RD (insn) == 4)
+    {
+      /* sub  %g1, %g4, %g4 */
+      insn = sparc_fetch_instruction (pc);
+      pc = pc + 4;
+      if (!(X_OP (insn) == 2 && X_OP3 (insn) == 0x4 && !X_I(insn)
+            && X_RD (insn) == 4 && X_RS1 (insn) == 1 && X_RS2 (insn) == 4))
+        return start_pc;
+
+      /* cmp  %g1, %g4 */
+      insn = sparc_fetch_instruction (pc);
+      pc = pc + 4;
+      if (!(X_OP (insn) == 2 && X_OP3 (insn) == 0x14 && !X_I(insn)
+            && X_RD (insn) == 0 && X_RS1 (insn) == 1 && X_RS2 (insn) == 4))
+        return start_pc;
+
+      /* be  <disp> */
+      insn = sparc_fetch_instruction (pc);
+      pc = pc + 4;
+      if (!(X_OP (insn) == 0 && X_COND (insn) == 0x1))
+        return start_pc;
+
+      /* add  %g1, -<some immediate>, %g1 */
+      insn = sparc_fetch_instruction (pc);
+      pc = pc + 4;
+      if (!(X_OP (insn) == 2  && X_OP3(insn) == 0 && X_I(insn)
+            && X_RS1 (insn) == 1 && X_RD (insn) == 1))
+        return start_pc;
+
+      /* ba  <disp> */
+      insn = sparc_fetch_instruction (pc);
+      pc = pc + 4;
+      if (!(X_OP (insn) == 0 && X_COND (insn) == 0x8))
+        return start_pc;
+
+      /* clr  [%g1] */
+      insn = sparc_fetch_instruction (pc);
+      pc = pc + 4;
+      if (!(X_OP (insn) == 3 && X_OP3(insn) == 0x4 && !X_I(insn)
+            && X_RD (insn) == 0 && X_RS1 (insn) == 1))
+        return start_pc;
+
+      /* clr [%g4 - some immediate]  */
+      insn = sparc_fetch_instruction (pc);
+      pc = pc + 4;
+      if (!(X_OP (insn) == 3 && X_OP3(insn) == 0x4 && X_I(insn)
+            && X_RS1 (insn) == 4 && X_RD (insn) == 0))
+        return start_pc;
+
+      /* We found a valid stack-check sequence, return the new PC.  */
+      return pc;
+    }
+
+  /* No stack check code in our prologue, return the start_pc.  */
+  return start_pc;
+}
+
 CORE_ADDR
 sparc_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
 			struct sparc_frame_cache *cache)
@@ -531,6 +717,8 @@ sparc_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
   unsigned long insn;
   int offset = 0;
   int dest = -1;
+
+  pc = sparc_skip_stack_check (pc);
 
   if (current_pc <= pc)
     return current_pc;
@@ -651,12 +839,9 @@ sparc_frame_cache (struct frame_info *next_frame, void **this_cache)
   cache = sparc_alloc_frame_cache ();
   *this_cache = cache;
 
-  cache->pc = frame_func_unwind (next_frame);
+  cache->pc = frame_func_unwind (next_frame, NORMAL_FRAME);
   if (cache->pc != 0)
-    {
-      CORE_ADDR addr_in_block = frame_unwind_address_in_block (next_frame);
-      sparc_analyze_prologue (cache->pc, addr_in_block, cache);
-    }
+    sparc_analyze_prologue (cache->pc, frame_pc_unwind (next_frame), cache);
 
   if (cache->frameless_p)
     {
@@ -1006,7 +1191,7 @@ sparc32_stabs_argument_has_addr (struct gdbarch *gdbarch, struct type *type)
 static int
 sparc32_dwarf2_struct_return_p (struct frame_info *next_frame)
 {
-  CORE_ADDR pc = frame_unwind_address_in_block (next_frame);
+  CORE_ADDR pc = frame_unwind_address_in_block (next_frame, NORMAL_FRAME);
   struct symbol *sym = find_pc_function (pc);
 
   if (sym)
@@ -1051,7 +1236,7 @@ sparc32_dwarf2_frame_init_reg (struct gdbarch *gdbarch, int regnum,
    software single-step mechanism.  */
 
 static CORE_ADDR
-sparc_analyze_control_transfer (struct gdbarch *arch,
+sparc_analyze_control_transfer (struct frame_info *frame,
 				CORE_ADDR pc, CORE_ADDR *npc)
 {
   unsigned long insn = sparc_fetch_instruction (pc);
@@ -1093,7 +1278,7 @@ sparc_analyze_control_transfer (struct gdbarch *arch,
   else if (X_OP (insn) == 2 && X_OP3 (insn) == 0x3a)
     {
       /* Trap instruction (TRAP).  */
-      return gdbarch_tdep (arch)->step_trap (insn);
+      return gdbarch_tdep (get_frame_arch (frame))->step_trap (frame, insn);
     }
 
   /* FIXME: Handle DONE and RETRY instructions.  */
@@ -1126,50 +1311,47 @@ sparc_analyze_control_transfer (struct gdbarch *arch,
 }
 
 static CORE_ADDR
-sparc_step_trap (unsigned long insn)
+sparc_step_trap (struct frame_info *frame, unsigned long insn)
 {
   return 0;
 }
 
-void
-sparc_software_single_step (enum target_signal sig, int insert_breakpoints_p)
+int
+sparc_software_single_step (struct frame_info *frame)
 {
-  struct gdbarch *arch = current_gdbarch;
+  struct gdbarch *arch = get_frame_arch (frame);
   struct gdbarch_tdep *tdep = gdbarch_tdep (arch);
   CORE_ADDR npc, nnpc;
 
-  if (insert_breakpoints_p)
-    {
-      CORE_ADDR pc, orig_npc;
+  CORE_ADDR pc, orig_npc;
 
-      pc = sparc_address_from_register (tdep->pc_regnum);
-      orig_npc = npc = sparc_address_from_register (tdep->npc_regnum);
+  pc = get_frame_register_unsigned (frame, tdep->pc_regnum);
+  orig_npc = npc = get_frame_register_unsigned (frame, tdep->npc_regnum);
 
-      /* Analyze the instruction at PC.  */
-      nnpc = sparc_analyze_control_transfer (arch, pc, &npc);
-      if (npc != 0)
-	insert_single_step_breakpoint (npc);
+  /* Analyze the instruction at PC.  */
+  nnpc = sparc_analyze_control_transfer (frame, pc, &npc);
+  if (npc != 0)
+    insert_single_step_breakpoint (npc);
 
-      if (nnpc != 0)
-	insert_single_step_breakpoint (nnpc);
+  if (nnpc != 0)
+    insert_single_step_breakpoint (nnpc);
 
-      /* Assert that we have set at least one breakpoint, and that
-	 they're not set at the same spot - unless we're going
-	 from here straight to NULL, i.e. a call or jump to 0.  */
-      gdb_assert (npc != 0 || nnpc != 0 || orig_npc == 0);
-      gdb_assert (nnpc != npc || orig_npc == 0);
-    }
-  else
-    remove_single_step_breakpoints ();
+  /* Assert that we have set at least one breakpoint, and that
+     they're not set at the same spot - unless we're going
+     from here straight to NULL, i.e. a call or jump to 0.  */
+  gdb_assert (npc != 0 || nnpc != 0 || orig_npc == 0);
+  gdb_assert (nnpc != npc || orig_npc == 0);
+
+  return 1;
 }
 
 static void
-sparc_write_pc (CORE_ADDR pc, ptid_t ptid)
+sparc_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_regcache_arch (regcache));
 
-  write_register_pid (tdep->pc_regnum, pc, ptid);
-  write_register_pid (tdep->npc_regnum, pc + 4, ptid);
+  regcache_cooked_write_unsigned (regcache, tdep->pc_regnum, pc);
+  regcache_cooked_write_unsigned (regcache, tdep->npc_regnum, pc + 4);
 }
 
 /* Unglobalize NAME.  */
@@ -1248,7 +1430,7 @@ sparc32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   tdep->step_trap = sparc_step_trap;
 
   set_gdbarch_long_double_bit (gdbarch, 128);
-  set_gdbarch_long_double_format (gdbarch, &floatformat_sparc_quad);
+  set_gdbarch_long_double_format (gdbarch, floatformats_sparc_quad);
 
   set_gdbarch_num_regs (gdbarch, SPARC32_NUM_REGS);
   set_gdbarch_register_name (gdbarch, sparc32_register_name);
@@ -1621,4 +1803,7 @@ void
 _initialize_sparc_tdep (void)
 {
   register_gdbarch_init (bfd_arch_sparc, sparc32_gdbarch_init);
+
+  /* Initialize the SPARC-specific register types.  */
+  sparc_init_types();
 }

@@ -6,27 +6,14 @@ But M2 support added set types just before GDB 6.5, and now there's
 not much left of this.
 
 ---
- gdb/dwarf2read.c |    7 +++++--
- 1 file changed, 5 insertions(+), 2 deletions(-)
+ gdb/dwarf2read.c |    3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
-Index: gdb-6.6.dfsg/gdb/dwarf2read.c
+Index: gdb-6.6.dfsg.90.20070912/gdb/dwarf2read.c
 ===================================================================
---- gdb-6.6.dfsg.orig/gdb/dwarf2read.c	2007-01-27 20:35:30.000000000 -0500
-+++ gdb-6.6.dfsg/gdb/dwarf2read.c	2007-01-27 20:35:33.000000000 -0500
-@@ -6300,9 +6300,11 @@ set_cu_language (unsigned int lang, stru
-     case DW_LANG_Modula2:
-       cu->language = language_m2;
-       break;
-+    case DW_LANG_Pascal83:
-+      cu->language = language_pascal;
-+      break;
-     case DW_LANG_Cobol74:
-     case DW_LANG_Cobol85:
--    case DW_LANG_Pascal83:
-     default:
-       cu->language = language_minimal;
-       break;
-@@ -7496,7 +7498,8 @@ determine_prefix (struct die_info *die, 
+--- gdb-6.6.dfsg.90.20070912.orig/gdb/dwarf2read.c	2007-09-15 10:18:23.000000000 -0400
++++ gdb-6.6.dfsg.90.20070912/gdb/dwarf2read.c	2007-09-15 10:19:20.000000000 -0400
+@@ -7616,7 +7616,8 @@ determine_prefix (struct die_info *die, 
    struct die_info *parent;
  
    if (cu->language != language_cplus

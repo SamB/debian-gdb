@@ -3,15 +3,13 @@
 
    Contributed by Daniel Berlin <dberlin@redhat.com>
 
-   Copyright (C) 2001, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
-   This program is free software; you can redistribute it and/or
-   modify
-   it under the terms of the GNU General Public License as published
-   by
-   the Free Software Foundation; either version 2 of the License, or
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -20,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef CP_ABI_H_
 #define CP_ABI_H_ 1
@@ -30,6 +26,8 @@
 struct fn_field;
 struct type;
 struct value;
+struct ui_file;
+struct frame_info;
 
 /* The functions here that attempt to determine what sort of thing a
    mangled name refers to may well be revised in the future.  It would
@@ -147,6 +145,33 @@ extern struct type *value_rtti_type (struct value *value,
 extern int baseclass_offset (struct type *type, int index,
 			     const bfd_byte *valaddr, CORE_ADDR address);
                   
+/* Describe the target of a pointer to method.  CONTENTS is the byte
+   pattern representing the pointer to method.  TYPE is the pointer to
+   method type.  STREAM is the stream to print it to.  */
+void cplus_print_method_ptr (const gdb_byte *contents, struct type *type,
+			     struct ui_file *stream);
+
+/* Return the size of a pointer to member function for the current
+   architecture.  */
+int cplus_method_ptr_size (void);
+
+/* Return the method which should be called by applying METHOD_PTR
+   to *THIS_P, and adjust *THIS_P if necessary.  */
+struct value *cplus_method_ptr_to_value (struct value **this_p,
+					 struct value *method_ptr);
+
+/* Create the byte pattern in CONTENTS representing a pointer to
+   member function at ADDRESS (if IS_VIRTUAL is 0) or with virtual
+   table offset ADDRESS (if IS_VIRTUAL is 1).  This is the opposite
+   of cplus_method_ptr_to_value.  */
+void cplus_make_method_ptr (gdb_byte *CONTENTS, CORE_ADDR address,
+			    int is_virtual);
+
+/* Determine if we are currently in a C++ thunk.  If so, get the address
+   of the routine we are thunking to and continue to there instead.  */
+
+CORE_ADDR cplus_skip_trampoline (struct frame_info *frame, CORE_ADDR stop_pc);
+
 struct cp_abi_ops
 {
   const char *shortname;
@@ -164,6 +189,12 @@ struct cp_abi_ops
 			     int *using_enc);
   int (*baseclass_offset) (struct type *type, int index,
 			   const bfd_byte *valaddr, CORE_ADDR address);
+  void (*print_method_ptr) (const gdb_byte *contents, struct type *type,
+			    struct ui_file *stream);
+  int (*method_ptr_size) (void);
+  void (*make_method_ptr) (gdb_byte *, CORE_ADDR, int);
+  struct value * (*method_ptr_to_value) (struct value **, struct value *);
+  CORE_ADDR (*skip_trampoline) (struct frame_info *, CORE_ADDR);
 };
 
 

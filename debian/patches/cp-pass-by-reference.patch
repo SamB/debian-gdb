@@ -15,11 +15,11 @@ Patch updated, but still not submitted.
  gdb/testsuite/gdb.cp/pass-by-ref.exp |   38 ++++++++++++++++
  7 files changed, 248 insertions(+), 12 deletions(-)
 
-Index: gdb-6.6.dfsg/gdb/infcall.c
+Index: gdb-6.6.dfsg.90.20070912/gdb/infcall.c
 ===================================================================
---- gdb-6.6.dfsg.orig/gdb/infcall.c	2007-01-27 20:35:19.000000000 -0500
-+++ gdb-6.6.dfsg/gdb/infcall.c	2007-01-27 20:35:30.000000000 -0500
-@@ -36,6 +36,7 @@
+--- gdb-6.6.dfsg.90.20070912.orig/gdb/infcall.c	2007-08-23 14:08:35.000000000 -0400
++++ gdb-6.6.dfsg.90.20070912/gdb/infcall.c	2007-09-15 10:13:26.000000000 -0400
+@@ -34,6 +34,7 @@
  #include "gdb_string.h"
  #include "infcall.h"
  #include "dummy-frame.h"
@@ -27,7 +27,7 @@ Index: gdb-6.6.dfsg/gdb/infcall.c
  
  /* NOTE: cagney/2003-04-16: What's the future of this code?
  
-@@ -320,8 +321,8 @@ call_function_by_hand (struct value *fun
+@@ -339,8 +340,8 @@ call_function_by_hand (struct value *fun
  {
    CORE_ADDR sp;
    CORE_ADDR dummy_addr;
@@ -38,7 +38,7 @@ Index: gdb-6.6.dfsg/gdb/infcall.c
    CORE_ADDR struct_addr = 0;
    struct regcache *retbuf;
    struct cleanup *retbuf_cleanup;
-@@ -335,6 +336,7 @@ call_function_by_hand (struct value *fun
+@@ -354,6 +355,7 @@ call_function_by_hand (struct value *fun
    struct regcache *caller_regcache;
    struct cleanup *caller_regcache_cleanup;
    struct frame_id dummy_id;
@@ -46,7 +46,7 @@ Index: gdb-6.6.dfsg/gdb/infcall.c
  
    if (TYPE_CODE (ftype) == TYPE_CODE_PTR)
      ftype = check_typedef (TYPE_TARGET_TYPE (ftype));
-@@ -439,10 +441,31 @@ call_function_by_hand (struct value *fun
+@@ -460,10 +462,31 @@ call_function_by_hand (struct value *fun
      using_gcc = (b == NULL ? 2 : BLOCK_GCC_COMPILED (b));
    }
  
@@ -81,25 +81,25 @@ Index: gdb-6.6.dfsg/gdb/infcall.c
  
    /* Determine the location of the breakpoint (and possibly other
       stuff) that the called function will return to.  The SPARC, for a
-@@ -461,7 +484,7 @@ call_function_by_hand (struct value *fun
-       if (INNER_THAN (1, 2))
+@@ -482,7 +505,7 @@ call_function_by_hand (struct value *fun
+       if (gdbarch_inner_than (current_gdbarch, 1, 2))
  	{
  	  sp = push_dummy_code (current_gdbarch, sp, funaddr,
 -				using_gcc, args, nargs, values_type,
 +				using_gcc, args, nargs, target_values_type,
- 				&real_pc, &bp_addr);
+ 				&real_pc, &bp_addr, get_current_regcache ());
  	  dummy_addr = sp;
  	}
-@@ -469,7 +492,7 @@ call_function_by_hand (struct value *fun
+@@ -490,7 +513,7 @@ call_function_by_hand (struct value *fun
  	{
  	  dummy_addr = sp;
  	  sp = push_dummy_code (current_gdbarch, sp, funaddr,
 -				using_gcc, args, nargs, values_type,
 +				using_gcc, args, nargs, target_values_type,
- 				&real_pc, &bp_addr);
+ 				&real_pc, &bp_addr, get_current_regcache ());
  	}
        break;
-@@ -536,9 +559,15 @@ call_function_by_hand (struct value *fun
+@@ -557,9 +580,15 @@ call_function_by_hand (struct value *fun
  	  param_type = TYPE_FIELD_TYPE (ftype, i);
  	else
  	  param_type = NULL;
@@ -116,7 +116,7 @@ Index: gdb-6.6.dfsg/gdb/infcall.c
  	/* elz: this code is to handle the case in which the function
  	   to be called has a pointer to function as parameter and the
  	   corresponding actual argument is the address of a function
-@@ -637,7 +666,7 @@ You must use a pointer to function type 
+@@ -659,7 +688,7 @@ You must use a pointer to function type 
       stack, if necessary.  Make certain that the value is correctly
       aligned. */
  
@@ -124,8 +124,8 @@ Index: gdb-6.6.dfsg/gdb/infcall.c
 +  if (struct_return || cp_struct_return)
      {
        int len = TYPE_LENGTH (values_type);
-       if (INNER_THAN (1, 2))
-@@ -662,6 +691,22 @@ You must use a pointer to function type 
+       if (gdbarch_inner_than (current_gdbarch, 1, 2))
+@@ -684,6 +713,22 @@ You must use a pointer to function type 
  	}
      }
  
@@ -148,16 +148,16 @@ Index: gdb-6.6.dfsg/gdb/infcall.c
    /* Create the dummy stack frame.  Pass in the call dummy address as,
       presumably, the ABI code knows where, in the call dummy, the
       return address should be pointed.  */
-@@ -669,6 +714,8 @@ You must use a pointer to function type 
- 				bp_addr, nargs, args, sp, struct_return,
- 				struct_addr);
+@@ -691,6 +736,8 @@ You must use a pointer to function type 
+ 				get_current_regcache (), bp_addr, nargs, args,
+ 				sp, struct_return, struct_addr);
  
 +  do_cleanups (args_cleanup);
 +
    /* Set up a frame ID for the dummy frame so we can pass it to
       set_momentary_breakpoint.  We need to give the breakpoint a frame
       ID so that the breakpoint code can correctly re-identify the
-@@ -860,7 +907,9 @@ the function call)."), name);
+@@ -882,7 +929,9 @@ the function call)."), name);
    {
      struct value *retval = NULL;
  
@@ -168,7 +168,7 @@ Index: gdb-6.6.dfsg/gdb/infcall.c
        {
  	/* If the function returns void, don't bother fetching the
  	   return value.  */
-@@ -870,7 +919,7 @@ the function call)."), name);
+@@ -892,7 +941,7 @@ the function call)."), name);
        {
  	struct gdbarch *arch = current_gdbarch;
  
@@ -177,14 +177,14 @@ Index: gdb-6.6.dfsg/gdb/infcall.c
  	  {
  	  case RETURN_VALUE_REGISTER_CONVENTION:
  	  case RETURN_VALUE_ABI_RETURNS_ADDRESS:
-Index: gdb-6.6.dfsg/gdb/cp-abi.h
+Index: gdb-6.6.dfsg.90.20070912/gdb/cp-abi.h
 ===================================================================
---- gdb-6.6.dfsg.orig/gdb/cp-abi.h	2007-01-27 20:35:19.000000000 -0500
-+++ gdb-6.6.dfsg/gdb/cp-abi.h	2007-01-27 20:35:30.000000000 -0500
-@@ -147,6 +147,10 @@ extern struct type *value_rtti_type (str
- extern int baseclass_offset (struct type *type, int index,
- 			     const bfd_byte *valaddr, CORE_ADDR address);
-                   
+--- gdb-6.6.dfsg.90.20070912.orig/gdb/cp-abi.h	2007-08-23 14:08:27.000000000 -0400
++++ gdb-6.6.dfsg.90.20070912/gdb/cp-abi.h	2007-09-15 10:12:50.000000000 -0400
+@@ -172,6 +172,10 @@ void cplus_make_method_ptr (gdb_byte *CO
+ 
+ CORE_ADDR cplus_skip_trampoline (struct frame_info *frame, CORE_ADDR stop_pc);
+ 
 +/* Return non-zero if an argument of type TYPE should be passed by reference
 +   instead of value.  */
 +extern int cp_pass_by_reference (struct type *type);
@@ -192,20 +192,20 @@ Index: gdb-6.6.dfsg/gdb/cp-abi.h
  struct cp_abi_ops
  {
    const char *shortname;
-@@ -164,6 +168,7 @@ struct cp_abi_ops
- 			     int *using_enc);
-   int (*baseclass_offset) (struct type *type, int index,
- 			   const bfd_byte *valaddr, CORE_ADDR address);
+@@ -195,6 +199,7 @@ struct cp_abi_ops
+   void (*make_method_ptr) (gdb_byte *, CORE_ADDR, int);
+   struct value * (*method_ptr_to_value) (struct value **, struct value *);
+   CORE_ADDR (*skip_trampoline) (struct frame_info *, CORE_ADDR);
 +  int (*pass_by_reference) (struct type *type);
  };
  
  
-Index: gdb-6.6.dfsg/gdb/cp-abi.c
+Index: gdb-6.6.dfsg.90.20070912/gdb/cp-abi.c
 ===================================================================
---- gdb-6.6.dfsg.orig/gdb/cp-abi.c	2007-01-27 20:35:19.000000000 -0500
-+++ gdb-6.6.dfsg/gdb/cp-abi.c	2007-01-27 20:35:30.000000000 -0500
-@@ -95,6 +95,14 @@ value_rtti_type (struct value *v, int *f
-   return (*current_cp_abi.rtti_type) (v, full, top, using_enc);
+--- gdb-6.6.dfsg.90.20070912.orig/gdb/cp-abi.c	2007-08-23 14:08:27.000000000 -0400
++++ gdb-6.6.dfsg.90.20070912/gdb/cp-abi.c	2007-09-15 10:12:17.000000000 -0400
+@@ -135,6 +135,14 @@ cplus_method_ptr_to_value (struct value 
+   return (*current_cp_abi.method_ptr_to_value) (this_p, method_ptr);
  }
  
 +int
@@ -219,12 +219,12 @@ Index: gdb-6.6.dfsg/gdb/cp-abi.c
  /* Set the current C++ ABI to SHORT_NAME.  */
  
  static int
-Index: gdb-6.6.dfsg/gdb/gnu-v3-abi.c
+Index: gdb-6.6.dfsg.90.20070912/gdb/gnu-v3-abi.c
 ===================================================================
---- gdb-6.6.dfsg.orig/gdb/gnu-v3-abi.c	2007-01-27 20:35:19.000000000 -0500
-+++ gdb-6.6.dfsg/gdb/gnu-v3-abi.c	2007-01-27 20:35:30.000000000 -0500
-@@ -416,6 +416,84 @@ gnuv3_baseclass_offset (struct type *typ
-   return base_offset;
+--- gdb-6.6.dfsg.90.20070912.orig/gdb/gnu-v3-abi.c	2007-08-23 14:08:33.000000000 -0400
++++ gdb-6.6.dfsg.90.20070912/gdb/gnu-v3-abi.c	2007-09-15 10:14:09.000000000 -0400
+@@ -716,6 +716,84 @@ gnuv3_skip_trampoline (struct frame_info
+   return real_stop_pc;
  }
  
 +/* Return nonzero if a type should be passed by reference.
@@ -308,18 +308,18 @@ Index: gdb-6.6.dfsg/gdb/gnu-v3-abi.c
  static void
  init_gnuv3_ops (void)
  {
-@@ -433,6 +511,7 @@ init_gnuv3_ops (void)
-   gnu_v3_abi_ops.rtti_type = gnuv3_rtti_type;
-   gnu_v3_abi_ops.virtual_fn_field = gnuv3_virtual_fn_field;
-   gnu_v3_abi_ops.baseclass_offset = gnuv3_baseclass_offset;
+@@ -738,6 +816,7 @@ init_gnuv3_ops (void)
+   gnu_v3_abi_ops.make_method_ptr = gnuv3_make_method_ptr;
+   gnu_v3_abi_ops.method_ptr_to_value = gnuv3_method_ptr_to_value;
+   gnu_v3_abi_ops.skip_trampoline = gnuv3_skip_trampoline;
 +  gnu_v3_abi_ops.pass_by_reference = gnuv3_pass_by_reference;
  }
  
  extern initialize_file_ftype _initialize_gnu_v3_abi; /* -Wmissing-prototypes */
-Index: gdb-6.6.dfsg/gdb/Makefile.in
+Index: gdb-6.6.dfsg.90.20070912/gdb/Makefile.in
 ===================================================================
---- gdb-6.6.dfsg.orig/gdb/Makefile.in	2007-01-27 20:35:29.000000000 -0500
-+++ gdb-6.6.dfsg/gdb/Makefile.in	2007-01-27 20:35:30.000000000 -0500
+--- gdb-6.6.dfsg.90.20070912.orig/gdb/Makefile.in	2007-09-04 20:14:02.000000000 -0400
++++ gdb-6.6.dfsg.90.20070912/gdb/Makefile.in	2007-09-15 10:12:17.000000000 -0400
 @@ -2174,7 +2174,7 @@ ia64-tdep.o: ia64-tdep.c $(defs_h) $(inf
  infcall.o: infcall.c $(defs_h) $(breakpoint_h) $(target_h) $(regcache_h) \
  	$(inferior_h) $(gdb_assert_h) $(block_h) $(gdbcore_h) $(language_h) \
@@ -329,10 +329,10 @@ Index: gdb-6.6.dfsg/gdb/Makefile.in
  inf-child.o: inf-child.c $(defs_h) $(regcache_h) $(memattr_h) $(symtab_h) \
  	$(target_h) $(inferior_h) $(gdb_string_h)
  infcmd.o: infcmd.c $(defs_h) $(gdb_string_h) $(symtab_h) $(gdbtypes_h) \
-Index: gdb-6.6.dfsg/gdb/testsuite/gdb.cp/pass-by-ref.exp
+Index: gdb-6.6.dfsg.90.20070912/gdb/testsuite/gdb.cp/pass-by-ref.exp
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ gdb-6.6.dfsg/gdb/testsuite/gdb.cp/pass-by-ref.exp	2007-01-27 20:35:30.000000000 -0500
++++ gdb-6.6.dfsg.90.20070912/gdb/testsuite/gdb.cp/pass-by-ref.exp	2007-09-15 10:12:17.000000000 -0400
 @@ -0,0 +1,38 @@
 +# This testcase is part of GDB, the GNU debugger.
 +
@@ -372,10 +372,10 @@ Index: gdb-6.6.dfsg/gdb/testsuite/gdb.cp/pass-by-ref.exp
 +}
 +
 +gdb_test "print foo (global_obj)" " = 3" "call function"
-Index: gdb-6.6.dfsg/gdb/testsuite/gdb.cp/pass-by-ref.cc
+Index: gdb-6.6.dfsg.90.20070912/gdb/testsuite/gdb.cp/pass-by-ref.cc
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ gdb-6.6.dfsg/gdb/testsuite/gdb.cp/pass-by-ref.cc	2007-01-27 20:35:30.000000000 -0500
++++ gdb-6.6.dfsg.90.20070912/gdb/testsuite/gdb.cp/pass-by-ref.cc	2007-09-15 10:12:17.000000000 -0400
 @@ -0,0 +1,57 @@
 +/* This testcase is part of GDB, the GNU debugger.
 +

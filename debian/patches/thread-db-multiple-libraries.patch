@@ -2,14 +2,14 @@ Support loading two libthread_db DSOs.  In this case, the LinuxThreads
 and NPTL ones.
 
 ---
- gdb/linux-thread-db.c |  299 ++++++++++++++++++++++++++++++--------------------
- 1 file changed, 184 insertions(+), 115 deletions(-)
+ gdb/linux-thread-db.c |  297 ++++++++++++++++++++++++++++++--------------------
+ 1 file changed, 181 insertions(+), 116 deletions(-)
 
-Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
+Index: gdb-6.6.dfsg.90.20070912/gdb/linux-thread-db.c
 ===================================================================
---- gdb-6.6.dfsg.orig/gdb/linux-thread-db.c	2007-01-27 20:49:03.000000000 -0500
-+++ gdb-6.6.dfsg/gdb/linux-thread-db.c	2007-01-27 20:50:19.000000000 -0500
-@@ -82,45 +82,63 @@ static td_thragent_t *thread_agent;
+--- gdb-6.6.dfsg.90.20070912.orig/gdb/linux-thread-db.c	2007-09-15 10:26:37.000000000 -0400
++++ gdb-6.6.dfsg.90.20070912/gdb/linux-thread-db.c	2007-09-15 11:14:04.000000000 -0400
+@@ -75,45 +75,63 @@ static td_thragent_t *thread_agent;
  
  /* Pointers to the libthread_db functions.  */
  
@@ -103,7 +103,7 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
  
  /* Prototypes for local functions.  */
  static void thread_db_find_new_threads (void);
-@@ -231,7 +249,7 @@ thread_get_info_callback (const td_thrha
+@@ -251,7 +269,7 @@ thread_get_info_callback (const td_thrha
    struct thread_info *thread_info;
    ptid_t thread_ptid;
  
@@ -112,7 +112,7 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
    if (err != TD_OK)
      error (_("thread_get_info_callback: cannot get thread info: %s"),
  	   thread_db_err_str (err));
-@@ -285,8 +303,9 @@ thread_db_map_id2thr (struct thread_info
+@@ -305,8 +323,9 @@ thread_db_map_id2thr (struct thread_info
    if (thread_info->private->th_valid)
      return;
  
@@ -124,7 +124,7 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
    if (err != TD_OK)
      {
        if (fatal)
-@@ -313,7 +332,8 @@ thread_from_lwp (ptid_t ptid)
+@@ -333,7 +352,8 @@ thread_from_lwp (ptid_t ptid)
  
    gdb_assert (is_lwp (ptid));
  
@@ -134,7 +134,7 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
    if (err != TD_OK)
      error (_("Cannot find user-level thread for LWP %ld: %s"),
  	   GET_LWP (ptid), thread_db_err_str (err));
-@@ -360,69 +380,86 @@ verbose_dlsym (void *handle, const char 
+@@ -380,69 +400,86 @@ verbose_dlsym (void *handle, const char 
    return sym;
  }
  
@@ -249,7 +249,7 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
  }
  
  static td_err_e
-@@ -432,7 +469,7 @@ enable_thread_event (td_thragent_t *thre
+@@ -452,7 +489,7 @@ enable_thread_event (td_thragent_t *thre
    td_err_e err;
  
    /* Get the breakpoint address for thread EVENT.  */
@@ -258,7 +258,7 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
    if (err != TD_OK)
      return err;
  
-@@ -463,8 +500,10 @@ enable_thread_event_reporting (void)
+@@ -483,8 +520,10 @@ enable_thread_event_reporting (void)
  
    /* We cannot use the thread event reporting facility if these
       functions aren't available.  */
@@ -271,7 +271,7 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
      return;
  
    /* Set the process wide mask saying which events we're interested in.  */
-@@ -481,7 +520,7 @@ enable_thread_event_reporting (void)
+@@ -501,7 +540,7 @@ enable_thread_event_reporting (void)
  #endif
      td_event_addset (&events, TD_DEATH);
  
@@ -280,7 +280,7 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
    if (err != TD_OK)
      {
        warning (_("Unable to set global thread event mask: %s"),
-@@ -521,7 +560,7 @@ disable_thread_event_reporting (void)
+@@ -541,7 +580,7 @@ disable_thread_event_reporting (void)
    /* Set the process wide mask saying we aren't interested in any
       events anymore.  */
    td_event_emptyset (&events);
@@ -289,20 +289,20 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
  
    /* Delete thread event breakpoints, if any.  */
    remove_thread_event_breakpoints ();
-@@ -564,28 +603,20 @@ check_thread_signals (void)
+@@ -584,11 +623,10 @@ check_thread_signals (void)
  void
  check_for_thread_db (void)
  {
 -  td_err_e err;
    static int already_loaded;
  
-+  /* Do nothing if we couldn't load libthread_db.so.1.  */
+   /* Do nothing if we couldn't load libthread_db.so.1.  */
+-  if (td_ta_new_p == NULL)
 +  if (all_pointers == NULL)
-+    return;
-+
+     return;
+ 
    /* First time through, report that libthread_db was successfuly
-      loaded.  Can't print this in in thread_db_load as, at that stage,
-      the interpreter and it's console haven't started.  */
+@@ -597,19 +635,8 @@ check_for_thread_db (void)
  
    if (!already_loaded)
      {
@@ -323,7 +323,7 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
        already_loaded = 1;
      }
  
-@@ -607,28 +638,34 @@ check_for_thread_db (void)
+@@ -631,28 +658,34 @@ check_for_thread_db (void)
    proc_handle.pid = GET_PID (inferior_ptid);
  
    /* Now attempt to open a connection to the thread library.  */
@@ -336,9 +336,6 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
 -    case TD_NOLIBTHREAD:
 -      /* No thread library was detected.  */
 -      break;
--
--    case TD_OK:
--      printf_unfiltered (_("[Thread debugging using libthread_db enabled]\n"));
 +      td_err_e err;
 +      err = current_pointers->td_ta_new_p (&proc_handle, &thread_agent);
 +      switch (err)
@@ -347,12 +344,15 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
 +	  /* No thread library was detected.  */
 +	  break;
  
--      /* The thread library was detected.  Activate the thread_db target.  */
--      push_target (&thread_db_ops);
--      using_thread_db = 1;
+-    case TD_OK:
+-      printf_unfiltered (_("[Thread debugging using libthread_db enabled]\n"));
 +	case TD_OK:
 +	  printf_unfiltered (_("[Thread debugging using libthread_db enabled]\n"));
  
+-      /* The thread library was detected.  Activate the thread_db target.  */
+-      push_target (&thread_db_ops);
+-      using_thread_db = 1;
+-
 -      enable_thread_event_reporting ();
 -      thread_db_find_new_threads ();
 -      break;
@@ -376,8 +376,8 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
      }
  }
  
-@@ -693,7 +730,7 @@ attach_thread (ptid_t ptid, const td_thr
- #endif
+@@ -713,7 +746,7 @@ attach_thread (ptid_t ptid, const td_thr
+     printf_unfiltered (_("[New %s]\n"), target_pid_to_str (ptid));
  
    /* Enable thread event reporting for this thread.  */
 -  err = td_thr_event_enable_p (th_p, 1);
@@ -385,7 +385,7 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
    if (err != TD_OK)
      error (_("Cannot enable thread event reporting for %s: %s"),
  	   target_pid_to_str (ptid), thread_db_err_str (err));
-@@ -819,7 +856,7 @@ check_event (ptid_t ptid)
+@@ -821,7 +854,7 @@ check_event (ptid_t ptid)
  
    do
      {
@@ -394,7 +394,7 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
        if (err != TD_OK)
  	{
  	  if (err == TD_NOMSG)
-@@ -829,7 +866,7 @@ check_event (ptid_t ptid)
+@@ -831,7 +864,7 @@ check_event (ptid_t ptid)
  		 thread_db_err_str (err));
  	}
  
@@ -403,7 +403,7 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
        if (err != TD_OK)
  	error (_("Cannot get thread info: %s"), thread_db_err_str (err));
  
-@@ -992,7 +1029,7 @@ find_new_threads_callback (const td_thrh
+@@ -948,7 +981,7 @@ find_new_threads_callback (const td_thrh
    td_err_e err;
    ptid_t ptid;
  
@@ -412,7 +412,16 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
    if (err != TD_OK)
      error (_("find_new_threads_callback: cannot get thread info: %s"),
  	   thread_db_err_str (err));
-@@ -1014,9 +1051,10 @@ thread_db_find_new_threads (void)
+@@ -966,7 +999,7 @@ find_new_threads_callback (const td_thrh
+ 	 be yet.  Just enable event reporting and otherwise ignore
+ 	 it.  */
+ 
+-      err = td_thr_event_enable_p (th_p, 1);
++      err = current_pointers->td_thr_event_enable_p (th_p, 1);
+       if (err != TD_OK)
+ 	error (_("Cannot enable thread event reporting for %s: %s"),
+ 	       target_pid_to_str (ptid), thread_db_err_str (err));
+@@ -986,9 +1019,10 @@ thread_db_find_new_threads (void)
    td_err_e err;
  
    /* Iterate over all user-space threads to discover new threads.  */
@@ -426,7 +435,7 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
    if (err != TD_OK)
      error (_("Cannot find new threads: %s"), thread_db_err_str (err));
  }
-@@ -1073,7 +1111,7 @@ thread_db_get_thread_local_address (ptid
+@@ -1070,7 +1104,7 @@ thread_db_get_thread_local_address (ptid
        struct thread_info *thread_info;
  
        /* glibc doesn't provide the needed interface.  */
@@ -435,7 +444,7 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
  	throw_error (TLS_NO_LIBRARY_SUPPORT_ERROR,
  		     _("No TLS library support"));
  
-@@ -1085,9 +1123,8 @@ thread_db_get_thread_local_address (ptid
+@@ -1083,9 +1117,8 @@ thread_db_get_thread_local_address (ptid
        thread_db_map_id2thr (thread_info, 1);
  
        /* Finally, get the address of the variable.  */
@@ -447,7 +456,7 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
  
  #ifdef THREAD_DB_HAS_TD_NOTALLOC
        /* The memory hasn't been allocated, yet.  */
-@@ -1147,14 +1184,46 @@ init_thread_db_ops (void)
+@@ -1141,13 +1174,45 @@ init_thread_db_ops (void)
  void
  _initialize_thread_db (void)
  {
@@ -477,8 +486,7 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
 +      const char *component;
  
 -      /* Add ourselves to objfile event chain.  */
--      target_new_objfile_chain = deprecated_target_new_objfile_hook;
--      deprecated_target_new_objfile_hook = thread_db_new_objfile;
+-      observer_attach_new_objfile (thread_db_new_objfile);
 +      component = memrchr (ptrs->filename, '/', p - ptrs->filename);
 +      if (component != NULL && strncmp (component, "/lib", 4) == 0)
 +	{
@@ -497,6 +505,5 @@ Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
 +  add_target (&thread_db_ops);
 +
 +  /* Add ourselves to objfile event chain.  */
-+  target_new_objfile_chain = deprecated_target_new_objfile_hook;
-+  deprecated_target_new_objfile_hook = thread_db_new_objfile;
++  observer_attach_new_objfile (thread_db_new_objfile);
  }

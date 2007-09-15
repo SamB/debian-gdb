@@ -1,6 +1,6 @@
 /* MI Command Set for GDB, the GNU debugger.
 
-   Copyright (C) 2000, 2001, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2003, 2007 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions (a Red Hat company).
 
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "top.h"
@@ -53,11 +51,7 @@ struct mi_cmd mi_cmds[] =
   { "data-read-memory", { NULL, 0 }, 0, mi_cmd_data_read_memory},
   { "data-write-memory", { NULL, 0 }, 0, mi_cmd_data_write_memory},
   { "data-write-register-values", { NULL, 0 }, 0, mi_cmd_data_write_register_values},
-  { "display-delete", { NULL, 0 }, NULL, NULL },
-  { "display-disable", { NULL, 0 }, NULL, NULL },
-  { "display-enable", { NULL, 0 }, NULL, NULL },
-  { "display-insert", { NULL, 0 }, NULL, NULL },
-  { "display-list", { NULL, 0 }, NULL, NULL },
+  { "enable-timings", { NULL, 0 }, 0, mi_cmd_enable_timings},
   { "environment-cd", { NULL, 0 }, 0, mi_cmd_env_cd},
   { "environment-directory", { NULL, 0 }, 0, mi_cmd_env_dir},
   { "environment-path", { NULL, 0 }, 0, mi_cmd_env_path},
@@ -155,11 +149,14 @@ struct mi_cmd mi_cmds[] =
   { "var-create", { NULL, 0 }, 0, mi_cmd_var_create},
   { "var-delete", { NULL, 0 }, 0, mi_cmd_var_delete},
   { "var-evaluate-expression", { NULL, 0 }, 0, mi_cmd_var_evaluate_expression},
+  { "var-info-path-expression", { NULL, 0 }, 0, 
+    mi_cmd_var_info_path_expression},
   { "var-info-expression", { NULL, 0 }, 0, mi_cmd_var_info_expression},
   { "var-info-num-children", { NULL, 0 }, 0, mi_cmd_var_info_num_children},
   { "var-info-type", { NULL, 0 }, 0, mi_cmd_var_info_type},
   { "var-list-children", { NULL, 0 }, 0, mi_cmd_var_list_children},
   { "var-set-format", { NULL, 0 }, 0, mi_cmd_var_set_format},
+  { "var-set-frozen", { NULL, 0 }, 0, mi_cmd_var_set_frozen},
   { "var-show-attributes", { NULL, 0 }, 0, mi_cmd_var_show_attributes},
   { "var-show-format", { NULL, 0 }, 0, mi_cmd_var_show_format},
   { "var-update", { NULL, 0 }, 0, mi_cmd_var_update},

@@ -1,12 +1,12 @@
 /* BSD Kernel Data Access Library (libkvm) interface.
 
-   Copyright (C) 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "cli/cli-cmds.h"
@@ -91,10 +89,9 @@ bsd_kvm_open (char *filename, int from_tty)
   core_kd = temp_kd;
   push_target (&bsd_kvm_ops);
 
-  target_fetch_registers (-1);
+  target_fetch_registers (get_current_regcache (), -1);
 
-  flush_cached_frames ();
-  select_frame (get_current_frame ());
+  reinit_frame_cache ();
   print_stack_frame (get_selected_frame (NULL), -1, 1);
 }
 
@@ -151,7 +148,7 @@ bsd_kvm_files_info (struct target_ops *ops)
 /* Fetch process control block at address PADDR.  */
 
 static int
-bsd_kvm_fetch_pcb (struct pcb *paddr)
+bsd_kvm_fetch_pcb (struct regcache *regcache, struct pcb *paddr)
 {
   struct pcb pcb;
 
@@ -159,17 +156,17 @@ bsd_kvm_fetch_pcb (struct pcb *paddr)
     error (("%s"), kvm_geterr (core_kd));
 
   gdb_assert (bsd_kvm_supply_pcb);
-  return bsd_kvm_supply_pcb (current_regcache, &pcb);
+  return bsd_kvm_supply_pcb (regcache, &pcb);
 }
 
 static void
-bsd_kvm_fetch_registers (int regnum)
+bsd_kvm_fetch_registers (struct regcache *regcache, int regnum)
 {
   struct nlist nl[2];
 
   if (bsd_kvm_paddr)
     {
-      bsd_kvm_fetch_pcb (bsd_kvm_paddr);
+      bsd_kvm_fetch_pcb (regcache, bsd_kvm_paddr);
       return;
     }
 
@@ -185,7 +182,7 @@ bsd_kvm_fetch_registers (int regnum)
     {
       /* Found dumppcb. If it contains a valid context, return
 	 immediately.  */
-      if (bsd_kvm_fetch_pcb ((struct pcb *) nl[0].n_value))
+      if (bsd_kvm_fetch_pcb (regcache, (struct pcb *) nl[0].n_value))
 	return;
     }
 
@@ -207,7 +204,7 @@ bsd_kvm_fetch_registers (int regnum)
       if (kvm_read (core_kd, nl[0].n_value, &paddr, sizeof paddr) == -1)
 	error (("%s"), kvm_geterr (core_kd));
 
-      bsd_kvm_fetch_pcb (paddr);
+      bsd_kvm_fetch_pcb (regcache, paddr);
       return;
     }
 
@@ -232,7 +229,7 @@ bsd_kvm_fetch_registers (int regnum)
       if (kvm_read (core_kd, nl[0].n_value, &paddr, sizeof paddr) == -1)
 	error (("%s"), kvm_geterr (core_kd));
 
-      bsd_kvm_fetch_pcb (paddr);
+      bsd_kvm_fetch_pcb (regcache, paddr);
       return;
     }
 #endif
@@ -274,10 +271,9 @@ bsd_kvm_proc_cmd (char *arg, int fromtty)
   if (kvm_read (core_kd, addr, &bsd_kvm_paddr, sizeof bsd_kvm_paddr) == -1)
     error (("%s"), kvm_geterr (core_kd));
 
-  target_fetch_registers (-1);
+  target_fetch_registers (get_current_regcache (), -1);
 
-  flush_cached_frames ();
-  select_frame (get_current_frame ());
+  reinit_frame_cache ();
   print_stack_frame (get_selected_frame (NULL), -1, 1);
 }
 
@@ -295,10 +291,9 @@ bsd_kvm_pcb_cmd (char *arg, int fromtty)
 
   bsd_kvm_paddr = (struct pcb *)(u_long) parse_and_eval_address (arg);
 
-  target_fetch_registers (-1);
+  target_fetch_registers (get_current_regcache (), -1);
 
-  flush_cached_frames ();
-  select_frame (get_current_frame ());
+  reinit_frame_cache ();
   print_stack_frame (get_selected_frame (NULL), -1, 1);
 }
 

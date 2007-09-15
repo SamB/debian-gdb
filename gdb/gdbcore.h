@@ -1,14 +1,13 @@
 /* Machine independent variables that describe the core file under GDB.
 
-   Copyright (C) 1986, 1987, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2004 Free Software Foundation,
-   Inc.
+   Copyright (C) 1986, 1987, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
+   1997, 1998, 1999, 2000, 2001, 2004, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* Interface routines for core, executable, etc.  */
 
@@ -27,6 +24,7 @@
 #define GDBCORE_H 1
 
 struct type;
+struct regcache;
 
 #include "bfd.h"
 
@@ -129,13 +127,6 @@ extern void exec_file_clear (int from_tty);
 
 extern void validate_files (void);
 
-extern CORE_ADDR register_addr (int regno, CORE_ADDR blockend);
-
-#if !defined (KERNEL_U_ADDR)
-extern CORE_ADDR kernel_u_addr;
-#define KERNEL_U_ADDR kernel_u_addr
-#endif
-
 /* The target vector for core files. */
 
 extern struct target_ops core_ops;
@@ -174,8 +165,8 @@ struct core_fns
 
     int (*core_sniffer) (struct core_fns *, bfd *);
 
-    /* Extract the register values out of the core file and store them where
-       `read_register' will find them.
+    /* Extract the register values out of the core file and supply them
+       into REGCACHE.
 
        CORE_REG_SECT points to the register values themselves, read into
        memory.
@@ -195,7 +186,8 @@ struct core_fns
        registers in a large upage-plus-stack ".reg" section.  Original upage
        address X is at location core_reg_sect+x+reg_addr. */
 
-    void (*core_read_registers) (char *core_reg_sect,
+    void (*core_read_registers) (struct regcache *regcache,
+				 char *core_reg_sect,
 				 unsigned core_reg_size,
 				 int which, CORE_ADDR reg_addr);
 

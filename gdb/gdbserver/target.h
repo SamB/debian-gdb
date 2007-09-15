@@ -1,6 +1,5 @@
 /* Target operations for the remote server for GDB.
-   Copyright (C) 2002, 2003, 2004, 2005
-   Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
 
@@ -8,7 +7,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef TARGET_H
 #define TARGET_H
@@ -59,7 +56,10 @@ struct target_ops
   /* Attach to a running process.
 
      PID is the process ID to attach to, specified by the user
-     or a higher layer.  */
+     or a higher layer.
+
+     Returns -1 if attaching is unsupported, 0 on success, and calls
+     error() otherwise.  */
 
   int (*attach) (unsigned long pid);
 
@@ -67,9 +67,14 @@ struct target_ops
 
   void (*kill) (void);
 
-  /* Detach from all inferiors.  */
+  /* Detach from all inferiors.
+     Return -1 on failure, and 0 on success.  */
 
-  void (*detach) (void);
+  int (*detach) (void);
+
+  /* Wait for inferiors to end.  */
+
+  void (*join) (void);
 
   /* Return 1 iff the thread with process ID PID is alive.  */
 
@@ -128,8 +133,10 @@ struct target_ops
 
   void (*look_up_symbols) (void);
 
-  /* Send a signal to the inferior process, however is appropriate.  */
-  void (*send_signal) (int);
+  /* Send an interrupt request to the inferior process,
+     however is appropriate.  */
+
+  void (*request_interrupt) (void);
 
   /* Read auxiliary vector data from the inferior process.
 
@@ -172,6 +179,14 @@ struct target_ops
 
   int (*get_tls_address) (struct thread_info *thread, CORE_ADDR offset,
 			  CORE_ADDR load_module, CORE_ADDR *address);
+
+  /* Return a string identifying the current architecture, or NULL if
+     this operation is not supported.  */
+  const char *(*arch_string) (void);
+
+   /* Read/Write from/to spufs using qXfer packets.  */
+  int (*qxfer_spu) (const char *annex, unsigned char *readbuf,
+		    unsigned const char *writebuf, CORE_ADDR offset, int len);
 };
 
 extern struct target_ops *the_target;
@@ -198,6 +213,9 @@ void set_target_ops (struct target_ops *);
 
 #define store_inferior_registers(regno) \
   (*the_target->store_registers) (regno)
+
+#define join_inferior() \
+  (*the_target->join) ()
 
 unsigned char mywait (char *statusp, int connected_wait);
 

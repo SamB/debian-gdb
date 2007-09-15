@@ -1,13 +1,14 @@
 /* Definitions for dealing with stack frames, for GDB, the GNU debugger.
 
-   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1996,
-   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1996, 1997,
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (FRAME_H)
 #define FRAME_H 1
@@ -183,6 +182,25 @@ extern int frame_id_inner (struct frame_id l, struct frame_id r);
 extern void fprint_frame_id (struct ui_file *file, struct frame_id id);
 
 
+/* Frame types.  Some are real, some are signal trampolines, and some
+   are completely artificial (dummy).  */
+
+enum frame_type
+{
+  /* A true stack frame, created by the target program during normal
+     execution.  */
+  NORMAL_FRAME,
+  /* A fake frame, created by GDB when performing an inferior function
+     call.  */
+  DUMMY_FRAME,
+  /* In a signal handler, various OSs handle this in various ways.
+     The main thing is that the frame may be far from normal.  */
+  SIGTRAMP_FRAME,
+  /* Sentinel or registers frame.  This frame obtains register values
+     direct from the inferior's registers.  */
+  SENTINEL_FRAME
+};
+
 /* For every stopped thread, GDB tracks two frames: current and
    selected.  Current frame is the inner most frame of the selected
    thread.  Selected frame is the one being examined by the the GDB
@@ -205,17 +223,10 @@ extern struct frame_info *get_current_frame (void);
 /* Invalidates the frame cache (this function should have been called
    invalidate_cached_frames).
 
-   FIXME: cagney/2002-11-28: The only difference between
-   flush_cached_frames() and reinit_frame_cache() is that the latter
-   explicitly sets the selected frame back to the current frame -- there
-   isn't any real difference (except that one delays the selection of
-   a new frame).  Code can instead simply rely on get_selected_frame()
-   to reinit the selected frame as needed.  As for invalidating the
-   cache, there should be two methods: one that reverts the thread's
-   selected frame back to current frame (for when the inferior
-   resumes) and one that does not (for when the user modifies the
-   target invalidating the frame cache).  */
-extern void flush_cached_frames (void);
+   FIXME: cagney/2002-11-28: There should be two methods: one that
+   reverts the thread's selected frame back to current frame (for when
+   the inferior resumes) and one that does not (for when the user
+   modifies the target invalidating the frame cache).  */
 extern void reinit_frame_cache (void);
 
 /* On demand, create the selected frame and then return it.  If the
@@ -264,7 +275,13 @@ extern CORE_ADDR get_frame_pc (struct frame_info *);
    the frame's block.  */
 
 extern CORE_ADDR get_frame_address_in_block (struct frame_info *this_frame);
-extern CORE_ADDR frame_unwind_address_in_block (struct frame_info *next_frame);
+
+/* Similar to get_frame_address_in_block, find an address in the
+   block which logically called NEXT_FRAME, assuming it is a THIS_TYPE
+   frame.  */
+
+extern CORE_ADDR frame_unwind_address_in_block (struct frame_info *next_frame,
+						enum frame_type this_type);
 
 /* The frame's inner-most bound.  AKA the stack-pointer.  Confusingly
    known as top-of-stack.  */
@@ -276,8 +293,12 @@ extern CORE_ADDR frame_sp_unwind (struct frame_info *);
 /* Following on from the `resume' address.  Return the entry point
    address of the function containing that resume address, or zero if
    that function isn't known.  */
-extern CORE_ADDR frame_func_unwind (struct frame_info *fi);
 extern CORE_ADDR get_frame_func (struct frame_info *fi);
+
+/* Similar to get_frame_func, find the start of the function which
+   logically called NEXT_FRAME, assuming it is a THIS_TYPE frame.  */
+extern CORE_ADDR frame_func_unwind (struct frame_info *next_frame,
+				    enum frame_type this_type);
 
 /* Closely related to the resume address, various symbol table
    attributes that are determined by the PC.  Note that for a normal
@@ -374,24 +395,8 @@ extern CORE_ADDR get_frame_args_address (struct frame_info *);
    for an invalid frame).  */
 extern int frame_relative_level (struct frame_info *fi);
 
-/* Return the frame's type.  Some are real, some are signal
-   trampolines, and some are completely artificial (dummy).  */
+/* Return the frame's type.  */
 
-enum frame_type
-{
-  /* A true stack frame, created by the target program during normal
-     execution.  */
-  NORMAL_FRAME,
-  /* A fake frame, created by GDB when performing an inferior function
-     call.  */
-  DUMMY_FRAME,
-  /* In a signal handler, various OSs handle this in various ways.
-     The main thing is that the frame may be far from normal.  */
-  SIGTRAMP_FRAME,
-  /* Sentinel or registers frame.  This frame obtains register values
-     direct from the inferior's registers.  */
-  SENTINEL_FRAME
-};
 extern enum frame_type get_frame_type (struct frame_info *);
 
 /* For frames where we can not unwind further, describe why.  */
@@ -491,6 +496,18 @@ extern void frame_register (struct frame_info *frame, int regnum,
 extern void put_frame_register (struct frame_info *frame, int regnum,
 				const gdb_byte *buf);
 
+/* Read LEN bytes from one or multiple registers starting with REGNUM
+   in frame FRAME, starting at OFFSET, into BUF.  */
+extern int get_frame_register_bytes (struct frame_info *frame, int regnum,
+				     CORE_ADDR offset, int len,
+				     gdb_byte *myaddr);
+
+/* Write LEN bytes to one or multiple registers starting with REGNUM
+   in frame FRAME, starting at OFFSET, into BUF.  */
+extern void put_frame_register_bytes (struct frame_info *frame, int regnum,
+				      CORE_ADDR offset, int len,
+				      const gdb_byte *myaddr);
+
 /* Map between a frame register number and its name.  A frame register
    space is a superset of the cooked register space --- it also
    includes builtin registers.  If NAMELEN is negative, use the NAME's
@@ -564,7 +581,8 @@ enum print_what
 #error "SIZEOF_FRAME_SAVED_REGS can not be re-defined"
 #endif
 #define SIZEOF_FRAME_SAVED_REGS \
-        (sizeof (CORE_ADDR) * (NUM_REGS+NUM_PSEUDO_REGS))
+        (sizeof (CORE_ADDR) * (gdbarch_num_regs (current_gdbarch)\
+			       + gdbarch_num_pseudo_regs (current_gdbarch)))
 
 /* Allocate zero initialized memory from the frame cache obstack.
    Appendices to the frame info (such as the unwind cache) should
@@ -652,10 +670,10 @@ extern void (*deprecated_selected_frame_level_changed_hook) (int);
 extern void return_command (char *, int);
 
 
-/* NOTE: cagney/2002-11-27:
+/* Notes (cagney/2002-11-27, drow/2003-09-06):
 
-   You might think that the below global can simply be replaced by a
-   call to either get_selected_frame() or select_frame().
+   You might think that calls to this function can simply be replaced by a
+   call to get_selected_frame().
 
    Unfortunately, it isn't that easy.
 
@@ -667,25 +685,17 @@ extern void return_command (char *, int);
    The only real exceptions occur at the edge (in the CLI code) where
    user commands need to pick up the selected frame before proceeding.
 
+   There are also some functions called with a NULL frame meaning either "the
+   program is not running" or "use the selected frame".
+
    This is important.  GDB is trying to stamp out the hack:
 
-   saved_frame = deprecated_selected_frame;
-   deprecated_selected_frame = ...;
+   saved_frame = deprecated_safe_get_selected_frame ();
+   select_frame (...);
    hack_using_global_selected_frame ();
-   deprecated_selected_frame = saved_frame;
+   select_frame (saved_frame);
 
-   Take care!  */
-
-extern struct frame_info *deprecated_selected_frame;
-
-/* NOTE: drow/2003-09-06:
-
-   This function is "a step sideways" for uses of deprecated_selected_frame.
-   They should be fixed as above, but meanwhile, we needed a solution for
-   cases where functions are called with a NULL frame meaning either "the
-   program is not running" or "use the selected frame".  Lazy building of
-   deprecated_selected_frame confuses the situation, because now
-   deprecated_selected_frame can be NULL even when the inferior is running.
+   Take care!
 
    This function calls get_selected_frame if the inferior should have a
    frame, or returns NULL otherwise.  */
@@ -697,7 +707,7 @@ extern struct frame_info *deprecated_safe_get_selected_frame (void);
 extern struct frame_info *create_new_frame (CORE_ADDR base, CORE_ADDR pc);
 
 /* FIXME: cagney/2002-12-06: Has the PC in the current frame changed?
-   "infrun.c", Thanks to DECR_PC_AFTER_BREAK, can change the PC after
+   "infrun.c", Thanks to gdbarch_decr_pc_after_break, can change the PC after
    the initial frame create.  This puts things back in sync.
 
    This replaced: frame->pc = ....; */

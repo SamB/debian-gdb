@@ -1,6 +1,5 @@
 /* YACC parser for Pascal expressions, for GDB.
-   Copyright (C) 2000, 2006
-   Free Software Foundation, Inc.
+   Copyright (C) 2000, 2006, 2007 Free Software Foundation, Inc.
 
 This file is part of GDB.
 
@@ -910,16 +909,16 @@ parse_number (p, len, parsed_float, putithere)
      shift it right and see whether anything remains.  Note that we
      can't shift sizeof (LONGEST) * HOST_CHAR_BIT bits or more in one
      operation, because many compilers will warn about such a shift
-     (which always produces a zero result).  Sometimes TARGET_INT_BIT
-     or TARGET_LONG_BIT will be that big, sometimes not.  To deal with
+     (which always produces a zero result).  Sometimes gdbarch_int_bit
+     or gdbarch_long_bit will be that big, sometimes not.  To deal with
      the case where it is we just always shift the value more than
      once, with fewer bits each time.  */
 
   un = (ULONGEST)n >> 2;
   if (long_p == 0
-      && (un >> (TARGET_INT_BIT - 2)) == 0)
+      && (un >> (gdbarch_int_bit (current_gdbarch) - 2)) == 0)
     {
-      high_bit = ((ULONGEST)1) << (TARGET_INT_BIT-1);
+      high_bit = ((ULONGEST)1) << (gdbarch_int_bit (current_gdbarch) - 1);
 
       /* A large decimal (not hex or octal) constant (between INT_MAX
 	 and UINT_MAX) is a long or unsigned long, according to ANSI,
@@ -931,20 +930,21 @@ parse_number (p, len, parsed_float, putithere)
       signed_type = builtin_type_int;
     }
   else if (long_p <= 1
-	   && (un >> (TARGET_LONG_BIT - 2)) == 0)
+	   && (un >> (gdbarch_long_bit (current_gdbarch) - 2)) == 0)
     {
-      high_bit = ((ULONGEST)1) << (TARGET_LONG_BIT-1);
+      high_bit = ((ULONGEST)1) << (gdbarch_long_bit (current_gdbarch) - 1);
       unsigned_type = builtin_type_unsigned_long;
       signed_type = builtin_type_long;
     }
   else
     {
       int shift;
-      if (sizeof (ULONGEST) * HOST_CHAR_BIT < TARGET_LONG_LONG_BIT)
+      if (sizeof (ULONGEST) * HOST_CHAR_BIT
+	  < gdbarch_long_long_bit (current_gdbarch))
 	/* A long long does not fit in a LONGEST.  */
 	shift = (sizeof (ULONGEST) * HOST_CHAR_BIT - 1);
       else
-	shift = (TARGET_LONG_LONG_BIT - 1);
+	shift = (gdbarch_long_long_bit (current_gdbarch) - 1);
       high_bit = (ULONGEST) 1 << shift;
       unsigned_type = builtin_type_unsigned_long_long;
       signed_type = builtin_type_long_long;
@@ -1342,6 +1342,7 @@ yylex ()
      removed from the input stream.  */
   if (namelen == 2 && uptokstart[0] == 'I' && uptokstart[1] == 'F')
     {
+      free (uptokstart);
       return 0;
     }
 
@@ -1354,18 +1355,31 @@ yylex ()
     {
     case 6:
       if (DEPRECATED_STREQ (uptokstart, "OBJECT"))
-	return CLASS;
+	{
+	  free (uptokstart);
+	  return CLASS;
+	}
       if (DEPRECATED_STREQ (uptokstart, "RECORD"))
-	return STRUCT;
+	{
+	  free (uptokstart);
+	  return STRUCT;
+	}
       if (DEPRECATED_STREQ (uptokstart, "SIZEOF"))
-	return SIZEOF;
+	{
+	  free (uptokstart);
+	  return SIZEOF;
+	}
       break;
     case 5:
       if (DEPRECATED_STREQ (uptokstart, "CLASS"))
-	return CLASS;
+	{
+	  free (uptokstart);
+	  return CLASS;
+	}
       if (DEPRECATED_STREQ (uptokstart, "FALSE"))
 	{
           yylval.lval = 0;
+	  free (uptokstart);
           return FALSEKEYWORD;
         }
       break;
@@ -1373,6 +1387,7 @@ yylex ()
       if (DEPRECATED_STREQ (uptokstart, "TRUE"))
 	{
           yylval.lval = 1;
+	  free (uptokstart);
   	  return TRUEKEYWORD;
         }
       if (DEPRECATED_STREQ (uptokstart, "SELF"))
@@ -1384,7 +1399,10 @@ yylex ()
 	  if (lookup_symbol (this_name, expression_context_block,
 			     VAR_DOMAIN, (int *) NULL,
 			     (struct symtab **) NULL))
-	    return THIS;
+	    {
+	      free (uptokstart);
+	      return THIS;
+	    }
 	}
       break;
     default:
@@ -1401,6 +1419,7 @@ yylex ()
         so in expression to enter hexadecimal values
         we still need to use C syntax with 0xff  */
       write_dollar_variable (yylval.sval);
+      free (uptokstart);
       return VARIABLE;
     }
 
@@ -1493,6 +1512,7 @@ yylex ()
 	strncpy (tempbuf, tokstart, namelen); tempbuf [namelen] = 0;
 	yylval.sval.ptr = tempbuf;
 	yylval.sval.length = namelen; 
+	free (uptokstart);
 	return FIELDNAME;
       } 
     /* Call lookup_symtab, not lookup_partial_symtab, in case there are
@@ -1503,6 +1523,7 @@ yylex ()
       {
 	yylval.ssym.sym = sym;
 	yylval.ssym.is_a_field_of_this = is_a_field_of_this;
+	free (uptokstart);
 	return BLOCKNAME;
       }
     if (sym && SYMBOL_CLASS (sym) == LOC_TYPEDEF)
@@ -1593,13 +1614,17 @@ yylex ()
 #else /* not 0 */
 	  yylval.tsym.type = SYMBOL_TYPE (sym);
 #endif /* not 0 */
+	  free (uptokstart);
 	  return TYPENAME;
         }
     yylval.tsym.type
       = language_lookup_primitive_type_by_name (current_language,
 						current_gdbarch, tmp);
     if (yylval.tsym.type != NULL)
-      return TYPENAME;
+      {
+	free (uptokstart);
+	return TYPENAME;
+      }
 
     /* Input names that aren't symbols but ARE valid hex numbers,
        when the input radix permits them, can be names or numbers
@@ -1614,6 +1639,7 @@ yylex ()
 	  {
 	    yylval.ssym.sym = sym;
 	    yylval.ssym.is_a_field_of_this = is_a_field_of_this;
+	    free (uptokstart);
 	    return NAME_OR_INT;
 	  }
       }

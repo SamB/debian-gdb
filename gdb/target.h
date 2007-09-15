@@ -1,7 +1,7 @@
 /* Interface between GDB and target environments, including files and processes
 
-   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.  Written by John Gilmore.
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (TARGET_H)
 #define TARGET_H
@@ -31,6 +29,7 @@ struct ui_file;
 struct mem_attrib;
 struct target_ops;
 struct bp_target_info;
+struct regcache;
 
 /* This include file defines the interface between the main part
    of the debugger, and the part which is target-specific, or
@@ -188,6 +187,8 @@ enum target_object
 {
   /* AVR target specific transfer.  See "avr-tdep.c" and "remote.c".  */
   TARGET_OBJECT_AVR,
+  /* SPU target specific transfer.  See "spu-tdep.c".  */
+  TARGET_OBJECT_SPU,
   /* Transfer up-to LEN bytes of memory starting at OFFSET.  */
   TARGET_OBJECT_MEMORY,
   /* Memory, avoiding GDB's data cache and trusting the executable.
@@ -206,8 +207,12 @@ enum target_object
      a previously erased flash memory.  Using it without erasing
      flash can have unexpected results.  Addresses are physical
      address on target, and not relative to flash start.  */
-  TARGET_OBJECT_FLASH
-
+  TARGET_OBJECT_FLASH,
+  /* Available target-specific features, e.g. registers and coprocessors.
+     See "target-descriptions.c".  ANNEX should never be empty.  */
+  TARGET_OBJECT_AVAILABLE_FEATURES,
+  /* Currently loaded libraries, in XML format.  */
+  TARGET_OBJECT_LIBRARIES
   /* Possible future objects: TARGET_OBJECT_FILE, TARGET_OBJECT_PROC, ... */
 };
 
@@ -321,9 +326,9 @@ struct target_ops
     void (*to_disconnect) (struct target_ops *, char *, int);
     void (*to_resume) (ptid_t, int, enum target_signal);
     ptid_t (*to_wait) (ptid_t, struct target_waitstatus *);
-    void (*to_fetch_registers) (int);
-    void (*to_store_registers) (int);
-    void (*to_prepare_to_store) (void);
+    void (*to_fetch_registers) (struct regcache *, int);
+    void (*to_store_registers) (struct regcache *, int);
+    void (*to_prepare_to_store) (struct regcache *);
 
     /* Transfer LEN bytes of memory between GDB address MYADDR and
        target address MEMADDR.  If WRITE, transfer them to the target, else
@@ -360,6 +365,7 @@ struct target_ops
     int (*to_remove_watchpoint) (CORE_ADDR, int, int);
     int (*to_insert_watchpoint) (CORE_ADDR, int, int);
     int (*to_stopped_by_watchpoint) (void);
+    int to_have_steppable_watchpoint;
     int to_have_continuable_watchpoint;
     int (*to_stopped_data_address) (struct target_ops *, CORE_ADDR *);
     int (*to_region_ok_for_hw_watchpoint) (CORE_ADDR, int);
@@ -492,6 +498,11 @@ struct target_ops
        equal to what was written.  */
     void (*to_flash_done) (struct target_ops *);
 
+    /* Describe the architecture-specific features of this target.
+       Returns the description found, or NULL if no description
+       was available.  */
+    const struct target_desc *(*to_read_description) (struct target_ops *ops);
+
     int to_magic;
     /* Need sub-structure for target machine related rather than comm related?
      */
@@ -581,15 +592,15 @@ extern void target_disconnect (char *, int);
 
 /* Fetch at least register REGNO, or all regs if regno == -1.  No result.  */
 
-#define	target_fetch_registers(regno)	\
-     (*current_target.to_fetch_registers) (regno)
+#define	target_fetch_registers(regcache, regno)	\
+     (*current_target.to_fetch_registers) (regcache, regno)
 
 /* Store at least register REGNO, or all regs if REGNO == -1.
    It can store as many registers as it wants to, so target_prepare_to_store
    must have been previously called.  Calls error() if there are problems.  */
 
-#define	target_store_registers(regs)	\
-     (*current_target.to_store_registers) (regs)
+#define	target_store_registers(regcache, regs)	\
+     (*current_target.to_store_registers) (regcache, regs)
 
 /* Get ready to modify the registers array.  On machines which store
    individual registers, this doesn't need to do anything.  On machines
@@ -597,8 +608,8 @@ extern void target_disconnect (char *, int);
    that REGISTERS contains all the registers from the program being
    debugged.  */
 
-#define	target_prepare_to_store()	\
-     (*current_target.to_prepare_to_store) ()
+#define	target_prepare_to_store(regcache)	\
+     (*current_target.to_prepare_to_store) (regcache)
 
 extern DCACHE *target_dcache;
 
@@ -611,9 +622,6 @@ extern int target_write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr,
 
 extern int xfer_memory (CORE_ADDR, gdb_byte *, int, int,
 			struct mem_attrib *, struct target_ops *);
-
-extern int child_xfer_memory (CORE_ADDR, gdb_byte *, int, int,
-			      struct mem_attrib *, struct target_ops *);
 
 /* Fetches the target's memory map.  If one is found it is sorted
    and returned, after some consistency checking.  Otherwise, NULL
@@ -668,41 +676,6 @@ enum flash_preserve_mode
 int target_write_memory_blocks (VEC(memory_write_request_s) *requests,
 				enum flash_preserve_mode preserve_flash_p,
 				void (*progress_cb) (ULONGEST, void *));
-
-
-extern char *child_pid_to_exec_file (int);
-
-extern char *child_core_file_to_sym_file (char *);
-
-#if defined(CHILD_POST_ATTACH)
-extern void child_post_attach (int);
-#endif
-
-extern void child_post_startup_inferior (ptid_t);
-
-extern void child_acknowledge_created_inferior (int);
-
-extern void child_insert_fork_catchpoint (int);
-
-extern int child_remove_fork_catchpoint (int);
-
-extern void child_insert_vfork_catchpoint (int);
-
-extern int child_remove_vfork_catchpoint (int);
-
-extern void child_acknowledge_created_inferior (int);
-
-extern int child_follow_fork (struct target_ops *, int);
-
-extern void child_insert_exec_catchpoint (int);
-
-extern int child_remove_exec_catchpoint (int);
-
-extern int child_reported_exec_events_per_exec_call (void);
-
-extern int child_has_exited (int, int, int *);
-
-extern int child_thread_alive (ptid_t);
 
 /* From infrun.c.  */
 
@@ -1036,31 +1009,6 @@ extern char *normal_pid_to_str (ptid_t ptid);
 #define target_extra_thread_info(TP) \
      (current_target.to_extra_thread_info (TP))
 
-/*
- * New Objfile Event Hook:
- *
- * Sometimes a GDB component wants to get notified whenever a new
- * objfile is loaded.  Mainly this is used by thread-debugging
- * implementations that need to know when symbols for the target
- * thread implemenation are available.
- *
- * The old way of doing this is to define a macro 'target_new_objfile'
- * that points to the function that you want to be called on every
- * objfile/shlib load.
-
-   The new way is to grab the function pointer,
-   'deprecated_target_new_objfile_hook', and point it to the function
-   that you want to be called on every objfile/shlib load.
-
-   If multiple clients are willing to be cooperative, they can each
-   save a pointer to the previous value of
-   deprecated_target_new_objfile_hook before modifying it, and arrange
-   for their function to call the previous function in the chain.  In
-   that way, multiple clients can receive this notification (something
-   like with signal handlers).  */
-
-extern void (*deprecated_target_new_objfile_hook) (struct objfile *);
-
 #ifndef target_pid_or_tid_to_str
 #define target_pid_or_tid_to_str(ID) \
      target_pid_to_str (ID)
@@ -1104,12 +1052,6 @@ extern void (*deprecated_target_new_objfile_hook) (struct objfile *);
 #define target_get_thread_local_address_p() \
     (target_get_thread_local_address != NULL)
 
-/* Hook to call target dependent code just after inferior target process has
-   started.  */
-
-#ifndef TARGET_CREATE_INFERIOR_HOOK
-#define TARGET_CREATE_INFERIOR_HOOK(PID)
-#endif
 
 /* Hardware watchpoint interfaces.  */
 
@@ -1119,6 +1061,13 @@ extern void (*deprecated_target_new_objfile_hook) (struct objfile *);
 #ifndef STOPPED_BY_WATCHPOINT
 #define STOPPED_BY_WATCHPOINT(w) \
    (*current_target.to_stopped_by_watchpoint) ()
+#endif
+
+/* Non-zero if we have steppable watchpoints  */
+
+#ifndef HAVE_STEPPABLE_WATCHPOINT
+#define HAVE_STEPPABLE_WATCHPOINT \
+   (current_target.to_have_steppable_watchpoint)
 #endif
 
 /* Non-zero if we have continuable watchpoints  */
@@ -1179,27 +1128,7 @@ extern int target_stopped_data_address_p (struct target_ops *);
 #define target_stopped_data_address_p(CURRENT_TARGET) (1)
 #endif
 
-/* This will only be defined by a target that supports catching vfork events,
-   such as HP-UX.
-
-   On some targets (such as HP-UX 10.20 and earlier), resuming a newly vforked
-   child process after it has exec'd, causes the parent process to resume as
-   well.  To prevent the parent from running spontaneously, such targets should
-   define this to a function that prevents that from happening.  */
-#if !defined(ENSURE_VFORKING_PARENT_REMAINS_STOPPED)
-#define ENSURE_VFORKING_PARENT_REMAINS_STOPPED(PID) (0)
-#endif
-
-/* This will only be defined by a target that supports catching vfork events,
-   such as HP-UX.
-
-   On some targets (such as HP-UX 10.20 and earlier), a newly vforked child
-   process must be resumed when it delivers its exec event, before the parent
-   vfork event will be delivered to us.  */
-
-#if !defined(RESUME_EXECD_VFORKING_CHILD_TO_GET_PARENT_VFORK)
-#define RESUME_EXECD_VFORKING_CHILD_TO_GET_PARENT_VFORK() (0)
-#endif
+extern const struct target_desc *target_read_description (struct target_ops *);
 
 /* Routines for maintenance of the target structures...
 

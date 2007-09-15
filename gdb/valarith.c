@@ -1,14 +1,14 @@
 /* Perform arithmetic and other operations on values, for GDB.
 
-   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
+   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "value.h"
@@ -808,8 +806,8 @@ value_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
       /* If either arg was long double, make sure that value is also long
          double.  */
 
-      if (TYPE_LENGTH (type1) * 8 > TARGET_DOUBLE_BIT
-	  || TYPE_LENGTH (type2) * 8 > TARGET_DOUBLE_BIT)
+      if (TYPE_LENGTH (type1) * 8 > gdbarch_double_bit (current_gdbarch)
+	  || TYPE_LENGTH (type2) * 8 > gdbarch_double_bit (current_gdbarch))
 	val = allocate_value (builtin_type_long_double);
       else
 	val = allocate_value (builtin_type_double);
@@ -1028,7 +1026,7 @@ value_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
 	  /* Can't just call init_type because we wouldn't know what
 	     name to give the type.  */
 	  val = allocate_value
-	    (result_len > TARGET_LONG_BIT / HOST_CHAR_BIT
+	    (result_len > gdbarch_long_bit (current_gdbarch) / HOST_CHAR_BIT
 	     ? builtin_type_unsigned_long_long
 	     : builtin_type_unsigned_long);
 	  store_unsigned_integer (value_contents_raw (val),
@@ -1153,7 +1151,7 @@ value_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
 	  /* Can't just call init_type because we wouldn't know what
 	     name to give the type.  */
 	  val = allocate_value
-	    (result_len > TARGET_LONG_BIT / HOST_CHAR_BIT
+	    (result_len > gdbarch_long_bit (current_gdbarch) / HOST_CHAR_BIT
 	     ? builtin_type_long_long
 	     : builtin_type_long);
 	  store_signed_integer (value_contents_raw (val),

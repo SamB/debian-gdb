@@ -1,25 +1,27 @@
 /* MIPS-specific support for 64-bit ELF
-   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
-   Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2007 Free Software Foundation, Inc.
    Ian Lance Taylor, Cygnus Support
    Linker support added by Mark Mitchell, CodeSourcery, LLC.
    <mark@codesourcery.com>
 
-This file is part of BFD, the Binary File Descriptor library.
+   This file is part of BFD, the Binary File Descriptor library.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
+
 
 /* This file supports the 64-bit MIPS ELF ABI.
 
@@ -40,8 +42,8 @@ Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA. 
  .     the OldABI version is still lying around and should be removed.
  */
 
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "libbfd.h"
 #include "aout/ar.h"
 #include "bfdlink.h"
@@ -1327,7 +1329,20 @@ static reloc_howto_type mips_elf64_howto_table_rela[] =
   EMPTY_HOWTO (R_MIPS_TLS_DTPMOD32),
   EMPTY_HOWTO (R_MIPS_TLS_DTPREL32),
   EMPTY_HOWTO (R_MIPS_TLS_DTPMOD64),
-  EMPTY_HOWTO (R_MIPS_TLS_DTPREL64),
+
+  HOWTO (R_MIPS_TLS_DTPREL64,	/* type */
+	 0,			/* rightshift */
+	 4,			/* size (0 = byte, 1 = short, 2 = long) */
+	 64,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_dont, /* complain_on_overflow */
+	 _bfd_mips_elf_generic_reloc, /* special_function */
+	 "R_MIPS_TLS_DTPREL64",	/* name */
+	 TRUE,			/* partial_inplace */
+	 MINUS_ONE,		/* src_mask */
+	 MINUS_ONE,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
 
   /* TLS general dynamic variable reference.  */
   HOWTO (R_MIPS_TLS_GD,		/* type */
@@ -2224,6 +2239,39 @@ bfd_elf64_bfd_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
     }
 }
 
+static reloc_howto_type *
+bfd_elf64_bfd_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
+				 const char *r_name)
+{
+  unsigned int i;
+
+  for (i = 0;
+       i < (sizeof (mips_elf64_howto_table_rela)
+	    / sizeof (mips_elf64_howto_table_rela[0])); i++)
+    if (mips_elf64_howto_table_rela[i].name != NULL
+	&& strcasecmp (mips_elf64_howto_table_rela[i].name, r_name) == 0)
+      return &mips_elf64_howto_table_rela[i];
+
+  for (i = 0;
+       i < (sizeof (mips16_elf64_howto_table_rela)
+	    / sizeof (mips16_elf64_howto_table_rela[0]));
+       i++)
+    if (mips16_elf64_howto_table_rela[i].name != NULL
+	&& strcasecmp (mips16_elf64_howto_table_rela[i].name, r_name) == 0)
+      return &mips16_elf64_howto_table_rela[i];
+
+  if (strcasecmp (elf_mips_gnu_vtinherit_howto.name, r_name) == 0)
+    return &elf_mips_gnu_vtinherit_howto;
+  if (strcasecmp (elf_mips_gnu_vtentry_howto.name, r_name) == 0)
+    return &elf_mips_gnu_vtentry_howto;
+  if (strcasecmp (elf_mips_gnu_rel16_s2.name, r_name) == 0)
+    return &elf_mips_gnu_rel16_s2;
+  if (strcasecmp (elf_mips_gnu_rela16_s2.name, r_name) == 0)
+    return &elf_mips_gnu_rela16_s2;
+
+  return NULL;
+}
+
 /* Given a MIPS Elf_Internal_Rel, fill in an arelent structure.  */
 
 static reloc_howto_type *
@@ -3022,6 +3070,7 @@ const struct elf_size_info mips_elf64_size_info =
   EV_CURRENT,
   bfd_elf64_write_out_phdrs,
   bfd_elf64_write_shdrs_and_ehdr,
+  bfd_elf64_checksum_contents,
   mips_elf64_write_relocs,
   bfd_elf64_swap_symbol_in,
   bfd_elf64_swap_symbol_out,
@@ -3097,6 +3146,8 @@ const struct elf_size_info mips_elf64_size_info =
 #define elf_backend_may_use_rel_p	1
 #define elf_backend_may_use_rela_p	1
 #define elf_backend_default_use_rela_p	1
+
+#define elf_backend_sign_extend_vma	TRUE
 
 #define elf_backend_write_section	_bfd_mips_elf_write_section
 

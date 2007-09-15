@@ -1,5 +1,5 @@
 /* Interface GDB to the GNU Hurd.
-   Copyright (C) 1992, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2006
+   Copyright (C) 1992, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include <ctype.h>
@@ -2207,11 +2205,8 @@ gnu_terminal_init_inferior (void)
    that registers contains all the registers from the program being
    debugged.  */
 static void
-gnu_prepare_to_store (void)
+gnu_prepare_to_store (struct regcache *regcache)
 {
-#ifdef CHILD_PREPARE_TO_STORE
-  CHILD_PREPARE_TO_STORE ();
-#endif
 }
 
 static void
@@ -2584,8 +2579,8 @@ gnu_pid_to_str (ptid_t ptid)
 }
 
 
-extern void gnu_store_registers (int regno);
-extern void gnu_fetch_registers (int regno);
+extern void gnu_store_registers (struct regcache *regcache, int regno);
+extern void gnu_fetch_registers (struct regcache *regcache, int regno);
 
 struct target_ops gnu_ops;
 

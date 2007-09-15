@@ -1,11 +1,11 @@
 /* Internal interfaces for the GNU/Linux specific target code for gdbserver.
-   Copyright (C) 2002, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,9 +14,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifdef HAVE_THREAD_DB_H
 #include <thread_db.h>
@@ -71,6 +69,10 @@ struct linux_target_ops
   /* Whether to left-pad registers for PEEKUSR/POKEUSR if they are smaller
      than an xfer unit.  */
   int left_pad_xfer;
+
+  /* What string to report to GDB when it asks for the architecture,
+     or NULL not to answer.  */
+  const char *arch_string;
 };
 
 extern struct linux_target_ops the_low_target;
@@ -88,8 +90,12 @@ struct process_info
   unsigned long lwpid;
   unsigned long tid;
 
-  /* If this flag is set, the next SIGSTOP will be ignored (the process will
-     be immediately resumed).  */
+  /* If this flag is set, the next SIGSTOP will be ignored (the
+     process will be immediately resumed).  This means that either we
+     sent the SIGSTOP to it ourselves and got some other pending event
+     (so the SIGSTOP is still pending), or that we stopped the
+     inferior implicitly via PTRACE_ATTACH and have not waited for it
+     yet.  */
   int stop_expected;
 
   /* If this flag is set, the process is known to be stopped right now (stop

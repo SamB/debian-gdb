@@ -1,18 +1,17 @@
-# Copyright 2003, 2004 Free Software Foundation, Inc.
+# Copyright 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # This file was written by Elena Zannoni (ezannoni@cygnus.com)
 
@@ -39,7 +38,7 @@ set bug_id 0
 
 set testfile "annota3"
 set srcfile ${testfile}.c
-set binfile ${objdir}/${subdir}/${testfile}
+set binfile ${objdir}/${subdir}/${testfile}$EXEEXT
 
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug nowarnings}] != "" } {
     untested annota3.exp
@@ -99,7 +98,29 @@ gdb_expect_list "annotation set at level 3" "\r\n$gdb_prompt$" {
     "set annotate 3"
 }
 
-
+#
+# if construct:
+#
+send_gdb "if 1\n"
+gdb_expect {
+    -re "^if 1\r\n\r\n\032\032post-prompt\r\n\r\n\032\032pre-commands\r\n >\r\n\032\032commands\r\n$" {
+	pass "start if construct"
+    }
+    -re ".*\032\032commands\r\n" {
+	fail "start if construct"
+    }
+    timeout { fail "start if construct (timeout)" }
+}
+send_gdb "end\n"
+gdb_expect {
+    -re "^end\r\n\r\n\032\032post-commands\r\n$gdb_prompt$" {
+ 	pass "end if construct"
+    }
+    -re ".*$gdb_prompt$" {
+	fail "end if construct"
+    }
+    timeout { fail "end if construct (timeout)" }
+}
 #
 # info break:
 #
@@ -118,7 +139,7 @@ gdb_expect_list "breakpoint info" "$gdb_prompt$" {
 send_gdb "run\n"
 gdb_expect_list "run until main breakpoint" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
-    "Starting program: .*annota3 \r\n"
+    "Starting program: .*annota3(|\.exe) \r\n"
     "\r\n\032\032starting\r\n"
     "\r\n\032\032breakpoint 1\r\n"
     "\r\n"
@@ -206,7 +227,7 @@ gdb_expect_list "continue to printf" "$gdb_prompt$" {
 send_gdb "backtrace\n"
 gdb_expect_list "backtrace from shlibrary" "$gdb_prompt$" {
     "\r\n\032\032post-prompt\r\n"
-    "#0 .* printf \[^\r\n\]*\r\n"
+    "#0 .* .*printf \[^\r\n\]*\r\n"
     "#1 .* main \[^\r\n\]*\r\n"
 }
 
@@ -246,7 +267,7 @@ if [target_info exists gdb,nosignals] {
     gdb_expect_list "backtrace @ signal handler" "$gdb_prompt$" {
 	"#0 +handle_USR1 \[^\r\n\]+\r\n"
 	"#1 +.signal handler called.\r\n"
-	"#2 .* printf \[^\r\n\]+\r\n"
+	"#2 .* .*printf \[^\r\n\]+\r\n"
 	"#3 .* main \[^\r\n\]+\r\n"
     }
 }

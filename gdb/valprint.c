@@ -1,14 +1,14 @@
 /* Print values for GDB, the GNU debugger.
 
-   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
+   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -207,13 +205,12 @@ val_print (struct type *type, const gdb_byte *valaddr, int embedded_offset,
 	   int deref_ref, int recurse, enum val_prettyprint pretty)
 {
   volatile struct gdb_exception except;
+  volatile enum val_prettyprint real_pretty = pretty;
   int ret = 0;
 
   struct type *real_type = check_typedef (type);
   if (pretty == Val_pretty_default)
-    {
-      pretty = prettyprint_structs ? Val_prettyprint : Val_no_prettyprint;
-    }
+    real_pretty = prettyprint_structs ? Val_prettyprint : Val_no_prettyprint;
 
   QUIT;
 
@@ -231,7 +228,7 @@ val_print (struct type *type, const gdb_byte *valaddr, int embedded_offset,
   TRY_CATCH (except, RETURN_MASK_ERROR)
     {
       ret = LA_VAL_PRINT (type, valaddr, embedded_offset, address,
-			  stream, format, deref_ref, recurse, pretty);
+			  stream, format, deref_ref, recurse, real_pretty);
     }
   if (except.reason < 0)
     fprintf_filtered (stream, _("<error reading variable>"));
@@ -443,19 +440,31 @@ print_floating (const gdb_byte *valaddr, struct type *type,
   int inv;
   const struct floatformat *fmt = NULL;
   unsigned len = TYPE_LENGTH (type);
+  enum float_kind kind;
 
   /* If it is a floating-point, check for obvious problems.  */
   if (TYPE_CODE (type) == TYPE_CODE_FLT)
     fmt = floatformat_from_type (type);
-  if (fmt != NULL && floatformat_is_nan (fmt, valaddr))
+  if (fmt != NULL)
     {
-      if (floatformat_is_negative (fmt, valaddr))
-	fprintf_filtered (stream, "-");
-      fprintf_filtered (stream, "nan(");
-      fputs_filtered ("0x", stream);
-      fputs_filtered (floatformat_mantissa (fmt, valaddr), stream);
-      fprintf_filtered (stream, ")");
-      return;
+      kind = floatformat_classify (fmt, valaddr);
+      if (kind == float_nan)
+	{
+	  if (floatformat_is_negative (fmt, valaddr))
+	    fprintf_filtered (stream, "-");
+	  fprintf_filtered (stream, "nan(");
+	  fputs_filtered ("0x", stream);
+	  fputs_filtered (floatformat_mantissa (fmt, valaddr), stream);
+	  fprintf_filtered (stream, ")");
+	  return;
+	}
+      else if (kind == float_infinite)
+	{
+	  if (floatformat_is_negative (fmt, valaddr))
+	    fputs_filtered ("-", stream);
+	  fputs_filtered ("inf", stream);
+	  return;
+	}
     }
 
   /* NOTE: cagney/2002-01-15: The TYPE passed into print_floating()
@@ -514,7 +523,7 @@ print_binary_chars (struct ui_file *stream, const gdb_byte *valaddr,
 
   /* FIXME: We should be not printing leading zeroes in most cases.  */
 
-  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
     {
       for (p = valaddr;
 	   p < valaddr + len;
@@ -601,7 +610,7 @@ print_octal_chars (struct ui_file *stream, const gdb_byte *valaddr,
   carry = 0;
 
   fputs_filtered ("0", stream);
-  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
     {
       for (p = valaddr;
 	   p < valaddr + len;
@@ -714,11 +723,11 @@ print_decimal_chars (struct ui_file *stream, const gdb_byte *valaddr,
 #define CARRY_LEFT( x ) ((x) % TEN)
 #define SHIFT( x )      ((x) << 4)
 #define START_P \
-        ((TARGET_BYTE_ORDER == BFD_ENDIAN_BIG) ? valaddr : valaddr + len - 1)
+        ((gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG) ? valaddr : valaddr + len - 1)
 #define NOT_END_P \
-        ((TARGET_BYTE_ORDER == BFD_ENDIAN_BIG) ? (p < valaddr + len) : (p >= valaddr))
+        ((gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG) ? (p < valaddr + len) : (p >= valaddr))
 #define NEXT_P \
-        ((TARGET_BYTE_ORDER == BFD_ENDIAN_BIG) ? p++ : p-- )
+        ((gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG) ? p++ : p-- )
 #define LOW_NIBBLE(  x ) ( (x) & 0x00F)
 #define HIGH_NIBBLE( x ) (((x) & 0x0F0) >> 4)
 
@@ -848,7 +857,7 @@ print_hex_chars (struct ui_file *stream, const gdb_byte *valaddr,
   /* FIXME: We should be not printing leading zeroes in most cases.  */
 
   fputs_filtered ("0x", stream);
-  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
     {
       for (p = valaddr;
 	   p < valaddr + len;
@@ -877,7 +886,7 @@ print_char_chars (struct ui_file *stream, const gdb_byte *valaddr,
 {
   const gdb_byte *p;
 
-  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
     {
       p = valaddr;
       while (p < valaddr + len - 1 && *p == 0)

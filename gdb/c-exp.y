@@ -1,7 +1,6 @@
 /* YACC parser for C expressions, for GDB.
    Copyright (C) 1986, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2003, 2004, 2006
-   Free Software Foundation, Inc.
+   1998, 1999, 2000, 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
 
 This file is part of GDB.
 
@@ -1097,9 +1096,13 @@ parse_number (p, len, parsed_float, putithere)
 	    putithere->typed_val_float.type = 
 	      builtin_type (current_gdbarch)->builtin_long_double;
 	  else
-	    return ERROR;
+	    {
+	      free (s);
+	      return ERROR;
+	    }
 	}
 
+      free (s);
       return FLOAT;
     }
 
@@ -1195,16 +1198,16 @@ parse_number (p, len, parsed_float, putithere)
      shift it right and see whether anything remains.  Note that we
      can't shift sizeof (LONGEST) * HOST_CHAR_BIT bits or more in one
      operation, because many compilers will warn about such a shift
-     (which always produces a zero result).  Sometimes TARGET_INT_BIT
-     or TARGET_LONG_BIT will be that big, sometimes not.  To deal with
+     (which always produces a zero result).  Sometimes gdbarch_int_bit
+     or gdbarch_long_bit will be that big, sometimes not.  To deal with
      the case where it is we just always shift the value more than
      once, with fewer bits each time.  */
 
   un = (ULONGEST)n >> 2;
   if (long_p == 0
-      && (un >> (TARGET_INT_BIT - 2)) == 0)
+      && (un >> (gdbarch_int_bit (current_gdbarch) - 2)) == 0)
     {
-      high_bit = ((ULONGEST)1) << (TARGET_INT_BIT-1);
+      high_bit = ((ULONGEST)1) << (gdbarch_int_bit (current_gdbarch) - 1);
 
       /* A large decimal (not hex or octal) constant (between INT_MAX
 	 and UINT_MAX) is a long or unsigned long, according to ANSI,
@@ -1216,20 +1219,21 @@ parse_number (p, len, parsed_float, putithere)
       signed_type = builtin_type (current_gdbarch)->builtin_int;
     }
   else if (long_p <= 1
-	   && (un >> (TARGET_LONG_BIT - 2)) == 0)
+	   && (un >> (gdbarch_long_bit (current_gdbarch) - 2)) == 0)
     {
-      high_bit = ((ULONGEST)1) << (TARGET_LONG_BIT-1);
+      high_bit = ((ULONGEST)1) << (gdbarch_long_bit (current_gdbarch) - 1);
       unsigned_type = builtin_type (current_gdbarch)->builtin_unsigned_long;
       signed_type = builtin_type (current_gdbarch)->builtin_long;
     }
   else
     {
       int shift;
-      if (sizeof (ULONGEST) * HOST_CHAR_BIT < TARGET_LONG_LONG_BIT)
+      if (sizeof (ULONGEST) * HOST_CHAR_BIT 
+	  < gdbarch_long_long_bit (current_gdbarch))
 	/* A long long does not fit in a LONGEST.  */
 	shift = (sizeof (ULONGEST) * HOST_CHAR_BIT - 1);
       else
-	shift = (TARGET_LONG_LONG_BIT - 1);
+	shift = (gdbarch_long_long_bit (current_gdbarch) - 1);
       high_bit = (ULONGEST) 1 << shift;
       unsigned_type = builtin_type (current_gdbarch)->builtin_unsigned_long_long;
       signed_type = builtin_type (current_gdbarch)->builtin_long_long;
@@ -1302,10 +1306,8 @@ yylex ()
   int tempbufindex;
   static char *tempbuf;
   static int tempbufsize;
-  struct symbol * sym_class = NULL;
   char * token_string = NULL;
   int class_prefix = 0;
-  int unquoted_expr;
    
  retry:
 
@@ -1321,7 +1323,6 @@ yylex ()
     }
 
   prev_lexptr = lexptr;
-  unquoted_expr = 1;
 
   tokstart = lexptr;
   /* See if it is a special token of length 3.  */
@@ -1393,7 +1394,6 @@ yylex ()
 	  if (namelen > 2)
 	    {
 	      lexptr = tokstart + namelen;
-              unquoted_expr = 0;
 	      if (lexptr[-1] != '\'')
 		error ("Unmatched single quote.");
 	      namelen -= 2;
@@ -1690,30 +1690,6 @@ yylex ()
     {
       write_dollar_variable (yylval.sval);
       return VARIABLE;
-    }
-  
-  /* Look ahead and see if we can consume more of the input
-     string to get a reasonable class/namespace spec or a
-     fully-qualified name.  This is a kludge to get around the
-     HP aCC compiler's generation of symbol names with embedded
-     colons for namespace and nested classes. */
-
-  /* NOTE: carlton/2003-09-24: I don't entirely understand the
-     HP-specific code, either here or in linespec.  Having said that,
-     I suspect that we're actually moving towards their model: we want
-     symbols whose names are fully qualified, which matches the
-     description above.  */
-  if (unquoted_expr)
-    {
-      /* Only do it if not inside single quotes */ 
-      sym_class = parse_nested_classes_for_hpacc (yylval.sval.ptr, yylval.sval.length,
-                                                  &token_string, &class_prefix, &lexptr);
-      if (sym_class)
-        {
-          /* Replace the current token with the bigger one we found */ 
-          yylval.sval.ptr = token_string;
-          yylval.sval.length = strlen (token_string);
-        }
     }
   
   /* Use token-type BLOCKNAME for symbols that happen to be defined as

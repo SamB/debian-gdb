@@ -1,27 +1,25 @@
 /* Machine independent support for SVR4 /proc (process file system) for GDB.
 
-   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2006 Free Software Foundation,
-   Inc.
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2006, 2007
+   Free Software Foundation, Inc.
 
    Written by Michael Snyder at Cygnus Solutions.
    Based on work by Fred Fish, Stu Grossman, Geoff Noer, and others.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software Foundation,
-Inc., 51 Franklin Street, Fifth Floor,
-Boston, MA 02110-1301, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "inferior.h"
@@ -30,6 +28,7 @@ Boston, MA 02110-1301, USA.  */
 #include "elf-bfd.h"		/* for elfcore_write_* */
 #include "gdbcmd.h"
 #include "gdbthread.h"
+#include "regcache.h"
 
 #if defined (NEW_PROC_API)
 #define _STRUCTURED_PROC 1	/* Should be done by configure script. */
@@ -119,10 +118,10 @@ static void procfs_resume (ptid_t, int, enum target_signal);
 static int procfs_can_run (void);
 static void procfs_stop (void);
 static void procfs_files_info (struct target_ops *);
-static void procfs_fetch_registers (int);
-static void procfs_store_registers (int);
+static void procfs_fetch_registers (struct regcache *, int);
+static void procfs_store_registers (struct regcache *, int);
 static void procfs_notice_signals (ptid_t);
-static void procfs_prepare_to_store (void);
+static void procfs_prepare_to_store (struct regcache *);
 static void procfs_kill_inferior (void);
 static void procfs_mourn_inferior (void);
 static void procfs_create_inferior (char *, char *, char **, int);
@@ -2846,7 +2845,8 @@ procfs_address_to_host_pointer (CORE_ADDR addr)
   void *ptr;
 
   gdb_assert (sizeof (ptr) == TYPE_LENGTH (builtin_type_void_data_ptr));
-  ADDRESS_TO_POINTER (builtin_type_void_data_ptr, &ptr, addr);
+  gdbarch_address_to_pointer (current_gdbarch, builtin_type_void_data_ptr,
+			      &ptr, addr);
   return ptr;
 }
 
@@ -3681,7 +3681,7 @@ do_detach (int signo)
    when the process is resumed.  */
 
 static void
-procfs_fetch_registers (int regnum)
+procfs_fetch_registers (struct regcache *regcache, int regnum)
 {
   gdb_gregset_t *gregs;
   procinfo *pi;
@@ -3705,22 +3705,22 @@ procfs_fetch_registers (int regnum)
   if (gregs == NULL)
     proc_error (pi, "fetch_registers, get_gregs", __LINE__);
 
-  supply_gregset (gregs);
+  supply_gregset (regcache, (const gdb_gregset_t *) gregs);
 
-  if (FP0_REGNUM >= 0)		/* Do we have an FPU?  */
+  if (gdbarch_fp0_regnum (current_gdbarch) >= 0) /* Do we have an FPU?  */
     {
       gdb_fpregset_t *fpregs;
 
-      if ((regnum >= 0 && regnum < FP0_REGNUM)
-	  || regnum == PC_REGNUM
-	  || regnum == SP_REGNUM)
+      if ((regnum >= 0 && regnum < gdbarch_fp0_regnum (current_gdbarch))
+	  || regnum == gdbarch_pc_regnum (current_gdbarch)
+	  || regnum == gdbarch_sp_regnum (current_gdbarch))
 	return;			/* Not a floating point register.  */
 
       fpregs = proc_get_fpregs (pi);
       if (fpregs == NULL)
 	proc_error (pi, "fetch_registers, get_fpregs", __LINE__);
 
-      supply_fpregset (fpregs);
+      supply_fpregset (regcache, (const gdb_fpregset_t *) fpregs);
     }
 }
 
@@ -3731,11 +3731,8 @@ procfs_fetch_registers (int regnum)
    from the program being debugged.  */
 
 static void
-procfs_prepare_to_store (void)
+procfs_prepare_to_store (struct regcache *regcache)
 {
-#ifdef CHILD_PREPARE_TO_STORE
-  CHILD_PREPARE_TO_STORE ();
-#endif
 }
 
 /* Store register REGNUM back into the inferior.  If REGNUM is -1, do
@@ -3749,7 +3746,7 @@ procfs_prepare_to_store (void)
    writing one register might affect the value of others, etc.  */
 
 static void
-procfs_store_registers (int regnum)
+procfs_store_registers (struct regcache *regcache, int regnum)
 {
   gdb_gregset_t *gregs;
   procinfo *pi;
@@ -3773,24 +3770,24 @@ procfs_store_registers (int regnum)
   if (gregs == NULL)
     proc_error (pi, "store_registers, get_gregs", __LINE__);
 
-  fill_gregset (gregs, regnum);
+  fill_gregset (regcache, gregs, regnum);
   if (!proc_set_gregs (pi))
     proc_error (pi, "store_registers, set_gregs", __LINE__);
 
-  if (FP0_REGNUM >= 0)		/* Do we have an FPU?  */
+  if (gdbarch_fp0_regnum (current_gdbarch) >= 0) /* Do we have an FPU?  */
     {
       gdb_fpregset_t *fpregs;
 
-      if ((regnum >= 0 && regnum < FP0_REGNUM)
-	  || regnum == PC_REGNUM
-	  || regnum == SP_REGNUM)
+      if ((regnum >= 0 && regnum < gdbarch_fp0_regnum (current_gdbarch))
+	  || regnum == gdbarch_pc_regnum (current_gdbarch)
+	  || regnum == gdbarch_sp_regnum (current_gdbarch))
 	return;			/* Not a floating point register.  */
 
       fpregs = proc_get_fpregs (pi);
       if (fpregs == NULL)
 	proc_error (pi, "store_registers, get_fpregs", __LINE__);
 
-      fill_fpregset (fpregs, regnum);
+      fill_fpregset (regcache, fpregs, regnum);
       if (!proc_set_fpregs (pi))
 	proc_error (pi, "store_registers, set_fpregs", __LINE__);
     }
@@ -4414,7 +4411,7 @@ invalidate_cache (procinfo *parent, procinfo *pi, void *ptr)
       if (!proc_set_gregs (pi))	/* flush gregs cache */
 	proc_warn (pi, "target_resume, set_gregs",
 		   __LINE__);
-  if (FP0_REGNUM >= 0)
+  if (gdbarch_fp0_regnum (current_gdbarch) >= 0)
     if (pi->fpregs_dirty)
       if (parent == NULL ||
 	  proc_get_current_thread (parent) != pi->tid)
@@ -5736,7 +5733,7 @@ info_mappings_callback (struct prmap *map, int (*ignore) (), void *unused)
 {
   char *data_fmt_string;
 
-  if (TARGET_ADDR_BIT == 32)
+  if (gdbarch_addr_bit (current_gdbarch) == 32)
     data_fmt_string   = "\t%#10lx %#10lx %#10x %#10x %7s\n";
   else
     data_fmt_string   = "  %#18lx %#18lx %#10x %#10x %7s\n";
@@ -5766,7 +5763,7 @@ info_proc_mappings (procinfo *pi, int summary)
 {
   char *header_fmt_string;
 
-  if (TARGET_PTR_BIT == 32)
+  if (gdbarch_ptr_bit (current_gdbarch) == 32)
     header_fmt_string = "\t%10s %10s %10s %10s %7s\n";
   else
     header_fmt_string = "  %18s %18s %10s %10s %7s\n";
@@ -6014,13 +6011,14 @@ static char *
 procfs_do_thread_registers (bfd *obfd, ptid_t ptid,
 			    char *note_data, int *note_size)
 {
+  struct regcache *regcache = get_thread_regcache (ptid);
   gdb_gregset_t gregs;
   gdb_fpregset_t fpregs;
   unsigned long merged_pid;
 
   merged_pid = TIDGET (ptid) << 16 | PIDGET (ptid);
 
-  fill_gregset (&gregs, -1);
+  fill_gregset (regcache, &gregs, -1);
 #if defined (UNIXWARE)
   note_data = (char *) elfcore_write_lwpstatus (obfd,
 						note_data,
@@ -6036,7 +6034,7 @@ procfs_do_thread_registers (bfd *obfd, ptid_t ptid,
 					       stop_signal,
 					       &gregs);
 #endif
-  fill_fpregset (&fpregs, -1);
+  fill_fpregset (regcache, &fpregs, -1);
   note_data = (char *) elfcore_write_prfpreg (obfd,
 					      note_data,
 					      note_size,
@@ -6107,7 +6105,7 @@ procfs_make_note_section (bfd *obfd, int *note_size)
 					       psargs);
 
 #ifdef UNIXWARE
-  fill_gregset (&gregs, -1);
+  fill_gregset (get_current_regcache (), &gregs, -1);
   note_data = elfcore_write_pstatus (obfd, note_data, note_size,
 				     PIDGET (inferior_ptid),
 				     stop_signal, &gregs);

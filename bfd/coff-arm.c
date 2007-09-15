@@ -1,6 +1,6 @@
 /* BFD back-end for ARM COFF files.
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
    Written by Cygnus Support.
 
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,10 +18,11 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "libbfd.h"
 #include "coff/arm.h"
 #include "coff/internal.h"
@@ -851,6 +852,23 @@ coff_arm_reloc_type_lookup (bfd * abfd, bfd_reloc_code_real_type code)
 #endif
     default: return NULL;
     }
+}
+
+static reloc_howto_type *
+coff_arm_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
+			    const char *r_name)
+{
+  unsigned int i;
+
+  for (i = 0;
+       i < (sizeof (aoutarm_std_reloc_howto)
+	    / sizeof (aoutarm_std_reloc_howto[0]));
+       i++)
+    if (aoutarm_std_reloc_howto[i].name != NULL
+	&& strcasecmp (aoutarm_std_reloc_howto[i].name, r_name) == 0)
+      return &aoutarm_std_reloc_howto[i];
+
+  return NULL;
 }
 
 #define COFF_DEFAULT_SECTION_ALIGNMENT_POWER  2
@@ -2112,6 +2130,7 @@ bfd_arm_process_before_allocation (bfd *                   abfd,
 #endif /* ! defined (COFF_IMAGE_WITH_PE) */
 
 #define coff_bfd_reloc_type_lookup 		coff_arm_reloc_type_lookup
+#define coff_bfd_reloc_name_lookup	coff_arm_reloc_name_lookup
 #define coff_relocate_section 			coff_arm_relocate_section
 #define coff_bfd_is_local_label_name 		coff_arm_is_local_label_name
 #define coff_adjust_symndx			coff_arm_adjust_symndx

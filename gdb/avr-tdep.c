@@ -1,13 +1,13 @@
 /* Target-dependent code for Atmel AVR, for GDB.
 
-   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
-   2005, 2006 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* Contributed by Theodore A. Roth, troth@openavr.org */
 
@@ -32,6 +30,7 @@
 #include "trad-frame.h"
 #include "gdbcmd.h"
 #include "gdbcore.h"
+#include "gdbtypes.h"
 #include "inferior.h"
 #include "symfile.h"
 #include "arch-utils.h"
@@ -311,38 +310,18 @@ avr_pointer_to_address (struct type *type, const gdb_byte *buf)
 }
 
 static CORE_ADDR
-avr_read_pc (ptid_t ptid)
+avr_read_pc (struct regcache *regcache)
 {
-  ptid_t save_ptid;
   ULONGEST pc;
-  CORE_ADDR retval;
-
-  save_ptid = inferior_ptid;
-  inferior_ptid = ptid;
-  regcache_cooked_read_unsigned (current_regcache, AVR_PC_REGNUM, &pc);
-  inferior_ptid = save_ptid;
-  retval = avr_make_iaddr (pc);
-  return retval;
+  regcache_cooked_read_unsigned (regcache, AVR_PC_REGNUM, &pc);
+  return avr_make_iaddr (pc);
 }
 
 static void
-avr_write_pc (CORE_ADDR val, ptid_t ptid)
+avr_write_pc (struct regcache *regcache, CORE_ADDR val)
 {
-  ptid_t save_ptid;
-
-  save_ptid = inferior_ptid;
-  inferior_ptid = ptid;
-  write_register (AVR_PC_REGNUM, avr_convert_iaddr_to_raw (val));
-  inferior_ptid = save_ptid;
-}
-
-static CORE_ADDR
-avr_read_sp (void)
-{
-  ULONGEST sp;
-
-  regcache_cooked_read_unsigned (current_regcache, AVR_SP_REGNUM, &sp);
-  return (avr_make_saddr (sp));
+  regcache_cooked_write_unsigned (regcache, AVR_PC_REGNUM,
+				  avr_convert_iaddr_to_raw (val));
 }
 
 static int
@@ -874,7 +853,7 @@ avr_frame_unwind_cache (struct frame_info *next_frame,
   info->size = 0;
   info->prologue_type = AVR_PROLOGUE_NONE;
 
-  pc = frame_func_unwind (next_frame);
+  pc = frame_func_unwind (next_frame, NORMAL_FRAME);
 
   if ((pc > 0) && (pc < frame_pc_unwind (next_frame)))
     avr_scan_prologue (pc, info);
@@ -911,7 +890,7 @@ avr_frame_unwind_cache (struct frame_info *next_frame,
 
   /* Adjust all the saved registers so that they contain addresses and not
      offsets.  */
-  for (i = 0; i < NUM_REGS - 1; i++)
+  for (i = 0; i < gdbarch_num_regs (current_gdbarch) - 1; i++)
     if (info->saved_regs[i].addr)
       {
         info->saved_regs[i].addr = (info->prev_sp - info->saved_regs[i].addr);
@@ -942,6 +921,16 @@ avr_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
   return avr_make_iaddr (pc);
 }
 
+static CORE_ADDR
+avr_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
+{
+  ULONGEST sp;
+
+  frame_unwind_unsigned_register (next_frame, AVR_SP_REGNUM, &sp);
+
+  return avr_make_saddr (sp);
+}
+
 /* Given a GDB frame, determine the address of the calling function's
    frame.  This will be used to create a new GDB frame struct.  */
 
@@ -957,7 +946,7 @@ avr_frame_this_id (struct frame_info *next_frame,
   struct frame_id id;
 
   /* The FUNC is easy.  */
-  func = frame_func_unwind (next_frame);
+  func = frame_func_unwind (next_frame, NORMAL_FRAME);
 
   /* Hopefully the prologue analysis either correctly determined the
      frame's base (which is the SP from the previous frame), or set
@@ -1161,8 +1150,8 @@ avr_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   if (struct_return)
     {
       fprintf_unfiltered (gdb_stderr, "struct_return: 0x%lx\n", struct_addr);
-      write_register (argreg--, struct_addr & 0xff);
-      write_register (argreg--, (struct_addr >>8) & 0xff);
+      regcache_cooked_write_unsigned (regcache, argreg--, struct_addr & 0xff);
+      regcache_cooked_write_unsigned (regcache, argreg--, (struct_addr >>8) & 0xff);
     }
 #endif
 
@@ -1267,13 +1256,12 @@ avr_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_double_bit (gdbarch, 4 * TARGET_CHAR_BIT);
   set_gdbarch_long_double_bit (gdbarch, 4 * TARGET_CHAR_BIT);
 
-  set_gdbarch_float_format (gdbarch, &floatformat_ieee_single_little);
-  set_gdbarch_double_format (gdbarch, &floatformat_ieee_single_little);
-  set_gdbarch_long_double_format (gdbarch, &floatformat_ieee_single_little);
+  set_gdbarch_float_format (gdbarch, floatformats_ieee_single);
+  set_gdbarch_double_format (gdbarch, floatformats_ieee_single);
+  set_gdbarch_long_double_format (gdbarch, floatformats_ieee_single);
 
   set_gdbarch_read_pc (gdbarch, avr_read_pc);
   set_gdbarch_write_pc (gdbarch, avr_write_pc);
-  set_gdbarch_read_sp (gdbarch, avr_read_sp);
 
   set_gdbarch_num_regs (gdbarch, AVR_NUM_REGS);
 
@@ -1302,6 +1290,7 @@ avr_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_unwind_dummy_id (gdbarch, avr_unwind_dummy_id);
 
   set_gdbarch_unwind_pc (gdbarch, avr_unwind_pc);
+  set_gdbarch_unwind_sp (gdbarch, avr_unwind_sp);
 
   return gdbarch;
 }

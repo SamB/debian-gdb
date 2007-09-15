@@ -1,12 +1,12 @@
 /* Target-dependent code for GNU/Linux UltraSPARC.
 
-   Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -106,14 +104,11 @@ sparc64_linux_sigframe_init (const struct tramp_frame *self,
    address.  */
 
 static CORE_ADDR
-sparc64_linux_step_trap (unsigned long insn)
+sparc64_linux_step_trap (struct frame_info *frame, unsigned long insn)
 {
   if (insn == 0x91d0206d)
     {
-      ULONGEST sp;
-
-      regcache_cooked_read_unsigned (current_regcache,
-				     SPARC_SP_REGNUM, &sp);
+      ULONGEST sp = get_frame_register_unsigned (frame, SPARC_SP_REGNUM);
       if (sp & 1)
 	sp += BIAS;
 

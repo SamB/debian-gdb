@@ -1,9 +1,9 @@
 /* GDB variable objects API.
-   Copyright (C) 1999, 2000, 2001, 2005 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2005, 2007 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -12,9 +12,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef VAROBJ_H
 #define VAROBJ_H 1
@@ -38,7 +36,15 @@ enum varobj_type
     USE_CURRENT_FRAME,          /* Use the current frame */
     USE_SELECTED_FRAME          /* Always reevaluate in selected frame */
   };
-    
+
+/* Error return values for varobj_update function.  */
+enum varobj_update_error
+  {
+    NOT_IN_SCOPE = -1,          /* varobj not in scope, can not be updated.  */
+    TYPE_CHANGED = -2,          /* varobj type has changed.  */
+    INVALID = -3,               /* varobj is not valid anymore.  */
+  };
+
 /* String representations of gdb's format codes (defined in varobj.c) */
 extern char *varobj_format_string[];
 
@@ -78,6 +84,10 @@ extern enum varobj_display_formats varobj_set_display_format (
 extern enum varobj_display_formats varobj_get_display_format (
 							struct varobj *var);
 
+extern void varobj_set_frozen (struct varobj *var, int frozen);
+
+extern int varobj_get_frozen (struct varobj *var);
+
 extern int varobj_get_num_children (struct varobj *var);
 
 extern int varobj_list_children (struct varobj *var,
@@ -86,6 +96,8 @@ extern int varobj_list_children (struct varobj *var,
 extern char *varobj_get_type (struct varobj *var);
 
 extern struct type *varobj_get_gdb_type (struct varobj *var);
+
+extern char *varobj_get_path_expr (struct varobj *var);
 
 extern enum varobj_languages varobj_get_language (struct varobj *var);
 
@@ -97,6 +109,9 @@ extern int varobj_set_value (struct varobj *var, char *expression);
 
 extern int varobj_list (struct varobj ***rootlist);
 
-extern int varobj_update (struct varobj **varp, struct varobj ***changelist);
+extern int varobj_update (struct varobj **varp, struct varobj ***changelist,
+			  int explicit);
+
+extern void varobj_invalidate (void);
 
 #endif /* VAROBJ_H */

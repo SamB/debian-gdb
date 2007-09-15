@@ -1,12 +1,12 @@
 /* GNU/Linux native-dependent code for debugging multiple forks.
 
-   Copyright (C) 2005, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "inferior.h"
@@ -245,14 +243,10 @@ fork_load_infrun_state (struct fork_info *fp)
   linux_nat_switch_fork (inferior_ptid);
 
   if (fp->savedregs && fp->clobber_regs)
-    regcache_cpy (current_regcache, fp->savedregs);
+    regcache_cpy (get_current_regcache (), fp->savedregs);
 
   registers_changed ();
   reinit_frame_cache ();
-
-  /* We must select a new frame before making any inferior calls to
-     avoid warnings.  */
-  select_frame (get_current_frame ());
 
   stop_pc = read_pc ();
   nullify_last_target_wait_ptid ();
@@ -282,7 +276,7 @@ fork_save_infrun_state (struct fork_info *fp, int clobber_regs)
   if (fp->savedregs)
     regcache_xfree (fp->savedregs);
 
-  fp->savedregs = regcache_dup (current_regcache);
+  fp->savedregs = regcache_dup (get_current_regcache ());
   fp->clobber_regs = clobber_regs;
   fp->pc = read_pc ();
 

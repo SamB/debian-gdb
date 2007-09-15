@@ -14,6 +14,9 @@
 /* Global directory for separate debug files. */
 #undef DEBUGDIR
 
+/* Define if the debug directory should be relocated when GDB is moved. */
+#undef DEBUGDIR_RELOCATABLE
+
 /* Define to BFD's default architecture. */
 #undef DEFAULT_BFD_ARCH
 
@@ -107,6 +110,9 @@
    */
 #undef HAVE_DIRENT_H
 
+/* Define if ELF support should be included. */
+#undef HAVE_ELF
+
 /* Define to 1 if you have the `fork' function. */
 #undef HAVE_FORK
 
@@ -118,6 +124,9 @@
 
 /* Define to 1 if you have the `getpagesize' function. */
 #undef HAVE_GETPAGESIZE
+
+/* Define to 1 if you have the `getrusage' function. */
+#undef HAVE_GETRUSAGE
 
 /* Define to 1 if you have the `getuid' function. */
 #undef HAVE_GETUID
@@ -275,6 +284,9 @@
 /* Define to 1 if you have the `sigaction' function. */
 #undef HAVE_SIGACTION
 
+/* Define to 1 if you have the <signal.h> header file. */
+#undef HAVE_SIGNAL_H
+
 /* Define to 1 if you have the `sigprocmask' function. */
 #undef HAVE_SIGPROCMASK
 
@@ -385,6 +397,9 @@
 /* Define to 1 if you have the <sys/reg.h> header file. */
 #undef HAVE_SYS_REG_H
 
+/* Define to 1 if you have the <sys/resource.h> header file. */
+#undef HAVE_SYS_RESOURCE_H
+
 /* Define to 1 if you have the <sys/select.h> header file. */
 #undef HAVE_SYS_SELECT_H
 
@@ -450,6 +465,9 @@
 
 /* Define to 1 if `vfork' works. */
 #undef HAVE_WORKING_VFORK
+
+/* Define to 1 if you have the `XML_StopParser' function. */
+#undef HAVE_XML_STOPPARSER
 
 /* Define to 1 if your system has the _etext variable. */
 #undef HAVE__ETEXT
@@ -536,9 +554,6 @@
 	STACK_DIRECTION = 0 => direction of growth unknown */
 #undef STACK_DIRECTION
 
-/* Define on a GNU/Linux system to work around problems in sys/procfs.h. */
-#undef START_INFERIOR_TRAPS_EXPECTED
-
 /* Define to 1 if the `S_IS*' macros in <sys/stat.h> do not work properly. */
 #undef STAT_MACROS_BROKEN
 
@@ -547,6 +562,12 @@
 
 /* Define if <thread_db.h> has the TD_NOTALLOC error code. */
 #undef THREAD_DB_HAS_TD_NOTALLOC
+
+/* Define if <thread_db.h> has the TD_NOTLS error code. */
+#undef THREAD_DB_HAS_TD_NOTLS
+
+/* Define if <thread_db.h> has the TD_VERSION error code. */
+#undef THREAD_DB_HAS_TD_VERSION
 
 /* Define to 1 if the regex included in libiberty should be used. */
 #undef USE_INCLUDED_REGEX
@@ -593,9 +614,6 @@
 
 /* Define to `int' if <sys/types.h> does not define. */
 #undef pid_t
-
-/* Define on a GNU/Linux system to work around problems in sys/procfs.h. */
-#undef sys_quotactl
 
 /* Define as `fork' if `vfork' does not work. */
 #undef vfork

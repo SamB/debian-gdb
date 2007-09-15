@@ -1,14 +1,14 @@
 /* Target-dependent code for PowerPC systems using the SVR4 ABI
    for GDB, the GNU debugger.
 
-   Copyright (C) 2000, 2001, 2002, 2003, 2005
+   Copyright (C) 2000, 2001, 2002, 2003, 2005, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbcore.h"
@@ -51,9 +49,13 @@ ppc_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 			      int struct_return, CORE_ADDR struct_addr)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
-  const CORE_ADDR saved_sp = read_sp ();
+  ULONGEST saved_sp;
   int argspace = 0;		/* 0 is an initial wrong guess.  */
   int write_pass;
+
+  regcache_cooked_read_unsigned (regcache,
+				 gdbarch_sp_regnum (current_gdbarch),
+				 &saved_sp);
 
   /* Go through the argument list twice.
 
@@ -132,19 +134,8 @@ ppc_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		  if (write_pass)
 		    {
 		      char memval[8];
-		      struct type *memtype;
-		      switch (TARGET_BYTE_ORDER)
-			{
-			case BFD_ENDIAN_BIG:
-			  memtype = builtin_type_ieee_double_big;
-			  break;
-			case BFD_ENDIAN_LITTLE:
-			  memtype = builtin_type_ieee_double_little;
-			  break;
-			default:
-			  internal_error (__FILE__, __LINE__, _("bad switch"));
-			}
-		      convert_typed_floating (val, type, memval, memtype);
+		      convert_typed_floating (val, type, memval,
+					      builtin_type_ieee_double);
 		      write_memory (sp + argoffset, val, len);
 		    }
 		  argoffset += 8;
@@ -200,7 +191,7 @@ ppc_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	      if (vreg <= 13)
 		{
 		  if (write_pass)
-		    regcache_cooked_write (current_regcache,
+		    regcache_cooked_write (regcache,
 					   tdep->ppc_vr0_regnum + vreg, val);
 		  vreg++;
 		}
@@ -226,7 +217,7 @@ ppc_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	      if (greg <= 10)
 		{
 		  if (write_pass)
-		    regcache_cooked_write (current_regcache,
+		    regcache_cooked_write (regcache,
 					   tdep->ppc_ev0_regnum + greg, val);
 		  greg++;
 		}
@@ -316,7 +307,8 @@ ppc_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
     }
 
   /* Update %sp.   */
-  regcache_cooked_write_signed (regcache, SP_REGNUM, sp);
+  regcache_cooked_write_signed (regcache,
+				gdbarch_sp_regnum (current_gdbarch), sp);
 
   /* Write the backchain (it occupies WORDSIZED bytes).  */
   write_memory_signed_integer (sp, tdep->wordsize, saved_sp);
@@ -396,8 +388,13 @@ do_ppc_sysv_return_value (struct gdbarch *gdbarch, struct type *type,
 	}
       return RETURN_VALUE_REGISTER_CONVENTION;
     }
-  if (TYPE_CODE (type) == TYPE_CODE_INT
-      && TYPE_LENGTH (type) <= tdep->wordsize)
+  else if ((TYPE_CODE (type) == TYPE_CODE_INT
+	    || TYPE_CODE (type) == TYPE_CODE_CHAR
+	    || TYPE_CODE (type) == TYPE_CODE_BOOL
+	    || TYPE_CODE (type) == TYPE_CODE_PTR
+	    || TYPE_CODE (type) == TYPE_CODE_REF
+	    || TYPE_CODE (type) == TYPE_CODE_ENUM)
+	   && TYPE_LENGTH (type) <= tdep->wordsize)
     {
       if (readbuf)
 	{
@@ -589,10 +586,7 @@ ppc64_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 {
   CORE_ADDR func_addr = find_function_addr (function, NULL);
   struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
-  /* By this stage in the proceedings, SP has been decremented by "red
-     zone size" + "struct return size".  Fetch the stack-pointer from
-     before this and use that as the BACK_CHAIN.  */
-  const CORE_ADDR back_chain = read_sp ();
+  ULONGEST back_chain;
   /* See for-loop comment below.  */
   int write_pass;
   /* Size of the Altivec's vector parameter region, the final value is
@@ -609,6 +603,13 @@ ppc64_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
      correct without having to do a non-local analysis to figure out
      the possible values of tdep->wordsize.  */
   gdb_assert (tdep->wordsize == 8);
+
+  /* By this stage in the proceedings, SP has been decremented by "red
+     zone size" + "struct return size".  Fetch the stack-pointer from
+     before this and use that as the BACK_CHAIN.  */
+  regcache_cooked_read_unsigned (regcache,
+				 gdbarch_sp_regnum (current_gdbarch),
+				 &back_chain);
 
   /* Go through the argument list twice.
 
@@ -839,7 +840,8 @@ ppc64_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
     }
 
   /* Update %sp.   */
-  regcache_cooked_write_signed (regcache, SP_REGNUM, sp);
+  regcache_cooked_write_signed (regcache,
+				gdbarch_sp_regnum (current_gdbarch), sp);
 
   /* Write the backchain (it occupies WORDSIZED bytes).  */
   write_memory_signed_integer (sp, tdep->wordsize, back_chain);

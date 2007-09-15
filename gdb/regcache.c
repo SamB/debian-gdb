@@ -1,13 +1,13 @@
 /* Cache and manage the values of registers for GDB, the GNU debugger.
 
-   Copyright (C) 1986, 1987, 1989, 1991, 1994, 1995, 1996, 1998, 2000,
-   2001, 2002, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1987, 1989, 1991, 1994, 1995, 1996, 1998, 2000, 2001,
+   2002, 2004, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "inferior.h"
@@ -94,8 +92,11 @@ init_regcache_descr (struct gdbarch *gdbarch)
   /* Total size of the register space.  The raw registers are mapped
      directly onto the raw register cache while the pseudo's are
      either mapped onto raw-registers or memory.  */
-  descr->nr_cooked_registers = NUM_REGS + NUM_PSEUDO_REGS;
-  descr->sizeof_cooked_register_valid_p = NUM_REGS + NUM_PSEUDO_REGS;
+  descr->nr_cooked_registers = gdbarch_num_regs (current_gdbarch)
+			       + gdbarch_num_pseudo_regs (current_gdbarch);
+  descr->sizeof_cooked_register_valid_p = gdbarch_num_regs (current_gdbarch)
+					  + gdbarch_num_pseudo_regs 
+					      (current_gdbarch);
 
   /* Fill in a table of register types.  */
   descr->register_type
@@ -105,12 +106,12 @@ init_regcache_descr (struct gdbarch *gdbarch)
 
   /* Construct a strictly RAW register cache.  Don't allow pseudo's
      into the register cache.  */
-  descr->nr_raw_registers = NUM_REGS;
+  descr->nr_raw_registers = gdbarch_num_regs (current_gdbarch);
 
   /* FIXME: cagney/2002-08-13: Overallocate the register_valid_p
      array.  This pretects GDB from erant code that accesses elements
-     of the global register_valid_p[] array in the range [NUM_REGS
-     .. NUM_REGS + NUM_PSEUDO_REGS).  */
+     of the global register_valid_p[] array in the range 
+     [gdbarch_num_regs .. gdbarch_num_regs + gdbarch_num_pseudo_regs).  */
   descr->sizeof_raw_register_valid_p = descr->sizeof_cooked_register_valid_p;
 
   /* Lay out the register cache.
@@ -172,7 +173,9 @@ register_size (struct gdbarch *gdbarch, int regnum)
 {
   struct regcache_descr *descr = regcache_descr (gdbarch);
   int size;
-  gdb_assert (regnum >= 0 && regnum < (NUM_REGS + NUM_PSEUDO_REGS));
+  gdb_assert (regnum >= 0
+	      && regnum < (gdbarch_num_regs (current_gdbarch)
+			   + gdbarch_num_pseudo_regs (current_gdbarch)));
   size = descr->sizeof_register[regnum];
   return size;
 }
@@ -183,8 +186,8 @@ struct regcache
 {
   struct regcache_descr *descr;
   /* The register buffers.  A read-only register cache can hold the
-     full [0 .. NUM_REGS + NUM_PSEUDO_REGS) while a read/write
-     register cache can only hold [0 .. NUM_REGS).  */
+     full [0 .. gdbarch_num_regs + gdbarch_num_pseudo_regs) while a read/write
+     register cache can only hold [0 .. gdbarch_num_regs).  */
   gdb_byte *registers;
   /* Register cache status:
      register_valid_p[REG] == 0 if REG value is not in the cache
@@ -198,6 +201,9 @@ struct regcache
      regcache_cpy().  The actual contents are determined by the
      reggroup_save and reggroup_restore methods.  */
   int readonly_p;
+  /* If this is a read-write cache, which thread's registers is
+     it connected to?  */
+  ptid_t ptid;
 };
 
 struct regcache *
@@ -214,6 +220,7 @@ regcache_xmalloc (struct gdbarch *gdbarch)
   regcache->register_valid_p
     = XCALLOC (descr->sizeof_raw_register_valid_p, gdb_byte);
   regcache->readonly_p = 1;
+  regcache->ptid = minus_one_ptid;
   return regcache;
 }
 
@@ -270,8 +277,8 @@ regcache_save (struct regcache *dst, regcache_cooked_read_ftype *cooked_read,
   memset (dst->registers, 0, dst->descr->sizeof_cooked_registers);
   memset (dst->register_valid_p, 0, dst->descr->sizeof_cooked_register_valid_p);
   /* Copy over any registers (identified by their membership in the
-     save_reggroup) and mark them as valid.  The full [0 .. NUM_REGS +
-     NUM_PSEUDO_REGS) range is checked since some architectures need
+     save_reggroup) and mark them as valid.  The full [0 .. gdbarch_num_regs +
+     gdbarch_num_pseudo_regs) range is checked since some architectures need
      to save/restore `cooked' registers that live in memory.  */
   for (regnum = 0; regnum < dst->descr->nr_cooked_registers; regnum++)
     {
@@ -300,8 +307,8 @@ regcache_restore (struct regcache *dst,
      doesn't make much sense.  */
   gdb_assert (!dst->readonly_p);
   /* Copy over any registers, being careful to only restore those that
-     were both saved and need to be restored.  The full [0 .. NUM_REGS
-     + NUM_PSEUDO_REGS) range is checked since some architectures need
+     were both saved and need to be restored.  The full [0 .. gdbarch_num_regs
+     + gdbarch_num_pseudo_regs) range is checked since some architectures need
      to save/restore `cooked' registers that live in memory.  */
   for (regnum = 0; regnum < dst->descr->nr_cooked_registers; regnum++)
     {
@@ -352,9 +359,9 @@ regcache_cpy_no_passthrough (struct regcache *dst, struct regcache *src)
   gdb_assert (src != NULL && dst != NULL);
   gdb_assert (src->descr->gdbarch == dst->descr->gdbarch);
   /* NOTE: cagney/2002-05-17: Don't let the caller do a no-passthrough
-     move of data into the current_regcache().  Doing this would be
+     move of data into the current regcache.  Doing this would be
      silly - it would mean that valid_p would be completely invalid.  */
-  gdb_assert (dst != current_regcache);
+  gdb_assert (dst->readonly_p);
   memcpy (dst->registers, src->registers, dst->descr->sizeof_raw_registers);
   memcpy (dst->register_valid_p, src->register_valid_p,
 	  dst->descr->sizeof_raw_register_valid_p);
@@ -364,7 +371,6 @@ struct regcache *
 regcache_dup (struct regcache *src)
 {
   struct regcache *newbuf;
-  gdb_assert (current_regcache != NULL);
   newbuf = regcache_xmalloc (src->descr->gdbarch);
   regcache_cpy (newbuf, src);
   return newbuf;
@@ -374,66 +380,70 @@ struct regcache *
 regcache_dup_no_passthrough (struct regcache *src)
 {
   struct regcache *newbuf;
-  gdb_assert (current_regcache != NULL);
   newbuf = regcache_xmalloc (src->descr->gdbarch);
   regcache_cpy_no_passthrough (newbuf, src);
   return newbuf;
 }
 
 int
-regcache_valid_p (struct regcache *regcache, int regnum)
+regcache_valid_p (const struct regcache *regcache, int regnum)
 {
   gdb_assert (regcache != NULL);
-  gdb_assert (regnum >= 0 && regnum < regcache->descr->nr_raw_registers);
+  gdb_assert (regnum >= 0);
+  if (regcache->readonly_p)
+    gdb_assert (regnum < regcache->descr->nr_cooked_registers);
+  else
+    gdb_assert (regnum < regcache->descr->nr_raw_registers);
+
   return regcache->register_valid_p[regnum];
 }
 
-gdb_byte *
-deprecated_grub_regcache_for_registers (struct regcache *regcache)
+void
+regcache_invalidate (struct regcache *regcache, int regnum)
 {
-  return regcache->registers;
+  gdb_assert (regcache != NULL);
+  gdb_assert (regnum >= 0);
+  gdb_assert (!regcache->readonly_p);
+  gdb_assert (regnum < regcache->descr->nr_raw_registers);
+  regcache->register_valid_p[regnum] = 0;
 }
+
 
 /* Global structure containing the current regcache.  */
 /* FIXME: cagney/2002-05-11: The two global arrays registers[] and
    deprecated_register_valid[] currently point into this structure.  */
-struct regcache *current_regcache;
+static struct regcache *current_regcache;
 
 /* NOTE: this is a write-through cache.  There is no "dirty" bit for
    recording if the register values have been changed (eg. by the
    user).  Therefore all registers must be written back to the
    target when appropriate.  */
 
-/* The thread/process associated with the current set of registers. */
-
-static ptid_t registers_ptid;
-
-/*
- * FUNCTIONS:
- */
-
-/* REGISTER_CACHED()
-
-   Returns 0 if the value is not in the cache (needs fetch).
-          >0 if the value is in the cache.
-	  <0 if the value is permanently unavailable (don't ask again).  */
-
-int
-register_cached (int regnum)
+struct regcache *get_thread_regcache (ptid_t ptid)
 {
-  return current_regcache->register_valid_p[regnum];
+  /* NOTE: uweigand/2007-05-05:  We need to detect the thread's
+     current architecture at this point.  */
+  struct gdbarch *thread_gdbarch = current_gdbarch;
+
+  if (current_regcache && ptid_equal (current_regcache->ptid, ptid)
+      && get_regcache_arch (current_regcache) == thread_gdbarch)
+    return current_regcache;
+
+  if (current_regcache)
+    regcache_xfree (current_regcache);
+
+  current_regcache = regcache_xmalloc (thread_gdbarch);
+  current_regcache->readonly_p = 0;
+  current_regcache->ptid = ptid;
+
+  return current_regcache;
 }
 
-/* Record that REGNUM's value is cached if STATE is >0, uncached but
-   fetchable if STATE is 0, and uncached and unfetchable if STATE is <0.  */
-
-void
-set_register_cached (int regnum, int state)
+struct regcache *get_current_regcache (void)
 {
-  gdb_assert (regnum >= 0);
-  gdb_assert (regnum < current_regcache->descr->nr_raw_registers);
-  current_regcache->register_valid_p[regnum] = state;
+  return get_thread_regcache (inferior_ptid);
 }
+
 
 /* Observer for the target_changed event.  */
 
@@ -459,7 +469,8 @@ registers_changed (void)
 {
   int i;
 
-  registers_ptid = pid_to_ptid (-1);
+  regcache_xfree (current_regcache);
+  current_regcache = NULL;
 
   /* Force cleanup of any alloca areas if using C alloca instead of
      a builtin alloca.  This particular call is used to clean up
@@ -467,111 +478,8 @@ registers_changed (void)
      during lengthy interactions between gdb and the target before
      gdb gives control to the user (ie watchpoints).  */
   alloca (0);
-
-  for (i = 0; i < current_regcache->descr->nr_raw_registers; i++)
-    set_register_cached (i, 0);
-
-  if (deprecated_registers_changed_hook)
-    deprecated_registers_changed_hook ();
 }
 
-/* DEPRECATED_REGISTERS_FETCHED ()
-
-   Indicate that all registers have been fetched, so mark them all valid.  */
-
-/* FIXME: cagney/2001-12-04: This function is DEPRECATED.  The target
-   code was blatting the registers[] array and then calling this.
-   Since targets should only be using regcache_raw_supply() the need for
-   this function/hack is eliminated.  */
-
-void
-deprecated_registers_fetched (void)
-{
-  int i;
-
-  for (i = 0; i < NUM_REGS; i++)
-    set_register_cached (i, 1);
-  /* Do not assume that the pseudo-regs have also been fetched.
-     Fetching all real regs NEVER accounts for pseudo-regs.  */
-}
-
-/* deprecated_read_register_bytes and deprecated_write_register_bytes
-   are generally a *BAD* idea.  They are inefficient because they need
-   to check for partial updates, which can only be done by scanning
-   through all of the registers and seeing if the bytes that are being
-   read/written fall inside of an invalid register.  [The main reason
-   this is necessary is that register sizes can vary, so a simple
-   index won't suffice.]  It is far better to call read_register_gen
-   and write_register_gen if you want to get at the raw register
-   contents, as it only takes a regnum as an argument, and therefore
-   can't do a partial register update.
-
-   Prior to the recent fixes to check for partial updates, both read
-   and deprecated_write_register_bytes always checked to see if any
-   registers were stale, and then called target_fetch_registers (-1)
-   to update the whole set.  This caused really slowed things down for
-   remote targets.  */
-
-/* Copy INLEN bytes of consecutive data from registers
-   starting with the INREGBYTE'th byte of register data
-   into memory at MYADDR.  */
-
-void
-deprecated_read_register_bytes (int in_start, gdb_byte *in_buf, int in_len)
-{
-  int in_end = in_start + in_len;
-  int regnum;
-  gdb_byte reg_buf[MAX_REGISTER_SIZE];
-
-  /* See if we are trying to read bytes from out-of-date registers.  If so,
-     update just those registers.  */
-
-  for (regnum = 0; regnum < NUM_REGS + NUM_PSEUDO_REGS; regnum++)
-    {
-      int reg_start;
-      int reg_end;
-      int reg_len;
-      int start;
-      int end;
-      int byte;
-
-      reg_start = DEPRECATED_REGISTER_BYTE (regnum);
-      reg_len = register_size (current_gdbarch, regnum);
-      reg_end = reg_start + reg_len;
-
-      if (reg_end <= in_start || in_end <= reg_start)
-	/* The range the user wants to read doesn't overlap with regnum.  */
-	continue;
-
-      if (REGISTER_NAME (regnum) != NULL && *REGISTER_NAME (regnum) != '\0')
-	/* Force the cache to fetch the entire register.  */
-	deprecated_read_register_gen (regnum, reg_buf);
-
-      /* Legacy note: This function, for some reason, allows a NULL
-         input buffer.  If the buffer is NULL, the registers are still
-         fetched, just the final transfer is skipped. */
-      if (in_buf == NULL)
-	continue;
-
-      /* start = max (reg_start, in_start) */
-      if (reg_start > in_start)
-	start = reg_start;
-      else
-	start = in_start;
-
-      /* end = min (reg_end, in_end) */
-      if (reg_end < in_end)
-	end = reg_end;
-      else
-	end = in_end;
-
-      /* Transfer just the bytes common to both IN_BUF and REG_BUF */
-      for (byte = start; byte < end; byte++)
-	{
-	  in_buf[byte - in_start] = reg_buf[byte - reg_start];
-	}
-    }
-}
 
 void
 regcache_raw_read (struct regcache *regcache, int regnum, gdb_byte *buf)
@@ -584,14 +492,13 @@ regcache_raw_read (struct regcache *regcache, int regnum, gdb_byte *buf)
      On the bright side, at least there is a regcache object.  */
   if (!regcache->readonly_p)
     {
-      gdb_assert (regcache == current_regcache);
-      if (! ptid_equal (registers_ptid, inferior_ptid))
+      if (!regcache_valid_p (regcache, regnum))
 	{
-	  registers_changed ();
-	  registers_ptid = inferior_ptid;
+	  struct cleanup *old_chain = save_inferior_ptid ();
+	  inferior_ptid = regcache->ptid;
+	  target_fetch_registers (regcache, regnum);
+	  do_cleanups (old_chain);
 	}
-      if (!register_cached (regnum))
-	target_fetch_registers (regnum);
 #if 0
       /* FIXME: cagney/2004-08-07: At present a number of targets
 	 forget (or didn't know that they needed) to set this leading to
@@ -599,7 +506,7 @@ regcache_raw_read (struct regcache *regcache, int regnum, gdb_byte *buf)
 	 that a register is in one of the possible states: valid,
 	 undefined, unknown.  The last of which isn't yet
 	 possible.  */
-      gdb_assert (register_cached (regnum));
+      gdb_assert (regcache_valid_p (regcache, regnum));
 #endif
     }
   /* Copy the value directly into the register cache.  */
@@ -653,14 +560,6 @@ regcache_raw_write_unsigned (struct regcache *regcache, int regnum,
   buf = alloca (regcache->descr->sizeof_register[regnum]);
   store_unsigned_integer (buf, regcache->descr->sizeof_register[regnum], val);
   regcache_raw_write (regcache, regnum, buf);
-}
-
-void
-deprecated_read_register_gen (int regnum, gdb_byte *buf)
-{
-  gdb_assert (current_regcache != NULL);
-  gdb_assert (current_regcache->descr->gdbarch == current_gdbarch);
-  regcache_cooked_read (current_regcache, regnum, buf);
 }
 
 void
@@ -735,22 +634,16 @@ void
 regcache_raw_write (struct regcache *regcache, int regnum,
 		    const gdb_byte *buf)
 {
+  struct cleanup *old_chain;
+
   gdb_assert (regcache != NULL && buf != NULL);
   gdb_assert (regnum >= 0 && regnum < regcache->descr->nr_raw_registers);
   gdb_assert (!regcache->readonly_p);
 
   /* On the sparc, writing %g0 is a no-op, so we don't even want to
      change the registers array if something writes to this register.  */
-  if (CANNOT_STORE_REGISTER (regnum))
+  if (gdbarch_cannot_store_register (current_gdbarch, regnum))
     return;
-
-  /* Make certain that the correct cache is selected.  */
-  gdb_assert (regcache == current_regcache);
-  if (! ptid_equal (registers_ptid, inferior_ptid))
-    {
-      registers_changed ();
-      registers_ptid = inferior_ptid;
-    }
 
   /* If we have a valid copy of the register, and new value == old
      value, then don't bother doing the actual store. */
@@ -759,19 +652,16 @@ regcache_raw_write (struct regcache *regcache, int regnum,
 		  regcache->descr->sizeof_register[regnum]) == 0))
     return;
 
-  target_prepare_to_store ();
+  old_chain = save_inferior_ptid ();
+  inferior_ptid = regcache->ptid;
+
+  target_prepare_to_store (regcache);
   memcpy (register_buffer (regcache, regnum), buf,
 	  regcache->descr->sizeof_register[regnum]);
   regcache->register_valid_p[regnum] = 1;
-  target_store_registers (regnum);
-}
+  target_store_registers (regcache, regnum);
 
-void
-deprecated_write_register_gen (int regnum, gdb_byte *buf)
-{
-  gdb_assert (current_regcache != NULL);
-  gdb_assert (current_regcache->descr->gdbarch == current_gdbarch);
-  regcache_cooked_write (current_regcache, regnum, buf);
+  do_cleanups (old_chain);
 }
 
 void
@@ -785,55 +675,6 @@ regcache_cooked_write (struct regcache *regcache, int regnum,
   else
     gdbarch_pseudo_register_write (regcache->descr->gdbarch, regcache,
 				   regnum, buf);
-}
-
-/* Copy INLEN bytes of consecutive data from memory at MYADDR
-   into registers starting with the MYREGSTART'th byte of register data.  */
-
-void
-deprecated_write_register_bytes (int myregstart, gdb_byte *myaddr, int inlen)
-{
-  int myregend = myregstart + inlen;
-  int regnum;
-
-  target_prepare_to_store ();
-
-  /* Scan through the registers updating any that are covered by the
-     range myregstart<=>myregend using write_register_gen, which does
-     nice things like handling threads, and avoiding updates when the
-     new and old contents are the same.  */
-
-  for (regnum = 0; regnum < NUM_REGS + NUM_PSEUDO_REGS; regnum++)
-    {
-      int regstart, regend;
-
-      regstart = DEPRECATED_REGISTER_BYTE (regnum);
-      regend = regstart + register_size (current_gdbarch, regnum);
-
-      /* Is this register completely outside the range the user is writing?  */
-      if (myregend <= regstart || regend <= myregstart)
-	/* do nothing */ ;		
-
-      /* Is this register completely within the range the user is writing?  */
-      else if (myregstart <= regstart && regend <= myregend)
-	deprecated_write_register_gen (regnum, myaddr + (regstart - myregstart));
-
-      /* The register partially overlaps the range being written.  */
-      else
-	{
-	  gdb_byte regbuf[MAX_REGISTER_SIZE];
-	  /* What's the overlap between this register's bytes and
-             those the caller wants to write?  */
-	  int overlapstart = max (regstart, myregstart);
-	  int overlapend   = min (regend,   myregend);
-
-	  /* We may be doing a partial update of an invalid register.
-	     Update it from the target before scribbling on it.  */
-	  deprecated_read_register_gen (regnum, regbuf);
-
-	  target_store_registers (regnum);
-	}
-    }
 }
 
 /* Perform a partial register transfer using a read, modify, write
@@ -931,77 +772,6 @@ register_offset_hack (struct gdbarch *gdbarch, int regnum)
   return descr->register_offset[regnum];
 }
 
-/* Hack to keep code using register_bytes working.  */
-
-int
-deprecated_register_bytes (void)
-{
-  return current_regcache->descr->sizeof_raw_registers;
-}
-
-/* Return the contents of register REGNUM as an unsigned integer.  */
-
-ULONGEST
-read_register (int regnum)
-{
-  gdb_byte *buf = alloca (register_size (current_gdbarch, regnum));
-  deprecated_read_register_gen (regnum, buf);
-  return (extract_unsigned_integer (buf, register_size (current_gdbarch, regnum)));
-}
-
-ULONGEST
-read_register_pid (int regnum, ptid_t ptid)
-{
-  ptid_t save_ptid;
-  int save_pid;
-  CORE_ADDR retval;
-
-  if (ptid_equal (ptid, inferior_ptid))
-    return read_register (regnum);
-
-  save_ptid = inferior_ptid;
-
-  inferior_ptid = ptid;
-
-  retval = read_register (regnum);
-
-  inferior_ptid = save_ptid;
-
-  return retval;
-}
-
-/* Store VALUE into the raw contents of register number REGNUM.  */
-
-void
-write_register (int regnum, LONGEST val)
-{
-  void *buf;
-  int size;
-  size = register_size (current_gdbarch, regnum);
-  buf = alloca (size);
-  store_signed_integer (buf, size, (LONGEST) val);
-  deprecated_write_register_gen (regnum, buf);
-}
-
-void
-write_register_pid (int regnum, CORE_ADDR val, ptid_t ptid)
-{
-  ptid_t save_ptid;
-
-  if (ptid_equal (ptid, inferior_ptid))
-    {
-      write_register (regnum, val);
-      return;
-    }
-
-  save_ptid = inferior_ptid;
-
-  inferior_ptid = ptid;
-
-  write_register (regnum, val);
-
-  inferior_ptid = save_ptid;
-}
 
 /* Supply register REGNUM, whose contents are stored in BUF, to REGCACHE.  */
 
@@ -1014,15 +784,6 @@ regcache_raw_supply (struct regcache *regcache, int regnum, const void *buf)
   gdb_assert (regcache != NULL);
   gdb_assert (regnum >= 0 && regnum < regcache->descr->nr_raw_registers);
   gdb_assert (!regcache->readonly_p);
-
-  /* FIXME: kettenis/20030828: It shouldn't be necessary to handle
-     CURRENT_REGCACHE specially here.  */
-  if (regcache == current_regcache
-      && !ptid_equal (registers_ptid, inferior_ptid))
-    {
-      registers_changed ();
-      registers_ptid = inferior_ptid;
-    }
 
   regbuf = register_buffer (regcache, regnum);
   size = regcache->descr->sizeof_register[regnum];
@@ -1053,8 +814,7 @@ regcache_raw_collect (const struct regcache *regcache, int regnum, void *buf)
 }
 
 
-/* read_pc, write_pc, read_sp, etc.  Special handling for registers
-   PC, SP, and FP.  */
+/* read_pc, write_pc, etc.  Special handling for register PC.  */
 
 /* NOTE: cagney/2001-02-18: The functions read_pc_pid(), read_pc() and
    read_sp(), will eventually be replaced by per-frame methods.
@@ -1069,25 +829,25 @@ regcache_raw_collect (const struct regcache *regcache, int regnum, void *buf)
 CORE_ADDR
 read_pc_pid (ptid_t ptid)
 {
-  ptid_t saved_inferior_ptid;
+  struct regcache *regcache = get_thread_regcache (ptid);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+
   CORE_ADDR pc_val;
 
-  /* In case ptid != inferior_ptid. */
-  saved_inferior_ptid = inferior_ptid;
-  inferior_ptid = ptid;
-
-  if (TARGET_READ_PC_P ())
-    pc_val = TARGET_READ_PC (ptid);
+  if (gdbarch_read_pc_p (gdbarch))
+    pc_val = gdbarch_read_pc (gdbarch, regcache);
   /* Else use per-frame method on get_current_frame.  */
-  else if (PC_REGNUM >= 0)
+  else if (gdbarch_pc_regnum (current_gdbarch) >= 0)
     {
-      CORE_ADDR raw_val = read_register_pid (PC_REGNUM, ptid);
-      pc_val = ADDR_BITS_REMOVE (raw_val);
+      ULONGEST raw_val;
+      regcache_cooked_read_unsigned (regcache,
+				     gdbarch_pc_regnum (current_gdbarch),
+				     &raw_val);
+      pc_val = gdbarch_addr_bits_remove (current_gdbarch, raw_val);
     }
   else
     internal_error (__FILE__, __LINE__, _("read_pc_pid: Unable to find PC"));
 
-  inferior_ptid = saved_inferior_ptid;
   return pc_val;
 }
 
@@ -1098,27 +858,19 @@ read_pc (void)
 }
 
 void
-generic_target_write_pc (CORE_ADDR pc, ptid_t ptid)
-{
-  if (PC_REGNUM >= 0)
-    write_register_pid (PC_REGNUM, pc, ptid);
-  else
-    internal_error (__FILE__, __LINE__,
-		    _("generic_target_write_pc"));
-}
-
-void
 write_pc_pid (CORE_ADDR pc, ptid_t ptid)
 {
-  ptid_t saved_inferior_ptid;
+  struct regcache *regcache = get_thread_regcache (ptid);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
 
-  /* In case ptid != inferior_ptid. */
-  saved_inferior_ptid = inferior_ptid;
-  inferior_ptid = ptid;
-
-  TARGET_WRITE_PC (pc, ptid);
-
-  inferior_ptid = saved_inferior_ptid;
+  if (gdbarch_write_pc_p (gdbarch))
+    gdbarch_write_pc (gdbarch, regcache, pc);
+  else if (gdbarch_pc_regnum (current_gdbarch) >= 0)
+    regcache_cooked_write_unsigned (regcache,
+				    gdbarch_pc_regnum (current_gdbarch), pc);
+  else
+    internal_error (__FILE__, __LINE__,
+		    _("write_pc_pid: Unable to update PC"));
 }
 
 void
@@ -1127,21 +879,6 @@ write_pc (CORE_ADDR pc)
   write_pc_pid (pc, inferior_ptid);
 }
 
-/* Cope with strage ways of getting to the stack and frame pointers */
-
-CORE_ADDR
-read_sp (void)
-{
-  if (TARGET_READ_SP_P ())
-    return TARGET_READ_SP ();
-  else if (gdbarch_unwind_sp_p (current_gdbarch))
-    return get_frame_sp (get_current_frame ());
-  else if (SP_REGNUM >= 0)
-    /* Try SP_REGNUM last: this makes all sorts of [wrong] assumptions
-       about the architecture so put it at the end.  */
-    return read_register (SP_REGNUM);
-  internal_error (__FILE__, __LINE__, _("read_sp: Unable to find SP"));
-}
 
 static void
 reg_flush_command (char *command, int from_tty)
@@ -1150,13 +887,6 @@ reg_flush_command (char *command, int from_tty)
   registers_changed ();
   if (from_tty)
     printf_filtered (_("Register cache flushed.\n"));
-}
-
-static void
-build_regcache (void)
-{
-  current_regcache = regcache_xmalloc (current_gdbarch);
-  current_regcache->readonly_p = 0;
 }
 
 static void
@@ -1207,12 +937,15 @@ regcache_dump (struct regcache *regcache, struct ui_file *file,
 		      regcache->descr->sizeof_raw_registers);
   fprintf_unfiltered (file, "sizeof_raw_register_valid_p %ld\n",
 		      regcache->descr->sizeof_raw_register_valid_p);
-  fprintf_unfiltered (file, "NUM_REGS %d\n", NUM_REGS);
-  fprintf_unfiltered (file, "NUM_PSEUDO_REGS %d\n", NUM_PSEUDO_REGS);
+  fprintf_unfiltered (file, "gdbarch_num_regs %d\n", 
+		      gdbarch_num_regs (current_gdbarch));
+  fprintf_unfiltered (file, "gdbarch_num_pseudo_regs %d\n",
+		      gdbarch_num_pseudo_regs (current_gdbarch));
 #endif
 
   gdb_assert (regcache->descr->nr_cooked_registers
-	      == (NUM_REGS + NUM_PSEUDO_REGS));
+	      == (gdbarch_num_regs (current_gdbarch)
+		  + gdbarch_num_pseudo_regs (current_gdbarch)));
 
   for (regnum = -1; regnum < regcache->descr->nr_cooked_registers; regnum++)
     {
@@ -1221,7 +954,7 @@ regcache_dump (struct regcache *regcache, struct ui_file *file,
 	fprintf_unfiltered (file, " %-10s", "Name");
       else
 	{
-	  const char *p = REGISTER_NAME (regnum);
+	  const char *p = gdbarch_register_name (current_gdbarch, regnum);
 	  if (p == NULL)
 	    p = "";
 	  else if (p[0] == '\0')
@@ -1238,10 +971,11 @@ regcache_dump (struct regcache *regcache, struct ui_file *file,
       /* Relative number.  */
       if (regnum < 0)
 	fprintf_unfiltered (file, " %4s", "Rel");
-      else if (regnum < NUM_REGS)
+      else if (regnum < gdbarch_num_regs (current_gdbarch))
 	fprintf_unfiltered (file, " %4d", regnum);
       else
-	fprintf_unfiltered (file, " %4d", (regnum - NUM_REGS));
+	fprintf_unfiltered (file, " %4d",
+			    (regnum - gdbarch_num_regs (current_gdbarch)));
 
       /* Offset.  */
       if (regnum < 0)
@@ -1251,7 +985,6 @@ regcache_dump (struct regcache *regcache, struct ui_file *file,
 	  fprintf_unfiltered (file, " %6ld",
 			      regcache->descr->register_offset[regnum]);
 	  if (register_offset != regcache->descr->register_offset[regnum]
-	      || register_offset != DEPRECATED_REGISTER_BYTE (regnum)
 	      || (regnum > 0
 		  && (regcache->descr->register_offset[regnum]
 		      != (regcache->descr->register_offset[regnum - 1]
@@ -1316,7 +1049,8 @@ regcache_dump (struct regcache *regcache, struct ui_file *file,
 	    {
 	      regcache_raw_read (regcache, regnum, buf);
 	      fprintf_unfiltered (file, "0x");
-	      dump_endian_bytes (file, TARGET_BYTE_ORDER, buf,
+	      dump_endian_bytes (file,
+				 gdbarch_byte_order (current_gdbarch), buf,
 				 regcache->descr->sizeof_register[regnum]);
 	    }
 	}
@@ -1330,7 +1064,8 @@ regcache_dump (struct regcache *regcache, struct ui_file *file,
 	    {
 	      regcache_cooked_read (regcache, regnum, buf);
 	      fprintf_unfiltered (file, "0x");
-	      dump_endian_bytes (file, TARGET_BYTE_ORDER, buf,
+	      dump_endian_bytes (file,
+				 gdbarch_byte_order (current_gdbarch), buf,
 				 regcache->descr->sizeof_register[regnum]);
 	    }
 	}
@@ -1377,13 +1112,13 @@ static void
 regcache_print (char *args, enum regcache_dump_what what_to_dump)
 {
   if (args == NULL)
-    regcache_dump (current_regcache, gdb_stdout, what_to_dump);
+    regcache_dump (get_current_regcache (), gdb_stdout, what_to_dump);
   else
     {
       struct ui_file *file = gdb_fopen (args, "w");
       if (file == NULL)
 	perror_with_name (_("maintenance print architecture"));
-      regcache_dump (current_regcache, file, what_to_dump);    
+      regcache_dump (get_current_regcache (), file, what_to_dump);
       ui_file_delete (file);
     }
 }
@@ -1418,17 +1153,11 @@ void
 _initialize_regcache (void)
 {
   regcache_descr_handle = gdbarch_data_register_post_init (init_regcache_descr);
-  DEPRECATED_REGISTER_GDBARCH_SWAP (current_regcache);
-  deprecated_register_gdbarch_swap (NULL, 0, build_regcache);
 
   observer_attach_target_changed (regcache_observer_target_changed);
 
   add_com ("flushregs", class_maintenance, reg_flush_command,
 	   _("Force gdb to flush its register cache (maintainer command)"));
-
-   /* Initialize the thread/process associated with the current set of
-      registers.  For now, -1 is special, and means `no current process'.  */
-  registers_ptid = pid_to_ptid (-1);
 
   add_cmd ("registers", class_maintenance, maintenance_print_registers, _("\
 Print the internal register configuration.\n\

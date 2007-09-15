@@ -1,12 +1,12 @@
 /* Native-dependent code for HP PA-RISC BSD's.
 
-   Copyright (C) 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "inferior.h"
@@ -124,10 +122,8 @@ hppabsd_collect_fpregset (struct regcache *regcache,
    for all registers (including the floating-point registers).  */
 
 static void
-hppabsd_fetch_registers (int regnum)
+hppabsd_fetch_registers (struct regcache *regcache, int regnum)
 {
-  struct regcache *regcache = current_regcache;
-
   if (regnum == -1 || hppabsd_gregset_supplies_p (regnum))
     {
       struct reg regs;
@@ -147,7 +143,7 @@ hppabsd_fetch_registers (int regnum)
 		  (PTRACE_TYPE_ARG3) &fpregs, 0) == -1)
 	perror_with_name (_("Couldn't get floating point status"));
 
-      hppabsd_supply_fpregset (current_regcache, &fpregs);
+      hppabsd_supply_fpregset (regcache, &fpregs);
     }
 }
 
@@ -155,7 +151,7 @@ hppabsd_fetch_registers (int regnum)
    this for all registers (including the floating-point registers).  */
 
 static void
-hppabsd_store_registers (int regnum)
+hppabsd_store_registers (struct regcache *regcache, int regnum)
 {
   if (regnum == -1 || hppabsd_gregset_supplies_p (regnum))
     {
@@ -165,7 +161,7 @@ hppabsd_store_registers (int regnum)
                   (PTRACE_TYPE_ARG3) &regs, 0) == -1)
         perror_with_name (_("Couldn't get registers"));
 
-      hppabsd_collect_gregset (current_regcache, &regs, regnum);
+      hppabsd_collect_gregset (regcache, &regs, regnum);
 
       if (ptrace (PT_SETREGS, PIDGET (inferior_ptid),
 	          (PTRACE_TYPE_ARG3) &regs, 0) == -1)
@@ -180,7 +176,7 @@ hppabsd_store_registers (int regnum)
 		  (PTRACE_TYPE_ARG3) &fpregs, 0) == -1)
 	perror_with_name (_("Couldn't get floating point status"));
 
-      hppabsd_collect_fpregset (current_regcache, &fpregs, regnum);
+      hppabsd_collect_fpregset (regcache, &fpregs, regnum);
 
       if (ptrace (PT_SETFPREGS, PIDGET (inferior_ptid),
 		  (PTRACE_TYPE_ARG3) &fpregs, 0) == -1)

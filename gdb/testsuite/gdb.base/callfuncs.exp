@@ -1,19 +1,18 @@
-# Copyright 1992, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-# 2003, 2004 Free Software Foundation, Inc.
+# Copyright 1992, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
+# 2004, 2007 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA. 
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-gdb@prep.ai.mit.edu
@@ -163,6 +162,11 @@ proc do_function_calls {} {
 	gdb_test "p t_double_values(double_val1,double_val2)" " = 1"
 	gdb_test "p t_double_values(45.654,double_val2)" " = 1"
 	gdb_test "p t_double_values(double_val1,-67.66)" " = 1"
+
+	gdb_test "p t_double_int(99.0, 1)" " = 0"
+	gdb_test "p t_double_int(99.0, 99)" " = 1"
+	gdb_test "p t_int_double(99, 1.0)" " = 0"
+	gdb_test "p t_int_double(99, 99.0)" " = 1"
     }
 
     gdb_test "p t_string_values(string_val2,string_val1)" " = 0"
@@ -236,22 +240,55 @@ proc do_function_calls {} {
 }
 
 # Procedure to get current content of all registers.
-global all_registers_content
-set all_registers_content ""
-proc do_get_all_registers { } {
+proc fetch_all_registers {test} {
     global gdb_prompt
-    global expect_out
-    global all_registers_content
 
-    set all_registers_content ""
-    send_gdb "info all-registers\n"
-    gdb_expect {
-	-re "info all-registers\r\n(.*)$gdb_prompt $" {
-	    set all_registers_content $expect_out(1,string)
+    set all_registers_lines {}
+    set bad -1
+    if {[gdb_test_multiple "info all-registers" $test {
+	-re "info all-registers\[\r\n\]+" {
+	    exp_continue
 	}
-	default {}
+	-ex "The program has no registers now" {
+	    set bad 1
+	    exp_continue
+	}
+	-re "^bspstore\[ \t\]+\[^\r\n\]+\[\r\n\]+" {
+	    if [istarget "ia64-*-*"] {
+		# Filter out bspstore which is specially tied to bsp,
+		# giving spurious differences.
+	    } else {
+		lappend all_registers_lines $expect_out(0,string)
+	    }
+	    exp_continue
+	}
+	-re "^\[^ \t\]+\[ \t\]+\[^\r\n\]+\[\r\n\]+" {
+	    lappend all_registers_lines $expect_out(0,string)
+	    exp_continue
+	}
+	-re ".*$gdb_prompt $" {
+	    incr bad
+	}
+	-re "^\[^\r\n\]+\[\r\n\]+" {
+	    if {!$bad} {
+		warning "Unrecognized output: $expect_out(0,string)"
+		set bad 1
+	    }
+	    exp_continue
+	}
+    }] != 0} {
+	return {}
     }
+
+    if {$bad} {
+	fail $test
+	return {}
+    }
+
+    pass $test
+    return $all_registers_lines
 }
+
 
 # Start with a fresh gdb.
 
@@ -297,19 +334,18 @@ gdb_test "next" "t_structs_c\\(struct_val1\\);.*" \
   "next to t_structs_c"
 
 # Save all register contents.
-do_get_all_registers
-set old_reg_content $all_registers_content
+set old_reg_content [fetch_all_registers "retrieve original register contents"]
 
 # Perform function calls.
 do_function_calls
 
 # Check if all registers still have the same value.
-do_get_all_registers
-set new_reg_content $all_registers_content
-if ![string compare $old_reg_content $new_reg_content] then {
+set new_reg_content [fetch_all_registers \
+		     "register contents after gdb function calls"]
+if {$old_reg_content == $new_reg_content} then {
     pass "gdb function calls preserve register contents"
 } else {
-    set old_reg_content $all_registers_content
+    set old_reg_content $new_reg_content
     fail "gdb function calls preserve register contents"
 }
 
@@ -325,9 +361,9 @@ gdb_test "continue" "Continuing.*" "continue from call dummy breakpoint"
 if ![gdb_test "bt 2" \
 	      "#0  main.*" \
 	      "bt after continuing from call dummy breakpoint"] then {
-    do_get_all_registers
-    set new_reg_content $all_registers_content
-    if ![string compare $old_reg_content $new_reg_content] then {
+    set new_reg_content [fetch_all_registers \
+			 "register contents after stop in call dummy"]
+    if {$old_reg_content == $new_reg_content} then {
 	pass "continue after stop in call dummy preserves register contents"
     } else {
 	fail "continue after stop in call dummy preserves register contents"
@@ -344,9 +380,9 @@ gdb_test "finish" \
 if ![gdb_test "bt 2" \
 	      "#0  main.*" \
 	      "bt after finishing from call dummy breakpoint"] then {
-    do_get_all_registers
-    set new_reg_content $all_registers_content
-    if ![string compare $old_reg_content $new_reg_content] then {
+    set new_reg_content [fetch_all_registers \
+			 "register contents after finish in call dummy"]
+    if {$old_reg_content == $new_reg_content} then {
 	pass "finish after stop in call dummy preserves register contents"
     } else {
 	fail "finish after stop in call dummy preserves register contents"
@@ -362,9 +398,9 @@ if ![gdb_test "return 7" \
 	      "back at main after return from call dummy breakpoint" \
 	      "Make add return now. .y or n.*" \
 	      "y"] then {
-    do_get_all_registers
-    set new_reg_content $all_registers_content
-    if ![string compare $old_reg_content $new_reg_content] then {
+    set new_reg_content [fetch_all_registers \
+                         "register contents after return in call dummy"]
+    if {$old_reg_content == $new_reg_content} then {
 	pass "return after stop in call dummy preserves register contents"
     } else {
 	fail "return after stop in call dummy preserves register contents"
@@ -419,9 +455,9 @@ gdb_test "finish" "Value returned is .* = 5" \
 gdb_test "backtrace" "\#0  main .*" \
 	"backtrace after finish from nested call level 1"
 
-do_get_all_registers
-set new_reg_content $all_registers_content
-if ![string compare $old_reg_content $new_reg_content] then {
+set new_reg_content [fetch_all_registers \
+		     "register contents after nested call dummies"]
+if {$old_reg_content == $new_reg_content} then {
     pass "nested call dummies preserve register contents"
 } else {
     fail "nested call dummies preserve register contents"

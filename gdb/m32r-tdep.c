@@ -1,13 +1,13 @@
 /* Target-dependent code for Renesas M32R, for GDB.
 
-   Copyright (C) 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005 Free
-   Software Foundation, Inc.
+   Copyright (C) 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -97,7 +95,7 @@ m32r_memory_insert_breakpoint (struct bp_target_info *bp_tgt)
   bp_tgt->placed_size = bp_tgt->shadow_len = 4;
 
   /* Determine appropriate breakpoint contents and size for this address.  */
-  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
     {
       if ((addr & 3) == 0)
 	{
@@ -151,7 +149,7 @@ m32r_memory_remove_breakpoint (struct bp_target_info *bp_tgt)
   buf[3] = contents_cache[3];
 
   /* Remove parallel bit.  */
-  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
     {
       if ((buf[0] & 0x80) == 0 && (buf[2] & 0x80) != 0)
 	buf[2] &= 0x7f;
@@ -175,7 +173,7 @@ m32r_breakpoint_from_pc (CORE_ADDR *pcptr, int *lenptr)
   gdb_byte *bp;
 
   /* Determine appropriate breakpoint.  */
-  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
     {
       if ((*pcptr & 3) == 0)
 	{
@@ -536,7 +534,7 @@ m32r_frame_unwind_cache (struct frame_info *next_frame,
   info->uses_frame = 0;
 
   scan_limit = frame_pc_unwind (next_frame);
-  for (pc = frame_func_unwind (next_frame);
+  for (pc = frame_func_unwind (next_frame, NORMAL_FRAME);
        pc > 0 && pc < scan_limit; pc += 2)
     {
       if ((pc & 2) == 0)
@@ -625,7 +623,7 @@ m32r_frame_unwind_cache (struct frame_info *next_frame,
 
   /* Adjust all the saved registers so that they contain addresses and
      not offsets.  */
-  for (i = 0; i < NUM_REGS - 1; i++)
+  for (i = 0; i < gdbarch_num_regs (current_gdbarch) - 1; i++)
     if (trad_frame_addr_p (info->saved_regs, i))
       info->saved_regs[i].addr = (info->prev_sp + info->saved_regs[i].addr);
 
@@ -643,27 +641,17 @@ m32r_frame_unwind_cache (struct frame_info *next_frame,
 }
 
 static CORE_ADDR
-m32r_read_pc (ptid_t ptid)
+m32r_read_pc (struct regcache *regcache)
 {
-  ptid_t save_ptid;
   ULONGEST pc;
-
-  save_ptid = inferior_ptid;
-  inferior_ptid = ptid;
-  regcache_cooked_read_unsigned (current_regcache, M32R_PC_REGNUM, &pc);
-  inferior_ptid = save_ptid;
+  regcache_cooked_read_unsigned (regcache, M32R_PC_REGNUM, &pc);
   return pc;
 }
 
 static void
-m32r_write_pc (CORE_ADDR val, ptid_t ptid)
+m32r_write_pc (struct regcache *regcache, CORE_ADDR val)
 {
-  ptid_t save_ptid;
-
-  save_ptid = inferior_ptid;
-  inferior_ptid = ptid;
-  write_register (M32R_PC_REGNUM, val);
-  inferior_ptid = save_ptid;
+  regcache_cooked_write_unsigned (regcache, M32R_PC_REGNUM, val);
 }
 
 static CORE_ADDR
@@ -835,7 +823,7 @@ m32r_frame_this_id (struct frame_info *next_frame,
   struct frame_id id;
 
   /* The FUNC is easy.  */
-  func = frame_func_unwind (next_frame);
+  func = frame_func_unwind (next_frame, NORMAL_FRAME);
 
   /* Check if the stack is empty.  */
   msym_stack = lookup_minimal_symbol ("_stack", NULL, NULL);
@@ -962,6 +950,9 @@ m32r_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* Hook in the default unwinders.  */
   frame_unwind_append_sniffer (gdbarch, m32r_frame_sniffer);
+
+  /* Support simple overlay manager.  */
+  set_gdbarch_overlay_update (gdbarch, simple_overlay_update);
 
   return gdbarch;
 }

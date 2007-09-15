@@ -1,20 +1,18 @@
 #   Copyright 1988, 1990, 1991, 1992, 1994, 1995, 1996, 1997, 1998, 1999,
-#   2000, 2002, 2003
-#   Free Software Foundation, Inc.
+#   2000, 2002, 2003, 2007 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-gdb@prep.ai.mit.edu
@@ -203,27 +201,16 @@ if [istarget "mips-idt-*"] then {
 #
 # run until the breakpoint at main is hit. For non-stubs-using targets.
 #
-if ![target_info exists use_gdb_stub] {
-  if [istarget "*-*-vxworks*"] then {
-    send_gdb "run vxmain \"2\"\n"
-    set timeout 120
-    verbose "Timeout is now $timeout seconds" 2
-  } else {
-	send_gdb "run\n"
-  }
-  gdb_expect {
-    -re "The program .* has been started already.*y or n. $" {
-	send_gdb "y\n"
-	exp_continue
+gdb_run_cmd
+gdb_expect {
+    -re "Breakpoint \[0-9\]+,.*main .*argc.*argv.* at .*$srcfile:$bp_location6.*$bp_location6\[\t \]+if .argc.* \{.*$gdb_prompt $" {
+	pass "run until function breakpoint"
     }
-    -re "Starting program.*Breakpoint \[0-9\]+,.*main .*argc.*argv.* at .*$srcfile:$bp_location6.*$bp_location6\[\t \]+if .argc.* \{.*$gdb_prompt $"\
-	                    { pass "run until function breakpoint" }
-    -re ".*$gdb_prompt $"       { fail "run until function breakpoint" }
-    timeout	            { fail "run until function breakpoint (timeout)" }
-  }
-} else {
-    if ![target_info exists gdb_stub] {
-	gdb_test continue ".*Continuing\\..*Breakpoint \[0-9\]+, main \\(argc=.*, argv=.*, envp=.*\\) at .*$srcfile:$bp_location6.*$bp_location6\[\t \]+if .argc.*\{.*" "stub continue"
+    -re "$gdb_prompt $" {
+	fail "run until function breakpoint"
+    }
+    timeout {
+	fail "run until function breakpoint (timeout)"
     }
 }
 
@@ -774,26 +761,14 @@ proc test_next_with_recursion {} {
     global decimal
     global binfile
 
-    if [target_info exists use_gdb_stub] {
-	# Reload the program.
-	delete_breakpoints
-	gdb_load ${binfile};
-    } else {
-	# FIXME: should be using runto
-	gdb_test "kill" "" "kill program" "Kill the program being debugged.*y or n. $" "y"
-
-	delete_breakpoints
-    }
+    gdb_test "kill" "" "kill program" "Kill the program being debugged.*y or n. $" "y"
+    delete_breakpoints
 
     gdb_test "break factorial" "Breakpoint $decimal at .*" "break at factorial"
 
     # Run until we call factorial with 6
 
-    if [istarget "*-*-vxworks*"] then {
-	send_gdb "run vxmain \"6\"\n"
-    } else {
-	gdb_run_cmd
-    }
+    gdb_run_cmd
     gdb_expect {
 	-re "Break.* factorial .value=6. .*$gdb_prompt $" {}
 	-re ".*$gdb_prompt $" {
@@ -917,29 +892,19 @@ gdb_test "break marker4" \
 #
 # run until the breakpoint at main is hit. For non-stubs-using targets.
 #
-if ![target_info exists use_gdb_stub] {
-  if [istarget "*-*-vxworks*"] then {
-    send_gdb "run vxmain \"2\"\n"
-    set timeout 120
-    verbose "Timeout is now $timeout seconds" 2
-  } else {
-	send_gdb "run\n"
-  }
-  gdb_expect {
-    -re "The program .* has been started already.*y or n. $" {
-	send_gdb "y\n"
-	exp_continue
+gdb_run_cmd
+gdb_expect {
+    -re "Breakpoint \[0-9\]+,.*main .*argc.*argv.* at .*$srcfile:$bp_location6.*$bp_location6\[\t \]+if .argc.* \{.*$gdb_prompt $" {
+	pass "run until function breakpoint, optimized file"
     }
-    -re "Starting program.*Breakpoint \[0-9\]+,.*main .*argc.*argv.* at .*$srcfile:$bp_location6.*$bp_location6\[\t \]+if .argc.* \{.*$gdb_prompt $"\
-	                    { pass "run until function breakpoint, optimized file" }
-    -re "Starting program.*Breakpoint \[0-9\]+,.*main .*argc.*argv.* at .*$gdb_prompt $"\
-	                    { pass "run until function breakpoint, optimized file (code motion)" }
-    -re ".*$gdb_prompt $"       { fail "run until function breakpoint, optimized file" }
-    timeout	            { fail "run until function breakpoint, optimized file (timeout)" }
-  }
-} else {
-    if ![target_info exists gdb_stub] {
-	gdb_test continue ".*Continuing\\..*Breakpoint \[0-9\]+, main \\(argc=.*, argv=.*, envp=.*\\) at .*$srcfile:$bp_location6.*$bp_location6\[\t \]+if .argc.*\{.*" "stub continue, optimized file"
+    -re "Breakpoint \[0-9\]+,.*main .*argc.*argv.* at .*$gdb_prompt $" {
+	pass "run until function breakpoint, optimized file (code motion)"
+    }
+    -re "$gdb_prompt $" {
+	fail "run until function breakpoint, optimized file"
+    }
+    timeout {
+	fail "run until function breakpoint, optimized file (timeout)"
     }
 }
 

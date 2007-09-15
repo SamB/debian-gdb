@@ -1,7 +1,7 @@
 /* Top level stuff for GDB, the GNU debugger.
 
-   Copyright (C) 1999, 2000, 2001, 2002, 2004, 2005 Free Software
-   Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2002, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    Written by Elena Zannoni <ezannoni@cygnus.com> of Cygnus Solutions.
 
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA. */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>. */
 
 #include "defs.h"
 #include "top.h"
@@ -186,19 +184,20 @@ rl_callback_read_char_wrapper (gdb_client_data client_data)
 void
 cli_command_loop (void)
 {
-  int length;
-  char *a_prompt;
-  char *gdb_prompt = get_prompt ();
-
   /* If we are using readline, set things up and display the first
      prompt, otherwise just print the prompt. */
   if (async_command_editing_p)
     {
+      int length;
+      char *a_prompt;
+      char *gdb_prompt = get_prompt ();
+
       /* Tell readline what the prompt to display is and what function it
          will need to call after a whole line is read. This also displays
          the first prompt. */
-      length = strlen (PREFIX (0)) + strlen (gdb_prompt) + strlen (SUFFIX (0)) + 1;
-      a_prompt = (char *) xmalloc (length);
+      length = strlen (PREFIX (0)) 
+	+ strlen (gdb_prompt) + strlen (SUFFIX (0)) + 1;
+      a_prompt = (char *) alloca (length);
       strcpy (a_prompt, PREFIX (0));
       strcat (a_prompt, gdb_prompt);
       strcat (a_prompt, SUFFIX (0));
@@ -672,6 +671,7 @@ command_line_handler (char *rl)
     {
       got_eof = 1;
       command_handler (0);
+      return;			/* Lint. */
     }
   if (strlen (rl) + 1 + (p - linebuffer) > linelength)
     {
@@ -752,8 +752,8 @@ command_line_handler (char *rl)
 	    }
 	  strcpy (linebuffer, history_value);
 	  p = linebuffer + strlen (linebuffer);
-	  xfree (history_value);
 	}
+      xfree (history_value);
     }
 
   /* If we just got an empty line, and that is supposed
@@ -863,6 +863,7 @@ gdb_readline2 (gdb_client_data client_data)
 	    break;
 	  xfree (result);
 	  (*input_handler) (0);
+	  return;
 	}
 
       if (c == '\n')
@@ -961,6 +962,13 @@ handle_sigint (int sig)
 {
   signal (sig, handle_sigint);
 
+  /* We could be running in a loop reading in symfiles or something so
+     it may be quite a while before we get back to the event loop.  So
+     set quit_flag to 1 here. Then if QUIT is called before we get to
+     the event loop, we will unwind as expected.  */
+
+  quit_flag = 1;
+
   /* If immediate_quit is set, we go ahead and process the SIGINT right
      away, even if we usually would defer this to the event loop. The
      assumption here is that it is safe to process ^C immediately if
@@ -989,8 +997,14 @@ handle_sigterm (int sig)
 void
 async_request_quit (gdb_client_data arg)
 {
-  quit_flag = 1;
-  quit ();
+  /* If the quit_flag has gotten reset back to 0 by the time we get
+     back here, that means that an exception was thrown to unwind the
+     current command before we got back to the event loop.  So there
+     is no reason to call quit again here, unless immediate_quit is
+     set.*/
+
+  if (quit_flag || immediate_quit)
+    quit ();
 }
 
 #ifdef SIGQUIT

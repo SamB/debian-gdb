@@ -1,14 +1,14 @@
 /* Top level stuff for GDB, the GNU debugger.
 
-   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbcmd.h"
@@ -47,6 +45,7 @@
 #include "doublest.h"
 #include "gdb_assert.h"
 #include "main.h"
+#include "event-loop.h"
 
 /* readline include files */
 #include "readline/readline.h"
@@ -269,11 +268,6 @@ void (*deprecated_detach_hook) (void);
    check for stop buttons, etc... */
 
 void (*deprecated_interactive_hook) (void);
-
-/* Called when the registers have changed, as a hint to a GUI
-   to minimize window update. */
-
-void (*deprecated_registers_changed_hook) (void);
 
 /* Tell the GUI someone changed the register REGNO. -1 means
    that the caller does not know which register changed or
@@ -712,26 +706,111 @@ The filename in which to record the command history is \"%s\".\n"),
 }
 
 /* This is like readline(), but it has some gdb-specific behavior.
-   gdb can use readline in both the synchronous and async modes during
+   gdb may want readline in both the synchronous and async modes during
    a single gdb invocation.  At the ordinary top-level prompt we might
    be using the async readline.  That means we can't use
    rl_pre_input_hook, since it doesn't work properly in async mode.
    However, for a secondary prompt (" >", such as occurs during a
-   `define'), gdb just calls readline() directly, running it in
-   synchronous mode.  So for operate-and-get-next to work in this
-   situation, we have to switch the hooks around.  That is what
-   gdb_readline_wrapper is for.  */
+   `define'), gdb wants a synchronous response.
+
+   We used to call readline() directly, running it in synchronous
+   mode.  But mixing modes this way is not supported, and as of
+   readline 5.x it no longer works; the arrow keys come unbound during
+   the synchronous call.  So we make a nested call into the event
+   loop.  That's what gdb_readline_wrapper is for.  */
+
+/* A flag set as soon as gdb_readline_wrapper_line is called; we can't
+   rely on gdb_readline_wrapper_result, which might still be NULL if
+   the user types Control-D for EOF.  */
+static int gdb_readline_wrapper_done;
+
+/* The result of the current call to gdb_readline_wrapper, once a newline
+   is seen.  */
+static char *gdb_readline_wrapper_result;
+
+/* Any intercepted hook.  Operate-and-get-next sets this, expecting it
+   to be called after the newline is processed (which will redisplay
+   the prompt).  But in gdb_readline_wrapper we will not get a new
+   prompt until the next call, or until we return to the event loop.
+   So we disable this hook around the newline and restore it before we
+   return.  */
+static void (*saved_after_char_processing_hook) (void);
+
+/* This function is called when readline has seen a complete line of
+   text.  */
+
+static void
+gdb_readline_wrapper_line (char *line)
+{
+  gdb_assert (!gdb_readline_wrapper_done);
+  gdb_readline_wrapper_result = line;
+  gdb_readline_wrapper_done = 1;
+
+  /* Prevent operate-and-get-next from acting too early.  */
+  saved_after_char_processing_hook = after_char_processing_hook;
+  after_char_processing_hook = NULL;
+
+  /* Prevent parts of the prompt from being redisplayed if annotations
+     are enabled, and readline's state getting out of sync.  */
+  if (async_command_editing_p)
+    rl_callback_handler_remove ();
+}
+
+struct gdb_readline_wrapper_cleanup
+  {
+    void (*handler_orig) (char *);
+    int already_prompted_orig;
+  };
+
+static void
+gdb_readline_wrapper_cleanup (void *arg)
+{
+  struct gdb_readline_wrapper_cleanup *cleanup = arg;
+
+  rl_already_prompted = cleanup->already_prompted_orig;
+
+  gdb_assert (input_handler == gdb_readline_wrapper_line);
+  input_handler = cleanup->handler_orig;
+  gdb_readline_wrapper_result = NULL;
+  gdb_readline_wrapper_done = 0;
+
+  after_char_processing_hook = saved_after_char_processing_hook;
+  saved_after_char_processing_hook = NULL;
+
+  xfree (cleanup);
+}
+
 char *
 gdb_readline_wrapper (char *prompt)
 {
-  /* Set the hook that works in this case.  */
-  if (after_char_processing_hook)
-    {
-      rl_pre_input_hook = (Function *) after_char_processing_hook;
-      after_char_processing_hook = NULL;
-    }
+  struct cleanup *back_to;
+  struct gdb_readline_wrapper_cleanup *cleanup;
+  char *retval;
 
-  return readline (prompt);
+  cleanup = xmalloc (sizeof (*cleanup));
+  cleanup->handler_orig = input_handler;
+  input_handler = gdb_readline_wrapper_line;
+
+  cleanup->already_prompted_orig = rl_already_prompted;
+
+  back_to = make_cleanup (gdb_readline_wrapper_cleanup, cleanup);
+
+  /* Display our prompt and prevent double prompt display.  */
+  display_gdb_prompt (prompt);
+  rl_already_prompted = 1;
+
+  if (after_char_processing_hook)
+    (*after_char_processing_hook) ();
+  gdb_assert (after_char_processing_hook == NULL);
+
+  /* gdb_do_one_event argument is unused.  */
+  while (gdb_do_one_event (NULL) >= 0)
+    if (gdb_readline_wrapper_done)
+      break;
+
+  retval = gdb_readline_wrapper_result;
+  do_cleanups (back_to);
+  return retval;
 }
 
 
@@ -1012,8 +1091,8 @@ command_line_input (char *prompt_arg, int repeat, char *annotation_suffix)
 	    }
 	  strcpy (linebuffer, history_value);
 	  p = linebuffer + strlen (linebuffer);
-	  xfree (history_value);
 	}
+      xfree (history_value);
     }
 
   /* If we just got an empty line, and that is supposed
@@ -1068,7 +1147,7 @@ print_gdb_version (struct ui_file *stream)
 
   /* Second line is a copyright notice. */
 
-  fprintf_filtered (stream, "Copyright (C) 2006 Free Software Foundation, Inc.\n");
+  fprintf_filtered (stream, "Copyright (C) 2007 Free Software Foundation, Inc.\n");
 
   /* Following the copyright is a brief statement that the program is
      free software, that users are free to copy and change it on
@@ -1076,10 +1155,10 @@ print_gdb_version (struct ui_file *stream)
      there is no warranty. */
 
   fprintf_filtered (stream, "\
-GDB is free software, covered by the GNU General Public License, and you are\n\
-welcome to change it and/or distribute copies of it under certain conditions.\n\
-Type \"show copying\" to see the conditions.\n\
-There is absolutely no warranty for GDB.  Type \"show warranty\" for details.\n");
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\n\
+This is free software: you are free to change and redistribute it.\n\
+There is NO WARRANTY, to the extent permitted by law.  Type \"show copying\"\n\
+and \"show warranty\" for details.\n");
 
   /* After the required info we print the configuration information. */
 

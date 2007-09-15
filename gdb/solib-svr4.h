@@ -1,13 +1,12 @@
 /* Handle shared libraries for GDB, the GNU Debugger.
 
-   Copyright (C) 2000, 2004, 2006
-   Free Software Foundation, Inc.
+   Copyright (C) 2000, 2004, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,14 +15,15 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef SOLIB_SVR4_H
 #define SOLIB_SVR4_H
 
 struct objfile;
+struct target_so_ops;
+
+extern struct target_so_ops svr4_so_ops;
 
 /* Critical offsets and sizes which describe struct r_debug and
    struct link_map on SVR4-like targets.  All offsets and sizes are
@@ -47,32 +47,17 @@ struct link_map_offsets
     /* Offset to l_addr field in struct link_map.  */
     int l_addr_offset;
 
-    /* Size of l_addr field in struct link_map.  */
-    int l_addr_size;
-
     /* Offset to l_ld field in struct link_map.  */
     int l_ld_offset;
-
-    /* Size of l_ld field in struct link_map.  */
-    int l_ld_size;
 
     /* Offset to l_next field in struct link_map.  */
     int l_next_offset;
 
-    /* Size of l_next field in struct link_map.  */
-    int l_next_size;
-
     /* Offset to l_prev field in struct link_map.  */
     int l_prev_offset;
 
-    /* Size of l_prev field in struct link_map.  */
-    int l_prev_size;
-
     /* Offset to l_name field in struct link_map.  */
     int l_name_offset;
-
-    /* Size of l_name field in struct link_map.  */
-    int l_name_size;
   };
 
 /* set_solib_svr4_fetch_link_map_offsets() is intended to be called by
@@ -96,5 +81,9 @@ extern struct link_map_offsets *(*legacy_svr4_fetch_link_map_offsets_hook) (void
    for ILP32 and LP64 SVR4 systems.  */
 extern struct link_map_offsets *svr4_ilp32_fetch_link_map_offsets (void);
 extern struct link_map_offsets *svr4_lp64_fetch_link_map_offsets (void);
+
+/* Return 1 if PC lies in the dynamic symbol resolution code of the
+   SVR4 run time loader.  */
+int svr4_in_dynsym_resolve_code (CORE_ADDR pc);
 
 #endif /* solib-svr4.h */

@@ -1,12 +1,12 @@
 /* Remote File-I/O communications
 
-   Copyright (C) 2003, 2005, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* See the GDB User Guide for details of the GDB remote protocol. */
 
@@ -70,12 +68,16 @@ remote_fileio_init_fd_map (void)
 static int
 remote_fileio_resize_fd_map (void)
 {
+  int i = remote_fio_data.fd_map_size;
+
   if (!remote_fio_data.fd_map)
     return remote_fileio_init_fd_map ();
   remote_fio_data.fd_map_size += 10;
   remote_fio_data.fd_map =
     (int *) xrealloc (remote_fio_data.fd_map,
 		      remote_fio_data.fd_map_size * sizeof (int));
+  for (; i < remote_fio_data.fd_map_size; i++)
+    remote_fio_data.fd_map[i] = FIO_FD_INVALID;
   return remote_fio_data.fd_map_size - 10;
 }
 
@@ -192,11 +194,11 @@ remote_fileio_mode_to_target (mode_t mode)
 {
   mode_t tmode = 0;
 
-  if (mode & S_IFREG)
+  if (S_ISREG(mode))
     tmode |= FILEIO_S_IFREG;
-  if (mode & S_IFDIR)
+  if (S_ISDIR(mode))
     tmode |= FILEIO_S_IFDIR;
-  if (mode & S_IFCHR)
+  if (S_ISCHR(mode))
     tmode |= FILEIO_S_IFCHR;
   if (mode & S_IRUSR)
     tmode |= FILEIO_S_IRUSR;
@@ -850,6 +852,7 @@ remote_fileio_func_write (char *buf)
     {
       case FIO_FD_CONSOLE_IN:
 	remote_fileio_badfd ();
+	xfree (buffer);
 	return;
       case FIO_FD_CONSOLE_OUT:
 	ui_file_write (target_fd == 1 ? gdb_stdtarg : gdb_stdtargerr,
@@ -1332,19 +1335,19 @@ static struct {
   char *name;
   void (*func)(char *);
 } remote_fio_func_map[] = {
-  "open", remote_fileio_func_open,
-  "close", remote_fileio_func_close,
-  "read", remote_fileio_func_read,
-  "write", remote_fileio_func_write,
-  "lseek", remote_fileio_func_lseek,
-  "rename", remote_fileio_func_rename,
-  "unlink", remote_fileio_func_unlink,
-  "stat", remote_fileio_func_stat,
-  "fstat", remote_fileio_func_fstat,
-  "gettimeofday", remote_fileio_func_gettimeofday,
-  "isatty", remote_fileio_func_isatty,
-  "system", remote_fileio_func_system,
-  NULL, NULL
+  { "open", remote_fileio_func_open },
+  { "close", remote_fileio_func_close },
+  { "read", remote_fileio_func_read },
+  { "write", remote_fileio_func_write },
+  { "lseek", remote_fileio_func_lseek },
+  { "rename", remote_fileio_func_rename },
+  { "unlink", remote_fileio_func_unlink },
+  { "stat", remote_fileio_func_stat },
+  { "fstat", remote_fileio_func_fstat },
+  { "gettimeofday", remote_fileio_func_gettimeofday },
+  { "isatty", remote_fileio_func_isatty },
+  { "system", remote_fileio_func_system },
+  { NULL, NULL }
 };
 
 static int

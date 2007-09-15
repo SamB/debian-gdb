@@ -1,21 +1,20 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free
-# Software Foundation, Inc.
+# Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 # long_long.exp   Test printing of 64-bit things in 32-bit gdb.
 #                 Also test differnet kinds of formats.
@@ -229,7 +228,7 @@ gdb_test_char "p/d *(char *)c" "1"
 gdb_test_char "p/u *(char *)c" "1"
 gdb_test_char "p/o *(char *)c" "01"
 gdb_test_char "p/t *(char *)c" "1"
-gdb_test_char "p/a *(char *)c" "0x1"
+gdb_test_char "p/a *(char *)c" "0x1( <.*>)?"
 gdb_test_char "p/f *(char *)c" "1"
 gdb_test_char "p/c *(char *)c" "1 '.001'"
 
@@ -238,7 +237,7 @@ gdb_test_short "p/d *(short *)s" "" "291" ""
 gdb_test_short "p/u *(short *)s" "" "291" ""
 gdb_test_short "p/o *(short *)s" "" "0443" ""
 gdb_test_short "p/t *(short *)s" "" "100100011" ""
-gdb_test_short "p/a *(short *)s" "" "0x123" ""
+gdb_test_short "p/a *(short *)s" "" "0x123( <.*>)?" ""
 gdb_test_short "p/f *(short *)s" "" "291" ""
 gdb_test_short "p/c *(short *)s" "" "35 '.'" ""
 

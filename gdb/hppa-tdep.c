@@ -1,7 +1,7 @@
 /* Target-dependent code for the HP PA-RISC architecture.
 
-   Copyright (C) 1986, 1987, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright (C) 1986, 1987, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
    Free Software Foundation, Inc.
 
    Contributed by the Center for Software Science at the
@@ -11,7 +11,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -20,9 +20,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "bfd.h"
@@ -31,6 +29,7 @@
 #include "completer.h"
 #include "osabi.h"
 #include "gdb_assert.h"
+#include "gdb_stdint.h"
 #include "arch-utils.h"
 /* For argument passing to the inferior */
 #include "symtab.h"
@@ -41,6 +40,7 @@
 
 #include "gdbcore.h"
 #include "gdbcmd.h"
+#include "gdbtypes.h"
 #include "objfiles.h"
 #include "hppa-tdep.h"
 
@@ -501,7 +501,7 @@ find_unwind_entry (CORE_ADDR pc)
       {
 	if (hppa_debug)
 	  fprintf_unfiltered (gdb_stdlog, "0x%s (cached) }\n",
-            paddr_nz ((CORE_ADDR) ui->cache));
+            paddr_nz ((uintptr_t) ui->cache));
         return ui->cache;
       }
 
@@ -519,7 +519,7 @@ find_unwind_entry (CORE_ADDR pc)
 	    ui->cache = &ui->table[middle];
 	    if (hppa_debug)
 	      fprintf_unfiltered (gdb_stdlog, "0x%s }\n",
-                paddr_nz ((CORE_ADDR) ui->cache));
+                paddr_nz ((uintptr_t) ui->cache));
 	    return &ui->table[middle];
 	  }
 
@@ -830,12 +830,12 @@ hppa32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   /* If a structure has to be returned, set up register 28 to hold its
      address */
   if (struct_return)
-    write_register (28, struct_addr);
+    regcache_cooked_write_unsigned (regcache, 28, struct_addr);
 
   gp = tdep->find_global_pointer (function);
 
   if (gp != 0)
-    write_register (19, gp);
+    regcache_cooked_write_unsigned (regcache, 19, gp);
 
   /* Set the return address.  */
   if (!gdbarch_push_dummy_code_p (gdbarch))
@@ -1272,13 +1272,13 @@ hppa64_frame_align (struct gdbarch *gdbarch, CORE_ADDR addr)
 }
 
 CORE_ADDR
-hppa_read_pc (ptid_t ptid)
+hppa_read_pc (struct regcache *regcache)
 {
   ULONGEST ipsw;
-  CORE_ADDR pc;
+  ULONGEST pc;
 
-  ipsw = read_register_pid (HPPA_IPSW_REGNUM, ptid);
-  pc = read_register_pid (HPPA_PCOQ_HEAD_REGNUM, ptid);
+  regcache_cooked_read_unsigned (regcache, HPPA_IPSW_REGNUM, &ipsw);
+  regcache_cooked_read_unsigned (regcache, HPPA_PCOQ_HEAD_REGNUM, &pc);
 
   /* If the current instruction is nullified, then we are effectively
      still executing the previous instruction.  Pretend we are still
@@ -1292,10 +1292,10 @@ hppa_read_pc (ptid_t ptid)
 }
 
 void
-hppa_write_pc (CORE_ADDR pc, ptid_t ptid)
+hppa_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
-  write_register_pid (HPPA_PCOQ_HEAD_REGNUM, pc, ptid);
-  write_register_pid (HPPA_PCOQ_TAIL_REGNUM, pc + 4, ptid);
+  regcache_cooked_write_unsigned (regcache, HPPA_PCOQ_HEAD_REGNUM, pc);
+  regcache_cooked_write_unsigned (regcache, HPPA_PCOQ_TAIL_REGNUM, pc + 4);
 }
 
 /* return the alignment of a type in bytes. Structures have the maximum
@@ -1599,9 +1599,11 @@ restart:
 
          FIXME.  Can still die if we have a mix of GR and FR argument
          stores!  */
-      if (reg_num >= (TARGET_PTR_BIT == 64 ? 19 : 23) && reg_num <= 26)
+      if (reg_num >= (gdbarch_ptr_bit (current_gdbarch) == 64 ? 19 : 23)
+	  && reg_num <= 26)
 	{
-	  while (reg_num >= (TARGET_PTR_BIT == 64 ? 19 : 23) && reg_num <= 26)
+	  while (reg_num >= (gdbarch_ptr_bit (current_gdbarch) == 64 ? 19 : 23)
+		 && reg_num <= 26)
 	    {
 	      pc += 4;
 	      status = read_memory_nobpt (pc, buf, 4);
@@ -1628,7 +1630,8 @@ restart:
          save.  */
       if ((inst & 0xfc000000) == 0x34000000
 	  && inst_saves_fr (next_inst) >= 4
-	  && inst_saves_fr (next_inst) <= (TARGET_PTR_BIT == 64 ? 11 : 7))
+	  && inst_saves_fr (next_inst)
+	       <= (gdbarch_ptr_bit (current_gdbarch) == 64 ? 11 : 7))
 	{
 	  /* So we drop into the code below in a reasonable state.  */
 	  reg_num = inst_saves_fr (next_inst);
@@ -1639,9 +1642,12 @@ restart:
          This is a kludge as on the HP compiler sets this bit and it
          never does prologue scheduling.  So once we see one, skip past
          all of them.  */
-      if (reg_num >= 4 && reg_num <= (TARGET_PTR_BIT == 64 ? 11 : 7))
+      if (reg_num >= 4
+	  && reg_num <= (gdbarch_ptr_bit (current_gdbarch) == 64 ? 11 : 7))
 	{
-	  while (reg_num >= 4 && reg_num <= (TARGET_PTR_BIT == 64 ? 11 : 7))
+	  while (reg_num >= 4
+		 && reg_num
+		      <= (gdbarch_ptr_bit (current_gdbarch) == 64 ? 11 : 7))
 	    {
 	      pc += 8;
 	      status = read_memory_nobpt (pc, buf, 4);
@@ -1786,9 +1792,14 @@ hppa_skip_prologue (CORE_ADDR pc)
 static struct unwind_table_entry *
 hppa_find_unwind_entry_in_block (struct frame_info *f)
 {
-  CORE_ADDR pc;
+  CORE_ADDR pc = frame_unwind_address_in_block (f, NORMAL_FRAME);
 
-  pc = frame_unwind_address_in_block (f);
+  /* FIXME drow/20070101: Calling gdbarch_addr_bits_remove on the
+     result of frame_unwind_address_in_block implies a problem.
+     The bits should have been removed earlier, before the return
+     value of frame_pc_unwind.  That might be happening already;
+     if it isn't, it should be fixed.  Then this call can be
+     removed.  */
   pc = gdbarch_addr_bits_remove (get_frame_arch (f), pc);
   return find_unwind_entry (pc);
 }
@@ -1898,7 +1909,7 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
     if ((u->Region_description & 0x2) == 0)
       start_pc = u->region_start;
     else
-      start_pc = frame_func_unwind (next_frame);
+      start_pc = frame_func_unwind (next_frame, NORMAL_FRAME);
 
     prologue_end = skip_prologue_hard_way (start_pc, 0);
     end_pc = frame_pc_unwind (next_frame);
@@ -2094,7 +2105,8 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
             /* Both we're expecting the SP to be saved and the SP has been
 	       saved.  The entry SP value is saved at this frame's SP
 	       address.  */
-            cache->base = read_memory_integer (this_sp, TARGET_PTR_BIT / 8);
+            cache->base = read_memory_integer
+			    (this_sp, gdbarch_ptr_bit (current_gdbarch) / 8);
 
 	    if (hppa_debug)
 	      fprintf_unfiltered (gdb_stdlog, " (base=0x%s) [saved]",
@@ -2173,7 +2185,7 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
   {
     /* Convert all the offsets into addresses.  */
     int reg;
-    for (reg = 0; reg < NUM_REGS; reg++)
+    for (reg = 0; reg < gdbarch_num_regs (current_gdbarch); reg++)
       {
 	if (trad_frame_addr_p (cache->saved_regs, reg))
 	  cache->saved_regs[reg].addr += cache->base;
@@ -2266,7 +2278,7 @@ hppa_fallback_frame_cache (struct frame_info *next_frame, void **this_cache)
   (*this_cache) = cache;
   cache->saved_regs = trad_frame_alloc_saved_regs (next_frame);
 
-  start_pc = frame_func_unwind (next_frame);
+  start_pc = frame_func_unwind (next_frame, NORMAL_FRAME);
   if (start_pc)
     {
       CORE_ADDR cur_pc = frame_pc_unwind (next_frame);
@@ -2325,7 +2337,8 @@ hppa_fallback_frame_this_id (struct frame_info *next_frame, void **this_cache,
 {
   struct hppa_frame_cache *info = 
     hppa_fallback_frame_cache (next_frame, this_cache);
-  (*this_id) = frame_id_build (info->base, frame_func_unwind (next_frame));
+  (*this_id) = frame_id_build (info->base,
+			       frame_func_unwind (next_frame, NORMAL_FRAME));
 }
 
 static void
@@ -2408,7 +2421,8 @@ hppa_stub_frame_this_id (struct frame_info *next_frame,
     = hppa_stub_frame_unwind_cache (next_frame, this_prologue_cache);
 
   if (info)
-    *this_id = frame_id_build (info->base, frame_func_unwind (next_frame));
+    *this_id = frame_id_build (info->base,
+			       frame_func_unwind (next_frame, NORMAL_FRAME));
   else
     *this_id = null_frame_id;
 }
@@ -2440,14 +2454,14 @@ static const struct frame_unwind hppa_stub_frame_unwind = {
 static const struct frame_unwind *
 hppa_stub_unwind_sniffer (struct frame_info *next_frame)
 {
-  CORE_ADDR pc = frame_pc_unwind (next_frame);
+  CORE_ADDR pc = frame_unwind_address_in_block (next_frame, NORMAL_FRAME);
   struct gdbarch *gdbarch = get_frame_arch (next_frame);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   if (pc == 0
       || (tdep->in_solib_call_trampoline != NULL
 	  && tdep->in_solib_call_trampoline (pc, NULL))
-      || IN_SOLIB_RETURN_TRAMPOLINE (pc, NULL))
+      || gdbarch_in_solib_return_trampoline (current_gdbarch, pc, NULL))
     return &hppa_stub_frame_unwind;
   return NULL;
 }
@@ -2635,7 +2649,7 @@ hppa32_register_type (struct gdbarch *gdbarch, int regnum)
    if (regnum < HPPA_FP4_REGNUM)
      return builtin_type_uint32;
    else
-     return builtin_type_ieee_single_big;
+     return builtin_type_ieee_single;
 }
 
 static struct type *
@@ -2644,7 +2658,7 @@ hppa64_register_type (struct gdbarch *gdbarch, int regnum)
    if (regnum < HPPA64_FP4_REGNUM)
      return builtin_type_uint64;
    else
-     return builtin_type_ieee_double_big;
+     return builtin_type_ieee_double;
 }
 
 /* Return non-zero if REGNUM is not a register available to the user
@@ -2660,12 +2674,32 @@ hppa32_cannot_store_register (int regnum)
 }
 
 static int
+hppa32_cannot_fetch_register (int regnum)
+{
+  /* cr26 and cr27 are readable (but not writable) from userspace.  */
+  if (regnum == HPPA_CR26_REGNUM || regnum == HPPA_CR27_REGNUM)
+    return 0;
+  else
+    return hppa32_cannot_store_register (regnum);
+}
+
+static int
 hppa64_cannot_store_register (int regnum)
 {
   return (regnum == 0
           || regnum == HPPA_PCSQ_HEAD_REGNUM
           || (regnum >= HPPA_PCSQ_TAIL_REGNUM && regnum < HPPA_IPSW_REGNUM)
           || (regnum > HPPA_IPSW_REGNUM && regnum < HPPA64_FP4_REGNUM));
+}
+
+static int
+hppa64_cannot_fetch_register (int regnum)
+{
+  /* cr26 and cr27 are readable (but not writable) from userspace.  */
+  if (regnum == HPPA_CR26_REGNUM || regnum == HPPA_CR27_REGNUM)
+    return 0;
+  else
+    return hppa64_cannot_store_register (regnum);
 }
 
 static CORE_ADDR
@@ -2925,7 +2959,7 @@ hppa_in_solib_call_trampoline (CORE_ADDR pc, char *name)
    systems: $$dyncall, import stubs and PLT stubs.  */
 
 CORE_ADDR
-hppa_skip_trampoline_code (CORE_ADDR pc)
+hppa_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
 {
   unsigned int insn[HPPA_MAX_INSN_PATTERN_LEN];
   int dp_rel;
@@ -2933,7 +2967,7 @@ hppa_skip_trampoline_code (CORE_ADDR pc)
   /* $$dyncall handles both PLABELs and direct addresses.  */
   if (hppa_in_dyncall (pc))
     {
-      pc = read_register (HPPA_R0_REGNUM + 22);
+      pc = get_frame_register_unsigned (frame, HPPA_R0_REGNUM + 22);
 
       /* PLABELs have bit 30 set; if it's a PLABEL, then dereference it.  */
       if (pc & 0x2)
@@ -2949,9 +2983,9 @@ hppa_skip_trampoline_code (CORE_ADDR pc)
       pc = hppa_extract_21 (insn[0]) + hppa_extract_14 (insn[1]);
 
       if (dp_rel)
-        pc += read_register (HPPA_DP_REGNUM);
+        pc += get_frame_register_unsigned (frame, HPPA_DP_REGNUM);
       else
-        pc += read_register (HPPA_R0_REGNUM + 19);
+        pc += get_frame_register_unsigned (frame, HPPA_R0_REGNUM + 19);
 
       /* fallthrough */
     }
@@ -3060,7 +3094,7 @@ hppa_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	set_gdbarch_cannot_store_register (gdbarch,
 					   hppa32_cannot_store_register);
 	set_gdbarch_cannot_fetch_register (gdbarch,
-					   hppa32_cannot_store_register);
+					   hppa32_cannot_fetch_register);
         break;
       case 8:
         set_gdbarch_num_regs (gdbarch, hppa64_num_regs);
@@ -3071,7 +3105,7 @@ hppa_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	set_gdbarch_cannot_store_register (gdbarch,
 					   hppa64_cannot_store_register);
 	set_gdbarch_cannot_fetch_register (gdbarch,
-					   hppa64_cannot_store_register);
+					   hppa64_cannot_fetch_register);
         break;
       default:
         internal_error (__FILE__, __LINE__, _("Unsupported address size: %d"),
@@ -3085,7 +3119,7 @@ hppa_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
      and LP64, but might show differences some day.  */
   set_gdbarch_long_long_bit (gdbarch, 64);
   set_gdbarch_long_double_bit (gdbarch, 128);
-  set_gdbarch_long_double_format (gdbarch, &floatformat_ia64_quad_big);
+  set_gdbarch_long_double_format (gdbarch, floatformats_ia64_quad);
 
   /* The following gdbarch vector elements do not depend on the address
      size, or in any other gdbarch element previously set.  */

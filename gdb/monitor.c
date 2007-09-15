@@ -1,7 +1,7 @@
 /* Remote debugging interface for boot monitors, for GDB.
 
-   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2006 Free Software Foundation, Inc.
+   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
+   2000, 2001, 2002, 2006, 2007 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.  Written by Rob Savoye for Cygnus.
    Resurrected from the ashes by Stu Grossman.
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This file was derived from various remote-* modules. It is a collection
    of generic support functions so GDB can talk directly to a ROM based
@@ -63,7 +61,7 @@ static struct target_ops *targ_ops;
 static void monitor_interrupt_query (void);
 static void monitor_interrupt_twice (int);
 static void monitor_stop (void);
-static void monitor_dump_regs (void);
+static void monitor_dump_regs (struct regcache *regcache);
 
 #if 0
 static int from_hex (int a);
@@ -848,7 +846,7 @@ monitor_detach (char *args, int from_tty)
 /* Convert VALSTR into the target byte-ordered value of REGNO and store it.  */
 
 char *
-monitor_supply_register (int regno, char *valstr)
+monitor_supply_register (struct regcache *regcache, int regno, char *valstr)
 {
   ULONGEST val;
   unsigned char regbuf[MAX_REGISTER_SIZE];
@@ -887,7 +885,7 @@ monitor_supply_register (int regno, char *valstr)
 
   store_unsigned_integer (regbuf, register_size (current_gdbarch, regno), val);
 
-  regcache_raw_supply (current_regcache, regno, regbuf);
+  regcache_raw_supply (regcache, regno, regbuf);
 
   return p;
 }
@@ -926,7 +924,7 @@ monitor_resume (ptid_t ptid, int step, enum target_signal sig)
    string which are passed down to monitor specific code.  */
 
 static void
-parse_register_dump (char *buf, int len)
+parse_register_dump (struct regcache *regcache, char *buf, int len)
 {
   monitor_debug ("MON Parsing  register dump\n");
   while (1)
@@ -948,7 +946,8 @@ parse_register_dump (char *buf, int len)
       vallen = register_strings.end[2] - register_strings.start[2];
       val = buf + register_strings.start[2];
 
-      current_monitor->supply_register (regname, regnamelen, val, vallen);
+      current_monitor->supply_register (regcache, regname, regnamelen,
+					val, vallen);
 
       buf += register_strings.end[0];
       len -= register_strings.end[0];
@@ -1108,10 +1107,10 @@ monitor_wait (ptid_t ptid, struct target_waitstatus *status)
     }
 
   if (current_monitor->register_pattern)
-    parse_register_dump (buf, resp_len);
+    parse_register_dump (get_current_regcache (), buf, resp_len);
 #else
   monitor_debug ("Wait fetching registers after stop\n");
-  monitor_dump_regs ();
+  monitor_dump_regs (get_current_regcache ());
 #endif
 
   status->kind = TARGET_WAITKIND_STOPPED;
@@ -1128,7 +1127,7 @@ monitor_wait (ptid_t ptid, struct target_waitstatus *status)
    errno value.  */
 
 static void
-monitor_fetch_register (int regno)
+monitor_fetch_register (struct regcache *regcache, int regno)
 {
   const char *name;
   char *zerobuf;
@@ -1148,7 +1147,7 @@ monitor_fetch_register (int regno)
   if (!name || (*name == '\0'))
     {
       monitor_debug ("No register known for %d\n", regno);
-      regcache_raw_supply (current_regcache, regno, zerobuf);
+      regcache_raw_supply (regcache, regno, zerobuf);
       return;
     }
 
@@ -1227,7 +1226,7 @@ monitor_fetch_register (int regno)
       current_monitor->getreg.term_cmd)		/* ack expected */
     monitor_expect_prompt (NULL, 0);	/* get response */
 
-  monitor_supply_register (regno, regbuf);
+  monitor_supply_register (regcache, regno, regbuf);
 }
 
 /* Sometimes, it takes several commands to dump the registers */
@@ -1235,13 +1234,13 @@ monitor_fetch_register (int regno)
    case they need to compose the operation.
  */
 int
-monitor_dump_reg_block (char *block_cmd)
+monitor_dump_reg_block (struct regcache *regcache, char *block_cmd)
 {
   char buf[TARGET_BUF_SIZE];
   int resp_len;
   monitor_printf (block_cmd);
   resp_len = monitor_expect_prompt (buf, sizeof (buf));
-  parse_register_dump (buf, resp_len);
+  parse_register_dump (regcache, buf, resp_len);
   return 1;
 }
 
@@ -1250,47 +1249,47 @@ monitor_dump_reg_block (char *block_cmd)
 /* Call the specific function if it has been provided */
 
 static void
-monitor_dump_regs (void)
+monitor_dump_regs (struct regcache *regcache)
 {
   char buf[TARGET_BUF_SIZE];
   int resp_len;
   if (current_monitor->dumpregs)
-    (*(current_monitor->dumpregs)) ();	/* call supplied function */
+    (*(current_monitor->dumpregs)) (regcache);	/* call supplied function */
   else if (current_monitor->dump_registers)	/* default version */
     {
       monitor_printf (current_monitor->dump_registers);
       resp_len = monitor_expect_prompt (buf, sizeof (buf));
-      parse_register_dump (buf, resp_len);
+      parse_register_dump (regcache, buf, resp_len);
     }
   else
     internal_error (__FILE__, __LINE__, _("failed internal consistency check"));			/* Need some way to read registers */
 }
 
 static void
-monitor_fetch_registers (int regno)
+monitor_fetch_registers (struct regcache *regcache, int regno)
 {
   monitor_debug ("MON fetchregs\n");
   if (current_monitor->getreg.cmd)
     {
       if (regno >= 0)
 	{
-	  monitor_fetch_register (regno);
+	  monitor_fetch_register (regcache, regno);
 	  return;
 	}
 
-      for (regno = 0; regno < NUM_REGS; regno++)
-	monitor_fetch_register (regno);
+      for (regno = 0; regno < gdbarch_num_regs (current_gdbarch); regno++)
+	monitor_fetch_register (regcache, regno);
     }
   else
     {
-      monitor_dump_regs ();
+      monitor_dump_regs (regcache);
     }
 }
 
 /* Store register REGNO, or all if REGNO == 0.  Return errno value.  */
 
 static void
-monitor_store_register (int regno)
+monitor_store_register (struct regcache *regcache, int regno)
 {
   const char *name;
   ULONGEST val;
@@ -1306,7 +1305,7 @@ monitor_store_register (int regno)
       return;
     }
 
-  val = read_register (regno);
+  regcache_cooked_read_unsigned (regcache, regno, &val);
   monitor_debug ("MON storeg %d %s\n", regno,
 		 phex (val, register_size (current_gdbarch, regno)));
 
@@ -1347,16 +1346,16 @@ monitor_store_register (int regno)
 /* Store the remote registers.  */
 
 static void
-monitor_store_registers (int regno)
+monitor_store_registers (struct regcache *regcache, int regno)
 {
   if (regno >= 0)
     {
-      monitor_store_register (regno);
+      monitor_store_register (regcache, regno);
       return;
     }
 
-  for (regno = 0; regno < NUM_REGS; regno++)
-    monitor_store_register (regno);
+  for (regno = 0; regno < gdbarch_num_regs (current_gdbarch); regno++)
+    monitor_store_register (regcache, regno);
 }
 
 /* Get ready to modify the registers array.  On machines which store
@@ -1366,7 +1365,7 @@ monitor_store_registers (int regno)
    debugged.  */
 
 static void
-monitor_prepare_to_store (void)
+monitor_prepare_to_store (struct regcache *regcache)
 {
   /* Do nothing, since we can store individual regs */
 }
@@ -1387,7 +1386,7 @@ monitor_write_memory (CORE_ADDR memaddr, char *myaddr, int len)
   monitor_debug ("MON write %d %s\n", len, paddr (memaddr));
 
   if (current_monitor->flags & MO_ADDR_BITS_REMOVE)
-    memaddr = ADDR_BITS_REMOVE (memaddr);
+    memaddr = gdbarch_addr_bits_remove (current_gdbarch, memaddr);
 
   /* Use memory fill command for leading 0 bytes.  */
 
@@ -1786,7 +1785,7 @@ monitor_read_memory (CORE_ADDR memaddr, char *myaddr, int len)
 		 paddr_nz (memaddr), (long) myaddr, len);
 
   if (current_monitor->flags & MO_ADDR_BITS_REMOVE)
-    memaddr = ADDR_BITS_REMOVE (memaddr);
+    memaddr = gdbarch_addr_bits_remove (current_gdbarch, memaddr);
 
   if (current_monitor->flags & MO_GETMEM_READ_SINGLE)
     return monitor_read_memory_single (memaddr, myaddr, len);
@@ -2012,7 +2011,7 @@ monitor_insert_breakpoint (struct bp_target_info *bp_tgt)
     error (_("No set_break defined for this monitor"));
 
   if (current_monitor->flags & MO_ADDR_BITS_REMOVE)
-    addr = ADDR_BITS_REMOVE (addr);
+    addr = gdbarch_addr_bits_remove (current_gdbarch, addr);
 
   /* Determine appropriate breakpoint size for this address.  */
   bp = gdbarch_breakpoint_from_pc (current_gdbarch, &addr, &bplen);

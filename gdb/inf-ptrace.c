@@ -1,14 +1,14 @@
 /* Low-level child interface to ptrace.
 
-   Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1998, 1999, 2000, 2001, 2002, 2004, 2005, 2006
+   Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998,
+   1999, 2000, 2001, 2002, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "command.h"
@@ -28,6 +26,7 @@
 #include "gdbcore.h"
 #include "regcache.h"
 
+#include "gdb_stdint.h"
 #include "gdb_assert.h"
 #include "gdb_string.h"
 #include "gdb_ptrace.h"
@@ -504,7 +503,8 @@ inf_ptrace_xfer_partial (struct target_ops *ops, enum target_object object,
 		    < rounded_offset + sizeof (PTRACE_TYPE_RET)))
 	      /* Need part of initial word -- fetch it.  */
 	      buffer.word = ptrace (PT_READ_I, pid,
-				    (PTRACE_TYPE_ARG3)(long)rounded_offset, 0);
+				    (PTRACE_TYPE_ARG3)(uintptr_t)
+				    rounded_offset, 0);
 
 	    /* Copy data to be written over corresponding part of
 	       buffer.  */
@@ -513,14 +513,16 @@ inf_ptrace_xfer_partial (struct target_ops *ops, enum target_object object,
 
 	    errno = 0;
 	    ptrace (PT_WRITE_D, pid,
-		    (PTRACE_TYPE_ARG3)(long)rounded_offset, buffer.word);
+		    (PTRACE_TYPE_ARG3)(uintptr_t)rounded_offset,
+		    buffer.word);
 	    if (errno)
 	      {
 		/* Using the appropriate one (I or D) is necessary for
 		   Gould NP1, at least.  */
 		errno = 0;
 		ptrace (PT_WRITE_I, pid,
-			(PTRACE_TYPE_ARG3)(long)rounded_offset, buffer.word);
+			(PTRACE_TYPE_ARG3)(uintptr_t)rounded_offset,
+			buffer.word);
 		if (errno)
 		  return 0;
 	      }
@@ -530,7 +532,8 @@ inf_ptrace_xfer_partial (struct target_ops *ops, enum target_object object,
 	  {
 	    errno = 0;
 	    buffer.word = ptrace (PT_READ_I, pid,
-				  (PTRACE_TYPE_ARG3)(long)rounded_offset, 0);
+				  (PTRACE_TYPE_ARG3)(uintptr_t)rounded_offset,
+				  0);
 	    if (errno)
 	      return 0;
 	    /* Copy appropriate bytes out of the buffer.  */
@@ -607,21 +610,24 @@ inf_ptrace_target (void)
 
 /* Pointer to a function that returns the offset within the user area
    where a particular register is stored.  */
-static CORE_ADDR (*inf_ptrace_register_u_offset)(int);
+static CORE_ADDR (*inf_ptrace_register_u_offset)(struct gdbarch *, int, int);
 
 /* Fetch register REGNUM from the inferior.  */
 
 static void
-inf_ptrace_fetch_register (int regnum)
+inf_ptrace_fetch_register (struct regcache *regcache, int regnum)
 {
   CORE_ADDR addr;
   size_t size;
   PTRACE_TYPE_RET *buf;
   int pid, i;
 
-  if (CANNOT_FETCH_REGISTER (regnum))
+  /* This isn't really an address, but ptrace thinks of it as one.  */
+  addr = inf_ptrace_register_u_offset (current_gdbarch, regnum, 0);
+  if (addr == (CORE_ADDR)-1
+      || gdbarch_cannot_fetch_register (current_gdbarch, regnum))
     {
-      regcache_raw_supply (current_regcache, regnum, NULL);
+      regcache_raw_supply (regcache, regnum, NULL);
       return;
     }
 
@@ -631,10 +637,7 @@ inf_ptrace_fetch_register (int regnum)
   if (pid == 0)
     pid = ptid_get_pid (inferior_ptid);
 
-  /* This isn't really an address, but ptrace thinks of it as one.  */
-  addr = inf_ptrace_register_u_offset (regnum);
   size = register_size (current_gdbarch, regnum);
-
   gdb_assert ((size % sizeof (PTRACE_TYPE_RET)) == 0);
   buf = alloca (size);
 
@@ -642,40 +645,44 @@ inf_ptrace_fetch_register (int regnum)
   for (i = 0; i < size / sizeof (PTRACE_TYPE_RET); i++)
     {
       errno = 0;
-      buf[i] = ptrace (PT_READ_U, pid, (PTRACE_TYPE_ARG3)addr, 0);
+      buf[i] = ptrace (PT_READ_U, pid, (PTRACE_TYPE_ARG3)(uintptr_t)addr, 0);
       if (errno != 0)
 	error (_("Couldn't read register %s (#%d): %s."),
-	       REGISTER_NAME (regnum), regnum, safe_strerror (errno));
+	       gdbarch_register_name (current_gdbarch, regnum),
+	       regnum, safe_strerror (errno));
 
       addr += sizeof (PTRACE_TYPE_RET);
     }
-  regcache_raw_supply (current_regcache, regnum, buf);
+  regcache_raw_supply (regcache, regnum, buf);
 }
 
 /* Fetch register REGNUM from the inferior.  If REGNUM is -1, do this
    for all registers.  */
 
 static void
-inf_ptrace_fetch_registers (int regnum)
+inf_ptrace_fetch_registers (struct regcache *regcache, int regnum)
 {
   if (regnum == -1)
-    for (regnum = 0; regnum < NUM_REGS; regnum++)
-      inf_ptrace_fetch_register (regnum);
+    for (regnum = 0; regnum < gdbarch_num_regs (current_gdbarch); regnum++)
+      inf_ptrace_fetch_register (regcache, regnum);
   else
-    inf_ptrace_fetch_register (regnum);
+    inf_ptrace_fetch_register (regcache, regnum);
 }
 
 /* Store register REGNUM into the inferior.  */
 
 static void
-inf_ptrace_store_register (int regnum)
+inf_ptrace_store_register (const struct regcache *regcache, int regnum)
 {
   CORE_ADDR addr;
   size_t size;
   PTRACE_TYPE_RET *buf;
   int pid, i;
 
-  if (CANNOT_STORE_REGISTER (regnum))
+  /* This isn't really an address, but ptrace thinks of it as one.  */
+  addr = inf_ptrace_register_u_offset (current_gdbarch, regnum, 1);
+  if (addr == (CORE_ADDR)-1 
+      || gdbarch_cannot_store_register (current_gdbarch, regnum))
     return;
 
   /* Cater for systems like GNU/Linux, that implement threads as
@@ -684,22 +691,20 @@ inf_ptrace_store_register (int regnum)
   if (pid == 0)
     pid = ptid_get_pid (inferior_ptid);
 
-  /* This isn't really an address, but ptrace thinks of it as one.  */
-  addr = inf_ptrace_register_u_offset (regnum);
   size = register_size (current_gdbarch, regnum);
-
   gdb_assert ((size % sizeof (PTRACE_TYPE_RET)) == 0);
   buf = alloca (size);
 
   /* Write the register contents into the inferior a chunk at a time.  */
-  regcache_raw_collect (current_regcache, regnum, buf);
+  regcache_raw_collect (regcache, regnum, buf);
   for (i = 0; i < size / sizeof (PTRACE_TYPE_RET); i++)
     {
       errno = 0;
-      ptrace (PT_WRITE_U, pid, (PTRACE_TYPE_ARG3)addr, buf[i]);
+      ptrace (PT_WRITE_U, pid, (PTRACE_TYPE_ARG3)(uintptr_t)addr, buf[i]);
       if (errno != 0)
 	error (_("Couldn't write register %s (#%d): %s."),
-	       REGISTER_NAME (regnum), regnum, safe_strerror (errno));
+	       gdbarch_register_name (current_gdbarch, regnum),
+	       regnum, safe_strerror (errno));
 
       addr += sizeof (PTRACE_TYPE_RET);
     }
@@ -709,13 +714,13 @@ inf_ptrace_store_register (int regnum)
    this for all registers.  */
 
 void
-inf_ptrace_store_registers (int regnum)
+inf_ptrace_store_registers (struct regcache *regcache, int regnum)
 {
   if (regnum == -1)
-    for (regnum = 0; regnum < NUM_REGS; regnum++)
-      inf_ptrace_store_register (regnum);
+    for (regnum = 0; regnum < gdbarch_num_regs (current_gdbarch); regnum++)
+      inf_ptrace_store_register (regcache, regnum);
   else
-    inf_ptrace_store_register (regnum);
+    inf_ptrace_store_register (regcache, regnum);
 }
 
 /* Create a "traditional" ptrace target.  REGISTER_U_OFFSET should be
@@ -723,7 +728,8 @@ inf_ptrace_store_registers (int regnum)
    particular register is stored.  */
 
 struct target_ops *
-inf_ptrace_trad_target (CORE_ADDR (*register_u_offset)(int))
+inf_ptrace_trad_target (CORE_ADDR (*register_u_offset)
+					(struct gdbarch *, int, int))
 {
   struct target_ops *t = inf_ptrace_target();
 

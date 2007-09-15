@@ -1,13 +1,13 @@
 /* Scheme/Guile language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 1995, 1996, 1998, 2000, 2001, 2002, 2003, 2004, 2005 Free
+   Copyright (C) 1995, 1996, 1998, 2000, 2001, 2002, 2003, 2004, 2005, 2007 Free
    Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -59,8 +57,7 @@ scm_printstr (struct ui_file *stream, const gdb_byte *string,
 int
 is_scmvalue_type (struct type *type)
 {
-  if (TYPE_CODE (type) == TYPE_CODE_INT
-      && TYPE_NAME (type) && strcmp (TYPE_NAME (type), "SCM") == 0)
+  if (TYPE_NAME (type) && strcmp (TYPE_NAME (type), "SCM") == 0)
     {
       return 1;
     }
@@ -197,8 +194,8 @@ scm_evaluate_string (char *str, int len)
 }
 
 static struct value *
-evaluate_subexp_scm (struct type *expect_type, struct expression *exp,
-		     int *pos, enum noside noside)
+evaluate_exp (struct type *expect_type, struct expression *exp,
+	      int *pos, enum noside noside)
 {
   enum exp_opcode op = exp->elts[*pos].opcode;
   int len, pc;
@@ -213,7 +210,7 @@ evaluate_subexp_scm (struct type *expect_type, struct expression *exp,
 	goto nosideret;
       str = &exp->elts[pc + 2].string;
       return scm_lookup_name (str);
-    case OP_EXPRSTRING:
+    case OP_STRING:
       pc = (*pos)++;
       len = longest_to_int (exp->elts[pc + 1].longconst);
       (*pos) += 3 + BYTES_TO_EXP_ELEM (len + 1);
@@ -234,7 +231,7 @@ const struct exp_descriptor exp_descriptor_scm =
   operator_length_standard,
   op_name_standard,
   dump_subexp_body_standard,
-  evaluate_subexp_scm
+  evaluate_exp
 };
 
 const struct language_defn scm_language_defn =
@@ -277,7 +274,8 @@ void
 _initialize_scheme_language (void)
 {
   add_language (&scm_language_defn);
-  builtin_type_scm = init_type (TYPE_CODE_INT,
-				TARGET_LONG_BIT / TARGET_CHAR_BIT,
-				0, "SCM", (struct objfile *) NULL);
+  builtin_type_scm =
+    init_type (TYPE_CODE_INT,
+	       gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       0, "SCM", (struct objfile *) NULL);
 }

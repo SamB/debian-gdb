@@ -1,18 +1,18 @@
-# Copyright 1999, 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+# Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2007
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #
 # Test essential Machine interface (MI) operations
@@ -63,7 +63,7 @@ proc test_watchpoint_creation_and_listing {} {
              "break-watch operation"
 
     mi_gdb_test "222-break-list" \
-	    "222\\\^done,BreakpointTable=\{nr_rows=\".\",nr_cols=\".\",hdr=\\\[\{width=\".*\",alignment=\".*\",col_name=\"number\",colhdr=\"Num\"\}.*colhdr=\"Type\".*colhdr=\"Disp\".*colhdr=\"Enb\".*colhdr=\"Address\".*colhdr=\"What\".*\\\],body=\\\[bkpt=\{number=\"1\",type=\"breakpoint\",disp=\"keep\",enabled=\"y\",addr=\"$hex\",func=\"callee4\",file=\".*basics.c\",line=\"$line_callee4_body\",times=\"1\"\},bkpt=\{number=\"2\",type=\".*watchpoint\",disp=\"keep\",enabled=\"y\",addr=\"\",what=\"C\",times=\"0\"\}\\\]\}" \
+	    "222\\\^done,BreakpointTable=\{nr_rows=\".\",nr_cols=\".\",hdr=\\\[\{width=\".*\",alignment=\".*\",col_name=\"number\",colhdr=\"Num\"\}.*colhdr=\"Type\".*colhdr=\"Disp\".*colhdr=\"Enb\".*colhdr=\"Address\".*colhdr=\"What\".*\\\],body=\\\[bkpt=\{number=\"2\",type=\".*watchpoint\",disp=\"keep\",enabled=\"y\",addr=\"\",what=\"C\",times=\"0\"\}\\\]\}" \
                 "list of watchpoints"
 
 }
@@ -165,6 +165,11 @@ proc test_watchpoint_triggering {} {
       -re ".*$mi_gdb_prompt$" {fail "wp out of scope (1)"}
       timeout {fail "wp out of scope (timeout 1)"}
     }
+}
+
+# Disable hardware watchpoints if necessary.
+if [target_info exists gdb,no_hardware_watchpoints] {
+    mi_gdb_test "-gdb-set can-use-hw-watchpoints 0" "\\^done" ""
 }
 
 mi_runto callee4

@@ -1,13 +1,12 @@
 /* Serial interface for local (hardwired) serial ports on Windows systems
 
-   Copyright (C) 2006
-   Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "serial.h"
@@ -454,6 +451,15 @@ fd_is_pipe (int fd)
     return 0;
 }
 
+static int
+fd_is_file (int fd)
+{
+  if (GetFileType ((HANDLE) _get_osfhandle (fd)) == FILE_TYPE_DISK)
+    return 1;
+  else
+    return 0;
+}
+
 static DWORD WINAPI
 pipe_select_thread (void *arg)
 {
@@ -502,6 +508,42 @@ pipe_select_thread (void *arg)
     }
 }
 
+static DWORD WINAPI
+file_select_thread (void *arg)
+{
+  struct serial *scb = arg;
+  struct ser_console_state *state;
+  int event_index;
+  HANDLE h;
+
+  state = scb->state;
+  h = (HANDLE) _get_osfhandle (scb->fd);
+
+  while (1)
+    {
+      HANDLE wait_events[2];
+      DWORD n_avail;
+
+      SetEvent (state->have_stopped);
+
+      wait_events[0] = state->start_select;
+      wait_events[1] = state->exit_select;
+
+      if (WaitForMultipleObjects (2, wait_events, FALSE, INFINITE) != WAIT_OBJECT_0)
+	return 0;
+
+      ResetEvent (state->have_stopped);
+
+      if (SetFilePointer (h, 0, NULL, FILE_CURRENT) == INVALID_SET_FILE_POINTER)
+	{
+	  SetEvent (state->except_event);
+	  continue;
+	}
+
+      SetEvent (state->read_event);
+    }
+}
+
 static void
 ser_console_wait_handle (struct serial *scb, HANDLE *read, HANDLE *except)
 {
@@ -513,7 +555,7 @@ ser_console_wait_handle (struct serial *scb, HANDLE *read, HANDLE *except)
       int is_tty;
 
       is_tty = isatty (scb->fd);
-      if (!is_tty && !fd_is_pipe (scb->fd))
+      if (!is_tty && !fd_is_file (scb->fd) && !fd_is_pipe (scb->fd))
 	{
 	  *read = NULL;
 	  *except = NULL;
@@ -542,8 +584,11 @@ ser_console_wait_handle (struct serial *scb, HANDLE *read, HANDLE *except)
       if (is_tty)
 	state->thread = CreateThread (NULL, 0, console_select_thread, scb, 0,
 				      &threadId);
-      else
+      else if (fd_is_pipe (scb->fd))
 	state->thread = CreateThread (NULL, 0, pipe_select_thread, scb, 0,
+				      &threadId);
+      else
+	state->thread = CreateThread (NULL, 0, file_select_thread, scb, 0,
 				      &threadId);
     }
 
@@ -697,12 +742,16 @@ cleanup_pipe_state (void *untyped)
 static int
 pipe_windows_open (struct serial *scb, const char *name)
 {
+  struct pipe_state *ps;
+  FILE *pex_stderr;
+
   char **argv = buildargv (name);
   struct cleanup *back_to = make_cleanup_freeargv (argv);
   if (! argv[0] || argv[0][0] == '\0')
     error ("missing child command");
 
-  struct pipe_state *ps = make_pipe_state ();
+
+  ps = make_pipe_state ();
   make_cleanup (cleanup_pipe_state, ps);
 
   ps->pex = pex_init (PEX_USE_PIPES, "target remote pipe", NULL);
@@ -715,7 +764,8 @@ pipe_windows_open (struct serial *scb, const char *name)
   {
     int err;
     const char *err_msg
-      = pex_run (ps->pex, PEX_SEARCH | PEX_BINARY_INPUT | PEX_BINARY_OUTPUT,
+      = pex_run (ps->pex, PEX_SEARCH | PEX_BINARY_INPUT | PEX_BINARY_OUTPUT
+		 | PEX_STDERR_TO_PIPE,
                  argv[0], argv, NULL, NULL,
                  &err);
 
@@ -737,8 +787,13 @@ pipe_windows_open (struct serial *scb, const char *name)
   ps->output = pex_read_output (ps->pex, 1);
   if (! ps->output)
     goto fail;
-
   scb->fd = fileno (ps->output);
+
+  pex_stderr = pex_read_err (ps->pex, 1);
+  if (! pex_stderr)
+    goto fail;
+  scb->error_fd = fileno (pex_stderr);
+
   scb->state = (void *) ps;
 
   discard_cleanups (back_to);
@@ -767,17 +822,18 @@ static int
 pipe_windows_read (struct serial *scb, size_t count)
 {
   HANDLE pipeline_out = (HANDLE) _get_osfhandle (scb->fd);
+  DWORD available;
+  DWORD bytes_read;
+
   if (pipeline_out == INVALID_HANDLE_VALUE)
     return -1;
 
-  DWORD available;
   if (! PeekNamedPipe (pipeline_out, NULL, 0, NULL, &available, NULL))
     return -1;
 
   if (count > available)
     count = available;
 
-  DWORD bytes_read;
   if (! ReadFile (pipeline_out, scb->buf, count, &bytes_read, NULL))
     return -1;
 
@@ -789,15 +845,17 @@ static int
 pipe_windows_write (struct serial *scb, const void *buf, size_t count)
 {
   struct pipe_state *ps = scb->state;
+  HANDLE pipeline_in;
+  DWORD written;
+
   int pipeline_in_fd = fileno (ps->input);
   if (pipeline_in_fd < 0)
     return -1;
 
-  HANDLE pipeline_in = (HANDLE) _get_osfhandle (pipeline_in_fd);
+  pipeline_in = (HANDLE) _get_osfhandle (pipeline_in_fd);
   if (pipeline_in == INVALID_HANDLE_VALUE)
     return -1;
 
-  DWORD written;
   if (! WriteFile (pipeline_in, buf, count, &written, NULL))
     return -1;
 
@@ -858,6 +916,17 @@ pipe_done_wait_handle (struct serial *scb)
 
   SetEvent (ps->wait.stop_select);
   WaitForSingleObject (ps->wait.have_stopped, INFINITE);
+}
+
+static int
+pipe_avail (struct serial *scb, int fd)
+{
+  HANDLE h = (HANDLE) _get_osfhandle (fd);
+  DWORD numBytes;
+  BOOL r = PeekNamedPipe (h, NULL, 0, NULL, &numBytes, NULL);
+  if (r == FALSE)
+    numBytes = 0;
+  return numBytes;
 }
 
 struct net_windows_state
@@ -1159,6 +1228,7 @@ _initialize_ser_windows (void)
   ops->write_prim = pipe_windows_write;
   ops->wait_handle = pipe_wait_handle;
   ops->done_wait_handle = pipe_done_wait_handle;
+  ops->avail = pipe_avail;
 
   serial_add_interface (ops);
 

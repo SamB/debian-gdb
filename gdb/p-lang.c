@@ -1,13 +1,13 @@
 /* Pascal language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 2000, 2002, 2003, 2004, 2005 Free Software Foundation,
-   Inc.
+   Copyright (C) 2000, 2002, 2003, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This file is derived from c-lang.c */
 
@@ -287,7 +285,7 @@ pascal_create_fundamental_type (struct objfile *objfile, int typeid)
          name "<?type?>".  When all the dust settles from the type
          reconstruction work, this should probably become an error. */
       type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
+			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "<?type?>", objfile);
       warning (_("internal error: no Pascal fundamental type %d"), typeid);
       break;
@@ -313,77 +311,81 @@ pascal_create_fundamental_type (struct objfile *objfile, int typeid)
       break;
     case FT_SHORT:
       type = init_type (TYPE_CODE_INT,
-			TARGET_SHORT_BIT / TARGET_CHAR_BIT,
+			gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "integer", objfile);
       break;
     case FT_SIGNED_SHORT:
       type = init_type (TYPE_CODE_INT,
-			TARGET_SHORT_BIT / TARGET_CHAR_BIT,
+			gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "integer", objfile);		/* FIXME-fnf */
       break;
     case FT_UNSIGNED_SHORT:
       type = init_type (TYPE_CODE_INT,
-			TARGET_SHORT_BIT / TARGET_CHAR_BIT,
+			gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			TYPE_FLAG_UNSIGNED, "word", objfile);
       break;
     case FT_INTEGER:
       type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
+			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "longint", objfile);
       break;
     case FT_SIGNED_INTEGER:
       type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
+			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "longint", objfile);		/* FIXME -fnf */
       break;
     case FT_UNSIGNED_INTEGER:
       type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
+			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			TYPE_FLAG_UNSIGNED, "cardinal", objfile);
       break;
     case FT_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "long", objfile);
       break;
     case FT_SIGNED_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "long", objfile);	/* FIXME -fnf */
       break;
     case FT_UNSIGNED_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			TYPE_FLAG_UNSIGNED, "unsigned long", objfile);
       break;
     case FT_LONG_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_long_bit
+			  (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "long long", objfile);
       break;
     case FT_SIGNED_LONG_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_long_bit
+			  (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "signed long long", objfile);
       break;
     case FT_UNSIGNED_LONG_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_long_bit
+			  (current_gdbarch) / TARGET_CHAR_BIT,
 			TYPE_FLAG_UNSIGNED, "unsigned long long", objfile);
       break;
     case FT_FLOAT:
       type = init_type (TYPE_CODE_FLT,
-			TARGET_FLOAT_BIT / TARGET_CHAR_BIT,
+			gdbarch_float_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "float", objfile);
       break;
     case FT_DBL_PREC_FLOAT:
       type = init_type (TYPE_CODE_FLT,
-			TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
+			gdbarch_double_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "double", objfile);
       break;
     case FT_EXT_PREC_FLOAT:
       type = init_type (TYPE_CODE_FLT,
-			TARGET_LONG_DOUBLE_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_double_bit (current_gdbarch)
+			  / TARGET_CHAR_BIT,
 			0, "extended", objfile);
       break;
     }
@@ -424,33 +426,77 @@ const struct op_print pascal_op_print_tab[] =
   {NULL, 0, 0, 0}
 };
 
-struct type **const (pascal_builtin_types[]) =
-{
-  &builtin_type_int,
-    &builtin_type_long,
-    &builtin_type_short,
-    &builtin_type_char,
-    &builtin_type_float,
-    &builtin_type_double,
-    &builtin_type_void,
-    &builtin_type_long_long,
-    &builtin_type_signed_char,
-    &builtin_type_unsigned_char,
-    &builtin_type_unsigned_short,
-    &builtin_type_unsigned_int,
-    &builtin_type_unsigned_long,
-    &builtin_type_unsigned_long_long,
-    &builtin_type_long_double,
-    &builtin_type_complex,
-    &builtin_type_double_complex,
-    0
+enum pascal_primitive_types {
+  pascal_primitive_type_int,
+  pascal_primitive_type_long,
+  pascal_primitive_type_short,
+  pascal_primitive_type_char,
+  pascal_primitive_type_float,
+  pascal_primitive_type_double,
+  pascal_primitive_type_void,
+  pascal_primitive_type_long_long,
+  pascal_primitive_type_signed_char,
+  pascal_primitive_type_unsigned_char,
+  pascal_primitive_type_unsigned_short,
+  pascal_primitive_type_unsigned_int,
+  pascal_primitive_type_unsigned_long,
+  pascal_primitive_type_unsigned_long_long,
+  pascal_primitive_type_long_double,
+  pascal_primitive_type_complex,
+  pascal_primitive_type_double_complex,
+  nr_pascal_primitive_types
 };
+
+static void
+pascal_language_arch_info (struct gdbarch *gdbarch,
+			   struct language_arch_info *lai)
+{
+  const struct builtin_type *builtin = builtin_type (gdbarch);
+  lai->string_char_type = builtin->builtin_char;
+  lai->primitive_type_vector
+    = GDBARCH_OBSTACK_CALLOC (gdbarch, nr_pascal_primitive_types + 1,
+                              struct type *);
+  lai->primitive_type_vector [pascal_primitive_type_int]
+    = builtin->builtin_int;
+  lai->primitive_type_vector [pascal_primitive_type_long]
+    = builtin->builtin_long;
+  lai->primitive_type_vector [pascal_primitive_type_short]
+    = builtin->builtin_short;
+  lai->primitive_type_vector [pascal_primitive_type_char]
+    = builtin->builtin_char;
+  lai->primitive_type_vector [pascal_primitive_type_float]
+    = builtin->builtin_float;
+  lai->primitive_type_vector [pascal_primitive_type_double]
+    = builtin->builtin_double;
+  lai->primitive_type_vector [pascal_primitive_type_void]
+    = builtin->builtin_void;
+  lai->primitive_type_vector [pascal_primitive_type_long_long]
+    = builtin->builtin_long_long;
+  lai->primitive_type_vector [pascal_primitive_type_signed_char]
+    = builtin->builtin_signed_char;
+  lai->primitive_type_vector [pascal_primitive_type_unsigned_char]
+    = builtin->builtin_unsigned_char;
+  lai->primitive_type_vector [pascal_primitive_type_unsigned_short]
+    = builtin->builtin_unsigned_short;
+  lai->primitive_type_vector [pascal_primitive_type_unsigned_int]
+    = builtin->builtin_unsigned_int;
+  lai->primitive_type_vector [pascal_primitive_type_unsigned_long]
+    = builtin->builtin_unsigned_long;
+  lai->primitive_type_vector [pascal_primitive_type_unsigned_long_long]
+    = builtin->builtin_unsigned_long_long;
+  lai->primitive_type_vector [pascal_primitive_type_long_double]
+    = builtin->builtin_long_double;
+  lai->primitive_type_vector [pascal_primitive_type_complex]
+    = builtin->builtin_complex;
+  lai->primitive_type_vector [pascal_primitive_type_double_complex]
+    = builtin->builtin_double_complex;
+}
 
 const struct language_defn pascal_language_defn =
 {
   "pascal",			/* Language name */
   language_pascal,
-  pascal_builtin_types,
+  NULL,
   range_check_on,
   type_check_on,
   case_sensitive_on,
@@ -475,9 +521,9 @@ const struct language_defn pascal_language_defn =
   pascal_op_print_tab,		/* expression operators for printing */
   1,				/* c-style arrays */
   0,				/* String lower bound */
-  &builtin_type_char,		/* Type of string elements */
+  NULL,
   default_word_break_characters,
-  NULL, /* FIXME: la_language_arch_info.  */
+  pascal_language_arch_info,
   default_print_array_index,
   LANG_MAGIC
 };

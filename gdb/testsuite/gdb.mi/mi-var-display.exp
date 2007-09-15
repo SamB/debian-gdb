@@ -1,9 +1,9 @@
-# Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005
+# Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
 # Free Software Foundation, Inc.
 #
-# This Program Is Free software; you can redistribute it and/or modify
+# This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
 #
 # This program is distributed in the hope that it will be useful,
@@ -12,8 +12,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Test essential Machine interface (MI) operations
 #
@@ -66,7 +65,7 @@ gdb_expect {
 # Test: c_variable-6.1
 # Desc: create variable bar
 mi_gdb_test "-var-create bar * bar" \
-	"\\^done,name=\"bar\",numchild=\"0\",type=\"int\"" \
+	"\\^done,name=\"bar\",numchild=\"0\",value=\".*\",type=\"int\"" \
 	"create local variable bar"
 
 # Test: c_variable-6.2
@@ -120,7 +119,7 @@ mi_gdb_test "-var-delete bar" \
 # Test: c_variable-6.11
 # Desc: create variable foo
 mi_gdb_test "-var-create foo * foo" \
-	"\\^done,name=\"foo\",numchild=\"1\",type=\"int \\*\"" \
+	"\\^done,name=\"foo\",numchild=\"1\",value=\".*\",type=\"int \\*\"" \
 	"create local variable foo"
 
 # Test: c_variable-6.12
@@ -180,7 +179,7 @@ mi_gdb_test "-var-delete foo" \
 # Test: c_variable-6.21
 # Desc: create variable weird and children
 mi_gdb_test "-var-create weird * weird" \
-	"\\^done,name=\"weird\",numchild=\"11\",type=\"weird_struct \\*\"" \
+	"\\^done,name=\"weird\",numchild=\"11\",value=\".*\",type=\"weird_struct \\*\"" \
 	"create local variable weird"
 
 mi_gdb_test "-var-list-children weird" \
@@ -345,7 +344,7 @@ gdb_expect {
 # Test: c_variable-7.10
 # Desc: create union u
 mi_gdb_test "-var-create u * u" \
-	"\\^done,name=\"u\",numchild=\"2\",type=\"union named_union\"" \
+	"\\^done,name=\"u\",numchild=\"2\",value=\".*\",type=\"union named_union\"" \
 	"create local variable u"
 
 # Test: c_variable-7.11
@@ -381,7 +380,7 @@ mi_gdb_test "-var-list-children u" \
 # Test: c_variable-7.20
 # Desc: create anonu
 mi_gdb_test "-var-create anonu * anonu" \
-	"\\^done,name=\"anonu\",numchild=\"3\",type=\"union \{\\.\\.\\.\}\"" \
+	"\\^done,name=\"anonu\",numchild=\"3\",value=\".*\",type=\"union \{\\.\\.\\.\}\"" \
 	"create local variable anonu"
 
 # Test: c_variable-7.21
@@ -417,7 +416,7 @@ mi_gdb_test "-var-list-children anonu" \
 # Test: c_variable-7.30
 # Desc: create struct s
 mi_gdb_test "-var-create s * s" \
-	"\\^done,name=\"s\",numchild=\"6\",type=\"struct _simple_struct\"" \
+	"\\^done,name=\"s\",numchild=\"6\",value=\".*\",type=\"struct _simple_struct\"" \
 	"create local variable s"
 
 
@@ -455,7 +454,7 @@ mi_gdb_test "-var-list-children s" \
 # Test: c_variable-7.40
 # Desc: create anons
 mi_gdb_test "-var-create anons * anons" \
-	"\\^done,name=\"anons\",numchild=\"3\",type=\"struct \{\\.\\.\\.\}\"" \
+	"\\^done,name=\"anons\",numchild=\"3\",value=\".*\",type=\"struct \{\\.\\.\\.\}\"" \
 	"create local variable anons"
 
 # Test: c_variable-7.41
@@ -492,7 +491,7 @@ mi_gdb_test "-var-list-children anons" \
 # Test: c_variable-7.50
 # Desc: create enum e
 mi_gdb_test "-var-create e * e" \
-	"\\^done,name=\"e\",numchild=\"0\",type=\"enum foo\"" \
+	"\\^done,name=\"e\",numchild=\"0\",value=\".*\",type=\"enum foo\"" \
 	"create local variable e"
 
 setup_xfail "*-*-*"
@@ -530,7 +529,7 @@ mi_gdb_test "-var-list-children e" \
 # Test: c_variable-7.60
 # Desc: create anone
 mi_gdb_test "-var-create anone * anone" \
-	"\\^done,name=\"anone\",numchild=\"0\",type=\"enum \{\\.\\.\\.\}\"" \
+	"\\^done,name=\"anone\",numchild=\"0\",value=\".*\",type=\"enum \{\\.\\.\\.\}\"" \
 	"create local variable anone"
 
 setup_xfail "*-*-*"
@@ -611,11 +610,11 @@ gdb_expect {
 # Test: c_variable-7.81
 # Desc: Create variables in different scopes
 mi_gdb_test "-var-create a1 * a" \
-	"\\^done,name=\"a1\",numchild=\"0\",type=\"char\"" \
+	"\\^done,name=\"a1\",numchild=\"0\",value=\".*\",type=\"char\"" \
 	"create local variable a1"
 
 mi_gdb_test "-var-create a2 $fp a" \
-	"\\^done,name=\"a2\",numchild=\"0\",type=\"int\"" \
+	"\\^done,name=\"a2\",numchild=\"0\",value=\".*\",type=\"int\"" \
 	"create variable a2 in different scope"
 
 #gdbtk_test c_variable-7.81 {create variables in different scopes} {

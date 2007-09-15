@@ -1,13 +1,13 @@
 /* Target-dependent code for GNU/Linux i386.
 
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbcore.h"
@@ -35,6 +33,7 @@
 #include "i386-linux-tdep.h"
 #include "glibc-tdep.h"
 #include "solib-svr4.h"
+#include "symtab.h"
 
 /* Return the name of register REG.  */
 
@@ -316,9 +315,9 @@ i386_linux_sigcontext_addr (struct frame_info *next_frame)
 /* Set the program counter for process PTID to PC.  */
 
 static void
-i386_linux_write_pc (CORE_ADDR pc, ptid_t ptid)
+i386_linux_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
-  write_register_pid (I386_EIP_REGNUM, pc, ptid);
+  regcache_cooked_write_unsigned (regcache, I386_EIP_REGNUM, pc);
 
   /* We must be careful with modifying the program counter.  If we
      just interrupted a system call, the kernel might try to restart
@@ -334,7 +333,7 @@ i386_linux_write_pc (CORE_ADDR pc, ptid_t ptid)
      when we resume the inferior on return from a function call from
      within GDB.  In all other cases the system call will not be
      restarted.  */
-  write_register_pid (I386_LINUX_ORIG_EAX_REGNUM, -1, ptid);
+  regcache_cooked_write_unsigned (regcache, I386_LINUX_ORIG_EAX_REGNUM, -1);
 }
 
 
@@ -431,6 +430,7 @@ i386_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->sc_num_regs = ARRAY_SIZE (i386_linux_sc_reg_offset);
 
   /* GNU/Linux uses SVR4-style shared libraries.  */
+  set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);
   set_solib_svr4_fetch_link_map_offsets
     (gdbarch, svr4_ilp32_fetch_link_map_offsets);
 

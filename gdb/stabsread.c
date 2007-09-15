@@ -1,14 +1,14 @@
 /* Support routines for decoding "stabs" debugging information format.
 
-   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* Support routines for reading and decoding debugging information in
    the "stabs" format.  This format is used with many systems that use
@@ -47,6 +45,7 @@
 #include "doublest.h"
 #include "cp-abi.h"
 #include "cp-support.h"
+#include "gdb_assert.h"
 
 #include <ctype.h>
 
@@ -147,7 +146,7 @@ static struct type *read_array_type (char **, struct type *,
 
 static struct field *read_args (char **, int, struct objfile *, int *, int *);
 
-static void add_undefined_type (struct type *);
+static void add_undefined_type (struct type *, int[2]);
 
 static int
 read_cpp_abbrev (struct field_info *, char **, struct type *,
@@ -161,15 +160,6 @@ void stabsread_clear_cache (void);
 
 static const char vptr_name[] = "_vptr$";
 static const char vb_name[] = "_vb$";
-
-/* Define this as 1 if a pcc declaration of a char or short argument
-   gives the correct address.  Otherwise assume pcc gives the
-   address of the corresponding int, which is not the same on a
-   big-endian machine.  */
-
-#if !defined (BELIEVE_PCC_PROMOTION)
-#define BELIEVE_PCC_PROMOTION 0
-#endif
 
 static void
 invalid_cpp_abbrev_complaint (const char *arg1)
@@ -197,6 +187,20 @@ static struct type **undef_types;
 static int undef_types_allocated;
 static int undef_types_length;
 static struct symbol *current_symbol = NULL;
+
+/* Make a list of nameless types that are undefined.
+   This happens when another type is referenced by its number
+   before this type is actually defined. For instance "t(0,1)=k(0,2)"
+   and type (0,2) is defined only later.  */
+
+struct nat
+{
+  int typenums[2];
+  struct type *type;
+};
+static struct nat *noname_undefs;
+static int noname_undefs_allocated;
+static int noname_undefs_length;
 
 /* Check for and handle cretinous stabs symbol name continuation!  */
 #define STABS_CONTINUE(pp,objfile)				\
@@ -278,15 +282,12 @@ dbx_lookup_type (int typenums[2])
 
       if (real_filenum >= N_HEADER_FILES (current_objfile))
 	{
-	  struct type *temp_type;
-	  struct type **temp_type_p;
+	  static struct type **temp_type_p;
 
 	  warning (_("GDB internal error: bad real_filenum"));
 
 	error_return:
-	  temp_type = init_type (TYPE_CODE_ERROR, 0, 0, NULL, NULL);
-	  temp_type_p = (struct type **) xmalloc (sizeof (struct type *));
-	  *temp_type_p = temp_type;
+	  temp_type_p = &builtin_type_error;
 	  return temp_type_p;
 	}
 
@@ -359,6 +360,7 @@ patch_block_stabs (struct pending *symbols, struct pending_stabs *stabs,
 	{
 	  name = stabs->stab[ii];
 	  pp = (char *) strchr (name, ':');
+	  gdb_assert (pp);	/* Must find a ':' or game's over.  */
 	  while (pp[1] == ':')
 	    {
 	      pp += 2;
@@ -949,7 +951,7 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
       SYMBOL_DOMAIN (sym) = VAR_DOMAIN;
       add_symbol_to_list (sym, &local_symbols);
 
-      if (TARGET_BYTE_ORDER != BFD_ENDIAN_BIG)
+      if (gdbarch_byte_order (current_gdbarch) != BFD_ENDIAN_BIG)
 	{
 	  /* On little-endian machines, this crud is never necessary,
 	     and, if the extra bytes contain garbage, is harmful.  */
@@ -957,10 +959,11 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
 	}
 
       /* If it's gcc-compiled, if it says `short', believe it.  */
-      if (processing_gcc_compilation || BELIEVE_PCC_PROMOTION)
+      if (processing_gcc_compilation
+	  || gdbarch_believe_pcc_promotion (current_gdbarch))
 	break;
 
-      if (!BELIEVE_PCC_PROMOTION)
+      if (!gdbarch_believe_pcc_promotion (current_gdbarch))
 	{
 	  /* This is the signed type which arguments get promoted to.  */
 	  static struct type *pcc_promotion_type;
@@ -970,12 +973,14 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
 	  /* Call it "int" because this is mainly C lossage.  */
 	  if (pcc_promotion_type == NULL)
 	    pcc_promotion_type =
-	      init_type (TYPE_CODE_INT, TARGET_INT_BIT / TARGET_CHAR_BIT,
+	      init_type (TYPE_CODE_INT, 
+			 gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			 0, "int", NULL);
 
 	  if (pcc_unsigned_promotion_type == NULL)
 	    pcc_unsigned_promotion_type =
-	      init_type (TYPE_CODE_INT, TARGET_INT_BIT / TARGET_CHAR_BIT,
+	      init_type (TYPE_CODE_INT, 
+			 gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			 TYPE_FLAG_UNSIGNED, "unsigned int", NULL);
 
 	  /* If PCC says a parameter is a short or a char, it is
@@ -1006,13 +1011,16 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
       /* Parameter which is in a register.  */
       SYMBOL_TYPE (sym) = read_type (&p, objfile);
       SYMBOL_CLASS (sym) = LOC_REGPARM;
-      SYMBOL_VALUE (sym) = STAB_REG_TO_REGNUM (valu);
-      if (SYMBOL_VALUE (sym) >= NUM_REGS + NUM_PSEUDO_REGS)
+      SYMBOL_VALUE (sym) = gdbarch_stab_reg_to_regnum (current_gdbarch, valu);
+      if (SYMBOL_VALUE (sym) >= gdbarch_num_regs (current_gdbarch)
+				  + gdbarch_num_pseudo_regs (current_gdbarch))
 	{
 	  reg_value_complaint (SYMBOL_VALUE (sym),
-			       NUM_REGS + NUM_PSEUDO_REGS,
+			       gdbarch_num_regs (current_gdbarch)
+				 + gdbarch_num_pseudo_regs (current_gdbarch),
 			       SYMBOL_PRINT_NAME (sym));
-	  SYMBOL_VALUE (sym) = SP_REGNUM;	/* Known safe, though useless */
+	  SYMBOL_VALUE (sym) = gdbarch_sp_regnum (current_gdbarch);
+	  /* Known safe, though useless */
 	}
       SYMBOL_DOMAIN (sym) = VAR_DOMAIN;
       add_symbol_to_list (sym, &local_symbols);
@@ -1022,13 +1030,16 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
       /* Register variable (either global or local).  */
       SYMBOL_TYPE (sym) = read_type (&p, objfile);
       SYMBOL_CLASS (sym) = LOC_REGISTER;
-      SYMBOL_VALUE (sym) = STAB_REG_TO_REGNUM (valu);
-      if (SYMBOL_VALUE (sym) >= NUM_REGS + NUM_PSEUDO_REGS)
+      SYMBOL_VALUE (sym) = gdbarch_stab_reg_to_regnum (current_gdbarch, valu);
+      if (SYMBOL_VALUE (sym) >= gdbarch_num_regs (current_gdbarch)
+				+ gdbarch_num_pseudo_regs (current_gdbarch))
 	{
 	  reg_value_complaint (SYMBOL_VALUE (sym),
-			       NUM_REGS + NUM_PSEUDO_REGS,
+			       gdbarch_num_regs (current_gdbarch)
+				 + gdbarch_num_pseudo_regs (current_gdbarch),
 			       SYMBOL_PRINT_NAME (sym));
-	  SYMBOL_VALUE (sym) = SP_REGNUM;	/* Known safe, though useless */
+	  SYMBOL_VALUE (sym) = gdbarch_sp_regnum (current_gdbarch);
+	  /* Known safe, though useless */
 	}
       SYMBOL_DOMAIN (sym) = VAR_DOMAIN;
       if (within_function)
@@ -1102,6 +1113,22 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
       break;
 
     case 't':
+      /* In Ada, there is no distinction between typedef and non-typedef;
+         any type declaration implicitly has the equivalent of a typedef,
+         and thus 't' is in fact equivalent to 'Tt'. 
+
+         Therefore, for Ada units, we check the character immediately
+         before the 't', and if we do not find a 'T', then make sure to
+         create the associated symbol in the STRUCT_DOMAIN ('t' definitions
+         will be stored in the VAR_DOMAIN).  If the symbol was indeed
+         defined as 'Tt' then the STRUCT_DOMAIN symbol will be created
+         elsewhere, so we don't need to take care of that.
+         
+         This is important to do, because of forward references:
+         The cleanup of undefined types stored in undef_types only uses
+         STRUCT_DOMAIN symbols to perform the replacement.  */
+      synonym = (SYMBOL_LANGUAGE (sym) == language_ada && p[-2] != 'T');
+
       /* Typedef */
       SYMBOL_TYPE (sym) = read_type (&p, objfile);
 
@@ -1185,6 +1212,24 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
 	}
 
       add_symbol_to_list (sym, &file_symbols);
+
+      if (synonym)
+        {
+          /* Create the STRUCT_DOMAIN clone.  */
+          struct symbol *struct_sym = (struct symbol *)
+            obstack_alloc (&objfile->objfile_obstack, sizeof (struct symbol));
+
+          *struct_sym = *sym;
+          SYMBOL_CLASS (struct_sym) = LOC_TYPEDEF;
+          SYMBOL_VALUE (struct_sym) = valu;
+          SYMBOL_DOMAIN (struct_sym) = STRUCT_DOMAIN;
+          if (TYPE_NAME (SYMBOL_TYPE (sym)) == 0)
+            TYPE_NAME (SYMBOL_TYPE (sym))
+              = obconcat (&objfile->objfile_obstack, "", "",
+                          DEPRECATED_SYMBOL_NAME (sym));
+          add_symbol_to_list (struct_sym, &file_symbols);
+        }
+      
       break;
 
     case 'T':
@@ -1260,13 +1305,16 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
       /* Reference parameter which is in a register.  */
       SYMBOL_TYPE (sym) = read_type (&p, objfile);
       SYMBOL_CLASS (sym) = LOC_REGPARM_ADDR;
-      SYMBOL_VALUE (sym) = STAB_REG_TO_REGNUM (valu);
-      if (SYMBOL_VALUE (sym) >= NUM_REGS + NUM_PSEUDO_REGS)
+      SYMBOL_VALUE (sym) = gdbarch_stab_reg_to_regnum (current_gdbarch, valu);
+      if (SYMBOL_VALUE (sym) >= gdbarch_num_regs (current_gdbarch)
+				+ gdbarch_num_pseudo_regs (current_gdbarch))
 	{
 	  reg_value_complaint (SYMBOL_VALUE (sym),
-			       NUM_REGS + NUM_PSEUDO_REGS,
+			       gdbarch_num_regs (current_gdbarch)
+				 + gdbarch_num_pseudo_regs (current_gdbarch),
 			       SYMBOL_PRINT_NAME (sym));
-	  SYMBOL_VALUE (sym) = SP_REGNUM;	/* Known safe, though useless */
+	  SYMBOL_VALUE (sym) = gdbarch_sp_regnum (current_gdbarch);
+	  /* Known safe, though useless */
 	}
       SYMBOL_DOMAIN (sym) = VAR_DOMAIN;
       add_symbol_to_list (sym, &local_symbols);
@@ -1413,7 +1461,7 @@ read_type (char **pp, struct objfile *objfile)
              doesn't get patched up by the time we're done
              reading.  */
           if (TYPE_CODE (type) == TYPE_CODE_UNDEF)
-            add_undefined_type (type);
+            add_undefined_type (type, typenums);
 
           return type;
         }
@@ -1539,7 +1587,7 @@ again:
 	INIT_CPLUS_SPECIFIC (type);
 	TYPE_FLAGS (type) |= TYPE_FLAG_STUB;
 
-	add_undefined_type (type);
+	add_undefined_type (type, typenums);
 	return type;
       }
 
@@ -1731,7 +1779,7 @@ again:
 
 	  memtype = read_type (pp, objfile);
 	  type = dbx_alloc_type (typenums, objfile);
-	  smash_to_member_type (type, domain, memtype);
+	  smash_to_memberptr_type (type, domain, memtype);
 	}
       else
 	/* type attribute */
@@ -1868,7 +1916,7 @@ again:
       if (is_string)
 	TYPE_CODE (type) = TYPE_CODE_STRING;
       if (is_vector)
-	TYPE_FLAGS (type) |= TYPE_FLAG_VECTOR;
+	make_vector_type (type);
       break;
 
     case 'S':			/* Set or bitstring  type */
@@ -2786,7 +2834,8 @@ read_one_struct_field (struct field_info *fip, char **pp, char *p,
       if ((FIELD_BITSIZE (fip->list->field)
 	   == TARGET_CHAR_BIT * TYPE_LENGTH (field_type)
 	   || (TYPE_CODE (field_type) == TYPE_CODE_ENUM
-	       && FIELD_BITSIZE (fip->list->field) == TARGET_INT_BIT)
+	       && FIELD_BITSIZE (fip->list->field)
+		  == gdbarch_int_bit (current_gdbarch))
 	  )
 	  &&
 	  FIELD_BITPOS (fip->list->field) % 8 == 0)
@@ -3479,7 +3528,7 @@ read_enum_type (char **pp, struct type *type,
 
   /* Now fill in the fields of the type-structure.  */
 
-  TYPE_LENGTH (type) = TARGET_INT_BIT / HOST_CHAR_BIT;
+  TYPE_LENGTH (type) = gdbarch_int_bit (current_gdbarch) / HOST_CHAR_BIT;
   TYPE_CODE (type) = TYPE_CODE_ENUM;
   TYPE_FLAGS (type) &= ~TYPE_FLAG_STUB;
   if (unsigned_enum)
@@ -3662,7 +3711,7 @@ read_huge_number (char **pp, int end, int *bits, int twos_complement_bits)
   int nbits = 0;
   int c;
   long upper_limit;
-  int twos_complement_representation = radix == 8 && twos_complement_bits > 0;
+  int twos_complement_representation;
 
   if (*p == '-')
     {
@@ -3678,6 +3727,7 @@ read_huge_number (char **pp, int end, int *bits, int twos_complement_bits)
       p++;
     }
 
+  twos_complement_representation = radix == 8 && twos_complement_bits > 0;
   upper_limit = LONG_MAX / radix;
 
   while ((c = *p++) >= '0' && c < ('0' + radix))
@@ -3904,7 +3954,8 @@ read_range_type (char **pp, int typenums[2], int type_size,
       /* It is unsigned int or unsigned long.  */
       /* GCC 2.3.3 uses this for long long too, but that is just a GDB 3.5
          compatibility hack.  */
-      return init_type (TYPE_CODE_INT, TARGET_INT_BIT / TARGET_CHAR_BIT,
+      return init_type (TYPE_CODE_INT, 
+			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			TYPE_FLAG_UNSIGNED, NULL, objfile);
     }
 
@@ -3946,7 +3997,8 @@ read_range_type (char **pp, int typenums[2], int type_size,
      of self_subrange.  */
   else if (n3 == 0 && n2 < 0
 	   && (self_subrange
-	       || n2 == -TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT))
+	       || n2 == -gdbarch_long_long_bit
+			  (current_gdbarch) / TARGET_CHAR_BIT))
     return init_type (TYPE_CODE_INT, -n2, 0, NULL, objfile);
   else if (n2 == -n3 - 1)
     {
@@ -3977,7 +4029,8 @@ handle_true_range:
 		 _("base type %d of range type is not defined"), rangenums[1]);
       if (range_type_index == NULL)
 	range_type_index =
-	  init_type (TYPE_CODE_INT, TARGET_INT_BIT / TARGET_CHAR_BIT,
+	  init_type (TYPE_CODE_INT, 
+		     gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 		     0, "range type index type", NULL);
       index_type = range_type_index;
     }
@@ -4136,13 +4189,33 @@ fix_common_block (struct symbol *sym, int valu)
 
 
 
-/* What about types defined as forward references inside of a small lexical
-   scope?  */
-/* Add a type to the list of undefined types to be checked through
-   once this file has been read in.  */
+/* Add {TYPE, TYPENUMS} to the NONAME_UNDEFS vector.
+   See add_undefined_type for more details.  */
 
 static void
-add_undefined_type (struct type *type)
+add_undefined_type_noname (struct type *type, int typenums[2])
+{
+  struct nat nat;
+
+  nat.typenums[0] = typenums [0];
+  nat.typenums[1] = typenums [1];
+  nat.type = type;
+
+  if (noname_undefs_length == noname_undefs_allocated)
+    {
+      noname_undefs_allocated *= 2;
+      noname_undefs = (struct nat *)
+	xrealloc ((char *) noname_undefs,
+		  noname_undefs_allocated * sizeof (struct nat));
+    }
+  noname_undefs[noname_undefs_length++] = nat;
+}
+
+/* Add TYPE to the UNDEF_TYPES vector.
+   See add_undefined_type for more details.  */
+
+static void
+add_undefined_type_1 (struct type *type)
 {
   if (undef_types_length == undef_types_allocated)
     {
@@ -4154,6 +4227,48 @@ add_undefined_type (struct type *type)
   undef_types[undef_types_length++] = type;
 }
 
+/* What about types defined as forward references inside of a small lexical
+   scope?  */
+/* Add a type to the list of undefined types to be checked through
+   once this file has been read in.
+   
+   In practice, we actually maintain two such lists: The first list
+   (UNDEF_TYPES) is used for types whose name has been provided, and
+   concerns forward references (eg 'xs' or 'xu' forward references);
+   the second list (NONAME_UNDEFS) is used for types whose name is
+   unknown at creation time, because they were referenced through
+   their type number before the actual type was declared.
+   This function actually adds the given type to the proper list.  */
+
+static void
+add_undefined_type (struct type *type, int typenums[2])
+{
+  if (TYPE_TAG_NAME (type) == NULL)
+    add_undefined_type_noname (type, typenums);
+  else
+    add_undefined_type_1 (type);
+}
+
+/* Try to fix all undefined types pushed on the UNDEF_TYPES vector.  */
+
+void
+cleanup_undefined_types_noname (void)
+{
+  int i;
+
+  for (i = 0; i < noname_undefs_length; i++)
+    {
+      struct nat nat = noname_undefs[i];
+      struct type **type;
+
+      type = dbx_lookup_type (nat.typenums);
+      if (nat.type != *type && TYPE_CODE (*type) != TYPE_CODE_UNDEF)
+        replace_type (nat.type, *type);
+    }
+
+  noname_undefs_length = 0;
+}
+
 /* Go through each undefined type, see if it's still undefined, and fix it
    up if possible.  We have two kinds of undefined types:
 
@@ -4163,8 +4278,9 @@ add_undefined_type (struct type *type)
    TYPE_CODE_STRUCT, TYPE_CODE_UNION:  Structure whose fields were not
    yet defined at the time a pointer to it was made.
    Fix:  Do a full lookup on the struct/union tag.  */
+
 void
-cleanup_undefined_types (void)
+cleanup_undefined_types_1 (void)
 {
   struct type **type;
 
@@ -4223,6 +4339,16 @@ cleanup_undefined_types (void)
     }
 
   undef_types_length = 0;
+}
+
+/* Try to fix all the undefined types we ecountered while processing
+   this unit.  */
+
+void
+cleanup_undefined_types (void)
+{
+  cleanup_undefined_types_1 ();
+  cleanup_undefined_types_noname ();
 }
 
 /* Scan through all of the global symbols defined in the object file,
@@ -4460,4 +4586,9 @@ _initialize_stabsread (void)
   undef_types_length = 0;
   undef_types = (struct type **)
     xmalloc (undef_types_allocated * sizeof (struct type *));
+
+  noname_undefs_allocated = 20;
+  noname_undefs_length = 0;
+  noname_undefs = (struct nat *)
+    xmalloc (noname_undefs_allocated * sizeof (struct nat));
 }

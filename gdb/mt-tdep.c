@@ -1,12 +1,12 @@
 /* Target-dependent code for Morpho mt processor, for GDB.
 
-   Copyright (C) 2005 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* Contributed by Michael Snyder, msnyder@redhat.com.  */
 
@@ -495,7 +493,7 @@ mt_select_coprocessor (struct gdbarch *gdbarch,
       
       /* We must flush the cache, as it is now invalid.  */
       for (ix = MT_NUM_CPU_REGS; ix != MT_NUM_REGS; ix++)
-	set_register_cached (ix, 0);
+	regcache_invalidate (regcache, ix);
     }
   
   return index;
@@ -573,7 +571,7 @@ mt_pseudo_register_write (struct gdbarch *gdbarch,
     case MT_COPRO_PSEUDOREG_REGNUM:
       regcache_raw_write (regcache, MT_COPRO_REGNUM, buf);
       for (i = MT_NUM_CPU_REGS; i < MT_NUM_REGS; i++)
-	set_register_cached (i, 0);
+	regcache_invalidate (regcache, i);
       break;
     case MT_MAC_REGNUM:
     case MT_MAC_PSEUDOREG_REGNUM:
@@ -661,8 +659,11 @@ mt_registers_info (struct gdbarch *gdbarch,
 
 	  frame_register_read (frame, regnum, buff);
 
-	  fputs_filtered (REGISTER_NAME (regnum), file);
-	  print_spaces_filtered (15 - strlen (REGISTER_NAME (regnum)), file);
+	  fputs_filtered (gdbarch_register_name
+			  (current_gdbarch, regnum), file);
+	  print_spaces_filtered (15 - strlen (gdbarch_register_name
+					        (current_gdbarch, regnum)),
+				 file);
 	  fputs_filtered ("0x", file);
 
 	  for (i = 0; i < regsize; i++)
@@ -683,8 +684,11 @@ mt_registers_info (struct gdbarch *gdbarch,
 	  frame_register_read (frame, MT_COPRO_REGNUM, buf);
 	  /* And print.  */
 	  regnum = MT_COPRO_PSEUDOREG_REGNUM;
-	  fputs_filtered (REGISTER_NAME (regnum), file);
-	  print_spaces_filtered (15 - strlen (REGISTER_NAME (regnum)), file);
+	  fputs_filtered (gdbarch_register_name (current_gdbarch, regnum),
+			  file);
+	  print_spaces_filtered (15 - strlen (gdbarch_register_name
+					        (current_gdbarch, regnum)),
+				 file);
 	  val_print (register_type (gdbarch, regnum), buf,
 		     0, 0, file, 0, 1, 0, Val_no_prettyprint);
 	  fputs_filtered ("\n", file);
@@ -713,8 +717,11 @@ mt_registers_info (struct gdbarch *gdbarch,
 
 	  /* And print.  */
 	  regnum = MT_MAC_PSEUDOREG_REGNUM;
-	  fputs_filtered (REGISTER_NAME (regnum), file);
-	  print_spaces_filtered (15 - strlen (REGISTER_NAME (regnum)), file);
+	  fputs_filtered (gdbarch_register_name (current_gdbarch, regnum),
+			  file);
+	  print_spaces_filtered (15 - strlen (gdbarch_register_name
+					      (current_gdbarch, regnum)),
+				 file);
 	  fputs_filtered ("0x", file);
 	  print_longest (file, 'x', 0, newmac);
 	  fputs_filtered ("\t", file);
@@ -891,7 +898,7 @@ mt_frame_unwind_cache (struct frame_info *next_frame,
   frame_unwind_unsigned_register (next_frame, MT_SP_REGNUM, &sp);
   frame_unwind_unsigned_register (next_frame, MT_FP_REGNUM, &fp);
 
-  start_addr = frame_func_unwind (next_frame);
+  start_addr = frame_func_unwind (next_frame, NORMAL_FRAME);
 
   /* Return early if GDB couldn't find the function.  */
   if (start_addr == 0)
@@ -1041,10 +1048,9 @@ mt_frame_this_id (struct frame_info *next_frame,
     mt_frame_unwind_cache (next_frame, this_prologue_cache);
 
   if (!(info == NULL || info->prev_sp == 0))
-    {
-      (*this_id) = frame_id_build (info->prev_sp,
-				   frame_func_unwind (next_frame));
-    }
+    (*this_id) = frame_id_build (info->prev_sp,
+				 frame_func_unwind (next_frame, NORMAL_FRAME));
+
   return;
 }
 
@@ -1118,23 +1124,9 @@ mt_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
      provided.  */
   gdbarch = gdbarch_alloc (&info, NULL);
 
-  switch (info.byte_order)
-    {
-    case BFD_ENDIAN_BIG:
-      set_gdbarch_float_format (gdbarch, &floatformat_ieee_single_big);
-      set_gdbarch_double_format (gdbarch, &floatformat_ieee_double_big);
-      set_gdbarch_long_double_format (gdbarch, &floatformat_ieee_double_big);
-      break;
-    case BFD_ENDIAN_LITTLE:
-      set_gdbarch_float_format (gdbarch, &floatformat_ieee_single_little);
-      set_gdbarch_double_format (gdbarch, &floatformat_ieee_double_little);
-      set_gdbarch_long_double_format (gdbarch,
-				      &floatformat_ieee_double_little);
-      break;
-    default:
-      internal_error (__FILE__, __LINE__,
-		      _("mt_gdbarch_init: bad byte order for float format"));
-    }
+  set_gdbarch_float_format (gdbarch, floatformats_ieee_single);
+  set_gdbarch_double_format (gdbarch, floatformats_ieee_double);
+  set_gdbarch_long_double_format (gdbarch, floatformats_ieee_double);
 
   set_gdbarch_register_name (gdbarch, mt_register_name);
   set_gdbarch_num_regs (gdbarch, MT_NUM_REGS);

@@ -1,14 +1,14 @@
 /* Parser for linespec for the GNU debugger, GDB.
 
-   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -37,6 +35,7 @@
 #include "objc-lang.h"
 #include "linespec.h"
 #include "exceptions.h"
+#include "language.h"
 
 /* We share this one with symtab.c, but it is not exported widely. */
 
@@ -75,6 +74,7 @@ static struct symtabs_and_lines find_method (int funfirstline,
 					     struct symbol *sym_class);
 
 static int collect_methods (char *copy, struct type *t,
+			    struct symbol *sym_class,
 			    struct symbol **sym_arr);
 
 static NORETURN void cplusplus_error (const char *name,
@@ -83,12 +83,15 @@ static NORETURN void cplusplus_error (const char *name,
 
 static int total_number_of_methods (struct type *type);
 
-static int find_methods (struct type *, char *, struct symbol **);
+static int find_methods (struct type *, char *,
+			 enum language, struct symbol **);
 
 static int add_matching_methods (int method_counter, struct type *t,
+				 enum language language,
 				 struct symbol **sym_arr);
 
 static int add_constructors (int method_counter, struct type *t,
+			     enum language language,
 			     struct symbol **sym_arr);
 
 static void build_canonical_line_spec (struct symtab_and_line *,
@@ -196,7 +199,8 @@ total_number_of_methods (struct type *type)
    Note that this function is g++ specific.  */
 
 static int
-find_methods (struct type *t, char *name, struct symbol **sym_arr)
+find_methods (struct type *t, char *name, enum language language,
+	      struct symbol **sym_arr)
 {
   int i1 = 0;
   int ibase;
@@ -206,8 +210,8 @@ find_methods (struct type *t, char *name, struct symbol **sym_arr)
      unless we figure out how to get the physname without the name of
      the class, then the loop can't do any good.  */
   if (class_name
-      && (lookup_symbol (class_name, (struct block *) NULL,
-			 STRUCT_DOMAIN, (int *) NULL,
+      && (lookup_symbol_in_language (class_name, (struct block *) NULL,
+			 STRUCT_DOMAIN, language, (int *) NULL,
 			 (struct symtab **) NULL)))
     {
       int method_counter;
@@ -238,12 +242,12 @@ find_methods (struct type *t, char *name, struct symbol **sym_arr)
 
 	  if (strcmp_iw (name, method_name) == 0)
 	    /* Find all the overloaded methods with that name.  */
-	    i1 += add_matching_methods (method_counter, t,
+	    i1 += add_matching_methods (method_counter, t, language,
 					sym_arr + i1);
 	  else if (strncmp (class_name, name, name_len) == 0
 		   && (class_name[name_len] == '\0'
 		       || class_name[name_len] == '<'))
-	    i1 += add_constructors (method_counter, t,
+	    i1 += add_constructors (method_counter, t, language,
 				    sym_arr + i1);
 	}
     }
@@ -261,7 +265,8 @@ find_methods (struct type *t, char *name, struct symbol **sym_arr)
 
   if (i1 == 0)
     for (ibase = 0; ibase < TYPE_N_BASECLASSES (t); ibase++)
-      i1 += find_methods (TYPE_BASECLASS (t, ibase), name, sym_arr + i1);
+      i1 += find_methods (TYPE_BASECLASS (t, ibase), name,
+			  language, sym_arr + i1);
 
   return i1;
 }
@@ -272,7 +277,7 @@ find_methods (struct type *t, char *name, struct symbol **sym_arr)
 
 static int
 add_matching_methods (int method_counter, struct type *t,
-		      struct symbol **sym_arr)
+		      enum language language, struct symbol **sym_arr)
 {
   int field_counter;
   int i1 = 0;
@@ -299,14 +304,15 @@ add_matching_methods (int method_counter, struct type *t,
 	}
       else
 	phys_name = TYPE_FN_FIELD_PHYSNAME (f, field_counter);
-		
+
       /* Destructor is handled by caller, don't add it to
 	 the list.  */
       if (is_destructor_name (phys_name) != 0)
 	continue;
 
-      sym_arr[i1] = lookup_symbol (phys_name,
+      sym_arr[i1] = lookup_symbol_in_language (phys_name,
 				   NULL, VAR_DOMAIN,
+				   language,
 				   (int *) NULL,
 				   (struct symtab **) NULL);
       if (sym_arr[i1])
@@ -333,7 +339,7 @@ add_matching_methods (int method_counter, struct type *t,
 
 static int
 add_constructors (int method_counter, struct type *t,
-		  struct symbol **sym_arr)
+		  enum language language, struct symbol **sym_arr)
 {
   int field_counter;
   int i1 = 0;
@@ -349,7 +355,7 @@ add_constructors (int method_counter, struct type *t,
     {
       struct fn_field *f;
       char *phys_name;
-		  
+
       f = TYPE_FN_FIELDLIST1 (t, method_counter);
 
       /* GCC 3.x will never produce stabs stub methods, so
@@ -362,8 +368,9 @@ add_constructors (int method_counter, struct type *t,
 
       /* If this method is actually defined, include it in the
 	 list.  */
-      sym_arr[i1] = lookup_symbol (phys_name,
+      sym_arr[i1] = lookup_symbol_in_language (phys_name,
 				   NULL, VAR_DOMAIN,
+				   language,
 				   (int *) NULL,
 				   (struct symtab **) NULL);
       if (sym_arr[i1])
@@ -1096,7 +1103,7 @@ decode_objc (char **argptr, int funfirstline, struct symtab *file_symtab,
   if (i1 > 0)
     {
       sym_arr = (struct symbol **) alloca ((i1 + 1) * sizeof (struct symbol *));
-      sym_arr[i1] = 0;
+      sym_arr[i1] = NULL;
 
       copy = find_imps (file_symtab, block, *argptr, sym_arr, &i1, &i2); 
       *argptr = copy;
@@ -1136,7 +1143,7 @@ decode_objc (char **argptr, int funfirstline, struct symtab *file_symtab,
       else
 	{
 	  /* The only match was a non-debuggable symbol.  */
-	  values.sals[0].symtab = 0;
+	  values.sals[0].symtab = NULL;
 	  values.sals[0].line = 0;
 	  values.sals[0].end = 0;
 	  values.sals[0].pc = SYMBOL_VALUE_ADDRESS (sym_arr[0]);
@@ -1402,7 +1409,7 @@ find_method (int funfirstline, char ***canonical, char *saved_arg,
 	     char *copy, struct type *t, struct symbol *sym_class)
 {
   struct symtabs_and_lines values;
-  struct symbol *sym = 0;
+  struct symbol *sym = NULL;
   int i1;	/*  Counter for the symbol array.  */
   struct symbol **sym_arr =  alloca (total_number_of_methods (t)
 				     * sizeof (struct symbol *));
@@ -1410,7 +1417,7 @@ find_method (int funfirstline, char ***canonical, char *saved_arg,
   /* Find all methods with a matching name, and put them in
      sym_arr.  */
 
-  i1 = collect_methods (copy, t, sym_arr);
+  i1 = collect_methods (copy, t, sym_class, sym_arr);
 
   if (i1 == 1)
     {
@@ -1466,7 +1473,7 @@ find_method (int funfirstline, char ***canonical, char *saved_arg,
 
 static int
 collect_methods (char *copy, struct type *t,
-		 struct symbol **sym_arr)
+		 struct symbol *sym_class, struct symbol **sym_arr)
 {
   int i1 = 0;	/*  Counter for the symbol array.  */
 
@@ -1488,7 +1495,7 @@ collect_methods (char *copy, struct type *t,
 	}
     }
   else
-    i1 = find_methods (t, copy, sym_arr);
+    i1 = find_methods (t, copy, SYMBOL_LANGUAGE (sym_class), sym_arr);
 
   return i1;
 }
@@ -1564,7 +1571,7 @@ decode_all_digits (char **argptr, struct symtab *default_symtab,
   sign = none;
 
   /* We might need a canonical line spec if no file was specified.  */
-  int need_canonical = (file_symtab == 0) ? 1 : 0;
+  int need_canonical = (file_symtab == NULL) ? 1 : 0;
 
   init_sal (&val);
 
@@ -1666,7 +1673,7 @@ decode_dollar (char *copy, int funfirstline, struct symtab *default_symtab,
 
       /* Look up entire name as a symbol first.  */
       sym = lookup_symbol (copy, 0, VAR_DOMAIN, 0, &sym_symtab);
-      file_symtab = (struct symtab *) 0;
+      file_symtab = (struct symtab *) NULL;
       need_canonical = 1;
       /* Symbol was found --> jump to normal symbol processing.  */
       if (sym)
@@ -1680,7 +1687,6 @@ decode_dollar (char *copy, int funfirstline, struct symtab *default_symtab,
 	return minsym_found (funfirstline, msymbol);
 
       /* Not a user variable or function -- must be convenience variable.  */
-      need_canonical = (file_symtab == 0) ? 1 : 0;
       valx = value_of_internalvar (lookup_internalvar (copy + 1));
       if (TYPE_CODE (value_type (valx)) != TYPE_CODE_INT)
 	error (_("Convenience variables used in line specs must have integer values."));
@@ -1824,9 +1830,27 @@ minsym_found (int funfirstline, struct minimal_symbol *msymbol)
   values.sals[0].section = SYMBOL_BFD_SECTION (msymbol);
   if (funfirstline)
     {
-      values.sals[0].pc += DEPRECATED_FUNCTION_START_OFFSET;
-      values.sals[0].pc = SKIP_PROLOGUE (values.sals[0].pc);
+      struct symtab_and_line sal;
+
+      values.sals[0].pc
+	+= gdbarch_deprecated_function_start_offset (current_gdbarch);
+      values.sals[0].pc = gdbarch_skip_prologue
+			    (current_gdbarch, values.sals[0].pc);
+
+      sal = find_pc_sect_line (values.sals[0].pc, values.sals[0].section, 0);
+
+      /* Check if SKIP_PROLOGUE left us in mid-line, and the next
+	 line is still part of the same function.  If there is no
+	 line information here, sal.pc will be the passed in PC.  */
+      if (sal.pc != values.sals[0].pc
+	  && (lookup_minimal_symbol_by_pc_section (values.sals[0].pc,
+						   values.sals[0].section)
+	      == lookup_minimal_symbol_by_pc_section (sal.end,
+						      values.sals[0].section)))
+	/* Recalculate the line number (might not be N+1).  */
+	values.sals[0] = find_pc_sect_line (sal.end, values.sals[0].section, 0);
     }
+
   values.nelts = 1;
   return values;
 }

@@ -1,5 +1,5 @@
 /* Serial interface for a pipe to a separate program
-   Copyright (C) 1999, 2000, 2001 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2007 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions.
 
@@ -7,7 +7,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "serial.h"
@@ -62,8 +60,11 @@ pipe_open (struct serial *scb, const char *name)
    * published in UNIX Review, Vol. 6, No. 8.
    */
   int pdes[2];
+  int err_pdes[2];
   int pid;
   if (socketpair (AF_UNIX, SOCK_STREAM, 0, pdes) < 0)
+    return -1;
+  if (socketpair (AF_UNIX, SOCK_STREAM, 0, err_pdes) < 0)
     return -1;
 
   /* Create the child process to run the command in.  Note that the
@@ -77,7 +78,16 @@ pipe_open (struct serial *scb, const char *name)
     {
       close (pdes[0]);
       close (pdes[1]);
+      close (err_pdes[0]);
+      close (err_pdes[1]);
       return -1;
+    }
+
+  if (fcntl (err_pdes[0], F_SETFL, O_NONBLOCK) == -1)
+    {
+      close (err_pdes[0]);
+      close (err_pdes[1]);
+      err_pdes[0] = err_pdes[1] = -1;
     }
 
   /* Child. */
@@ -91,6 +101,13 @@ pipe_open (struct serial *scb, const char *name)
 	  close (pdes[1]);
 	}
       dup2 (STDOUT_FILENO, STDIN_FILENO);
+
+      if (err_pdes[0] != -1)
+	{
+	  close (err_pdes[0]);
+	  dup2 (err_pdes[1], STDERR_FILENO);
+	  close (err_pdes[1]);
+	}
 #if 0
       /* close any stray FD's - FIXME - how? */
       /* POSIX.2 B.3.2.2 "popen() shall ensure that any streams
@@ -109,6 +126,7 @@ pipe_open (struct serial *scb, const char *name)
   state = XMALLOC (struct pipe_state);
   state->pid = pid;
   scb->fd = pdes[0];
+  scb->error_fd = err_pdes[0];
   scb->state = state;
 
   /* If we don't do this, GDB simply exits when the remote side dies.  */

@@ -1,7 +1,7 @@
 /* Machine independent support for QNX Neutrino /proc (process file system)
    for GDB.  Written by Colin Burgess at QNX Software Systems Limited. 
 
-   Copyright (C) 2003, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2006, 2007 Free Software Foundation, Inc.
 
    Contributed by QNX Software Systems Ltd.
 
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 
@@ -43,6 +41,7 @@
 #include "nto-tdep.h"
 #include "command.h"
 #include "regcache.h"
+#include "solib.h"
 
 #define NULL_PID		0
 #define _DEBUG_FLAG_TRACE	(_DEBUG_FLAG_TRACE_EXEC|_DEBUG_FLAG_TRACE_RD|\
@@ -66,7 +65,7 @@ static int procfs_xfer_memory (CORE_ADDR, char *, int, int,
 			       struct mem_attrib *attrib,
 			       struct target_ops *);
 
-static void procfs_fetch_registers (int);
+static void procfs_fetch_registers (struct regcache *, int);
 
 static void notice_signals (void);
 
@@ -202,7 +201,8 @@ procfs_open (char *arg, int from_tty)
 	  else
 	    {
 	      if (sysinfo->type !=
-		  nto_map_arch_to_cputype (TARGET_ARCHITECTURE->arch_name))
+		  nto_map_arch_to_cputype (gdbarch_bfd_arch_info
+					   (current_gdbarch)->arch_name))
 		{
 		  close (fd);
 		  error (_("Invalid target CPU."));
@@ -713,7 +713,7 @@ procfs_wait (ptid_t ptid, struct target_waitstatus *ourstatus)
    general register set and floating point registers (if supported)
    and update gdb's idea of their current values.  */
 static void
-procfs_fetch_registers (int regno)
+procfs_fetch_registers (struct regcache *regcache, int regno)
 {
   union
   {
@@ -726,13 +726,13 @@ procfs_fetch_registers (int regno)
 
   procfs_set_thread (inferior_ptid);
   if (devctl (ctl_fd, DCMD_PROC_GETGREG, &reg, sizeof (reg), &regsize) == EOK)
-    nto_supply_gregset ((char *) &reg.greg);
+    nto_supply_gregset (regcache, (char *) &reg.greg);
   if (devctl (ctl_fd, DCMD_PROC_GETFPREG, &reg, sizeof (reg), &regsize)
       == EOK)
-    nto_supply_fpregset ((char *) &reg.fpreg);
+    nto_supply_fpregset (regcache, (char *) &reg.fpreg);
   if (devctl (ctl_fd, DCMD_PROC_GETALTREG, &reg, sizeof (reg), &regsize)
       == EOK)
-    nto_supply_altregset ((char *) &reg.altreg);
+    nto_supply_altregset (regcache, (char *) &reg.altreg);
 }
 
 /* Copy LEN bytes to/from inferior's memory starting at MEMADDR
@@ -1108,7 +1108,7 @@ procfs_kill_inferior (void)
 /* Store register REGNO, or all registers if REGNO == -1, from the contents
    of REGISTERS.  */
 static void
-procfs_prepare_to_store (void)
+procfs_prepare_to_store (struct regcache *regcache)
 {
 }
 
@@ -1146,7 +1146,7 @@ get_regset (int regset, char *buf, int bufsize, int *regsize)
 }
 
 void
-procfs_store_registers (int regno)
+procfs_store_registers (struct regcache *regcache, int regno)
 {
   union
   {
@@ -1172,7 +1172,7 @@ procfs_store_registers (int regno)
 	  if (dev_set == -1)
 	    continue;
 
-	  if (nto_regset_fill (regset, (char *) &reg) == -1)
+	  if (nto_regset_fill (regcache, regset, (char *) &reg) == -1)
 	    continue;
 
 	  err = devctl (ctl_fd, dev_set, &reg, regsize, 0);
@@ -1197,7 +1197,7 @@ procfs_store_registers (int regno)
       if (len < 1)
 	return;
 
-      regcache_raw_collect (current_regcache, regno, (char *) &reg + off);
+      regcache_raw_collect (regcache, regno, (char *) &reg + off);
 
       err = devctl (ctl_fd, dev_set, &reg, regsize, 0);
       if (err != EOK)

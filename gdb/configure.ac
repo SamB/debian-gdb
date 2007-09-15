@@ -7,18 +7,16 @@ dnl This file is part of GDB.
 dnl 
 dnl This program is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
-dnl the Free Software Foundation; either version 2 of the License, or
+dnl the Free Software Foundation; either version 3 of the License, or
 dnl (at your option) any later version.
-dnl 
+dnl
 dnl This program is distributed in the hope that it will be useful,
 dnl but WITHOUT ANY WARRANTY; without even the implied warranty of
 dnl MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 dnl GNU General Public License for more details.
-dnl 
+dnl
 dnl You should have received a copy of the GNU General Public License
-dnl along with this program; if not, write to the Free Software
-dnl Foundation, Inc., 51 Franklin Street, Fifth Floor,
-dnl Boston, MA 02110-1301, USA.
+dnl along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 dnl Process this file with autoconf to produce a configure script.
 
@@ -74,6 +72,22 @@ AC_ARG_WITH(separate-debug-dir,
 AC_DEFINE_DIR(DEBUGDIR, debugdir,
               [Global directory for separate debug files. ])
 #AC_DEFINE_UNQUOTED(DEBUGDIR, "$debugdir"),
+
+if test "x$exec_prefix" = xNONE || test "x$exec_prefix" = 'x${prefix}'; then
+  if test "x$prefix" = xNONE; then
+    test_prefix=/usr/local
+  else
+    test_prefix=$prefix
+  fi
+else
+  test_prefix=$exec_prefix
+fi
+case ${debugdir} in
+"${test_prefix}"|"${test_prefix}/"*|\
+'${exec_prefix}'|'${exec_prefix}/'*)
+  AC_DEFINE(DEBUGDIR_RELOCATABLE, 1, [Define if the debug directory should be relocated when GDB is moved.])
+  ;;
+esac
 
 AC_CONFIG_SUBDIRS(doc testsuite)
 
@@ -321,10 +335,47 @@ if test "$ac_cv_search_tgetent" = no; then
   AC_MSG_ERROR([no termcap library found])
 fi
 
-AC_LIB_HAVE_LINKFLAGS([expat], [], [#include "expat.h"],
-		      [XML_Parser p = XML_ParserCreate (0);])
-if test "$HAVE_LIBEXPAT" != yes; then
-  AC_MSG_WARN([expat is missing or unusable; some features may be disabled.])
+AC_ARG_WITH([system-readline],
+  [AS_HELP_STRING([--with-system-readline],
+                  [use installed readline library])])
+
+if test "$with_system_readline" = yes; then
+  READLINE=-lreadline
+  READLINE_DEPS=
+  READLINE_CFLAGS=
+else
+  READLINE='$(READLINE_DIR)/libreadline.a'
+  READLINE_DEPS='$(READLINE)'
+  READLINE_CFLAGS='-I$(READLINE_SRC)/..'
+fi
+AC_SUBST(READLINE)
+AC_SUBST(READLINE_DEPS)
+AC_SUBST(READLINE_CFLAGS)
+
+AC_ARG_WITH(expat,
+  AS_HELP_STRING([--with-expat], [include expat support (auto/yes/no)]),
+  [], [with_expat=auto])
+AC_MSG_CHECKING([whether to use expat])
+AC_MSG_RESULT([$with_expat])
+
+if test "${with_expat}" = no; then
+  AC_MSG_WARN([expat support disabled; some features may be unavailable.])
+  HAVE_LIBEXPAT=no
+else
+  AC_LIB_HAVE_LINKFLAGS([expat], [], [#include "expat.h"],
+			[XML_Parser p = XML_ParserCreate (0);])
+  if test "$HAVE_LIBEXPAT" != yes; then
+    if test "$with_expat" = yes; then
+      AC_MSG_ERROR([expat is missing or unusable])
+    else
+      AC_MSG_WARN([expat is missing or unusable; some features may be unavailable.])
+    fi
+  else
+    save_LIBS=$LIBS
+    LIBS="$LIBS $LIBEXPAT"
+    AC_CHECK_FUNCS(XML_StopParser)
+    LIBS=$save_LIBS
+  fi
 fi
 
 # ------------------------- #
@@ -346,6 +397,7 @@ AC_CHECK_HEADERS(link.h, [], [],
 AC_CHECK_HEADERS(machine/reg.h)
 AC_CHECK_HEADERS(poll.h sys/poll.h)
 AC_CHECK_HEADERS(proc_service.h thread_db.h gnu/libc-version.h)
+AC_CHECK_HEADERS(signal.h)
 AC_CHECK_HEADERS(stddef.h)
 AC_CHECK_HEADERS(stdlib.h)
 AC_CHECK_HEADERS(stdint.h)
@@ -355,6 +407,7 @@ AC_CHECK_HEADERS(sys/file.h)
 AC_CHECK_HEADERS(sys/filio.h)
 AC_CHECK_HEADERS(sys/ioctl.h)
 AC_CHECK_HEADERS(sys/param.h)
+AC_CHECK_HEADERS(sys/resource.h)
 AC_CHECK_HEADERS(sys/proc.h, [], [],
 [#if HAVE_SYS_PARAM_H
 # include <sys/param.h>
@@ -442,6 +495,7 @@ AC_FUNC_ALLOCA
 AC_FUNC_MMAP
 AC_FUNC_VFORK
 AC_CHECK_FUNCS(canonicalize_file_name realpath)
+AC_CHECK_FUNCS(getrusage)
 AC_CHECK_FUNCS(getuid getgid)
 AC_CHECK_FUNCS(poll)
 AC_CHECK_FUNCS(pread64)
@@ -662,18 +716,10 @@ if test $gdb_cv_have_pt_getxmmregs = yes; then
   [Define if sys/ptrace.h defines the PT_GETXMMREGS request.])
 fi
 
-# If we are configured native on GNU/Linux, work around problems with
-# sys/procfs.h
-# Also detect which type of /proc is in use, such as for Unixware or Solaris.
+# Detect which type of /proc is in use, such as for Unixware or Solaris.
 
 if test "${target}" = "${host}"; then
   case "${host}" in
-  i[[3456]]86-*-linux*)
-	AC_DEFINE(START_INFERIOR_TRAPS_EXPECTED, 2,
-        [Define on a GNU/Linux system to work around problems in sys/procfs.h.])
-	AC_DEFINE(sys_quotactl, 1,
-        [Define on a GNU/Linux system to work around problems in sys/procfs.h.])
-	;;
   *-*-unixware* | *-*-sysv4.2* | *-*-sysv5* | *-*-interix* )
       AC_DEFINE(NEW_PROC_API, 1,
       [Define if you want to use new multi-fd /proc interface
@@ -1024,7 +1070,8 @@ if test ${build} = ${host} -a ${host} = ${target} ; then
    AC_SUBST(CONFIG_LDFLAGS)
 fi
 
-dnl See if we have a thread_db header file that has TD_NOTALLOC.
+dnl See if we have a thread_db header file that has TD_NOTALLOC and
+dnl other error codes.
 if test "x$ac_cv_header_thread_db_h" = "xyes"; then
    AC_CACHE_CHECK([whether <thread_db.h> has TD_NOTALLOC],
                   gdb_cv_thread_db_h_has_td_notalloc,
@@ -1035,10 +1082,36 @@ if test "x$ac_cv_header_thread_db_h" = "xyes"; then
        gdb_cv_thread_db_h_has_td_notalloc=no
      )
    )
+   AC_CACHE_CHECK([whether <thread_db.h> has TD_VERSION],
+                  gdb_cv_thread_db_h_has_td_version,
+     AC_TRY_COMPILE(
+       [#include <thread_db.h>],
+       [int i = TD_VERSION;],
+       gdb_cv_thread_db_h_has_td_version=yes,
+       gdb_cv_thread_db_h_has_td_version=no
+     )
+   )
+   AC_CACHE_CHECK([whether <thread_db.h> has TD_NOTLS],
+                  gdb_cv_thread_db_h_has_td_notls,
+     AC_TRY_COMPILE(
+       [#include <thread_db.h>],
+       [int i = TD_NOTLS;],
+       gdb_cv_thread_db_h_has_td_notls=yes,
+       gdb_cv_thread_db_h_has_td_notls=no
+     )
+   )
 fi
 if test "x$gdb_cv_thread_db_h_has_td_notalloc" = "xyes"; then
   AC_DEFINE(THREAD_DB_HAS_TD_NOTALLOC, 1,
             [Define if <thread_db.h> has the TD_NOTALLOC error code.])
+fi
+if test "x$gdb_cv_thread_db_h_has_td_version" = "xyes"; then
+  AC_DEFINE(THREAD_DB_HAS_TD_VERSION, 1,
+            [Define if <thread_db.h> has the TD_VERSION error code.])
+fi
+if test "x$gdb_cv_thread_db_h_has_td_notls" = "xyes"; then
+  AC_DEFINE(THREAD_DB_HAS_TD_NOTLS, 1,
+            [Define if <thread_db.h> has the TD_NOTLS error code.])
 fi
 
 dnl See if we have a sys/syscall header file that has __NR_tkill.
@@ -1070,17 +1143,20 @@ AC_ARG_WITH(sysroot,
 
  TARGET_SYSTEM_ROOT_DEFINE='-DTARGET_SYSTEM_ROOT=\"$(TARGET_SYSTEM_ROOT)\"'
 
- if test "x$exec_prefix" = xNONE; then
-  if test "x$prefix" = xNONE; then
-   test_prefix=/usr/local
-  else
-   test_prefix=$prefix
-  fi
+ if test "x$prefix" = xNONE; then
+  test_prefix=/usr/local
  else
-  test_prefix=$exec_prefix
+  test_prefix=$prefix
+ fi
+ if test "x$exec_prefix" = xNONE || test "x$exec_prefix" = 'x${prefix}'; then
+  test_exec_prefix=$test_prefix
+ else
+  test_exec_prefix=$exec_prefix
  fi
  case ${TARGET_SYSTEM_ROOT} in
  "${test_prefix}"|"${test_prefix}/"*|\
+ "${test_exec_prefix}"|"${test_exec_prefix}/"*|\
+ '${prefix}'|'${prefix}/'*|\
  '${exec_prefix}'|'${exec_prefix}/'*)
    t="$TARGET_SYSTEM_ROOT_DEFINE -DTARGET_SYSTEM_ROOT_RELOCATABLE"
    TARGET_SYSTEM_ROOT_DEFINE="$t"
@@ -1101,37 +1177,25 @@ AC_ARG_ENABLE(werror,
      *) AC_MSG_ERROR(bad value ${enableval} for --enable-werror) ;;
    esac])
 
+# Enable -Werror by default when using gcc
+if test "${GCC}" = yes -a -z "${ERROR_ON_WARNING}" ; then
+    ERROR_ON_WARNING=yes
+fi
+
 WERROR_CFLAGS=""
 if test "${ERROR_ON_WARNING}" = yes ; then
     WERROR_CFLAGS="-Werror"
 fi
 
-# NOTE: Don't add -Wall or -Wunused, they both include
-# -Wunused-parameter which reports bogus warnings.
-# NOTE: If you add to this list, remember to update
+# The entries after -Wno-pointer-sign are disabled warnings which may
+# be enabled in the future, which can not currently be used to build
+# GDB.
+# NOTE: If you change this list, remember to update
 # gdb/doc/gdbint.texinfo.
-build_warnings="-Wimplicit -Wreturn-type -Wcomment -Wtrigraphs \
--Wformat -Wparentheses -Wpointer-arith -Wformat-nonliteral \
--Wunused-label -Wunused-function -Wno-pointer-sign"
+build_warnings="-Wall -Wdeclaration-after-statement -Wpointer-arith \
+-Wformat-nonliteral -Wno-pointer-sign \
+-Wno-unused -Wno-switch -Wno-char-subscripts"
 
-# GCC supports -Wuninitialized only with -O or -On, n != 0.
-if test x${CFLAGS+set} = xset; then
-  case "${CFLAGS}" in
-    *"-O0"* ) ;;
-    *"-O"* )
-      build_warnings="${build_warnings} -Wuninitialized"
-    ;;
-  esac
-else
-  build_warnings="${build_warnings} -Wuninitialized"
-fi
-
-# Up for debate: -Wswitch -Wcomment -trigraphs -Wtrigraphs
-# -Wunused-function -Wunused-variable -Wunused-value
-# -Wchar-subscripts -Wtraditional -Wshadow -Wcast-qual
-# -Wcast-align -Wwrite-strings -Wconversion -Wstrict-prototypes
-# -Wmissing-prototypes -Wmissing-declarations -Wredundant-decls
-# -Woverloaded-virtual -Winline -Werror"
 AC_ARG_ENABLE(build-warnings,
 [  --enable-build-warnings Enable build-time compiler warnings if gcc is used],
 [case "${enableval}" in
@@ -1176,7 +1240,7 @@ then
 	    CFLAGS="$saved_CFLAGS"
 	esac
     done
-    AC_MSG_RESULT(${WARN_CFLAGS}${WERROR_CFLAGS})
+    AC_MSG_RESULT(${WARN_CFLAGS} ${WERROR_CFLAGS})
 fi
 AC_SUBST(WARN_CFLAGS)
 AC_SUBST(WERROR_CFLAGS)
@@ -1220,6 +1284,30 @@ case ${host} in
     ;;
 esac	    
 AC_SUBST(WIN32LIBS)
+
+# Add ELF support to GDB, but only if BFD includes ELF support.
+OLD_CFLAGS=$CFLAGS
+OLD_LDFLAGS=$LDFLAGS
+OLD_LIBS=$LIBS
+CFLAGS="$CFLAGS -I${srcdir}/../include -I../bfd -I${srcdir}/../bfd"
+LDFLAGS="$LDFLAGS -L../bfd -L../libiberty"
+LIBS="$LIBS -lbfd -liberty"
+AC_CACHE_CHECK([for ELF support in BFD], gdb_cv_var_elf,
+[AC_TRY_LINK(
+[#include <stdlib.h>
+#include "bfd.h"
+#include "elf-bfd.h"
+],
+[bfd *abfd = NULL; bfd_get_elf_phdr_upper_bound (abfd); ],
+gdb_cv_var_elf=yes, gdb_cv_var_elf=no)])
+if test $gdb_cv_var_elf = yes; then
+  CONFIG_OBS="$CONFIG_OBS elfread.o"
+  AC_DEFINE(HAVE_ELF, 1,
+	    [Define if ELF support should be included.])
+fi
+CFLAGS=$OLD_CFLAGS
+LDFLAGS=$OLD_LDFLAGS
+LIBS=$OLD_LIBS
 
 # Add any host-specific objects to GDB.
 CONFIG_OBS="${CONFIG_OBS} ${gdb_host_obs}"
@@ -1447,7 +1535,7 @@ s/XM_FILE[ 	]*=[ 	]*\([^ 	]*\)/\1/p
 ' ${host_makefile_frag}`
 
 targetfile=`sed -n '
-s/DEPRECATED_TM_FILE[ 	]*=[ 	]*\([^ 	]*\)/\1/p
+s/^[ 	]*DEPRECATED_TM_FILE[ 	]*=[ 	]*\([^ 	]*\)/\1/p
 ' ${target_makefile_frag}`
 
 if test "${gdb_native}" = "yes"; then

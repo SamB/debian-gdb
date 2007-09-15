@@ -1,7 +1,7 @@
 /* Parse expressions for GDB.
 
-   Copyright (C) 1986, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 1999, 2000, 2001, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    Modified from expread.y by the Department of Computer Science at the
    State University of New York at Buffalo, 1991.
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* Parse an expression from text in a string,
    and return the result as a  struct expression  pointer.
@@ -47,8 +45,7 @@
 #include "parser-defs.h"
 #include "gdbcmd.h"
 #include "symfile.h"		/* for overlay functions */
-#include "inferior.h"		/* for NUM_PSEUDO_REGS.  NOTE: replace 
-				   with "gdbarch.h" when appropriate.  */
+#include "inferior.h"
 #include "doublest.h"
 #include "gdb_assert.h"
 #include "block.h"
@@ -385,16 +382,12 @@ write_exp_bitstring (struct stoken str)
    based on the language, but they no longer have names like "int", so
    the initial rationale is gone.  */
 
-static struct type *msym_text_symbol_type;
-static struct type *msym_data_symbol_type;
-static struct type *msym_unknown_symbol_type;
-static struct type *msym_tls_symbol_type;
-
 void
 write_exp_msymbol (struct minimal_symbol *msymbol, 
 		   struct type *text_symbol_type, 
 		   struct type *data_symbol_type)
 {
+  struct gdbarch *gdbarch = current_gdbarch;
   CORE_ADDR addr;
 
   write_exp_elt_opcode (OP_LONG);
@@ -420,7 +413,7 @@ write_exp_msymbol (struct minimal_symbol *msymbol,
 
       write_exp_elt_opcode (UNOP_MEMVAL_TLS);
       write_exp_elt_objfile (ofp);
-      write_exp_elt_type (msym_tls_symbol_type);
+      write_exp_elt_type (builtin_type (gdbarch)->nodebug_tls_symbol);
       write_exp_elt_opcode (UNOP_MEMVAL_TLS);
       return;
     }
@@ -431,18 +424,18 @@ write_exp_msymbol (struct minimal_symbol *msymbol,
     case mst_text:
     case mst_file_text:
     case mst_solib_trampoline:
-      write_exp_elt_type (msym_text_symbol_type);
+      write_exp_elt_type (builtin_type (gdbarch)->nodebug_text_symbol);
       break;
 
     case mst_data:
     case mst_file_data:
     case mst_bss:
     case mst_file_bss:
-      write_exp_elt_type (msym_data_symbol_type);
+      write_exp_elt_type (builtin_type (gdbarch)->nodebug_data_symbol);
       break;
 
     default:
-      write_exp_elt_type (msym_unknown_symbol_type);
+      write_exp_elt_type (builtin_type (gdbarch)->nodebug_unknown_symbol);
       break;
     }
   write_exp_elt_opcode (UNOP_MEMVAL);
@@ -509,7 +502,7 @@ write_dollar_variable (struct stoken str)
 
   /* Handle tokens that refer to machine registers:
      $ followed by a register name.  */
-  i = frame_map_name_to_regnum (deprecated_selected_frame,
+  i = frame_map_name_to_regnum (deprecated_safe_get_selected_frame (),
 				str.ptr + 1, str.length - 1);
   if (i >= 0)
     goto handle_register;
@@ -549,192 +542,13 @@ handle_last:
   return;
 handle_register:
   write_exp_elt_opcode (OP_REGISTER);
-  write_exp_elt_longcst (i);
+  str.length--;
+  str.ptr++;
+  write_exp_string (str);
   write_exp_elt_opcode (OP_REGISTER);
   return;
 }
 
-
-/* Parse a string that is possibly a namespace / nested class
-   specification, i.e., something of the form A::B::C::x.  Input
-   (NAME) is the entire string; LEN is the current valid length; the
-   output is a string, TOKEN, which points to the largest recognized
-   prefix which is a series of namespaces or classes.  CLASS_PREFIX is
-   another output, which records whether a nested class spec was
-   recognized (= 1) or a fully qualified variable name was found (=
-   0).  ARGPTR is side-effected (if non-NULL) to point to beyond the
-   string recognized and consumed by this routine.
-
-   The return value is a pointer to the symbol for the base class or
-   variable if found, or NULL if not found.  Callers must check this
-   first -- if NULL, the outputs may not be correct. 
-
-   This function is used c-exp.y.  This is used specifically to get
-   around HP aCC (and possibly other compilers), which insists on
-   generating names with embedded colons for namespace or nested class
-   members.
-
-   (Argument LEN is currently unused. 1997-08-27)
-
-   Callers must free memory allocated for the output string TOKEN.  */
-
-static const char coloncolon[2] =
-{':', ':'};
-
-struct symbol *
-parse_nested_classes_for_hpacc (char *name, int len, char **token,
-				int *class_prefix, char **argptr)
-{
-  /* Comment below comes from decode_line_1 which has very similar
-     code, which is called for "break" command parsing. */
-
-  /* We have what looks like a class or namespace
-     scope specification (A::B), possibly with many
-     levels of namespaces or classes (A::B::C::D).
-
-     Some versions of the HP ANSI C++ compiler (as also possibly
-     other compilers) generate class/function/member names with
-     embedded double-colons if they are inside namespaces. To
-     handle this, we loop a few times, considering larger and
-     larger prefixes of the string as though they were single
-     symbols.  So, if the initially supplied string is
-     A::B::C::D::foo, we have to look up "A", then "A::B",
-     then "A::B::C", then "A::B::C::D", and finally
-     "A::B::C::D::foo" as single, monolithic symbols, because
-     A, B, C or D may be namespaces.
-
-     Note that namespaces can nest only inside other
-     namespaces, and not inside classes.  So we need only
-     consider *prefixes* of the string; there is no need to look up
-     "B::C" separately as a symbol in the previous example. */
-
-  char *p;
-  char *start, *end;
-  char *prefix = NULL;
-  char *tmp;
-  struct symbol *sym_class = NULL;
-  struct symbol *sym_var = NULL;
-  struct type *t;
-  int prefix_len = 0;
-  int done = 0;
-  char *q;
-
-  /* Check for HP-compiled executable -- in other cases
-     return NULL, and caller must default to standard GDB
-     behaviour. */
-
-  if (!deprecated_hp_som_som_object_present)
-    return (struct symbol *) NULL;
-
-  p = name;
-
-  /* Skip over whitespace and possible global "::" */
-  while (*p && (*p == ' ' || *p == '\t'))
-    p++;
-  if (p[0] == ':' && p[1] == ':')
-    p += 2;
-  while (*p && (*p == ' ' || *p == '\t'))
-    p++;
-
-  while (1)
-    {
-      /* Get to the end of the next namespace or class spec. */
-      /* If we're looking at some non-token, fail immediately */
-      start = p;
-      if (!(isalpha (*p) || *p == '$' || *p == '_'))
-	return (struct symbol *) NULL;
-      p++;
-      while (*p && (isalnum (*p) || *p == '$' || *p == '_'))
-	p++;
-
-      if (*p == '<')
-	{
-	  /* If we have the start of a template specification,
-	     scan right ahead to its end */
-	  q = find_template_name_end (p);
-	  if (q)
-	    p = q;
-	}
-
-      end = p;
-
-      /* Skip over "::" and whitespace for next time around */
-      while (*p && (*p == ' ' || *p == '\t'))
-	p++;
-      if (p[0] == ':' && p[1] == ':')
-	p += 2;
-      while (*p && (*p == ' ' || *p == '\t'))
-	p++;
-
-      /* Done with tokens? */
-      if (!*p || !(isalpha (*p) || *p == '$' || *p == '_'))
-	done = 1;
-
-      tmp = (char *) alloca (prefix_len + end - start + 3);
-      if (prefix)
-	{
-	  memcpy (tmp, prefix, prefix_len);
-	  memcpy (tmp + prefix_len, coloncolon, 2);
-	  memcpy (tmp + prefix_len + 2, start, end - start);
-	  tmp[prefix_len + 2 + end - start] = '\000';
-	}
-      else
-	{
-	  memcpy (tmp, start, end - start);
-	  tmp[end - start] = '\000';
-	}
-
-      prefix = tmp;
-      prefix_len = strlen (prefix);
-
-      /* See if the prefix we have now is something we know about */
-
-      if (!done)
-	{
-	  /* More tokens to process, so this must be a class/namespace */
-	  sym_class = lookup_symbol (prefix, 0, STRUCT_DOMAIN,
-				     0, (struct symtab **) NULL);
-	}
-      else
-	{
-	  /* No more tokens, so try as a variable first */
-	  sym_var = lookup_symbol (prefix, 0, VAR_DOMAIN,
-				   0, (struct symtab **) NULL);
-	  /* If failed, try as class/namespace */
-	  if (!sym_var)
-	    sym_class = lookup_symbol (prefix, 0, STRUCT_DOMAIN,
-				       0, (struct symtab **) NULL);
-	}
-
-      if (sym_var ||
-	  (sym_class &&
-	   (t = check_typedef (SYMBOL_TYPE (sym_class)),
-	    (TYPE_CODE (t) == TYPE_CODE_STRUCT
-	     || TYPE_CODE (t) == TYPE_CODE_UNION))))
-	{
-	  /* We found a valid token */
-	  *token = (char *) xmalloc (prefix_len + 1);
-	  memcpy (*token, prefix, prefix_len);
-	  (*token)[prefix_len] = '\000';
-	  break;
-	}
-
-      /* No variable or class/namespace found, no more tokens */
-      if (done)
-	return (struct symbol *) NULL;
-    }
-
-  /* Out of loop, so we must have found a valid token */
-  if (sym_var)
-    *class_prefix = 0;
-  else
-    *class_prefix = 1;
-
-  if (argptr)
-    *argptr = done ? p : end;
-
-  return sym_var ? sym_var : sym_class;		/* found */
-}
 
 char *
 find_template_name_end (char *p)
@@ -899,7 +713,6 @@ operator_length_standard (struct expression *expr, int endpos,
     case OP_TYPE:
     case OP_BOOL:
     case OP_LAST:
-    case OP_REGISTER:
     case OP_INTERNALVAR:
       oplen = 3;
       break;
@@ -954,12 +767,12 @@ operator_length_standard (struct expression *expr, int endpos,
     case STRUCTOP_PTR:
       args = 1;
       /* fall through */
+    case OP_REGISTER:
     case OP_M2_STRING:
     case OP_STRING:
     case OP_OBJC_NSSTRING:	/* Objective C Foundation Class NSString constant */
     case OP_OBJC_SELECTOR:	/* Objective C "@selector" pseudo-op */
     case OP_NAME:
-    case OP_EXPRSTRING:
       oplen = longest_to_int (expr->elts[endpos - 2].longconst);
       oplen = 4 + BYTES_TO_EXP_ELEM (oplen + 1);
       break;
@@ -1358,28 +1171,6 @@ follow_types (struct type *follow_type)
   return follow_type;
 }
 
-static void build_parse (void);
-static void
-build_parse (void)
-{
-  int i;
-
-  msym_text_symbol_type =
-    init_type (TYPE_CODE_FUNC, 1, 0, "<text variable, no debug info>", NULL);
-  TYPE_TARGET_TYPE (msym_text_symbol_type) = builtin_type_int;
-  msym_data_symbol_type =
-    init_type (TYPE_CODE_INT, TARGET_INT_BIT / HOST_CHAR_BIT, 0,
-	       "<data variable, no debug info>", NULL);
-  msym_unknown_symbol_type =
-    init_type (TYPE_CODE_INT, 1, 0,
-	       "<variable (not text or data), no debug info>",
-	       NULL);
-
-  msym_tls_symbol_type =
-    init_type (TYPE_CODE_INT, TARGET_INT_BIT / HOST_CHAR_BIT, 0,
-	       "<thread local variable, no debug info>", NULL);
-}
-
 /* This function avoids direct calls to fprintf 
    in the parser generated debug code.  */
 void
@@ -1404,16 +1195,6 @@ _initialize_parse (void)
   type_stack_depth = 0;
   type_stack = (union type_stack_elt *)
     xmalloc (type_stack_size * sizeof (*type_stack));
-
-  build_parse ();
-
-  /* FIXME - For the moment, handle types by swapping them in and out.
-     Should be using the per-architecture data-pointer and a large
-     struct. */
-  DEPRECATED_REGISTER_GDBARCH_SWAP (msym_text_symbol_type);
-  DEPRECATED_REGISTER_GDBARCH_SWAP (msym_data_symbol_type);
-  DEPRECATED_REGISTER_GDBARCH_SWAP (msym_unknown_symbol_type);
-  deprecated_register_gdbarch_swap (NULL, 0, build_parse);
 
   add_setshow_zinteger_cmd ("expression", class_maintenance,
 			    &expressiondebug, _("\

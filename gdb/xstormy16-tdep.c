@@ -1,13 +1,13 @@
 /* Target-dependent code for the Sanyo Xstormy16a (LC590000) processor.
 
-   Copyright (C) 2001, 2002, 2003, 2004, 2005 Free Software Foundation,
-   Inc.
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -416,12 +414,12 @@ xstormy16_skip_prologue (CORE_ADDR pc)
       struct symtab_and_line sal;
       struct symbol *sym;
       struct xstormy16_frame_cache cache;
+      CORE_ADDR plg_end;
 
       memset (&cache, 0, sizeof cache);
 
       /* Don't trust line number debug info in frameless functions. */
-      CORE_ADDR plg_end = xstormy16_analyze_prologue (func_addr, func_end,
-						      &cache, NULL);
+      plg_end = xstormy16_analyze_prologue (func_addr, func_end, &cache, NULL);
       if (!cache.uses_fp)
         return plg_end;
 
@@ -573,7 +571,7 @@ xstormy16_find_jmp_table_entry (CORE_ADDR faddr)
 }
 
 static CORE_ADDR
-xstormy16_skip_trampoline_code (CORE_ADDR pc)
+xstormy16_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
 {
   CORE_ADDR tmp = xstormy16_resolve_jmp_table_entry (pc);
 
@@ -655,7 +653,7 @@ xstormy16_frame_cache (struct frame_info *next_frame, void **this_cache)
   if (cache->base == 0)
     return cache;
 
-  cache->pc = frame_func_unwind (next_frame);
+  cache->pc = frame_func_unwind (next_frame, NORMAL_FRAME);
   current_pc = frame_pc_unwind (next_frame);
   if (cache->pc)
     xstormy16_analyze_prologue (cache->pc, current_pc, cache, next_frame);
@@ -824,8 +822,6 @@ xstormy16_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_address_to_pointer (gdbarch, xstormy16_address_to_pointer);
   set_gdbarch_pointer_to_address (gdbarch, xstormy16_pointer_to_address);
-
-  set_gdbarch_write_pc (gdbarch, generic_target_write_pc);
 
   /* Stack grows up. */
   set_gdbarch_inner_than (gdbarch, core_addr_greaterthan);

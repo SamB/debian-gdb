@@ -1,6 +1,7 @@
 /* Target-dependent code for NetBSD/powerpc.
 
-   Copyright (C) 2002, 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007
+   Free Software Foundation, Inc.
 
    Contributed by Wasabi Systems, Inc.
 
@@ -8,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbtypes.h"
@@ -42,7 +41,7 @@ struct ppc_reg_offsets ppcnbsd_reg_offsets;
 
 /* Core file support.  */
 
-/* NetBSD/powerpc register set.  */
+/* NetBSD/powerpc register sets.  */
 
 struct regset ppcnbsd_gregset =
 {
@@ -114,7 +113,8 @@ ppcnbsd_sigtramp_cache_init (const struct tramp_frame *self,
   CORE_ADDR addr, base;
   int i;
 
-  base = frame_unwind_register_unsigned (next_frame, SP_REGNUM);
+  base = frame_unwind_register_unsigned (next_frame,
+					 gdbarch_sp_regnum (current_gdbarch));
   if (self == &ppcnbsd2_sigtramp)
     addr = base + 0x10 + 2 * tdep->wordsize;
   else
@@ -132,7 +132,9 @@ ppcnbsd_sigtramp_cache_init (const struct tramp_frame *self,
   addr += tdep->wordsize;
   trad_frame_set_reg_addr (this_cache, tdep->ppc_ctr_regnum, addr);
   addr += tdep->wordsize;
-  trad_frame_set_reg_addr (this_cache, PC_REGNUM, addr); /* SRR0? */
+  trad_frame_set_reg_addr (this_cache,
+			   gdbarch_pc_regnum (current_gdbarch),
+			   addr); /* SRR0? */
   addr += tdep->wordsize;
 
   /* Construct the frame ID using the function start.  */
@@ -211,6 +213,8 @@ _initialize_ppcnbsd_tdep (void)
     {
       /* General-purpose registers.  */
       ppcnbsd_reg_offsets.r0_offset = 0;
+      ppcnbsd_reg_offsets.gpr_size = 4;
+      ppcnbsd_reg_offsets.xr_size = 4;
       ppcnbsd_reg_offsets.lr_offset = 128;
       ppcnbsd_reg_offsets.cr_offset = 132;
       ppcnbsd_reg_offsets.xer_offset = 136;
@@ -222,6 +226,7 @@ _initialize_ppcnbsd_tdep (void)
       /* Floating-point registers.  */
       ppcnbsd_reg_offsets.f0_offset = 0;
       ppcnbsd_reg_offsets.fpscr_offset = 256;
+      ppcnbsd_reg_offsets.fpscr_size = 4;
 
       /* AltiVec registers.  */
       ppcnbsd_reg_offsets.vr0_offset = 0;

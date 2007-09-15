@@ -1,14 +1,13 @@
 /* GDB routines for manipulating the minimal symbol tables.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004
-   Free Software Foundation, Inc.
+   2002, 2003, 2004, 2007 Free Software Foundation, Inc.
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 
 /* This file contains support routines for creating, manipulating, and
@@ -388,20 +385,20 @@ lookup_minimal_symbol_by_pc_section (CORE_ADDR pc, asection *section)
   if (pc_section == NULL)
     return NULL;
 
-  /* NOTE: cagney/2004-01-27: Removed code (added 2003-07-19) that was
-     trying to force the PC into a valid section as returned by
-     find_pc_section.  It broke IRIX 6.5 mdebug which relies on this
-     code returning an absolute symbol - the problem was that
-     find_pc_section wasn't returning an absolute section and hence
-     the code below would skip over absolute symbols.  Since the
-     original problem was with finding a frame's function, and that
-     uses [indirectly] lookup_minimal_symbol_by_pc, the original
-     problem has been fixed by having that function use
-     find_pc_section.  */
+  /* We can not require the symbol found to be in pc_section, because
+     e.g. IRIX 6.5 mdebug relies on this code returning an absolute
+     symbol - but find_pc_section won't return an absolute section and
+     hence the code below would skip over absolute symbols.  We can
+     still take advantage of the call to find_pc_section, though - the
+     object file still must match.  In case we have separate debug
+     files, search both the file and its separate debug file.  There's
+     no telling which one will have the minimal symbols.  */
 
-  for (objfile = object_files;
-       objfile != NULL;
-       objfile = objfile->next)
+  objfile = pc_section->objfile;
+  if (objfile->separate_debug_objfile)
+    objfile = objfile->separate_debug_objfile;
+
+  for (; objfile != NULL; objfile = objfile->separate_debug_objfile_backlink)
     {
       /* If this objfile has a minimal symbol table, go search it using
          a binary search.  Note that a minimal symbol table always consists
@@ -507,6 +504,22 @@ lookup_minimal_symbol_by_pc_section (CORE_ADDR pc, asection *section)
 		      && best_zero_sized == -1)
 		    {
 		      best_zero_sized = hi;
+		      hi--;
+		      continue;
+		    }
+
+		  /* If we are past the end of the current symbol, try
+		     the previous symbol if it has a larger overlapping
+		     size.  This happens on i686-pc-linux-gnu with glibc;
+		     the nocancel variants of system calls are inside
+		     the cancellable variants, but both have sizes.  */
+		  if (hi > 0
+		      && MSYMBOL_SIZE (&msymbol[hi]) != 0
+		      && pc >= (SYMBOL_VALUE_ADDRESS (&msymbol[hi])
+				+ MSYMBOL_SIZE (&msymbol[hi]))
+		      && pc < (SYMBOL_VALUE_ADDRESS (&msymbol[hi - 1])
+			       + MSYMBOL_SIZE (&msymbol[hi - 1])))
+		    {
 		      hi--;
 		      continue;
 		    }
@@ -1032,7 +1045,7 @@ lookup_solib_trampoline_symbol_by_pc (CORE_ADDR pc)
    a duplicate function in case this matters someday.  */
 
 CORE_ADDR
-find_solib_trampoline_target (CORE_ADDR pc)
+find_solib_trampoline_target (struct frame_info *frame, CORE_ADDR pc)
 {
   struct objfile *objfile;
   struct minimal_symbol *msymbol;

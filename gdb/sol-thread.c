@@ -1,13 +1,13 @@
 /* Solaris threads debugging interface.
 
-   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
-   2005 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This module implements a sort of half target that sits between the
    machine-independent parts of GDB and the /proc interface (procfs.c)
@@ -66,6 +64,7 @@
 #include "regcache.h"
 #include "solib.h"
 #include "symfile.h"
+#include "observer.h"
 
 #include "gdb_string.h"
 
@@ -478,7 +477,7 @@ sol_thread_wait (ptid_t ptid, struct target_waitstatus *ourstatus)
 }
 
 static void
-sol_thread_fetch_registers (int regnum)
+sol_thread_fetch_registers (struct regcache *regcache, int regnum)
 {
   thread_t thread;
   td_thrhandle_t thandle;
@@ -494,9 +493,9 @@ sol_thread_fetch_registers (int regnum)
     {
       /* It's an LWP; pass the request on to procfs.  */
       if (target_has_execution)
-	procfs_ops.to_fetch_registers (regnum);
+	procfs_ops.to_fetch_registers (regcache, regnum);
       else
-	orig_core_ops.to_fetch_registers (regnum);
+	orig_core_ops.to_fetch_registers (regcache, regnum);
       return;
     }
 
@@ -531,8 +530,8 @@ sol_thread_fetch_registers (int regnum)
      calling the td routines because the td routines call ps_lget*
      which affect the values stored in the registers array.  */
 
-  supply_gregset ((gdb_gregset_t *) &gregset);
-  supply_fpregset ((gdb_fpregset_t *) &fpregset);
+  supply_gregset (regcache, (const gdb_gregset_t *) &gregset);
+  supply_fpregset (regcache, (const gdb_fpregset_t *) &fpregset);
 
 #if 0
   /* FIXME: libthread_db doesn't seem to handle this right.  */
@@ -553,7 +552,7 @@ sol_thread_fetch_registers (int regnum)
 }
 
 static void
-sol_thread_store_registers (int regnum)
+sol_thread_store_registers (struct regcache *regcache, int regnum)
 {
   thread_t thread;
   td_thrhandle_t thandle;
@@ -568,7 +567,7 @@ sol_thread_store_registers (int regnum)
   if (!is_thread (inferior_ptid))
     {
       /* It's an LWP; pass the request on to procfs.c.  */
-      procfs_ops.to_store_registers (regnum);
+      procfs_ops.to_store_registers (regcache, regnum);
       return;
     }
 
@@ -586,7 +585,7 @@ sol_thread_store_registers (int regnum)
       char old_value[MAX_REGISTER_SIZE];
 
       /* Save new register value.  */
-      regcache_raw_collect (current_regcache, regnum, old_value);
+      regcache_raw_collect (regcache, regnum, old_value);
 
       val = p_td_thr_getgregs (&thandle, gregset);
       if (val != TD_OK)
@@ -598,7 +597,7 @@ sol_thread_store_registers (int regnum)
 	       td_err_string (val));
 
       /* Restore new register value.  */
-      regcache_raw_supply (current_regcache, regnum, old_value);
+      regcache_raw_supply (regcache, regnum, old_value);
 
 #if 0
       /* FIXME: libthread_db doesn't seem to handle this right.  */
@@ -618,8 +617,8 @@ sol_thread_store_registers (int regnum)
 #endif
     }
 
-  fill_gregset ((gdb_gregset_t *) &gregset, regnum);
-  fill_fpregset ((gdb_fpregset_t *) &fpregset, regnum);
+  fill_gregset (regcache, (gdb_gregset_t *) &gregset, regnum);
+  fill_fpregset (regcache, (gdb_fpregset_t *) &fpregset, regnum);
 
   val = p_td_thr_setgregs (&thandle, gregset);
   if (val != TD_OK)
@@ -649,9 +648,9 @@ sol_thread_store_registers (int regnum)
    program being debugged.  */
 
 static void
-sol_thread_prepare_to_store (void)
+sol_thread_prepare_to_store (struct regcache *regcache)
 {
-  procfs_ops.to_prepare_to_store ();
+  procfs_ops.to_prepare_to_store (regcache);
 }
 
 /* Transfer LEN bytes between GDB address MYADDR and target address
@@ -777,16 +776,9 @@ sol_thread_create_inferior (char *exec_file, char *allargs, char **env,
    when all symbol tables are removed.  libthread_db can only be
    initialized when it finds the right variables in libthread.so.
    Since it's a shared library, those variables don't show up until
-   the library gets mapped and the symbol table is read in.
+   the library gets mapped and the symbol table is read in.  */
 
-   This new_objfile event is managed by a chained function pointer.
-   It is the callee's responsability to call the next client on the
-   chain.  */
-
-/* Saved pointer to previous owner of the new_objfile event. */
-static void (*target_new_objfile_chain) (struct objfile *);
-
-void
+static void
 sol_thread_new_objfile (struct objfile *objfile)
 {
   td_err_e val;
@@ -794,13 +786,13 @@ sol_thread_new_objfile (struct objfile *objfile)
   if (!objfile)
     {
       sol_thread_active = 0;
-      goto quit;
+      return;
     }
 
   /* Don't do anything if init failed to resolve the libthread_db
      library.  */
   if (!procfs_suppress_run)
-    goto quit;
+    return;
 
   /* Now, initialize libthread_db.  This needs to be done after the
      shared libraries are located because it needs information from
@@ -810,24 +802,19 @@ sol_thread_new_objfile (struct objfile *objfile)
   if (val != TD_OK)
     {
       warning (_("sol_thread_new_objfile: td_init: %s"), td_err_string (val));
-      goto quit;
+      return;
     }
 
   val = p_td_ta_new (&main_ph, &main_ta);
   if (val == TD_NOLIBTHREAD)
-    goto quit;
+    return;
   else if (val != TD_OK)
     {
       warning (_("sol_thread_new_objfile: td_ta_new: %s"), td_err_string (val));
-      goto quit;
+      return;
     }
 
   sol_thread_active = 1;
-
-quit:
-  /* Call predecessor on chain, if any.  */
-  if (target_new_objfile_chain)
-    target_new_objfile_chain (objfile);
 }
 
 /* Clean up after the inferior dies.  */
@@ -921,7 +908,7 @@ typedef const struct ps_prochandle *gdb_ps_prochandle_t;
 typedef char *gdb_ps_read_buf_t;
 typedef char *gdb_ps_write_buf_t;
 typedef int gdb_ps_size_t;
-typedef paddr_t gdb_ps_addr_t;
+typedef psaddr_t gdb_ps_addr_t;
 #else
 typedef struct ps_prochandle *gdb_ps_prochandle_t;
 typedef void *gdb_ps_read_buf_t;
@@ -1098,16 +1085,18 @@ ps_err_e
 ps_lgetregs (gdb_ps_prochandle_t ph, lwpid_t lwpid, prgregset_t gregset)
 {
   struct cleanup *old_chain;
+  struct regcache *regcache;
 
   old_chain = save_inferior_ptid ();
 
   inferior_ptid = BUILD_LWP (lwpid, PIDGET (inferior_ptid));
+  regcache = get_thread_regcache (inferior_ptid);
 
   if (target_has_execution)
-    procfs_ops.to_fetch_registers (-1);
+    procfs_ops.to_fetch_registers (regcache, -1);
   else
-    orig_core_ops.to_fetch_registers (-1);
-  fill_gregset ((gdb_gregset_t *) gregset, -1);
+    orig_core_ops.to_fetch_registers (regcache, -1);
+  fill_gregset (regcache, (gdb_gregset_t *) gregset, -1);
 
   do_cleanups (old_chain);
 
@@ -1121,16 +1110,18 @@ ps_lsetregs (gdb_ps_prochandle_t ph, lwpid_t lwpid,
 	     const prgregset_t gregset)
 {
   struct cleanup *old_chain;
+  struct regcache *regcache;
 
   old_chain = save_inferior_ptid ();
 
   inferior_ptid = BUILD_LWP (lwpid, PIDGET (inferior_ptid));
+  regcache = get_thread_regcache (inferior_ptid);
 
-  supply_gregset ((gdb_gregset_t *) gregset);
+  supply_gregset (regcache, (const gdb_gregset_t *) gregset);
   if (target_has_execution)
-    procfs_ops.to_store_registers (-1);
+    procfs_ops.to_store_registers (regcache, -1);
   else
-    orig_core_ops.to_store_registers (-1);
+    orig_core_ops.to_store_registers (regcache, -1);
 
   do_cleanups (old_chain);
 
@@ -1230,16 +1221,18 @@ ps_lgetfpregs (gdb_ps_prochandle_t ph, lwpid_t lwpid,
 	       prfpregset_t *fpregset)
 {
   struct cleanup *old_chain;
+  struct regcache *regcache;
 
   old_chain = save_inferior_ptid ();
 
   inferior_ptid = BUILD_LWP (lwpid, PIDGET (inferior_ptid));
+  regcache = get_thread_regcache (inferior_ptid);
 
   if (target_has_execution)
-    procfs_ops.to_fetch_registers (-1);
+    procfs_ops.to_fetch_registers (regcache, -1);
   else
-    orig_core_ops.to_fetch_registers (-1);
-  fill_fpregset ((gdb_fpregset_t *) fpregset, -1);
+    orig_core_ops.to_fetch_registers (regcache, -1);
+  fill_fpregset (regcache, (gdb_fpregset_t *) fpregset, -1);
 
   do_cleanups (old_chain);
 
@@ -1253,16 +1246,18 @@ ps_lsetfpregs (gdb_ps_prochandle_t ph, lwpid_t lwpid,
 	       const prfpregset_t * fpregset)
 {
   struct cleanup *old_chain;
+  struct regcache *regcache;
 
   old_chain = save_inferior_ptid ();
 
   inferior_ptid = BUILD_LWP (lwpid, PIDGET (inferior_ptid));
+  regcache = get_thread_regcache (inferior_ptid);
 
-  supply_fpregset ((gdb_fpregset_t *) fpregset);
+  supply_fpregset (regcache, (const gdb_fpregset_t *) fpregset);
   if (target_has_execution)
-    procfs_ops.to_store_registers (-1);
+    procfs_ops.to_store_registers (regcache, -1);
   else
-    orig_core_ops.to_store_registers (-1);
+    orig_core_ops.to_store_registers (regcache, -1);
 
   do_cleanups (old_chain);
 
@@ -1667,8 +1662,7 @@ _initialize_sol_thread (void)
   add_target (&core_ops);
 
   /* Hook into new_objfile notification.  */
-  target_new_objfile_chain = deprecated_target_new_objfile_hook;
-  deprecated_target_new_objfile_hook  = sol_thread_new_objfile;
+  observer_attach_new_objfile (sol_thread_new_objfile);
   return;
 
  die:

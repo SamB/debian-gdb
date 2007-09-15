@@ -1,13 +1,13 @@
 /* Definitions for expressions stored in reversed prefix form, for GDB.
 
-   Copyright (C) 1986, 1989, 1992, 1994, 2000, 2003, 2005 Free Software
-   Foundation, Inc.
+   Copyright (C) 1986, 1989, 1992, 1994, 2000, 2003, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (EXPRESSION_H)
 #define EXPRESSION_H 1
@@ -166,9 +164,8 @@ enum exp_opcode
        With another OP_LAST at the end, this makes three exp_elements.  */
     OP_LAST,
 
-    /* OP_REGISTER is followed by an integer in the next exp_element.
-       This is the number of a register to fetch (as an int).
-       With another OP_REGISTER at the end, this makes three exp_elements.  */
+    /* OP_REGISTER is followed by a string in the next exp_element.
+       This is the name of a register to fetch.  */
     OP_REGISTER,
 
     /* OP_INTERNALVAR is followed by an internalvar ptr in the next exp_element.
@@ -324,9 +321,6 @@ enum exp_opcode
 
     /* An un-looked-up identifier. */
     OP_NAME,
-
-    /* An unparsed expression.  Used for Scheme (for now at least) */
-    OP_EXPRSTRING,
 
     /* An Objective C Foundation Class NSString constant */
     OP_OBJC_NSSTRING,

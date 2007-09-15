@@ -1,19 +1,17 @@
-#   Copyright 2003, 2004, 2005
-#   Free Software Foundation, Inc.
+#   Copyright 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # This file was created by Jeff Johnston. (jjohnstn@redhat.com)
 
@@ -27,8 +25,7 @@ if $tracelevel then {
 set prms_id 0
 set bug_id 0
 
-# are we on a target board?
-if ![isnative] then {
+if {[skip_shlib_tests]} {
     return 0
 }
 
@@ -58,6 +55,7 @@ gdb_exit
 gdb_start
 gdb_reinitialize_dir $srcdir/$subdir
 gdb_load ${binfile}
+gdb_load_shlibs $lib_sl
 
 if [target_info exists gdb_stub] {
     gdb_step_for_stub;
@@ -147,9 +145,10 @@ gdb_test "info break" \
 # Try a pending break for a line in a source file with a condition
 #
 
-gdb_test_multiple "break pendshr.c:26 if x > 3" "Set pending breakpoint 2" {
+set bp2_loc [gdb_get_line_number "y = x + 4" ${libfile}.c]
+gdb_test_multiple "break pendshr.c:$bp2_loc if x > 3" "Set pending breakpoint 2" {
      -re ".*Make breakpoint pending.*y or \\\[n\\\]. $" {
-	    gdb_test "y" "Breakpoint.*pendshr.c:26.*pending." \
+	    gdb_test "y" "Breakpoint.*pendshr.c:$bp2_loc.*pending." \
 		"Set pending breakpoint 2"
      }
 }
@@ -160,7 +159,7 @@ gdb_test "info break" \
 \[\t \]+stop only if k == 1.*
 \[\t \]+print k.*
 \[0-9\]+\[\t \]+breakpoint     keep y.* in main at .*$srcfile:$mainline.*
-\[0-9\]+\[\t \]+breakpoint     keep y.*PENDING.*pendshr.c:26 if x > 3.*" \
+\[0-9\]+\[\t \]+breakpoint     keep y.*PENDING.*pendshr.c:$bp2_loc if x > 3.*" \
 "multiple pending breakpoints"
 
 
@@ -168,9 +167,10 @@ gdb_test "info break" \
 # Try a pending break for a line in a source file with ignore count:
 #
 
-gdb_test_multiple "break pendshr.c:27" "Set pending breakpoint 3" {
+set bp3_loc [gdb_get_line_number "printf" ${libfile}.c]
+gdb_test_multiple "break pendshr.c:$bp3_loc" "Set pending breakpoint 3" {
      -re ".*Make breakpoint pending.*y or \\\[n\\\]. $" {
-	    gdb_test "y" "Breakpoint.*pendshr.c:27.*pending." \
+	    gdb_test "y" "Breakpoint.*pendshr.c:$bp3_loc.*pending." \
 		"Set pending breakpoint 3"
      }
 }
@@ -184,17 +184,18 @@ gdb_test "info break" \
 \[\t \]+stop only if k == 1.*
 \[\t \]+print k.*
 \[0-9\]+\[\t \]+breakpoint     keep y.* in main at .*$srcfile:$mainline.*
-\[0-9\]+\[\t \]+breakpoint     keep y.*PENDING.*pendshr.c:26 if x > 3.*
-\[0-9\]+\[\t \]+breakpoint     keep y.*PENDING.*pendshr.c:27.*ignore next 2 hits.*" \
+\[0-9\]+\[\t \]+breakpoint     keep y.*PENDING.*pendshr.c:$bp2_loc if x > 3.*
+\[0-9\]+\[\t \]+breakpoint     keep y.*PENDING.*pendshr.c:$bp3_loc.*ignore next 2 hits.*" \
 "multiple pending breakpoints 2"
 
 #
 # Run to main which should resolve a pending breakpoint
 #
 
-gdb_test "run" \
+gdb_run_cmd
+gdb_test "" \
 "Breakpoint.*at.*
-Pending breakpoint \"pendshr.c:26 if x > 3\" resolved.*
+Pending breakpoint \"pendshr.c:$bp2_loc if x > 3\" resolved.*
 Breakpoint.*, main.*$mainline.*" \
 "running to main"
 
@@ -212,11 +213,11 @@ Pending breakpoint \"pendfunc1.* resolved.*" \
 #
 
 gdb_test "continue" \
-".*Breakpoint.*pendfunc1.*at.*pendshr.c:26.*4;" \
+".*Breakpoint.*pendfunc1.*at.*pendshr.c:$bp2_loc.*4;" \
 "continue to resolved breakpoint 2"
 
 gdb_test "continue" \
-".*Breakpoint.*pendfunc1.*at.*pendshr.c:26.*
+".*Breakpoint.*pendfunc1.*at.*pendshr.c:$bp2_loc.*
 \[$\]1 = 1." \
 "continue to resolved breakpoint 1"
 
@@ -230,7 +231,7 @@ gdb_test "disable 7" "" "Disable other breakpoints"
 gdb_test "disable 5" "" "Disable other breakpoints"
 
 gdb_test "continue" \
-	{.*Breakpoint.*pendfunc1.*\(x=3\) at.*pendshr.c:27.*printf.*;} \
+	 ".*Breakpoint.*pendfunc1.*\\\(x=3\\\) at.*pendshr.c:$bp3_loc.*printf.*;" \
 "continue to resolved breakpoint 3"
 
 delete_breakpoints

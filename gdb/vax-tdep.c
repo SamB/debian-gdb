@@ -1,13 +1,13 @@
 /* Target-dependent code for the VAX.
 
-   Copyright (C) 1986, 1989, 1991, 1992, 1995, 1996, 1998, 1999, 2000,
-   2002, 2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1989, 1991, 1992, 1995, 1996, 1998, 1999, 2000, 2002,
+   2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "arch-utils.h"
@@ -384,7 +382,8 @@ vax_frame_this_id (struct frame_info *next_frame, void **this_cache,
   if (cache->base == 0)
     return;
 
-  (*this_id) = frame_id_build (cache->base, frame_func_unwind (next_frame));
+  (*this_id) = frame_id_build (cache->base,
+			       frame_func_unwind (next_frame, NORMAL_FRAME));
 }
 
 static void
@@ -477,10 +476,10 @@ vax_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   gdbarch = gdbarch_alloc (&info, NULL);
 
-  set_gdbarch_float_format (gdbarch, &floatformat_vax_f);
-  set_gdbarch_double_format (gdbarch, &floatformat_vax_d);
-  set_gdbarch_long_double_format (gdbarch, &floatformat_vax_d);
-  set_gdbarch_long_double_bit(gdbarch, 64);
+  set_gdbarch_float_format (gdbarch, floatformats_vax_f);
+  set_gdbarch_double_format (gdbarch, floatformats_vax_d);
+  set_gdbarch_long_double_format (gdbarch, floatformats_vax_d);
+  set_gdbarch_long_double_bit (gdbarch, 64);
 
   /* Register info */
   set_gdbarch_num_regs (gdbarch, VAX_NUM_REGS);

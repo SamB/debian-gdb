@@ -1,12 +1,13 @@
 /* Generic code for supporting multiple C++ ABI's
 
-   Copyright (C) 2001, 2002, 2003, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2005, 2006, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "value.h"
@@ -93,6 +92,47 @@ value_rtti_type (struct value *v, int *full, int *top, int *using_enc)
   if ((current_cp_abi.rtti_type) == NULL)
     return NULL;
   return (*current_cp_abi.rtti_type) (v, full, top, using_enc);
+}
+
+void
+cplus_print_method_ptr (const gdb_byte *contents, struct type *type,
+			struct ui_file *stream)
+{
+  if (current_cp_abi.print_method_ptr == NULL)
+    error (_("GDB does not support pointers to methods on this target"));
+  (*current_cp_abi.print_method_ptr) (contents, type, stream);
+}
+
+int
+cplus_method_ptr_size (void)
+{
+  if (current_cp_abi.method_ptr_size == NULL)
+    error (_("GDB does not support pointers to methods on this target"));
+  return (*current_cp_abi.method_ptr_size) ();
+}
+
+void
+cplus_make_method_ptr (gdb_byte *contents, CORE_ADDR value, int is_virtual)
+{
+  if (current_cp_abi.make_method_ptr == NULL)
+    error (_("GDB does not support pointers to methods on this target"));
+  (*current_cp_abi.make_method_ptr) (contents, value, is_virtual);
+}
+
+CORE_ADDR
+cplus_skip_trampoline (struct frame_info *frame, CORE_ADDR stop_pc)
+{
+  if (current_cp_abi.skip_trampoline == NULL)
+    return 0;
+  return (*current_cp_abi.skip_trampoline) (frame, stop_pc);
+}
+
+struct value *
+cplus_method_ptr_to_value (struct value **this_p, struct value *method_ptr)
+{
+  if (current_cp_abi.method_ptr_to_value == NULL)
+    error (_("GDB does not support pointers to methods on this target"));
+  return (*current_cp_abi.method_ptr_to_value) (this_p, method_ptr);
 }
 
 /* Set the current C++ ABI to SHORT_NAME.  */

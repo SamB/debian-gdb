@@ -1,11 +1,11 @@
 /* Functions for manipulating expressions designed to be executed on the agent
-   Copyright (C) 1998, 1999, 2000 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,9 +14,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* Despite what the above comment says about this file being part of
    GDB, we would like to keep these functions free of GDB
@@ -231,8 +229,12 @@ ax_const_l (struct agent_expr *x, LONGEST l)
      signed or unsigned; we always reproduce the value exactly, and
      use the shortest representation.  */
   for (op = 0, size = 8; size < 64; size *= 2, op++)
-    if (-((LONGEST) 1 << size) <= l && l < ((LONGEST) 1 << size))
-      break;
+    {
+      LONGEST lim = 1 << (size - 1);
+
+      if (-lim <= l && l <= lim - 1)
+        break;
+    }
 
   /* Emit the right opcode... */
   ax_simple (x, ops[op]);

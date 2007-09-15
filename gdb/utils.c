@@ -1,14 +1,14 @@
 /* General utility routines for GDB, the GNU debugger.
 
-   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
+   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_assert.h"
@@ -906,18 +904,6 @@ quit (void)
 #endif
 }
 
-/* Control C comes here */
-void
-request_quit (int signo)
-{
-  quit_flag = 1;
-  /* Restore the signal handler.  Harmless with BSD-style signals,
-     needed for System V-style signals.  */
-  signal (signo, request_quit);
-
-  if (immediate_quit)
-    quit ();
-}
 
 /* Called when a memory allocation fails, with the number of bytes of
    memory requested in SIZE. */
@@ -1645,7 +1631,7 @@ set_screen_size (void)
     rows = INT_MAX;
 
   if (cols <= 0)
-    rl_get_screen_size (NULL, &cols);
+    cols = INT_MAX;
 
   /* Update Readline's idea of the terminal size.  */
   rl_set_screen_size (rows, cols);
@@ -2452,15 +2438,12 @@ subset_compare (char *string_to_compare, char *template_string)
   return match;
 }
 
-
-static void pagination_on_command (char *arg, int from_tty);
 static void
 pagination_on_command (char *arg, int from_tty)
 {
   pagination_enabled = 1;
 }
 
-static void pagination_on_command (char *arg, int from_tty);
 static void
 pagination_off_command (char *arg, int from_tty)
 {
@@ -2550,19 +2533,19 @@ get_cell (void)
 int
 strlen_paddr (void)
 {
-  return (TARGET_ADDR_BIT / 8 * 2);
+  return (gdbarch_addr_bit (current_gdbarch) / 8 * 2);
 }
 
 char *
 paddr (CORE_ADDR addr)
 {
-  return phex (addr, TARGET_ADDR_BIT / 8);
+  return phex (addr, gdbarch_addr_bit (current_gdbarch) / 8);
 }
 
 char *
 paddr_nz (CORE_ADDR addr)
 {
-  return phex_nz (addr, TARGET_ADDR_BIT / 8);
+  return phex_nz (addr, gdbarch_addr_bit (current_gdbarch) / 8);
 }
 
 const char *
@@ -2574,10 +2557,10 @@ paddress (CORE_ADDR addr)
      when it won't occur. */
   /* NOTE: This assumes that the significant address information is
      kept in the least significant bits of ADDR - the upper bits were
-     either zero or sign extended.  Should ADDRESS_TO_POINTER() or
+     either zero or sign extended.  Should gdbarch_address_to_pointer or
      some ADDRESS_TO_PRINTABLE() be used to do the conversion?  */
 
-  int addr_bit = TARGET_ADDR_BIT;
+  int addr_bit = gdbarch_addr_bit (current_gdbarch);
 
   if (addr_bit < (sizeof (CORE_ADDR) * HOST_CHAR_BIT))
     addr &= ((CORE_ADDR) 1 << addr_bit) - 1;
@@ -2857,7 +2840,7 @@ string_to_core_addr (const char *my_string)
   CORE_ADDR addr = 0;
   if (my_string[0] == '0' && tolower (my_string[1]) == 'x')
     {
-      /* Assume that it is in decimal.  */
+      /* Assume that it is in hex.  */
       int i;
       for (i = 2; my_string[i] != '\0'; i++)
 	{
@@ -3209,4 +3192,32 @@ strtoulst (const char *num, const char **trailer, int base)
     return -result;
   else
     return result;
+}
+
+/* Simple, portable version of dirname that does not modify its
+   argument.  */
+
+char *
+ldirname (const char *filename)
+{
+  const char *base = lbasename (filename);
+  char *dirname;
+
+  while (base > filename && IS_DIR_SEPARATOR (base[-1]))
+    --base;
+
+  if (base == filename)
+    return NULL;
+
+  dirname = xmalloc (base - filename + 2);
+  memcpy (dirname, filename, base - filename);
+
+  /* On DOS based file systems, convert "d:foo" to "d:.", so that we
+     create "d:./bar" later instead of the (different) "d:/bar".  */
+  if (base - filename == 2 && IS_ABSOLUTE_PATH (base)
+      && !IS_DIR_SEPARATOR (filename[0]))
+    dirname[base++ - filename] = '.';
+
+  dirname[base - filename] = '\0';
+  return dirname;
 }

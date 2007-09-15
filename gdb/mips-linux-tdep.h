@@ -1,12 +1,12 @@
 /* Target-dependent code for GNU/Linux on MIPS processors.
 
-   Copyright 2006 Free Software Foundation, Inc.
+   Copyright 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* Copied from <asm/elf.h>.  */
 #define ELF_NGREG       45
@@ -50,10 +48,10 @@ typedef mips_elf_fpreg_t mips_elf_fpregset_t[ELF_NFPREG];
 
 #define EF_SIZE			180
 
-void mips_supply_gregset (mips_elf_gregset_t *);
-void mips_fill_gregset (mips_elf_gregset_t *, int);
-void mips_supply_fpregset (mips_elf_fpregset_t *);
-void mips_fill_fpregset (mips_elf_fpregset_t *, int);
+void mips_supply_gregset (struct regcache *, const mips_elf_gregset_t *);
+void mips_fill_gregset (const struct regcache *, mips_elf_gregset_t *, int);
+void mips_supply_fpregset (struct regcache *, const mips_elf_fpregset_t *);
+void mips_fill_fpregset (const struct regcache *, mips_elf_fpregset_t *, int);
 
 /* 64-bit support.  */
 
@@ -88,7 +86,17 @@ typedef mips64_elf_fpreg_t mips64_elf_fpregset_t[MIPS64_ELF_NFPREG];
 
 #define MIPS64_EF_SIZE			304
 
-void mips64_supply_gregset (mips64_elf_gregset_t *);
-void mips64_fill_gregset (mips64_elf_gregset_t *, int);
-void mips64_supply_fpregset (mips64_elf_fpregset_t *);
-void mips64_fill_fpregset (mips64_elf_fpregset_t *, int);
+void mips64_supply_gregset (struct regcache *, const mips64_elf_gregset_t *);
+void mips64_fill_gregset (const struct regcache *, mips64_elf_gregset_t *, int);
+void mips64_supply_fpregset (struct regcache *, const mips64_elf_fpregset_t *);
+void mips64_fill_fpregset (const struct regcache *, mips64_elf_fpregset_t *, int);
+
+enum {
+  /* The Linux kernel stores an error code from any interrupted
+     syscall in a "register" (in $0's save slot).  */
+  MIPS_RESTART_REGNUM = MIPS_LAST_EMBED_REGNUM + 1
+};
+
+/* Return 1 if MIPS_RESTART_REGNUM is usable.  */
+
+int mips_linux_restart_reg_p (struct gdbarch *gdbarch);

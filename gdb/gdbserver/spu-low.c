@@ -1,5 +1,5 @@
 /* Low level interface to SPUs, for the remote server for GDB.
-   Copyright (C) 2006 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007 Free Software Foundation, Inc.
 
    Contributed by Ulrich Weigand <uweigand@de.ibm.com>.
 
@@ -7,7 +7,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "server.h"
 
@@ -58,7 +56,6 @@
 
 /* These are used in remote-utils.c.  */
 int using_threads = 0;
-int debug_threads = 0;
 
 
 /* Fetch PPU register REGNO.  */
@@ -249,7 +246,7 @@ spu_proc_xfer_spu (const char *annex, unsigned char *readbuf,
       && lseek (fd, (off_t) offset, SEEK_SET) != (off_t) offset)
     {
       close (fd);
-      return -1;
+      return 0;
     }
 
   if (writebuf)
@@ -280,6 +277,8 @@ spu_create_inferior (char *program, char **allargs)
       setpgid (0, 0);
 
       execv (program, allargs);
+      if (errno == ENOENT)
+	execvp (program, allargs);
 
       fprintf (stderr, "Cannot exec %s: %s.\n", program,
 	       strerror (errno));
@@ -315,10 +314,23 @@ spu_kill (void)
 }
 
 /* Detach from inferior process.  */
-static void
+static int
 spu_detach (void)
 {
   ptrace (PTRACE_DETACH, current_tid, 0, 0);
+  return 0;
+}
+
+static void
+spu_join (void)
+{
+  int status, ret;
+
+  do {
+    ret = waitpid (current_tid, &status, 0);
+    if (WIFEXITED (status) || WIFSIGNALED (status))
+      break;
+  } while (ret != -1 || errno != ECHILD);
 }
 
 /* Return nonzero if the given thread is still alive.  */
@@ -551,17 +563,23 @@ spu_look_up_symbols (void)
 
 /* Send signal to inferior.  */
 static void
-spu_send_signal (int signo)
+spu_request_interrupt (void)
 {
-  syscall (SYS_tkill, current_tid, signo);
+  syscall (SYS_tkill, current_tid, SIGINT);
 }
 
-
+static const char *
+spu_arch_string (void)
+{
+  return "spu";
+}
+
 static struct target_ops spu_target_ops = {
   spu_create_inferior,
   spu_attach,
   spu_kill,
   spu_detach,
+  spu_join,
   spu_thread_alive,
   spu_resume,
   spu_wait,
@@ -570,8 +588,16 @@ static struct target_ops spu_target_ops = {
   spu_read_memory,
   spu_write_memory,
   spu_look_up_symbols,
-  spu_send_signal,
+  spu_request_interrupt,
   NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  spu_arch_string,
+  spu_proc_xfer_spu,
 };
 
 void

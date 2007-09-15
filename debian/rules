@@ -85,6 +85,7 @@ export INSTALL
 # causes a harmless, but ugly, testsuite failure in maint.exp.
 DEB_CONFIGURE_EXTRA_FLAGS := $(DEB_HOST_GNU_TYPE) --disable-gdbtk \
 	--disable-shared --enable-tui --srcdir=$(shell pwd) \
+	--with-system-readline \
 	$(arch_config_args)
 
 DEB_MAKE_BUILD_TARGET = all info

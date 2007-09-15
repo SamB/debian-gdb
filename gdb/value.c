@@ -1,14 +1,14 @@
 /* Low level packing and unpacking of values for GDB, the GNU Debugger.
 
-   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2002, 2003, 2004, 2005, 2006
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -31,7 +29,6 @@
 #include "gdbcmd.h"
 #include "target.h"
 #include "language.h"
-#include "scm-lang.h"
 #include "demangle.h"
 #include "doublest.h"
 #include "gdb_assert.h"
@@ -158,6 +155,9 @@ struct value
      actually exist in the program.  */
   char optimized_out;
 
+  /* If value is a variable, is it initialized or not.  */
+  int initialized;
+
   /* Actual contents of the value.  For use of this value; setting it
      uses the stuff above.  Not valid if lazy is nonzero.  Target
      byte-order.  We force it to be aligned properly for any possible
@@ -233,6 +233,7 @@ allocate_value (struct type *type)
   val->embedded_offset = 0;
   val->pointed_to_offset = 0;
   val->modifiable = 1;
+  val->initialized = 1;  /* Default to initialized.  */
   return val;
 }
 
@@ -551,7 +552,7 @@ value_copy (struct value *arg)
   struct value *val = allocate_value (encl_type);
   val->type = arg->type;
   VALUE_LVAL (val) = VALUE_LVAL (arg);
-  VALUE_ADDRESS (val) = VALUE_ADDRESS (arg);
+  val->location = arg->location;
   val->offset = arg->offset;
   val->bitpos = arg->bitpos;
   val->bitsize = arg->bitsize;
@@ -755,7 +756,7 @@ lookup_internalvar (char *name)
   var = (struct internalvar *) xmalloc (sizeof (struct internalvar));
   var->name = concat (name, (char *)NULL);
   var->value = allocate_value (builtin_type_void);
-  var->endian = TARGET_BYTE_ORDER;
+  var->endian = gdbarch_byte_order (current_gdbarch);
   release_value (var->value);
   var->next = internalvars;
   internalvars = var;
@@ -787,7 +788,7 @@ value_of_internalvar (struct internalvar *var)
      point types) are left alone, because they would be too complicated
      to correct.  */
 
-  if (var->endian != TARGET_BYTE_ORDER)
+  if (var->endian != gdbarch_byte_order (current_gdbarch))
     {
       gdb_byte *array = value_contents_raw (val);
       struct type *type = check_typedef (value_enclosing_type (val));
@@ -844,7 +845,7 @@ set_internalvar (struct internalvar *var, struct value *val)
      long.  */
   xfree (var->value);
   var->value = newval;
-  var->endian = TARGET_BYTE_ORDER;
+  var->endian = gdbarch_byte_order (current_gdbarch);
   release_value (newval);
   /* End code which must not call error().  */
 }
@@ -959,10 +960,10 @@ value_as_address (struct value *val)
   /* Assume a CORE_ADDR can fit in a LONGEST (for now).  Not sure
      whether we want this to be true eventually.  */
 #if 0
-  /* ADDR_BITS_REMOVE is wrong if we are being called for a
+  /* gdbarch_addr_bits_remove is wrong if we are being called for a
      non-address (e.g. argument to "signal", "info break", etc.), or
      for pointers to char, in which the low bits *are* significant.  */
-  return ADDR_BITS_REMOVE (value_as_long (val));
+  return gdbarch_addr_bits_remove (current_gdbarch, value_as_long (val));
 #else
 
   /* There are several targets (IA-64, PowerPC, and others) which
@@ -1076,10 +1077,6 @@ unpack_long (struct type *type, const gdb_byte *valaddr)
   int len = TYPE_LENGTH (type);
   int nosign = TYPE_UNSIGNED (type);
 
-  if (current_language->la_language == language_scm
-      && is_scmvalue_type (type))
-    return scm_unpack (type, valaddr, TYPE_CODE_INT);
-
   switch (code)
     {
     case TYPE_CODE_TYPEDEF:
@@ -1090,6 +1087,7 @@ unpack_long (struct type *type, const gdb_byte *valaddr)
     case TYPE_CODE_INT:
     case TYPE_CODE_CHAR:
     case TYPE_CODE_RANGE:
+    case TYPE_CODE_MEMBERPTR:
       if (nosign)
 	return extract_unsigned_integer (valaddr, len);
       else
@@ -1103,9 +1101,6 @@ unpack_long (struct type *type, const gdb_byte *valaddr)
       /* Assume a CORE_ADDR can fit in a LONGEST (for now).  Not sure
          whether we want this to be true eventually.  */
       return extract_typed_address (valaddr, type);
-
-    case TYPE_CODE_MEMBER:
-      error (_("not implemented: member types in unpack_long"));
 
     default:
       error (_("Value can't be converted to integer."));
@@ -1141,7 +1136,7 @@ unpack_double (struct type *type, const gdb_byte *valaddr, int *invp)
 	 only in a non-portable way.  Fixing the portability problem
 	 wouldn't help since the VAX floating-point code is also badly
 	 bit-rotten.  The target needs to add definitions for the
-	 methods TARGET_FLOAT_FORMAT and TARGET_DOUBLE_FORMAT - these
+	 methods gdbarch_float_format and gdbarch_double_format - these
 	 exactly describe the target floating-point format.  The
 	 problem here is that the corresponding floatformat_vax_f and
 	 floatformat_vax_d values these methods should be set to are
@@ -1345,11 +1340,9 @@ value_primitive_field (struct value *arg1, int offset,
   VALUE_LVAL (v) = VALUE_LVAL (arg1);
   if (VALUE_LVAL (arg1) == lval_internalvar)
     VALUE_LVAL (v) = lval_internalvar_component;
-  VALUE_ADDRESS (v) = VALUE_ADDRESS (arg1);
+  v->location = arg1->location;
   VALUE_REGNUM (v) = VALUE_REGNUM (arg1);
   VALUE_FRAME_ID (v) = VALUE_FRAME_ID (arg1);
-/*  VALUE_OFFSET (v) = VALUE_OFFSET (arg1) + offset
-   + TYPE_FIELD_BITPOS (arg_type, fieldno) / 8; */
   return v;
 }
 
@@ -1514,40 +1507,49 @@ modify_field (gdb_byte *addr, LONGEST fieldval, int bitpos, int bitsize)
   store_unsigned_integer (addr, sizeof oword, oword);
 }
 
-/* Convert C numbers into newly allocated values */
+/* Pack NUM into BUF using a target format of TYPE.  */
 
-struct value *
-value_from_longest (struct type *type, LONGEST num)
+void
+pack_long (gdb_byte *buf, struct type *type, LONGEST num)
 {
-  struct value *val = allocate_value (type);
-  enum type_code code;
   int len;
-retry:
-  code = TYPE_CODE (type);
+
+  type = check_typedef (type);
   len = TYPE_LENGTH (type);
 
-  switch (code)
+  switch (TYPE_CODE (type))
     {
-    case TYPE_CODE_TYPEDEF:
-      type = check_typedef (type);
-      goto retry;
     case TYPE_CODE_INT:
     case TYPE_CODE_CHAR:
     case TYPE_CODE_ENUM:
     case TYPE_CODE_FLAGS:
     case TYPE_CODE_BOOL:
     case TYPE_CODE_RANGE:
-      store_signed_integer (value_contents_raw (val), len, num);
+    case TYPE_CODE_MEMBERPTR:
+      store_signed_integer (buf, len, num);
       break;
 
     case TYPE_CODE_REF:
     case TYPE_CODE_PTR:
-      store_typed_address (value_contents_raw (val), type, (CORE_ADDR) num);
+      store_typed_address (buf, type, (CORE_ADDR) num);
       break;
 
     default:
-      error (_("Unexpected type (%d) encountered for integer constant."), code);
+      error (_("Unexpected type (%d) encountered for integer constant."),
+	     TYPE_CODE (type));
     }
+}
+
+
+/* Convert C numbers into newly allocated values.  */
+
+struct value *
+value_from_longest (struct type *type, LONGEST num)
+{
+  struct value *val = allocate_value (type);
+
+  pack_long (value_contents_raw (val), type, num);
+
   return val;
 }
 
@@ -1650,7 +1652,7 @@ coerce_enum (struct value *arg)
 
 
 /* Should we use DEPRECATED_EXTRACT_STRUCT_VALUE_ADDRESS instead of
-   EXTRACT_RETURN_VALUE?  GCC_P is true if compiled with gcc and TYPE
+   gdbarch_extract_return_value?  GCC_P is true if compiled with gcc and TYPE
    is the type (which is known to be struct, union or array).
 
    On most machines, the struct convention is used unless we are
@@ -1697,6 +1699,22 @@ using_struct_return (struct type *value_type, int gcc_p)
   return (gdbarch_return_value (current_gdbarch, value_type,
 				NULL, NULL, NULL)
 	  != RETURN_VALUE_REGISTER_CONVENTION);
+}
+
+/* Set the initialized field in a value struct.  */
+
+void
+set_value_initialized (struct value *val, int status)
+{
+  val->initialized = status;
+}
+
+/* Return the initialized field in a value struct.  */
+
+int
+value_initialized (struct value *val)
+{
+  return val->initialized;
 }
 
 void

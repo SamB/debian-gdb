@@ -1,13 +1,13 @@
 /* Support for the generic parts of PE/PEI; the common executable parts.
    Copyright 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
-   2005, 2006 Free Software Foundation, Inc.
+   2005, 2006, 2007 Free Software Foundation, Inc.
    Written by Cygnus Solutions.
 
    This file is part of BFD, the Binary File Descriptor library.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,7 +17,9 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
+
 
 /* Most of this hacked by Steve Chamberlain <sac@cygnus.com>.
 
@@ -56,8 +58,8 @@
    depending on whether we're compiling for straight PE or PE+.  */
 #define COFF_WITH_XX
 
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "libbfd.h"
 #include "coff/internal.h"
 
@@ -388,10 +390,11 @@ _bfd_XXi_swap_aouthdr_in (bfd * abfd,
 			  void * aouthdr_ext1,
 			  void * aouthdr_int1)
 {
-  struct internal_extra_pe_aouthdr *a;
-  PEAOUTHDR * src = (PEAOUTHDR *) (aouthdr_ext1);
+  PEAOUTHDR * src = (PEAOUTHDR *) aouthdr_ext1;
   AOUTHDR * aouthdr_ext = (AOUTHDR *) aouthdr_ext1;
-  struct internal_aouthdr *aouthdr_int = (struct internal_aouthdr *)aouthdr_int1;
+  struct internal_aouthdr *aouthdr_int
+    = (struct internal_aouthdr *) aouthdr_int1;
+  struct internal_extra_pe_aouthdr *a = &aouthdr_int->pe;
 
   aouthdr_int->magic = H_GET_16 (abfd, aouthdr_ext->magic);
   aouthdr_int->vstamp = H_GET_16 (abfd, aouthdr_ext->vstamp);
@@ -405,9 +408,17 @@ _bfd_XXi_swap_aouthdr_in (bfd * abfd,
   /* PE32+ does not have data_start member!  */
   aouthdr_int->data_start =
     GET_AOUTHDR_DATA_START (abfd, aouthdr_ext->data_start);
+  a->BaseOfData = aouthdr_int->data_start;
 #endif
 
-  a = &aouthdr_int->pe;
+  a->Magic = aouthdr_int->magic;
+  a->MajorLinkerVersion = H_GET_8 (abfd, aouthdr_ext->vstamp);
+  a->MinorLinkerVersion = H_GET_8 (abfd, aouthdr_ext->vstamp + 1);
+  a->SizeOfCode = aouthdr_int->tsize ;
+  a->SizeOfInitializedData = aouthdr_int->dsize ;
+  a->SizeOfUninitializedData = aouthdr_int->bsize ;
+  a->AddressOfEntryPoint = aouthdr_int->entry;
+  a->BaseOfCode = aouthdr_int->text_start;
   a->ImageBase = GET_OPTHDR_IMAGE_BASE (abfd, src->ImageBase);
   a->SectionAlignment = H_GET_32 (abfd, src->SectionAlignment);
   a->FileAlignment = H_GET_32 (abfd, src->FileAlignment);
@@ -636,16 +647,22 @@ _bfd_XXi_swap_aouthdr_out (bfd * abfd, void * in, void * out)
 	   in the virt_size field).  Files have been seen (from MSVC
 	   5.0 link.exe) where the file size of the .data segment is
 	   quite small compared to the virtual size.  Without this
-	   fix, strip munges the file.  */
+	   fix, strip munges the file.
+
+	   FIXME: We need to handle holes between sections, which may
+	   happpen when we covert from another format.  We just use
+	   the virtual address and virtual size of the last section
+	   for the image size.  */
 	if (coff_section_data (abfd, sec) != NULL
 	    && pei_section_data (abfd, sec) != NULL)
-	  isize += SA (FA (pei_section_data (abfd, sec)->virt_size));
+	  isize = (sec->vma - extra->ImageBase
+		   + SA (FA (pei_section_data (abfd, sec)->virt_size)));
       }
 
     aouthdr_in->dsize = dsize;
     aouthdr_in->tsize = tsize;
     extra->SizeOfHeaders = hsize;
-    extra->SizeOfImage = SA (hsize) + isize;
+    extra->SizeOfImage = isize;
   }
 
   H_PUT_16 (abfd, aouthdr_in->magic, aouthdr_out->standard.magic);
@@ -1802,6 +1819,7 @@ _bfd_XX_print_private_bfd_data_common (bfd * abfd, void * vfile)
   pe_data_type *pe = pe_data (abfd);
   struct internal_extra_pe_aouthdr *i = &pe->pe_opthdr;
   const char *subsystem_name = NULL;
+  const char *name;
 
   /* The MS dumpbin program reportedly ands with 0xff0f before
      printing the characteristics field.  Not sure why.  No reason to
@@ -1827,6 +1845,52 @@ _bfd_XX_print_private_bfd_data_common (bfd * abfd, void * vfile)
     time_t t = pe->coff.timestamp;
     fprintf (file, "\nTime/Date\t\t%s", ctime (&t));
   }
+
+#ifndef IMAGE_NT_OPTIONAL_HDR_MAGIC
+# define IMAGE_NT_OPTIONAL_HDR_MAGIC 0x10b
+#endif
+#ifndef IMAGE_NT_OPTIONAL_HDR64_MAGIC
+# define IMAGE_NT_OPTIONAL_HDR64_MAGIC 0x20b
+#endif
+#ifndef IMAGE_NT_OPTIONAL_HDRROM_MAGIC
+# define IMAGE_NT_OPTIONAL_HDRROM_MAGIC 0x107
+#endif
+
+  switch (i->Magic)
+    {
+    case IMAGE_NT_OPTIONAL_HDR_MAGIC:
+      name = "PE32";
+      break;
+    case IMAGE_NT_OPTIONAL_HDR64_MAGIC:
+      name = "PE32+";
+      break;
+    case IMAGE_NT_OPTIONAL_HDRROM_MAGIC:
+      name = "ROM";
+      break;
+    default:
+      name = NULL;
+      break;
+    }
+  fprintf (file, "Magic\t\t\t%04x", i->Magic);
+  if (name)
+    fprintf (file, "\t(%s)",name);
+  fprintf (file, "\nMajorLinkerVersion\t%d\n", i->MajorLinkerVersion);
+  fprintf (file, "MinorLinkerVersion\t%d\n", i->MinorLinkerVersion);
+  fprintf (file, "SizeOfCode\t\t%08lx\n", i->SizeOfCode);
+  fprintf (file, "SizeOfInitializedData\t%08lx\n",
+	   i->SizeOfInitializedData);
+  fprintf (file, "SizeOfUninitializedData\t%08lx\n",
+	   i->SizeOfUninitializedData);
+  fprintf (file, "AddressOfEntryPoint\t");
+  fprintf_vma (file, i->AddressOfEntryPoint);
+  fprintf (file, "\nBaseOfCode\t\t");
+  fprintf_vma (file, i->BaseOfCode);
+#if !defined(COFF_WITH_pep) && !defined(COFF_WITH_pex64)
+  /* PE32+ does not have BaseOfData member!  */
+  fprintf (file, "\nBaseOfData\t\t");
+  fprintf_vma (file, i->BaseOfData);
+#endif
+
   fprintf (file, "\nImageBase\t\t");
   fprintf_vma (file, i->ImageBase);
   fprintf (file, "\nSectionAlignment\t");

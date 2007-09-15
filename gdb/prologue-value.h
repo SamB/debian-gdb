@@ -1,11 +1,11 @@
 /* Interface to prologue value handling for GDB.
-   Copyright 2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,12 +14,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to:
-
-        Free Software Foundation, Inc.
-        51 Franklin St - Fifth Floor
-        Boston, MA 02110-1301
-        USA */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>. */
 
 #ifndef PROLOGUE_VALUE_H
 #define PROLOGUE_VALUE_H
@@ -285,7 +280,7 @@ int pv_area_store_would_trash (struct pv_area *area, pv_t addr);
    instead, and collecting all your information in one pass.  */
 int pv_area_find_reg (struct pv_area *area,
                       struct gdbarch *gdbarch,
-                      int register,
+                      int reg,
                       CORE_ADDR *offset_p);
 
 

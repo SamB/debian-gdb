@@ -1,12 +1,12 @@
 /* Target-dependent code for the Xtensa port of GDB, the GNU debugger.
 
-   Copyright (C) 2003, 2005, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 
 /* XTENSA_TDEP_VERSION can/should be changed along with XTENSA_CONFIG_VERSION
@@ -44,6 +42,8 @@ typedef enum
 
 /*  Xtensa register group.  */
 
+#define XTENSA_MAX_COPROCESSOR	0x08  /* Number of Xtensa coprocessors.  */
+
 typedef enum 
 {
   xtRegisterGroupUnknown = 0,
@@ -58,6 +58,16 @@ typedef enum
   xtRegisterGroupFloat		= 0x0400,    /* Floating Point.  */
   xtRegisterGroupVectra		= 0x0800,    /* Vectra.  */
   xtRegisterGroupSystem		= 0x1000,    /* System.  */
+
+  xtRegisterGroupCP0	    = 0x01000000,    /* CP0.  */
+  xtRegisterGroupCP1	    = 0x02000000,    /* CP1.  */
+  xtRegisterGroupCP2	    = 0x04000000,    /* CP2.  */
+  xtRegisterGroupCP3	    = 0x08000000,    /* CP3.  */
+  xtRegisterGroupCP4	    = 0x10000000,    /* CP4.  */
+  xtRegisterGroupCP5	    = 0x20000000,    /* CP5.  */
+  xtRegisterGroupCP6	    = 0x40000000,    /* CP6.  */
+  xtRegisterGroupCP7	    = 0x80000000,    /* CP7.  */
+
 } xtensa_register_group_t;
 
 
@@ -103,13 +113,15 @@ typedef struct
 
 typedef struct 
 {
+  int reg_num;
+  int bit_start;
+  int bit_size;
+} xtensa_reg_mask_t;
+
+typedef struct 
+{
   int count;
-  struct 
-  {
-    int reg_num;
-    int bit_start;
-    int bit_size;
-  } mask[0];
+  xtensa_reg_mask_t *mask;
 } xtensa_mask_t;
 
 
@@ -262,7 +274,9 @@ struct gdbarch_tdep
 #define REGMAP_BYTES      (gdbarch_tdep (current_gdbarch)->regmap_bytes)
 #define A0_BASE           (gdbarch_tdep (current_gdbarch)->a0_base)
 #define AR_BASE           (gdbarch_tdep (current_gdbarch)->ar_base)
-#define FP_ALIAS	  (NUM_REGS + NUM_PSEUDO_REGS)
+#define FP_ALIAS \
+  (gdbarch_num_regs (current_gdbarch) \
+   + gdbarch_num_pseudo_regs (current_gdbarch))
 #define CALL_ABI          (gdbarch_tdep (current_gdbarch)->call_abi)
 #define NUM_CONTEXTS      (gdbarch_tdep (current_gdbarch)->num_contexts)
   

@@ -1,6 +1,3 @@
-10.selected-frame.patch 
-13.use-dynamic-readline.patch 
-sim-destdir.patch 
 member-field-symtab.patch 
 cp-pass-by-reference.patch 
 thread-db-multiple-libraries.patch 
@@ -13,6 +10,4 @@ gdb-fortran-main.patch -p0
 linux-clear-thread-list.patch
 man-page-args.patch
 bfd-get-mtime-less.patch
-dwarf2-long-size.patch
-unwind-check-pc-regnum.patch 
-ia64-unwind-signedness.patch 
+hppa-linux-build.patch

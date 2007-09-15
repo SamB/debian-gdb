@@ -1,13 +1,13 @@
 /* Target-dependent code for the NEC V850 for GDB, the GNU debugger.
 
-   Copyright (C) 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005 Free
-   Software Foundation, Inc.
+   Copyright (C) 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -456,7 +454,7 @@ v850_is_save_register (int reg)
 
 static CORE_ADDR
 v850_analyze_prologue (CORE_ADDR func_addr, CORE_ADDR pc,
-		       struct v850_frame_cache *pi)
+		       struct v850_frame_cache *pi, ULONGEST ctbp)
 {
   CORE_ADDR prologue_end, current_pc;
   struct pifsr pifsrs[E_NUM_REGS + 1];
@@ -517,7 +515,6 @@ v850_analyze_prologue (CORE_ADDR func_addr, CORE_ADDR pc,
 	}
       else if ((insn & 0xffc0) == 0x0200 && !regsave_func_p)
 	{			/* callt <imm6> */
-	  long ctbp = read_register (E_CTBP_REGNUM);
 	  long adr = ctbp + ((insn & 0x3f) << 1);
 
 	  save_pc = current_pc;
@@ -856,10 +853,14 @@ v850_frame_cache (struct frame_info *next_frame, void **this_cache)
   if (cache->base == 0)
     return cache;
 
-  cache->pc = frame_func_unwind (next_frame);
+  cache->pc = frame_func_unwind (next_frame, NORMAL_FRAME);
   current_pc = frame_pc_unwind (next_frame);
   if (cache->pc != 0)
-    v850_analyze_prologue (cache->pc, current_pc, cache);
+    {
+      ULONGEST ctbp;
+      ctbp = frame_unwind_register_unsigned (next_frame, E_CTBP_REGNUM);
+      v850_analyze_prologue (cache->pc, current_pc, cache, ctbp);
+    }
 
   if (!cache->uses_fp)
     {
@@ -937,13 +938,15 @@ v850_frame_sniffer (struct frame_info *next_frame)
 static CORE_ADDR
 v850_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
-  return frame_unwind_register_unsigned (next_frame, SP_REGNUM);
+  return frame_unwind_register_unsigned (next_frame,
+					 gdbarch_sp_regnum (current_gdbarch));
 } 
 
 static CORE_ADDR
 v850_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
-  return frame_unwind_register_unsigned (next_frame, PC_REGNUM);
+  return frame_unwind_register_unsigned (next_frame,
+					 gdbarch_pc_regnum (current_gdbarch));
 }
 
 static struct frame_id

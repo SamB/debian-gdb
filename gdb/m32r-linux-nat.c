@@ -1,12 +1,12 @@
 /* Native-dependent code for GNU/Linux m32r.
 
-   Copyright (C) 2004, 2005, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "inferior.h"
@@ -69,9 +67,9 @@ static int regmap[] = {
    in *GREGSETP.  */
 
 void
-supply_gregset (elf_gregset_t * gregsetp)
+supply_gregset (struct regcache *regcache, const elf_gregset_t * gregsetp)
 {
-  elf_greg_t *regp = (elf_greg_t *) gregsetp;
+  const elf_greg_t *regp = (const elf_greg_t *) gregsetp;
   int i;
   unsigned long psw, bbpsw;
 
@@ -80,23 +78,27 @@ supply_gregset (elf_gregset_t * gregsetp)
 
   for (i = 0; i < M32R_LINUX_NUM_REGS; i++)
     {
+      elf_greg_t regval;
+
       switch (i)
 	{
 	case PSW_REGNUM:
-	  *(regp + regmap[i]) =
-	    ((0x00c1 & bbpsw) << 8) | ((0xc100 & psw) >> 8);
+	  regval = ((0x00c1 & bbpsw) << 8) | ((0xc100 & psw) >> 8);
 	  break;
 	case CBR_REGNUM:
-	  *(regp + regmap[i]) = ((psw >> 8) & 1);
+	  regval = ((psw >> 8) & 1);
+	  break;
+	default:
+	  regval = *(regp + regmap[i]);
 	  break;
 	}
 
       if (i != M32R_SP_REGNUM)
-	regcache_raw_supply (current_regcache, i, regp + regmap[i]);
+	regcache_raw_supply (regcache, i, &regval);
       else if (psw & 0x8000)
-	regcache_raw_supply (current_regcache, i, regp + SPU_REGMAP);
+	regcache_raw_supply (regcache, i, regp + SPU_REGMAP);
       else
-	regcache_raw_supply (current_regcache, i, regp + SPI_REGMAP);
+	regcache_raw_supply (regcache, i, regp + SPI_REGMAP);
     }
 }
 
@@ -104,14 +106,14 @@ supply_gregset (elf_gregset_t * gregsetp)
    store their values in GDB's register array.  */
 
 static void
-fetch_regs (int tid)
+fetch_regs (struct regcache *regcache, int tid)
 {
   elf_gregset_t regs;
 
   if (ptrace (PTRACE_GETREGS, tid, 0, (int) &regs) < 0)
     perror_with_name (_("Couldn't get registers"));
 
-  supply_gregset (&regs);
+  supply_gregset (regcache, (const elf_gregset_t *) &regs);
 }
 
 /* Fill register REGNO (if it is a general-purpose register) in
@@ -119,7 +121,8 @@ fetch_regs (int tid)
    do this for all registers.  */
 
 void
-fill_gregset (elf_gregset_t * gregsetp, int regno)
+fill_gregset (const struct regcache *regcache,
+	      elf_gregset_t * gregsetp, int regno)
 {
   elf_greg_t *regp = (elf_greg_t *) gregsetp;
   int i;
@@ -140,11 +143,11 @@ fill_gregset (elf_gregset_t * gregsetp, int regno)
 	continue;
 
       if (i != M32R_SP_REGNUM)
-	regcache_raw_collect (current_regcache, i, regp + regmap[i]);
+	regcache_raw_collect (regcache, i, regp + regmap[i]);
       else if (psw & 0x8000)
-	regcache_raw_collect (current_regcache, i, regp + SPU_REGMAP);
+	regcache_raw_collect (regcache, i, regp + SPU_REGMAP);
       else
-	regcache_raw_collect (current_regcache, i, regp + SPI_REGMAP);
+	regcache_raw_collect (regcache, i, regp + SPI_REGMAP);
     }
 }
 
@@ -152,14 +155,14 @@ fill_gregset (elf_gregset_t * gregsetp, int regno)
    into the process/thread specified by TID.  */
 
 static void
-store_regs (int tid, int regno)
+store_regs (const struct regcache *regcache, int tid, int regno)
 {
   elf_gregset_t regs;
 
   if (ptrace (PTRACE_GETREGS, tid, 0, (int) &regs) < 0)
     perror_with_name (_("Couldn't get registers"));
 
-  fill_gregset (&regs, regno);
+  fill_gregset (regcache, &regs, regno);
 
   if (ptrace (PTRACE_SETREGS, tid, 0, (int) &regs) < 0)
     perror_with_name (_("Couldn't write registers"));
@@ -171,12 +174,13 @@ store_regs (int tid, int regno)
    Since M32R has no floating-point registers, these functions do nothing.  */
 
 void
-supply_fpregset (gdb_fpregset_t *fpregs)
+supply_fpregset (struct regcache *regcache, const gdb_fpregset_t *fpregs)
 {
 }
 
 void
-fill_fpregset (gdb_fpregset_t *fpregs, int regno)
+fill_fpregset (const struct regcache *regcache,
+	       gdb_fpregset_t *fpregs, int regno)
 {
 }
 
@@ -189,7 +193,7 @@ fill_fpregset (gdb_fpregset_t *fpregs, int regno)
    registers).  */
 
 static void
-m32r_linux_fetch_inferior_registers (int regno)
+m32r_linux_fetch_inferior_registers (struct regcache *regcache, int regno)
 {
   int tid;
 
@@ -203,7 +207,7 @@ m32r_linux_fetch_inferior_registers (int regno)
      results.  */
   if (regno == -1 || GETREGS_SUPPLIES (regno))
     {
-      fetch_regs (tid);
+      fetch_regs (regcache, tid);
       return;
     }
 
@@ -215,7 +219,7 @@ m32r_linux_fetch_inferior_registers (int regno)
    do this for all registers (including the floating point and SSE
    registers).  */
 static void
-m32r_linux_store_inferior_registers (int regno)
+m32r_linux_store_inferior_registers (struct regcache *regcache, int regno)
 {
   int tid;
 
@@ -227,7 +231,7 @@ m32r_linux_store_inferior_registers (int regno)
      transfers more registers in one system call.  */
   if (regno == -1 || GETREGS_SUPPLIES (regno))
     {
-      store_regs (tid, regno);
+      store_regs (regcache, tid, regno);
       return;
     }
 

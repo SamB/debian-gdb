@@ -1,13 +1,13 @@
 /* Serial interface for local (hardwired) serial ports on Un*x like systems
 
-   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001,
-   2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2003,
+   2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "serial.h"
@@ -33,6 +31,7 @@
 
 #include "gdb_select.h"
 #include "gdb_string.h"
+#include "gdbcmd.h"
 
 #ifdef HAVE_TERMIOS
 
@@ -40,6 +39,18 @@ struct hardwire_ttystate
   {
     struct termios termios;
   };
+
+#ifdef CRTSCTS
+/* Boolean to explicitly enable or disable h/w flow control.  */
+static int serial_hwflow;
+static void
+show_serial_hwflow (struct ui_file *file, int from_tty,
+		    struct cmd_list_element *c, const char *value)
+{
+  fprintf_filtered (file, _("Hardware flow control is %s.\n"), value);
+}
+#endif
+
 #endif /* termios */
 
 #ifdef HAVE_TERMIO
@@ -387,6 +398,19 @@ hardwire_raw (struct serial *scb)
   state.termios.c_lflag = 0;
   state.termios.c_cflag &= ~(CSIZE | PARENB);
   state.termios.c_cflag |= CLOCAL | CS8;
+#ifdef CRTSCTS
+  /* h/w flow control.  */
+  if (serial_hwflow)
+    state.termios.c_cflag |= CRTSCTS;
+  else
+    state.termios.c_cflag &= ~CRTSCTS;
+#ifdef CRTS_IFLOW
+  if (serial_hwflow)
+    state.termios.c_cflag |= CRTS_IFLOW;
+  else
+    state.termios.c_cflag &= ~CRTS_IFLOW;
+#endif
+#endif
   state.termios.c_cc[VMIN] = 0;
   state.termios.c_cc[VTIME] = 0;
 #endif
@@ -892,6 +916,20 @@ _initialize_ser_hardwire (void)
   ops->read_prim = ser_unix_read_prim;
   ops->write_prim = ser_unix_write_prim;
   serial_add_interface (ops);
+
+#ifdef HAVE_TERMIOS
+#ifdef CRTSCTS
+  add_setshow_boolean_cmd ("remoteflow", no_class,
+			   &serial_hwflow, _("\
+Set use of hardware flow control for remote serial I/O."), _("\
+Show use of hardware flow control for remote serial I/O."), _("\
+Enable or disable hardware flow control (RTS/CTS) on the serial port\n\
+when debugging using remote targets."),
+			   NULL,
+			   show_serial_hwflow,
+			   &setlist, &showlist);
+#endif
+#endif
 }
 
 int

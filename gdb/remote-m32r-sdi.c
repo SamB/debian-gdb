@@ -1,6 +1,6 @@
 /* Remote debugging interface for M32R/SDI.
 
-   Copyright (C) 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    Contributed by Renesas Technology Co.
    Written by Kei Sakamoto <sakamoto.kei@renesas.com>.
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbcmd.h"
@@ -475,7 +473,7 @@ m32r_resume (ptid_t ptid, int step, enum target_signal sig)
       else
 	{
 	  buf[0] = SDI_WRITE_MEMORY;
-	  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+	  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
 	    store_long_parameter (buf + 1, pc_addr);
 	  else
 	    store_long_parameter (buf + 1, pc_addr - 1);
@@ -515,7 +513,7 @@ m32r_resume (ptid_t ptid, int step, enum target_signal sig)
 	continue;
 
       /* Set PBP. */
-      if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+      if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
 	send_three_arg_cmd (SDI_WRITE_MEMORY, 0xffff8000 + 4 * i, 4,
 			    0x00000006);
       else
@@ -542,7 +540,7 @@ m32r_resume (ptid_t ptid, int step, enum target_signal sig)
       store_long_parameter (buf + 5, 4);
       if ((bp_addr & 2) == 0 && bp_addr != (pc_addr & 0xfffffffc))
 	{
-	  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+	  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
 	    {
 	      buf[9] = dbt_bp_entry[0];
 	      buf[10] = dbt_bp_entry[1];
@@ -559,7 +557,7 @@ m32r_resume (ptid_t ptid, int step, enum target_signal sig)
 	}
       else
 	{
-	  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+	  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
 	    {
 	      if ((bp_addr & 2) == 0)
 		{
@@ -606,7 +604,7 @@ m32r_resume (ptid_t ptid, int step, enum target_signal sig)
 	continue;
 
       /* DBC register */
-      if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+      if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
 	{
 	  switch (ab_type[i])
 	    {
@@ -747,7 +745,7 @@ m32r_wait (ptid_t ptid, struct target_waitstatus *status)
   if (last_pc_addr != 0xffffffff)
     {
       buf[0] = SDI_WRITE_MEMORY;
-      if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+      if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
 	store_long_parameter (buf + 1, last_pc_addr);
       else
 	store_long_parameter (buf + 1, last_pc_addr - 1);
@@ -776,7 +774,7 @@ m32r_wait (ptid_t ptid, struct target_waitstatus *status)
 	     address, we have to take care of it later. */
 	  if ((pc_addr & 0x2) != 0)
 	    {
-	      if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+	      if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
 		{
 		  if ((bp_data[i][2] & 0x80) != 0)
 		    {
@@ -838,7 +836,7 @@ m32r_wait (ptid_t ptid, struct target_waitstatus *status)
 	  c = serial_readchar (sdi_desc, SDI_TIMEOUT);
 	  if (c != '-' && recv_data (buf, 4) != -1)
 	    {
-	      if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+	      if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
 		{
 		  if ((buf[3] & 0x1) == 0x1)
 		    hit_watchpoint_addr = ab_address[i];
@@ -903,26 +901,26 @@ get_reg_id (int regno)
 
 /* Read the remote registers into the block REGS.  */
 
-static void m32r_fetch_register (int);
+static void m32r_fetch_register (struct regcache *, int);
 
 static void
-m32r_fetch_registers (void)
+m32r_fetch_registers (struct regcache *regcache)
 {
   int regno;
 
-  for (regno = 0; regno < NUM_REGS; regno++)
-    m32r_fetch_register (regno);
+  for (regno = 0; regno < gdbarch_num_regs (current_gdbarch); regno++)
+    m32r_fetch_register (regcache, regno);
 }
 
 /* Fetch register REGNO, or all registers if REGNO is -1.
    Returns errno value.  */
 static void
-m32r_fetch_register (int regno)
+m32r_fetch_register (struct regcache *regcache, int regno)
 {
   unsigned long val, val2, regid;
 
   if (regno == -1)
-    m32r_fetch_registers ();
+    m32r_fetch_registers (regcache);
   else
     {
       char buffer[MAX_REGISTER_SIZE];
@@ -935,7 +933,7 @@ m32r_fetch_register (int regno)
 	{
 	  send_one_arg_cmd (SDI_READ_CPU_REG, SDI_REG_BBPSW);
 	  val2 = recv_long_data ();
-	  val = ((0x00c1 & val2) << 8) | ((0xc100 & val) >> 8);
+	  val = ((0x00cf & val2) << 8) | ((0xcf00 & val) >> 8);
 	}
 
       if (remote_debug)
@@ -945,22 +943,22 @@ m32r_fetch_register (int regno)
       /* We got the number the register holds, but gdb expects to see a
          value in the target byte ordering.  */
       store_unsigned_integer (buffer, 4, val);
-      regcache_raw_supply (current_regcache, regno, buffer);
+      regcache_raw_supply (regcache, regno, buffer);
     }
   return;
 }
 
 /* Store the remote registers from the contents of the block REGS.  */
 
-static void m32r_store_register (int);
+static void m32r_store_register (struct regcache *, int);
 
 static void
-m32r_store_registers (void)
+m32r_store_registers (struct regcache *regcache)
 {
   int regno;
 
-  for (regno = 0; regno < NUM_REGS; regno++)
-    m32r_store_register (regno);
+  for (regno = 0; regno < gdbarch_num_regs (current_gdbarch); regno++)
+    m32r_store_register (regcache, regno);
 
   registers_changed ();
 }
@@ -968,16 +966,16 @@ m32r_store_registers (void)
 /* Store register REGNO, or all if REGNO == 0.
    Return errno value.  */
 static void
-m32r_store_register (int regno)
+m32r_store_register (struct regcache *regcache, int regno)
 {
   int regid;
   ULONGEST regval, tmp;
 
   if (regno == -1)
-    m32r_store_registers ();
+    m32r_store_registers (regcache);
   else
     {
-      regcache_cooked_read_unsigned (current_regcache, regno, &regval);
+      regcache_cooked_read_unsigned (regcache, regno, &regval);
       regid = get_reg_id (regno);
 
       if (regid == SDI_REG_PSW)
@@ -990,10 +988,10 @@ m32r_store_register (int regno)
 	  send_one_arg_cmd (SDI_READ_CPU_REG, SDI_REG_BBPSW);
 	  bbpsw = recv_long_data ();
 
-	  tmp = (0x00c1 & psw) | ((0x00c1 & regval) << 8);
+	  tmp = (0x00cf & psw) | ((0x00cf & regval) << 8);
 	  send_two_arg_cmd (SDI_WRITE_CPU_REG, SDI_REG_PSW, tmp);
 
-	  tmp = (0x0030 & bbpsw) | ((0xc100 & regval) >> 8);
+	  tmp = (0x0030 & bbpsw) | ((0xcf00 & regval) >> 8);
 	  send_two_arg_cmd (SDI_WRITE_CPU_REG, SDI_REG_BBPSW, tmp);
 	}
       else
@@ -1014,7 +1012,7 @@ m32r_store_register (int regno)
    debugged.  */
 
 static void
-m32r_prepare_to_store (void)
+m32r_prepare_to_store (struct regcache *regcache)
 {
   /* Do nothing, since we can store individual regs */
   if (remote_debug)

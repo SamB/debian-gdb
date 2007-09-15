@@ -1,6 +1,6 @@
 /* DWARF 2 Expression Evaluator.
 
-   Copyright (C) 2001, 2002, 2003, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2005, 2007 Free Software Foundation, Inc.
 
    Contributed by Daniel Berlin (dan@dberlin.org)
 
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -33,6 +31,7 @@
 
 static void execute_stack_op (struct dwarf_expr_context *,
 			      gdb_byte *, gdb_byte *);
+static struct type *unsigned_address_type (void);
 
 /* Create a new context for the expression evaluator.  */
 
@@ -201,13 +200,40 @@ dwarf2_read_address (gdb_byte *buf, gdb_byte *buf_end, int *bytes_read)
 {
   CORE_ADDR result;
 
-  if (buf_end - buf < TARGET_ADDR_BIT / TARGET_CHAR_BIT)
+  if (buf_end - buf < gdbarch_addr_bit (current_gdbarch) / TARGET_CHAR_BIT)
     error (_("dwarf2_read_address: Corrupted DWARF expression."));
 
-  *bytes_read = TARGET_ADDR_BIT / TARGET_CHAR_BIT;
-  /* NOTE: cagney/2003-05-22: This extract is assuming that a DWARF 2
-     address is always unsigned.  That may or may not be true.  */
-  result = extract_unsigned_integer (buf, TARGET_ADDR_BIT / TARGET_CHAR_BIT);
+  *bytes_read = gdbarch_addr_bit (current_gdbarch) / TARGET_CHAR_BIT;
+
+  /* For most architectures, calling extract_unsigned_integer() alone
+     is sufficient for extracting an address.  However, some
+     architectures (e.g. MIPS) use signed addresses and using
+     extract_unsigned_integer() will not produce a correct
+     result.  Turning the unsigned integer into a value and then
+     decomposing that value as an address will cause
+     gdbarch_integer_to_address() to be invoked for those
+     architectures which require it.  Thus, using value_as_address()
+     will produce the correct result for both types of architectures.
+
+     One concern regarding the use of values for this purpose is
+     efficiency.  Obviously, these extra calls will take more time to
+     execute and creating a value takes more space, space which will
+     have to be garbage collected at a later time.  If constructing
+     and then decomposing a value for this purpose proves to be too
+     inefficient, then gdbarch_integer_to_address() can be called
+     directly.
+
+     The use of `unsigned_address_type' in the code below refers to
+     the type of buf and has no bearing on the signedness of the
+     address being returned.  */
+
+  result = value_as_address (value_from_longest 
+			      (unsigned_address_type (),
+			       extract_unsigned_integer 
+				 (buf,
+				  gdbarch_addr_bit (current_gdbarch)
+				    / TARGET_CHAR_BIT)));
+
   return result;
 }
 
@@ -216,7 +242,7 @@ dwarf2_read_address (gdb_byte *buf, gdb_byte *buf_end, int *bytes_read)
 static struct type *
 unsigned_address_type (void)
 {
-  switch (TARGET_ADDR_BIT / TARGET_CHAR_BIT)
+  switch (gdbarch_addr_bit (current_gdbarch) / TARGET_CHAR_BIT)
     {
     case 2:
       return builtin_type_uint16;
@@ -235,7 +261,7 @@ unsigned_address_type (void)
 static struct type *
 signed_address_type (void)
 {
-  switch (TARGET_ADDR_BIT / TARGET_CHAR_BIT)
+  switch (gdbarch_addr_bit (current_gdbarch) / TARGET_CHAR_BIT)
     {
     case 2:
       return builtin_type_int16;
@@ -257,6 +283,7 @@ execute_stack_op (struct dwarf_expr_context *ctx,
 		  gdb_byte *op_ptr, gdb_byte *op_end)
 {
   ctx->in_reg = 0;
+  ctx->initialized = 1;  /* Default is initialized.  */
 
   while (op_ptr < op_end)
     {
@@ -383,7 +410,9 @@ execute_stack_op (struct dwarf_expr_context *ctx,
 	case DW_OP_reg29:
 	case DW_OP_reg30:
 	case DW_OP_reg31:
-	  if (op_ptr != op_end && *op_ptr != DW_OP_piece)
+	  if (op_ptr != op_end 
+	      && *op_ptr != DW_OP_piece
+	      && *op_ptr != DW_OP_GNU_uninit)
 	    error (_("DWARF-2 expression error: DW_OP_reg operations must be "
 		   "used either alone or in conjuction with DW_OP_piece."));
 
@@ -520,13 +549,16 @@ execute_stack_op (struct dwarf_expr_context *ctx,
 	    {
 	    case DW_OP_deref:
 	      {
-		gdb_byte *buf = alloca (TARGET_ADDR_BIT / TARGET_CHAR_BIT);
+		gdb_byte *buf = alloca (gdbarch_addr_bit (current_gdbarch)
+					  / TARGET_CHAR_BIT);
 		int bytes_read;
 
 		(ctx->read_mem) (ctx->baton, buf, result,
-				 TARGET_ADDR_BIT / TARGET_CHAR_BIT);
+				 gdbarch_addr_bit (current_gdbarch)
+				   / TARGET_CHAR_BIT);
 		result = dwarf2_read_address (buf,
-					      buf + (TARGET_ADDR_BIT
+					      buf + (gdbarch_addr_bit
+						       (current_gdbarch)
 						     / TARGET_CHAR_BIT),
 					      &bytes_read);
 	      }
@@ -534,12 +566,15 @@ execute_stack_op (struct dwarf_expr_context *ctx,
 
 	    case DW_OP_deref_size:
 	      {
-		gdb_byte *buf = alloca (TARGET_ADDR_BIT / TARGET_CHAR_BIT);
+		gdb_byte *buf
+		   = alloca (gdbarch_addr_bit (current_gdbarch)
+			      / TARGET_CHAR_BIT);
 		int bytes_read;
 
 		(ctx->read_mem) (ctx->baton, buf, result, *op_ptr++);
 		result = dwarf2_read_address (buf,
-					      buf + (TARGET_ADDR_BIT
+					      buf + (gdbarch_addr_bit
+						      (current_gdbarch)
 						     / TARGET_CHAR_BIT),
 					      &bytes_read);
 	      }
@@ -703,6 +738,14 @@ execute_stack_op (struct dwarf_expr_context *ctx,
             ctx->in_reg = 0;
           }
           goto no_push;
+
+	case DW_OP_GNU_uninit:
+	  if (op_ptr != op_end)
+	    error (_("DWARF-2 expression error: DW_OP_GNU_unint must always "
+		   "be the very last op."));
+
+	  ctx->initialized = 0;
+	  goto no_push;
 
 	default:
 	  error (_("Unhandled dwarf expression opcode 0x%x"), op);

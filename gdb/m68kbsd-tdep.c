@@ -1,12 +1,12 @@
 /* Target-dependent code for Motorola 68000 BSD's.
 
-   Copyright (C) 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "arch-utils.h"
@@ -45,10 +43,12 @@
 int
 m68kbsd_fpreg_offset (int regnum)
 {
+  int fp_len = TYPE_LENGTH (gdbarch_register_type (current_gdbarch, regnum));
+  
   if (regnum >= M68K_FPC_REGNUM)
-    return 8 * 12 + (regnum - M68K_FPC_REGNUM) * 4;
+    return 8 * fp_len + (regnum - M68K_FPC_REGNUM) * 4;
 
-  return (regnum - M68K_FP0_REGNUM) * 12;
+  return (regnum - M68K_FP0_REGNUM) * fp_len;
 }
 
 /* Supply register REGNUM from the buffer specified by FPREGS and LEN
@@ -192,6 +192,8 @@ m68kbsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   tdep->jb_pc = 5;
   tdep->jb_elt_size = 4;
+
+  set_gdbarch_decr_pc_after_break (gdbarch, 2);
 
   set_gdbarch_regset_from_core_section
     (gdbarch, m68kbsd_regset_from_core_section);

@@ -1,11 +1,11 @@
 /* Prologue value handling for GDB.
-   Copyright 2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,12 +14,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to:
-
-        Free Software Foundation, Inc.
-        51 Franklin St - Fifth Floor
-        Boston, MA 02110-1301
-        USA */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>. */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -330,7 +325,8 @@ make_pv_area (int base_reg)
 
   /* Remember that shift amounts equal to the type's width are
      undefined.  */
-  a->addr_mask = ((((CORE_ADDR) 1 << (TARGET_ADDR_BIT - 1)) - 1) << 1) | 1;
+  a->addr_mask = ((((CORE_ADDR) 1
+		   << (gdbarch_addr_bit (current_gdbarch) - 1)) - 1) << 1) | 1;
 
   return a;
 }
@@ -351,6 +347,7 @@ clear_entries (struct pv_area *area)
         {
           struct area_entry *next = e->next;
           xfree (e);
+          e = next;
         }
       while (e != area->entry);
 

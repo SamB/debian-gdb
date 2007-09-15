@@ -1,3 +1,153 @@
+2007-09-04  Nick Clifton  <nickc@redhat.com>
+
+	* interp.c (options enum): Add OPTION_INFO_MEMORY.
+	(display_mem_info): New static variable.
+	(mips_option_handler): Handle OPTION_INFO_MEMORY.
+	(mips_options): Add info-memory and memory-info.
+	(sim_open): After processing the command line and board
+	specification, check display_mem_info.  If it is set then
+	call the real handler for the --memory-info command line
+	switch.
+
+2007-08-24  Joel Brobecker  <brobecker@adacore.com>
+
+	* configure.ac: Change license of multi-run.c to GPL version 3.
+	* configure: Regenerate.
+
+2007-06-28  Richard Sandiford  <richard@codesourcery.com>
+
+	* configure.ac, configure: Revert last patch.
+
+2007-06-26  Richard Sandiford  <richard@codesourcery.com>
+
+	* configure.ac (sim_mipsisa3264_configs): New variable.
+	(mipsis32*-*-, mipsisa32r2*-*-*, mips64*-*-*, mips64r2*-*-*): Make
+	every configuration support all four targets, using the triplet to
+	determine the default.
+	* configure: Regenerate.
+
+2007-06-25  Richard Sandiford  <richard@codesourcery.com>
+
+	* Makefile.in (m16run.o): New rule.
+
+2007-05-15  Thiemo Seufer  <ths@mips.com>
+
+	* mips3264r2.igen (DSHD): Fix compile warning.
+
+2007-05-14  Thiemo Seufer  <ths@mips.com>
+
+	* mips.igen (ALNV.PS, CEIL.L.fmt, CVT.L.fmt, CVT.PS.S, CVT.S.PL,
+	CVT.S.PU, FLOOR.L.fmt, LDXC1, LUXC1, LWXC1, MADD.fmt, MSUB.fmt,
+	NMADD.fmt, NMSUB.fmt, PLL.PS, PLU.PS, PREFX, PUL.PS, PUU.PS,
+	RECIP.fmt, ROUND.L.fmt, RSQRT.fmt, SWXC1, TRUNC.L.fmt): Add support
+	for mips32r2.
+
+2007-03-01  Thiemo Seufer  <ths@mips.com>
+
+	* mips.igen (MFHI, MFLO, MTHI, MTLO): Restore support for mips32
+	and mips64.
+
+2007-02-20  Thiemo Seufer  <ths@mips.com>
+
+	* dsp.igen: Update copyright notice.
+	* dsp2.igen: Fix copyright notice.
+
+2007-02-20  Thiemo Seufer  <ths@mips.com>
+            Chao-Ying Fu  <fu@mips.com>
+
+	* Makefile.in (IGEN_INCLUDE): Add dsp2.igen.
+	* configure.ac (mips*-sde-elf*, mipsisa32r2*-*-*, mipsisa64r2*-*-*):
+	Add dsp2 to sim_igen_machine.
+	* configure: Regenerate.
+	* dsp.igen (do_ph_op): Add MUL support when op = 2.
+	(do_ph_mulq): New function to support mulq_rs.ph and mulq_s.ph.
+	(mulq_rs.ph): Use do_ph_mulq.
+	(MFHI, MFLO, MTHI, MTLO): Move these instructions to mips.igen.
+	* mips.igen: Add dsp2 model and include dsp2.igen.
+	(MFHI, MFLO, MTHI, MTLO): Extend these instructions for
+	for *mips32r2, *mips64r2, *dsp.
+	(MADD, MADDU, MSUB, MSUBU, MULT, MULTU): Extend these instructions
+	for *mips32r2, *mips64r2, *dsp2.
+	* dsp2.igen: New file for MIPS DSP REV 2 ASE.
+
+2007-02-19  Thiemo Seufer  <ths@mips.com>
+            Nigel Stephens  <nigel@mips.com>
+
+	* mips.igen (jalr.hb, jr.hb): Add decoder for mip32r2/mips64r2
+	jumps with hazard barrier.
+
+2007-02-19  Thiemo Seufer  <ths@mips.com>
+            Nigel Stephens  <nigel@mips.com>
+
+	* interp.c (sim_monitor): Flush stdout and stderr file descriptors
+	after each call to sim_io_write.
+
+2007-02-19  Thiemo Seufer  <ths@mips.com>
+            Nigel Stephens  <nigel@mips.com>
+
+	* interp.c (ColdReset): Set CP0 Config0 to reflect the address size
+	supported by this simulator.
+	(decode_coproc): Recognise additional CP0 Config registers
+	correctly.
+
+2007-02-19  Thiemo Seufer  <ths@mips.com>
+            Nigel Stephens  <nigel@mips.com>
+            David Ung  <davidu@mips.com>
+
+	* cp1.c (value_fpr): Don't inherit existing FPR_STATE for
+	uninterpreted formats. If fmt is one of the uninterpreted types
+	don't update the FPR_STATE. Handle fmt_uninterpreted_32 like
+	fmt_word, and fmt_uninterpreted_64 like fmt_long.
+	(store_fpr): When writing an invalid odd register, set the
+	matching even register to fmt_unknown, not the following register.
+	* interp.c (sim_open): If STATE_MEM_SIZE isn't set then set it to
+	the the memory window at offset 0 set by --memory-size command
+	line option.
+	(sim_store_register): Handle storing 4 bytes to an 8 byte floating
+	point register.
+	(sim_fetch_register): Likewise for reading 4 bytes from an 8 byte
+	register.
+	(sim_monitor): When returning the memory size to the MIPS
+	application, use the value in STATE_MEM_SIZE, not an arbitrary
+	hardcoded value.
+	(cop_lw): Don' mess around with FPR_STATE, just pass
+	fmt_uninterpreted_32 to StoreFPR.
+	(cop_sw): Similarly.
+	(cop_ld): Pass fmt_uninterpreted_64 not fmt_uninterpreted.
+	(cop_sd): Similarly.
+	* mips.igen (not_word_value): Single version for mips32, mips64
+	and mips16.
+
+2007-02-19  Thiemo Seufer <ths@mips.com>
+            Nigel Stephens  <nigel@mips.com>
+
+	* interp.c (MEM_SIZE): Increase default memory size from 2 to 8
+	MBytes.
+
+2007-02-17  Thiemo Seufer  <ths@mips.com>
+
+	* configure.ac (mips*-sde-elf*): Move in front of generic machine
+	configuration.
+	* configure: Regenerate.
+
+2007-02-17  Thiemo Seufer  <ths@mips.com>
+
+	* configure.ac (mips*-sde-elf*, mipsisa32r2*-*-*, mipsisa64r2*-*-*):
+	Add mdmx to sim_igen_machine.
+	(mipsisa64*-*-*): Likewise. Remove dsp.
+	(mipsisa32*-*-*): Remove dsp.
+	* configure: Regenerate.
+
+2007-02-13  Thiemo Seufer  <ths@mips.com>
+
+	* configure.ac: Add mips*-sde-elf* target.
+	* configure: Regenerate.
+
+2006-12-21  Hans-Peter Nilsson  <hp@axis.com>
+
+	* acconfig.h: Remove.
+	* config.in, configure: Regenerate.
+
 2006-11-07  Thiemo Seufer  <ths@mips.com>
 
 	* dsp.igen (do_w_op): Fix compiler warning.

@@ -1,7 +1,7 @@
 /* GDB routines for manipulating objfiles.
 
-   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
+   2002, 2003, 2004, 2007 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This file contains support routines for creating, manipulating, and
    destroying objfile structures. */
@@ -793,23 +791,6 @@ in_plt_section (CORE_ADDR pc, char *name)
 	    && s->the_bfd_section->name != NULL
 	    && strcmp (s->the_bfd_section->name, ".plt") == 0);
   return (retval);
-}
-
-/* Return nonzero if NAME is in the import list of OBJFILE.  Else
-   return zero.  */
-
-int
-is_in_import_list (char *name, struct objfile *objfile)
-{
-  int i;
-
-  if (!objfile || !name || !*name)
-    return 0;
-
-  for (i = 0; i < objfile->import_list_size; i++)
-    if (objfile->import_list[i] && DEPRECATED_STREQ (name, objfile->import_list[i]))
-      return 1;
-  return 0;
 }
 
 

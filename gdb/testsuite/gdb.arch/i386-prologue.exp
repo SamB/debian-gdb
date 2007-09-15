@@ -1,8 +1,8 @@
-# Copyright (C) 2003, 2004, 2006 Free Software Foundation, Inc.
+# Copyright (C) 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
 #
 # This program is distributed in the hope that it will be useful,
@@ -11,8 +11,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-gdb@gnu.org
@@ -95,35 +94,88 @@ gdb_test "info frame" \
 	"saved registers in standard"
 
 
-# Testcase from breakpoints/2080.
+# Testcase from breakpoints/2080 (when %ecx is used)
 
-gdb_test "break *(stack_align + 7)" \
+gdb_test "break *(stack_align_ecx + 7)" \
 	"Breakpoint \[0-9\]* at $hex"
 
 gdb_test "continue" \
-	"Breakpoint \[0-9\]*.*stack_align.*" \
-	"continue to stack_align + 7"
+	"Breakpoint \[0-9\]*.*stack_align_ecx.*" \
+	"continue to stack_align_ecx + 7"
 
-setup_kfail *-*-* gdb/2080
 gdb_test "backtrace 10" \
-	"#0\[ \t\]*$hex in stack_align.*\r\n#1\[ \t\]*$hex in main.*" \
-	"first backtrace in stack_align"
+	"#0\[ \t\]*$hex in stack_align_ecx.*\r\n#1\[ \t\]*$hex in main.*" \
+	"first backtrace in stack_align_ecx"
 
 gdb_test "continue" \
 	"Program received signal SIGTRAP.*" \
-	"continue in stack_align"
+	"continue in stack_align_ecx"
 
-skip_breakpoint stack_align
+skip_breakpoint stack_align_ecx
 
-setup_kfail *-*-* gdb/2080
 gdb_test "backtrace 10" \
-	"#0\[ \t\]*$hex in stack_align.*\r\n#1\[ \t\]*$hex in main.*" \
-	"second backtrace in stack_align"
+	"#0\[ \t\]*$hex in stack_align_ecx.*\r\n#1\[ \t\]*$hex in main.*" \
+	"second backtrace in stack_align_ecx"
 
-setup_kfail *-*-* gdb/2080
 gdb_test "info frame" \
 	".*Saved registers:.*ecx at.*ebp at.*edi at.*eip at.*" \
-	"saved registers in stack_align"
+	"saved registers in stack_align_ecx"
+
+
+# Testcase from breakpoints/2080 (when %edx is used)
+
+gdb_test "break *(stack_align_edx + 7)" \
+	"Breakpoint \[0-9\]* at $hex"
+
+gdb_test "continue" \
+	"Breakpoint \[0-9\]*.*stack_align_edx.*" \
+	"continue to stack_align_edx + 7"
+
+gdb_test "backtrace 10" \
+	"#0\[ \t\]*$hex in stack_align_edx.*\r\n#1\[ \t\]*$hex in main.*" \
+	"first backtrace in stack_align_edx"
+
+gdb_test "continue" \
+	"Program received signal SIGTRAP.*" \
+	"continue in stack_align_edx"
+
+skip_breakpoint stack_align_edx
+
+gdb_test "backtrace 10" \
+	"#0\[ \t\]*$hex in stack_align_edx.*\r\n#1\[ \t\]*$hex in main.*" \
+	"second backtrace in stack_align_edx"
+
+gdb_test "info frame" \
+	".*Saved registers:.*ecx at.*ebp at.*edi at.*eip at.*" \
+	"saved registers in stack_align_edx"
+
+
+# Testcase from breakpoints/2080 (when %eax is used)
+
+gdb_test "break *(stack_align_eax + 7)" \
+	"Breakpoint \[0-9\]* at $hex"
+
+gdb_test "continue" \
+	"Breakpoint \[0-9\]*.*stack_align_eax.*" \
+	"continue to stack_align_eax + 7"
+
+gdb_test "backtrace 10" \
+	"#0\[ \t\]*$hex in stack_align_eax.*\r\n#1\[ \t\]*$hex in main.*" \
+	"first backtrace in stack_align_eax"
+
+gdb_test "continue" \
+	"Program received signal SIGTRAP.*" \
+	"continue in stack_align_eax"
+
+skip_breakpoint stack_align_eax
+
+gdb_test "backtrace 10" \
+	"#0\[ \t\]*$hex in stack_align_eax.*\r\n#1\[ \t\]*$hex in main.*" \
+	"second backtrace in stack_align_eax"
+
+gdb_test "info frame" \
+	".*Saved registers:.*ecx at.*ebp at.*edi at.*eip at.*" \
+	"saved registers in stack_align_eax"
 
 
 # Testcase from symtab/1253.

@@ -1,13 +1,12 @@
 /* Main code for remote server for GDB.
-   Copyright (C) 1989, 1993, 1994, 1995, 1997, 1998, 1999, 2000, 2002, 2003, 2004,
-   2005, 2006
-   Free Software Foundation, Inc.
+   Copyright (C) 1989, 1993, 1994, 1995, 1997, 1998, 1999, 2000, 2002, 2003,
+   2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,14 +15,16 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "server.h"
 
+#if HAVE_UNISTD_H
 #include <unistd.h>
+#endif
+#if HAVE_SIGNAL_H
 #include <signal.h>
+#endif
 #if HAVE_SYS_WAIT_H
 #include <sys/wait.h>
 #endif
@@ -35,6 +36,12 @@ unsigned long thread_from_wait;
 unsigned long old_thread_from_wait;
 int extended_protocol;
 int server_waiting;
+
+/* Enable miscellaneous debugging output.  The name is historical - it
+   was originally used to debug LinuxThreads support.  */
+int debug_threads;
+
+int pass_signals[TARGET_SIGNAL_LAST];
 
 jmp_buf toplevel;
 
@@ -71,6 +78,8 @@ start_inferior (char *argv[], char *statusptr)
 
   signal_pid = create_inferior (argv[0], argv);
 
+  /* FIXME: we don't actually know at this point that the create
+     actually succeeded.  We won't know that until we wait.  */
   fprintf (stderr, "Process %s created; pid = %ld\n", argv[0],
 	   signal_pid);
   fflush (stderr);
@@ -84,7 +93,8 @@ start_inferior (char *argv[], char *statusptr)
   atexit (restore_old_foreground_pgrp);
 #endif
 
-  /* Wait till we are at 1st instruction in program, return signal number.  */
+  /* Wait till we are at 1st instruction in program, return signal
+     number (assuming success).  */
   return mywait (statusptr, 0);
 }
 
@@ -132,7 +142,7 @@ decode_xfer_read (char *buf, char **annex, CORE_ADDR *ofs, unsigned int *len)
     return -1;
   *buf++ = 0;
 
-  /* After the read/write marker and annex, qXfer looks like a
+  /* After the read marker and annex, qXfer looks like a
      traditional 'm' packet.  */
   decode_m_packet (buf, ofs, len);
 
@@ -144,7 +154,7 @@ decode_xfer_read (char *buf, char **annex, CORE_ADDR *ofs, unsigned int *len)
    to as much of DATA/LEN as we could fit.  IS_MORE controls
    the first character of the response.  */
 static int
-write_qxfer_response (char *buf, unsigned char *data, int len, int is_more)
+write_qxfer_response (char *buf, const void *data, int len, int is_more)
 {
   int out_len;
 
@@ -157,11 +167,107 @@ write_qxfer_response (char *buf, unsigned char *data, int len, int is_more)
 			       PBUFSIZ - 2) + 1;
 }
 
+/* Handle all of the extended 'Q' packets.  */
+void
+handle_general_set (char *own_buf)
+{
+  if (strncmp ("QPassSignals:", own_buf, strlen ("QPassSignals:")) == 0)
+    {
+      int numsigs = (int) TARGET_SIGNAL_LAST, i;
+      const char *p = own_buf + strlen ("QPassSignals:");
+      CORE_ADDR cursig;
+
+      p = decode_address_to_semicolon (&cursig, p);
+      for (i = 0; i < numsigs; i++)
+	{
+	  if (i == cursig)
+	    {
+	      pass_signals[i] = 1;
+	      if (*p == '\0')
+		/* Keep looping, to clear the remaining signals.  */
+		cursig = -1;
+	      else
+		p = decode_address_to_semicolon (&cursig, p);
+	    }
+	  else
+	    pass_signals[i] = 0;
+	}
+      strcpy (own_buf, "OK");
+      return;
+    }
+
+  /* Otherwise we didn't know what packet it was.  Say we didn't
+     understand it.  */
+  own_buf[0] = 0;
+}
+
+static const char *
+get_features_xml (const char *annex)
+{
+  static int features_supported = -1;
+  static char *document;
+
+#ifdef USE_XML
+  extern const char *const xml_builtin[][2];
+  int i;
+
+  /* Look for the annex.  */
+  for (i = 0; xml_builtin[i][0] != NULL; i++)
+    if (strcmp (annex, xml_builtin[i][0]) == 0)
+      break;
+
+  if (xml_builtin[i][0] != NULL)
+    return xml_builtin[i][1];
+#endif
+
+  if (strcmp (annex, "target.xml") != 0)
+    return NULL;
+
+  if (features_supported == -1)
+    {
+      const char *arch = NULL;
+      if (the_target->arch_string != NULL)
+	arch = (*the_target->arch_string) ();
+
+      if (arch == NULL)
+	features_supported = 0;
+      else
+	{
+	  features_supported = 1;
+	  document = malloc (64 + strlen (arch));
+	  snprintf (document, 64 + strlen (arch),
+		    "<target><architecture>%s</architecture></target>",
+		    arch);
+	}
+    }
+
+  return document;
+}
+
+void
+monitor_show_help (void)
+{
+  monitor_output ("The following monitor commands are supported:\n");
+  monitor_output ("  set debug <0|1>\n");
+  monitor_output ("    Enable general debugging messages\n");  
+  monitor_output ("  set remote-debug <0|1>\n");
+  monitor_output ("    Enable remote protocol debugging messages\n");
+}
+
 /* Handle all of the extended 'q' packets.  */
 void
-handle_query (char *own_buf, int *new_packet_len_p)
+handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 {
   static struct inferior_list_entry *thread_ptr;
+
+  /* Reply the current thread id.  */
+  if (strcmp ("qC", own_buf) == 0)
+    {
+      thread_ptr = all_threads.head;
+      sprintf (own_buf, "QC%x",
+	thread_to_gdb_id ((struct thread_info *)thread_ptr));
+      return;
+    }
 
   if (strcmp ("qSymbol::", own_buf) == 0)
     {
@@ -209,6 +315,69 @@ handle_query (char *own_buf, int *new_packet_len_p)
       return;
     }
 
+  if (the_target->qxfer_spu != NULL
+      && strncmp ("qXfer:spu:read:", own_buf, 15) == 0)
+    {
+      char *annex;
+      int n;
+      unsigned int len;
+      CORE_ADDR ofs;
+      unsigned char *spu_buf;
+
+      strcpy (own_buf, "E00");
+      if (decode_xfer_read (own_buf + 15, &annex, &ofs, &len) < 0)
+	  return;
+      if (len > PBUFSIZ - 2)
+	len = PBUFSIZ - 2;
+      spu_buf = malloc (len + 1);
+      if (!spu_buf)
+        return;
+
+      n = (*the_target->qxfer_spu) (annex, spu_buf, NULL, ofs, len + 1);
+      if (n < 0) 
+	write_enn (own_buf);
+      else if (n > len)
+	*new_packet_len_p = write_qxfer_response
+			      (own_buf, spu_buf, len, 1);
+      else 
+	*new_packet_len_p = write_qxfer_response
+			      (own_buf, spu_buf, n, 0);
+
+      free (spu_buf);
+      return;
+    }
+
+  if (the_target->qxfer_spu != NULL
+      && strncmp ("qXfer:spu:write:", own_buf, 16) == 0)
+    {
+      char *annex;
+      int n;
+      unsigned int len;
+      CORE_ADDR ofs;
+      unsigned char *spu_buf;
+
+      strcpy (own_buf, "E00");
+      spu_buf = malloc (packet_len - 15);
+      if (!spu_buf)
+        return;
+      if (decode_xfer_write (own_buf + 16, packet_len - 16, &annex,
+			     &ofs, &len, spu_buf) < 0)
+	{
+	  free (spu_buf);
+	  return;
+	}
+
+      n = (*the_target->qxfer_spu) 
+	(annex, NULL, (unsigned const char *)spu_buf, ofs, len);
+      if (n < 0)
+	write_enn (own_buf);
+      else
+	sprintf (own_buf, "%x", n);
+
+      free (spu_buf);
+      return;
+    }
+
   if (the_target->read_auxv != NULL
       && strncmp ("qXfer:auxv:read:", own_buf, 16) == 0)
     {
@@ -244,14 +413,134 @@ handle_query (char *own_buf, int *new_packet_len_p)
       return;
     }
 
+  if (strncmp ("qXfer:features:read:", own_buf, 20) == 0)
+    {
+      CORE_ADDR ofs;
+      unsigned int len, total_len;
+      const char *document;
+      char *annex;
+
+      /* Check for support.  */
+      document = get_features_xml ("target.xml");
+      if (document == NULL)
+	{
+	  own_buf[0] = '\0';
+	  return;
+	}
+
+      /* Grab the annex, offset, and length.  */
+      if (decode_xfer_read (own_buf + 20, &annex, &ofs, &len) < 0)
+	{
+	  strcpy (own_buf, "E00");
+	  return;
+	}
+
+      /* Now grab the correct annex.  */
+      document = get_features_xml (annex);
+      if (document == NULL)
+	{
+	  strcpy (own_buf, "E00");
+	  return;
+	}
+
+      total_len = strlen (document);
+      if (len > PBUFSIZ - 2)
+	len = PBUFSIZ - 2;
+
+      if (ofs > total_len)
+	write_enn (own_buf);
+      else if (len < total_len - ofs)
+	*new_packet_len_p = write_qxfer_response (own_buf, document + ofs,
+						  len, 1);
+      else
+	*new_packet_len_p = write_qxfer_response (own_buf, document + ofs,
+						  total_len - ofs, 0);
+
+      return;
+    }
+
+  if (strncmp ("qXfer:libraries:read:", own_buf, 21) == 0)
+    {
+      CORE_ADDR ofs;
+      unsigned int len, total_len;
+      char *document, *p;
+      struct inferior_list_entry *dll_ptr;
+      char *annex;
+
+      /* Reject any annex; grab the offset and length.  */
+      if (decode_xfer_read (own_buf + 21, &annex, &ofs, &len) < 0
+	  || annex[0] != '\0')
+	{
+	  strcpy (own_buf, "E00");
+	  return;
+	}
+
+      /* Over-estimate the necessary memory.  Assume that every character
+	 in the library name must be escaped.  */
+      total_len = 64;
+      for (dll_ptr = all_dlls.head; dll_ptr != NULL; dll_ptr = dll_ptr->next)
+	total_len += 128 + 6 * strlen (((struct dll_info *) dll_ptr)->name);
+
+      document = malloc (total_len);
+      strcpy (document, "<library-list>\n");
+      p = document + strlen (document);
+
+      for (dll_ptr = all_dlls.head; dll_ptr != NULL; dll_ptr = dll_ptr->next)
+	{
+	  struct dll_info *dll = (struct dll_info *) dll_ptr;
+	  char *name;
+
+	  strcpy (p, "  <library name=\"");
+	  p = p + strlen (p);
+	  name = xml_escape_text (dll->name);
+	  strcpy (p, name);
+	  free (name);
+	  p = p + strlen (p);
+	  strcpy (p, "\"><segment address=\"");
+	  p = p + strlen (p);
+	  sprintf (p, "0x%lx", (long) dll->base_addr);
+	  p = p + strlen (p);
+	  strcpy (p, "\"/></library>\n");
+	  p = p + strlen (p);
+	}
+
+      strcpy (p, "</library-list>\n");
+
+      total_len = strlen (document);
+      if (len > PBUFSIZ - 2)
+	len = PBUFSIZ - 2;
+
+      if (ofs > total_len)
+	write_enn (own_buf);
+      else if (len < total_len - ofs)
+	*new_packet_len_p = write_qxfer_response (own_buf, document + ofs,
+						  len, 1);
+      else
+	*new_packet_len_p = write_qxfer_response (own_buf, document + ofs,
+						  total_len - ofs, 0);
+
+      free (document);
+      return;
+    }
+
   /* Protocol features query.  */
   if (strncmp ("qSupported", own_buf, 10) == 0
       && (own_buf[10] == ':' || own_buf[10] == '\0'))
     {
-      sprintf (own_buf, "PacketSize=%x", PBUFSIZ - 1);
+      sprintf (own_buf, "PacketSize=%x;QPassSignals+", PBUFSIZ - 1);
+
+      /* We do not have any hook to indicate whether the target backend
+	 supports qXfer:libraries:read, so always report it.  */
+      strcat (own_buf, ";qXfer:libraries:read+");
 
       if (the_target->read_auxv != NULL)
 	strcat (own_buf, ";qXfer:auxv:read+");
+     
+      if (the_target->qxfer_spu != NULL)
+	strcat (own_buf, ";qXfer:spu:read+;qXfer:spu:write+");
+
+      if (get_features_xml ("target.xml") != NULL)
+	strcat (own_buf, ";qXfer:features:read+");
 
       return;
     }
@@ -313,6 +602,55 @@ handle_query (char *own_buf, int *new_packet_len_p)
 	}
 
       /* Otherwise, pretend we do not understand this packet.  */
+    }
+
+  /* Handle "monitor" commands.  */
+  if (strncmp ("qRcmd,", own_buf, 6) == 0)
+    {
+      char *mon = malloc (PBUFSIZ);
+      int len = strlen (own_buf + 6);
+
+      if ((len % 1) != 0 || unhexify (mon, own_buf + 6, len / 2) != len / 2)
+	{
+	  write_enn (own_buf);
+	  free (mon);
+	  return;
+	}
+      mon[len / 2] = '\0';
+
+      write_ok (own_buf);
+
+      if (strcmp (mon, "set debug 1") == 0)
+	{
+	  debug_threads = 1;
+	  monitor_output ("Debug output enabled.\n");
+	}
+      else if (strcmp (mon, "set debug 0") == 0)
+	{
+	  debug_threads = 0;
+	  monitor_output ("Debug output disabled.\n");
+	}
+      else if (strcmp (mon, "set remote-debug 1") == 0)
+	{
+	  remote_debug = 1;
+	  monitor_output ("Protocol debug output enabled.\n");
+	}
+      else if (strcmp (mon, "set remote-debug 0") == 0)
+	{
+	  remote_debug = 0;
+	  monitor_output ("Protocol debug output disabled.\n");
+	}
+      else if (strcmp (mon, "help") == 0)
+	monitor_show_help ();
+      else
+	{
+	  monitor_output ("Unknown monitor command.\n\n");
+	  monitor_show_help ();
+	  write_enn (own_buf);
+	}
+
+      free (mon);
+      return;
     }
 
   /* Otherwise we didn't know what packet it was.  Say we didn't
@@ -427,8 +765,7 @@ handle_v_cont (char *own_buf, char *status, int *signal)
   return;
 
 err:
-  /* No other way to report an error... */
-  strcpy (own_buf, "");
+  write_enn (own_buf);
   free (resume_info);
   return;
 }
@@ -484,7 +821,7 @@ static void
 gdbserver_version (void)
 {
   printf ("GNU gdbserver %s\n"
-	  "Copyright (C) 2006 Free Software Foundation, Inc.\n"
+	  "Copyright (C) 2007 Free Software Foundation, Inc.\n"
 	  "gdbserver is free software, covered by the GNU General Public License.\n"
 	  "This gdbserver was configured as \"%s\"\n",
 	  version, host_name);
@@ -537,7 +874,7 @@ main (int argc, char *argv[])
   if (argc >= 3 && strcmp (argv[2], "--attach") == 0)
     {
       if (argc == 4
-	  && argv[3] != '\0'
+	  && argv[3][0] != '\0'
 	  && (pid = strtoul (argv[3], &arg_end, 10)) != 0
 	  && *arg_end == '\0')
 	{
@@ -555,7 +892,7 @@ main (int argc, char *argv[])
 
   initialize_low ();
 
-  own_buf = malloc (PBUFSIZ);
+  own_buf = malloc (PBUFSIZ + 1);
   mem_buf = malloc (PBUFSIZ);
 
   if (pid == 0)
@@ -563,7 +900,13 @@ main (int argc, char *argv[])
       /* Wait till we are at first instruction in program.  */
       signal = start_inferior (&argv[2], &status);
 
-      /* We are now stopped at the first instruction of the target process */
+      /* We are now (hopefully) stopped at the first instruction of
+	 the target process.  This assumes that the target process was
+	 successfully created.  */
+
+      /* Don't report shared library events on the initial connection,
+	 even if some libraries are preloaded.  */
+      dlls_changed = 0;
     }
   else
     {
@@ -576,6 +919,19 @@ main (int argc, char *argv[])
 	  attached = 1;
 	  break;
 	}
+    }
+
+  if (setjmp (toplevel))
+    {
+      fprintf (stderr, "Killing inferior\n");
+      kill_inferior ();
+      exit (1);
+    }
+
+  if (status == 'W' || status == 'X')
+    {
+      fprintf (stderr, "No inferior, GDBserver exiting.\n");
+      exit (1);
     }
 
   while (1)
@@ -599,37 +955,32 @@ main (int argc, char *argv[])
 	  switch (ch)
 	    {
 	    case 'q':
-	      handle_query (own_buf, &new_packet_len);
+	      handle_query (own_buf, packet_len, &new_packet_len);
 	      break;
-	    case 'd':
-	      remote_debug = !remote_debug;
+	    case 'Q':
+	      handle_general_set (own_buf);
 	      break;
-#ifndef USE_WIN32API
-	    /* Skip "detach" support on mingw32, since we don't have
-	       waitpid.  */
 	    case 'D':
 	      fprintf (stderr, "Detaching from inferior\n");
-	      detach_inferior ();
-	      write_ok (own_buf);
-	      putpkt (own_buf);
-	      remote_close ();
-
-	      /* If we are attached, then we can exit.  Otherwise, we need to
-		 hang around doing nothing, until the child is gone.  */
-	      if (!attached)
+	      if (detach_inferior () != 0)
 		{
-		  int status, ret;
-
-		  do {
-		    ret = waitpid (signal_pid, &status, 0);
-		    if (WIFEXITED (status) || WIFSIGNALED (status))
-		      break;
-		  } while (ret != -1 || errno != ECHILD);
+		  write_enn (own_buf);
+		  putpkt (own_buf);
 		}
+	      else
+		{
+		  write_ok (own_buf);
+		  putpkt (own_buf);
+		  remote_close ();
 
-	      exit (0);
-#endif
+		  /* If we are attached, then we can exit.  Otherwise, we
+		     need to hang around doing nothing, until the child
+		     is gone.  */
+		  if (!attached)
+		    join_inferior ();
 
+		  exit (0);
+		}
 	    case '!':
 	      if (attached == 0)
 		{

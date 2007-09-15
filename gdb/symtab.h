@@ -1,14 +1,14 @@
 /* Symbol table definitions for GDB.
 
-   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free Software
-   Foundation, Inc.
+   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
+   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (SYMTAB_H)
 #define SYMTAB_H 1
@@ -34,6 +32,7 @@ struct block;
 struct blockvector;
 struct axs_value;
 struct agent_expr;
+enum language;
 
 /* Some of the structures in this file are space critical.
    The space-critical structures are:
@@ -609,6 +608,10 @@ struct symbol
 
   struct type *type;
 
+  /* The symbol table containing this symbol.  This is the file
+     associated with LINE.  */
+  struct symtab *symtab;
+
   /* Domain code.  */
 
   ENUM_BITFIELD(domain_enum_tag) domain : 6;
@@ -664,6 +667,7 @@ struct symbol
 #define SYMBOL_CLASS(symbol)		(symbol)->aclass
 #define SYMBOL_TYPE(symbol)		(symbol)->type
 #define SYMBOL_LINE(symbol)		(symbol)->line
+#define SYMBOL_SYMTAB(symbol)		(symbol)->symtab
 #define SYMBOL_BASEREG(symbol)		(symbol)->aux_value.basereg
 #define SYMBOL_OBJFILE(symbol)          (symbol)->aux_value.objfile
 #define SYMBOL_OPS(symbol)              (symbol)->ops
@@ -846,9 +850,9 @@ struct symtab
 
   char *debugformat;
 
-  /* String of version information.  May be zero.  */
+  /* String of producer version information.  May be zero.  */
 
-  char *version;
+  char *producer;
 
   /* Full name of file as found by searching the source path.
      NULL if not yet known.  */
@@ -1002,7 +1006,17 @@ extern int asm_demangle;
 
 extern struct symtab *lookup_symtab (const char *);
 
-/* lookup a symbol by name (optional block, optional symtab) */
+/* lookup a symbol by name (optional block, optional symtab) in language */
+
+extern struct symbol *lookup_symbol_in_language (const char *,
+						 const struct block *,
+						 const domain_enum,
+						 enum language,
+						 int *,
+						 struct symtab **);
+
+/* lookup a symbol by name (optional block, optional symtab)
+   in the current language */
 
 extern struct symbol *lookup_symbol (const char *, const struct block *,
 				     const domain_enum, int *,
@@ -1034,6 +1048,7 @@ extern struct symbol *lookup_symbol_static (const char *name,
 
 extern struct symbol *lookup_symbol_global (const char *name,
 					    const char *linkage_name,
+					    const struct block *block,
 					    const domain_enum domain,
 					    struct symtab **symtab);
 
@@ -1175,7 +1190,7 @@ extern struct minimal_symbol *lookup_minimal_symbol_by_pc_section (CORE_ADDR,
 extern struct minimal_symbol
   *lookup_solib_trampoline_symbol_by_pc (CORE_ADDR);
 
-extern CORE_ADDR find_solib_trampoline_target (CORE_ADDR);
+extern CORE_ADDR find_solib_trampoline_target (struct frame_info *, CORE_ADDR);
 
 extern void init_minimal_symbol_collection (void);
 
@@ -1382,9 +1397,12 @@ extern struct cleanup *make_cleanup_free_search_symbols (struct symbol_search
 extern void set_main_name (const char *name);
 extern /*const */ char *main_name (void);
 
-/* Global to indicate presence of HP-compiled objects,
-   in particular, SOM executable file with SOM debug info 
-   Defined in symtab.c, used in hppa-tdep.c. */
-extern int deprecated_hp_som_som_object_present;
+/* Check global symbols in objfile.  */
+struct symbol *lookup_global_symbol_from_objfile (const struct objfile *objfile,
+						  const char *name,
+						  const char *linkage_name,
+						  const domain_enum domain,
+						  struct symtab **symtab);
+
 
 #endif /* !defined(SYMTAB_H) */

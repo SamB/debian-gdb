@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,12 +18,9 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
-#include "tm.h"
 #include "regcache.h"
 #include "inferior.h"
 #include "target.h"
@@ -54,7 +51,7 @@
    to make them look like 32-bit registers.  */
 #ifdef __s390x__
 #define SUBOFF(i) \
-	((TARGET_PTR_BIT == 32 \
+	((gdbarch_ptr_bit (current_gdbarch) == 32 \
 	  && ((i) == S390_PSWA_REGNUM \
 	      || ((i) >= S390_R0_REGNUM && (i) <= S390_R15_REGNUM)))? 4 : 0)
 #else
@@ -65,53 +62,53 @@
 /* Fill GDB's register array with the general-purpose register values
    in *REGP.  */
 void
-supply_gregset (gregset_t *regp)
+supply_gregset (struct regcache *regcache, const gregset_t *regp)
 {
   int i;
   for (i = 0; i < S390_NUM_REGS; i++)
     if (regmap_gregset[i] != -1)
-      regcache_raw_supply (current_regcache, i, 
-			   (char *)regp + regmap_gregset[i] + SUBOFF (i));
+      regcache_raw_supply (regcache, i, 
+			   (const char *)regp + regmap_gregset[i] + SUBOFF (i));
 }
 
 /* Fill register REGNO (if it is a general-purpose register) in
    *REGP with the value in GDB's register array.  If REGNO is -1,
    do this for all registers.  */
 void
-fill_gregset (gregset_t *regp, int regno)
+fill_gregset (const struct regcache *regcache, gregset_t *regp, int regno)
 {
   int i;
   for (i = 0; i < S390_NUM_REGS; i++)
     if (regmap_gregset[i] != -1)
       if (regno == -1 || regno == i)
-	regcache_raw_collect (current_regcache, i, 
+	regcache_raw_collect (regcache, i, 
 			      (char *)regp + regmap_gregset[i] + SUBOFF (i));
 }
 
 /* Fill GDB's register array with the floating-point register values
    in *REGP.  */
 void
-supply_fpregset (fpregset_t *regp)
+supply_fpregset (struct regcache *regcache, const fpregset_t *regp)
 {
   int i;
   for (i = 0; i < S390_NUM_REGS; i++)
     if (regmap_fpregset[i] != -1)
-      regcache_raw_supply (current_regcache, i,
-			   ((char *)regp) + regmap_fpregset[i]);
+      regcache_raw_supply (regcache, i,
+			   (const char *)regp + regmap_fpregset[i]);
 }
 
 /* Fill register REGNO (if it is a general-purpose register) in
    *REGP with the value in GDB's register array.  If REGNO is -1,
    do this for all registers.  */
 void
-fill_fpregset (fpregset_t *regp, int regno)
+fill_fpregset (const struct regcache *regcache, fpregset_t *regp, int regno)
 {
   int i;
   for (i = 0; i < S390_NUM_REGS; i++)
     if (regmap_fpregset[i] != -1)
       if (regno == -1 || regno == i)
-        regcache_raw_collect (current_regcache, i, 
-			      ((char *)regp) + regmap_fpregset[i]);
+        regcache_raw_collect (regcache, i, 
+			      (char *)regp + regmap_fpregset[i]);
 }
 
 /* Find the TID for the current inferior thread to use with ptrace.  */
@@ -129,7 +126,7 @@ s390_inferior_tid (void)
 /* Fetch all general-purpose registers from process/thread TID and
    store their values in GDB's register cache.  */
 static void
-fetch_regs (int tid)
+fetch_regs (struct regcache *regcache, int tid)
 {
   gregset_t regs;
   ptrace_area parea;
@@ -140,13 +137,13 @@ fetch_regs (int tid)
   if (ptrace (PTRACE_PEEKUSR_AREA, tid, (long) &parea) < 0)
     perror_with_name (_("Couldn't get registers"));
 
-  supply_gregset (&regs);
+  supply_gregset (regcache, (const gregset_t *) &regs);
 }
 
 /* Store all valid general-purpose registers in GDB's register cache
    into the process/thread specified by TID.  */
 static void
-store_regs (int tid, int regnum)
+store_regs (const struct regcache *regcache, int tid, int regnum)
 {
   gregset_t regs;
   ptrace_area parea;
@@ -157,7 +154,7 @@ store_regs (int tid, int regnum)
   if (ptrace (PTRACE_PEEKUSR_AREA, tid, (long) &parea) < 0)
     perror_with_name (_("Couldn't get registers"));
 
-  fill_gregset (&regs, regnum);
+  fill_gregset (regcache, &regs, regnum);
 
   if (ptrace (PTRACE_POKEUSR_AREA, tid, (long) &parea) < 0)
     perror_with_name (_("Couldn't write registers"));
@@ -166,7 +163,7 @@ store_regs (int tid, int regnum)
 /* Fetch all floating-point registers from process/thread TID and store
    their values in GDB's register cache.  */
 static void
-fetch_fpregs (int tid)
+fetch_fpregs (struct regcache *regcache, int tid)
 {
   fpregset_t fpregs;
   ptrace_area parea;
@@ -177,13 +174,13 @@ fetch_fpregs (int tid)
   if (ptrace (PTRACE_PEEKUSR_AREA, tid, (long) &parea) < 0)
     perror_with_name (_("Couldn't get floating point status"));
 
-  supply_fpregset (&fpregs);
+  supply_fpregset (regcache, (const fpregset_t *) &fpregs);
 }
 
 /* Store all valid floating-point registers in GDB's register cache
    into the process/thread specified by TID.  */
 static void
-store_fpregs (int tid, int regnum)
+store_fpregs (const struct regcache *regcache, int tid, int regnum)
 {
   fpregset_t fpregs;
   ptrace_area parea;
@@ -194,7 +191,7 @@ store_fpregs (int tid, int regnum)
   if (ptrace (PTRACE_PEEKUSR_AREA, tid, (long) &parea) < 0)
     perror_with_name (_("Couldn't get floating point status"));
 
-  fill_fpregset (&fpregs, regnum);
+  fill_fpregset (regcache, &fpregs, regnum);
 
   if (ptrace (PTRACE_POKEUSR_AREA, tid, (long) &parea) < 0)
     perror_with_name (_("Couldn't write floating point status"));
@@ -203,33 +200,33 @@ store_fpregs (int tid, int regnum)
 /* Fetch register REGNUM from the child process.  If REGNUM is -1, do
    this for all registers.  */
 static void
-s390_linux_fetch_inferior_registers (int regnum)
+s390_linux_fetch_inferior_registers (struct regcache *regcache, int regnum)
 {
   int tid = s390_inferior_tid ();
 
   if (regnum == -1 
       || (regnum < S390_NUM_REGS && regmap_gregset[regnum] != -1))
-    fetch_regs (tid);
+    fetch_regs (regcache, tid);
 
   if (regnum == -1 
       || (regnum < S390_NUM_REGS && regmap_fpregset[regnum] != -1))
-    fetch_fpregs (tid);
+    fetch_fpregs (regcache, tid);
 }
 
 /* Store register REGNUM back into the child process.  If REGNUM is
    -1, do this for all registers.  */
 static void
-s390_linux_store_inferior_registers (int regnum)
+s390_linux_store_inferior_registers (struct regcache *regcache, int regnum)
 {
   int tid = s390_inferior_tid ();
 
   if (regnum == -1 
       || (regnum < S390_NUM_REGS && regmap_gregset[regnum] != -1))
-    store_regs (tid, regnum);
+    store_regs (regcache, tid, regnum);
 
   if (regnum == -1 
       || (regnum < S390_NUM_REGS && regmap_fpregset[regnum] != -1))
-    store_fpregs (tid, regnum);
+    store_fpregs (regcache, tid, regnum);
 }
 
 

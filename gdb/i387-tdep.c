@@ -1,13 +1,13 @@
 /* Intel 387 floating point stuff.
 
-   Copyright (C) 1988, 1989, 1991, 1992, 1993, 1994, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 1988, 1989, 1991, 1992, 1993, 1994, 1998, 1999, 2000, 2001,
+   2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "doublest.h"
@@ -473,17 +471,6 @@ i387_collect_fsave (const struct regcache *regcache, int regnum, void *fsave)
       }
 #undef I387_ST0_REGNUM
 }
-
-/* Fill register REGNUM (if it is a floating-point register) in *FSAVE
-   with the value in GDB's register cache.  If REGNUM is -1, do this
-   for all registers.  This function doesn't touch any of the reserved
-   bits in *FSAVE.  */
-
-void
-i387_fill_fsave (void *fsave, int regnum)
-{
-  i387_collect_fsave (current_regcache, regnum, fsave);
-}
 
 
 /* At fxsave_offset[REGNUM] you'll find the offset to the location in
@@ -699,17 +686,6 @@ i387_collect_fxsave (const struct regcache *regcache, int regnum, void *fxsave)
 
 #undef I387_ST0_REGNUM
 #undef I387_NUM_XMM_REGS
-}
-
-/* Fill register REGNUM (if it is a floating-point or SSE register) in
-   *FXSAVE with the value in GDB's register cache.  If REGNUM is -1, do
-   this for all registers.  This function doesn't touch any of the
-   reserved bits in *FXSAVE.  */
-
-void
-i387_fill_fxsave (void *fxsave, int regnum)
-{
-  i387_collect_fxsave (current_regcache, regnum, fxsave);
 }
 
 /* Recreate the FTW (tag word) valid bits from the 80-bit FP data in

@@ -1,12 +1,12 @@
 /* C preprocessor macro expansion for GDB.
-   Copyright (C) 2002 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2007 Free Software Foundation, Inc.
    Contributed by Red Hat, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_obstack.h"
@@ -81,9 +79,6 @@ struct macro_buffer
 static void
 init_buffer (struct macro_buffer *b, int n)
 {
-  /* Small value for initial testing.  */
-  n = 1;
-
   b->size = n;
   if (n > 0)
     b->text = (char *) xmalloc (n);
@@ -715,7 +710,7 @@ gather_arguments (const char *name, struct macro_buffer *src, int *argc_p)
   get_token (&tok, src);
 
   args_len = 0;
-  args_size = 1;                /* small for initial testing */
+  args_size = 6;
   args = (struct macro_buffer *) xmalloc (sizeof (*args) * args_size);
 
   for (;;)

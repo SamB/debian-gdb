@@ -6,7 +6,7 @@ dnl This file is part of GDB.
 dnl
 dnl This program is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
-dnl the Free Software Foundation; either version 2 of the License, or
+dnl the Free Software Foundation; either version 3 of the License, or
 dnl (at your option) any later version.
 dnl
 dnl This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@ dnl MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 dnl GNU General Public License for more details.
 dnl
 dnl You should have received a copy of the GNU General Public License
-dnl along with this program; if not, write to the Free Software
-dnl Foundation, Inc., 51 Franklin Street, Fifth Floor,
-dnl Boston, MA 02110-1301, USA.
+dnl along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 dnl Process this file with autoconf to produce a configure script.
 
@@ -39,19 +37,59 @@ AC_HEADER_STDC
 AC_CHECK_HEADERS(sgtty.h termio.h termios.h sys/reg.h string.h dnl
 		 proc_service.h sys/procfs.h thread_db.h linux/elf.h dnl
 		 stdlib.h unistd.h dnl
-		 terminal.h sys/ioctl.h netinet/in.h sys/socket.h netdb.h dnl
+ 		 errno.h fcntl.h signal.h sys/file.h malloc.h dnl
+		 sys/ioctl.h netinet/in.h sys/socket.h netdb.h dnl
 		 netinet/tcp.h arpa/inet.h sys/wait.h)
 
-AC_CHECK_DECLS(strerror)
+have_errno=no
+AC_MSG_CHECKING(for errno)
+AC_TRY_LINK([
+#if HAVE_ERRNO_H
+#include <errno.h>
+#endif], [static int x; x = errno;],
+  [AC_MSG_RESULT(yes - in errno.h); AC_DEFINE(HAVE_ERRNO, 1, [Define if errno is available]) have_errno=yes])
+if test $have_errno = no; then
+AC_TRY_LINK([
+#if HAVE_ERRNO_H
+#include <errno.h>
+#endif], [extern int errno; static int x; x = errno;],
+  [AC_MSG_RESULT(yes - must define); AC_DEFINE(HAVE_ERRNO, 1, [Define if errno is available]) AC_DEFINE(MUST_DEFINE_ERRNO, 1, [Checking if errno must be defined])],
+  [AC_MSG_RESULT(no)])
+fi
+
+AC_CHECK_DECLS([strerror, perror])
 
 AC_CHECK_TYPES(socklen_t, [], [],
 [#include <sys/types.h>
 #include <sys/socket.h>
 ])
+
+# Check for various supplementary target information (beyond the
+# triplet) which might affect the choices in configure.srv.
+case "${target}" in
+  arm*-*-linux*)
+    AC_CACHE_CHECK([if iWMMXt is selected], [gdb_cv_arm_iwmmxt],
+		   [save_CPPFLAGS="$CPPFLAGS"
+		   CPPFLAGS="$CPPFLAGS $CFLAGS"
+		   AC_EGREP_CPP([got it], [
+#ifdef __IWMMXT__
+got it
+#endif
+				], [gdb_cv_arm_iwmmxt=yes],
+				[gdb_cv_arm_iwmmxt=no])
+		   CPPFLAGS="$save_CPPFLAGS"])
+    ;;
+esac
+
 . ${srcdir}/configure.srv
 
-if test "${srv_mingw}" = "yes"; then
+if test "${srv_mingwce}" = "yes"; then
+  LIBS="$LIBS -lws2"
+elif test "${srv_mingw}" = "yes"; then
   LIBS="$LIBS -lwsock32"
+fi
+
+if test "${srv_mingw}" = "yes"; then
   AC_DEFINE(USE_WIN32API, 1,
 	    [Define if we should use the Windows API, instead of the
 	     POSIX API.  On Windows, we use the Windows API when
@@ -140,12 +178,27 @@ if test "$srv_linux_thread_db" = "yes"; then
   fi
 fi
 
+if test "$srv_xmltarget" != ""; then
+  srv_xmltarget="\$(XML_DIR)/$srv_xmltarget"
+  srv_xmlbuiltin="xml-builtin.o"
+  AC_DEFINE(USE_XML, 1, [Define if an XML target description is available.])
+
+  tmp_xmlfiles=$srv_xmlfiles
+  srv_xmlfiles="target.xml"
+  for f in $tmp_xmlfiles; do
+    srv_xmlfiles="$srv_xmlfiles \$(XML_DIR)/$f"
+  done
+fi
+
 GDBSERVER_DEPFILES="$srv_regobj $srv_tgtobj $srv_thread_depfiles"
 GDBSERVER_LIBS="$srv_libs"
 
 AC_SUBST(GDBSERVER_DEPFILES)
 AC_SUBST(GDBSERVER_LIBS)
 AC_SUBST(USE_THREAD_DB)
+AC_SUBST(srv_xmlbuiltin)
+AC_SUBST(srv_xmlfiles)
+AC_SUBST(srv_xmltarget)
 
 AC_OUTPUT(Makefile,
 [case x$CONFIG_HEADERS in

@@ -1,13 +1,13 @@
 /* Target-dependent code for GDB, the GNU debugger.
 
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef PPC_TDEP_H
 #define PPC_TDEP_H
@@ -58,12 +56,8 @@ CORE_ADDR ppc64_sysv_abi_adjust_breakpoint_address (struct gdbarch *gdbarch,
 						    CORE_ADDR bpaddr);
 int ppc_linux_memory_remove_breakpoint (struct bp_target_info *bp_tgt);
 struct link_map_offsets *ppc_linux_svr4_fetch_link_map_offsets (void);
-void ppc_linux_supply_gregset (struct regcache *regcache,
-			       int regnum, const void *gregs, size_t size,
-			       int wordsize);
-void ppc_linux_supply_fpregset (const struct regset *regset,
-				struct regcache *regcache,
-				int regnum, const void *gregs, size_t size);
+const struct regset *ppc_linux_gregset (int);
+const struct regset *ppc_linux_fpregset (void);
 
 enum return_value_convention ppc64_sysv_abi_return_value (struct gdbarch *gdbarch,
 							  struct type *valtype,
@@ -85,6 +79,8 @@ struct ppc_reg_offsets
 {
   /* General-purpose registers.  */
   int r0_offset;
+  int gpr_size; /* size for r0-31, pc, ps, lr, ctr.  */
+  int xr_size;  /* size for cr, xer, mq.  */
   int pc_offset;
   int ps_offset;
   int cr_offset;
@@ -96,6 +92,7 @@ struct ppc_reg_offsets
   /* Floating-point registers.  */
   int f0_offset;
   int fpscr_offset;
+  int fpscr_size;
 
   /* AltiVec registers.  */
   int vr0_offset;
@@ -183,6 +180,13 @@ struct gdbarch_tdep
        register number for GDB register number I, or -1 if the
        simulator does not implement that register.  */
     int *sim_regno;
+
+    /* Minimum possible text address.  */
+    CORE_ADDR text_segment_base;
+
+    /* ISA-specific types.  */
+    struct type *ppc_builtin_type_vec64;
+    struct type *ppc_builtin_type_vec128;
 };
 
 

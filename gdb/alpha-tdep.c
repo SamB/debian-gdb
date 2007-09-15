@@ -1,13 +1,13 @@
 /* Target-dependent code for the ALPHA architecture, for GDB, the GNU Debugger.
 
-   Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2005, 2006 Free Software Foundation, Inc.
+   Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+   2003, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "doublest.h"
@@ -73,7 +71,7 @@ alpha_register_name (int regno)
 
   if (regno < 0)
     return NULL;
-  if (regno >= (sizeof(register_names) / sizeof(*register_names)))
+  if (regno >= ARRAY_SIZE(register_names))
     return NULL;
   return register_names[regno];
 }
@@ -103,7 +101,7 @@ alpha_register_type (struct gdbarch *gdbarch, int regno)
   /* Don't need to worry about little vs big endian until 
      some jerk tries to port to alpha-unicosmk.  */
   if (regno >= ALPHA_FP0_REGNUM && regno < ALPHA_FP0_REGNUM + 31)
-    return builtin_type_ieee_double_little;
+    return builtin_type_ieee_double;
 
   return builtin_type_int64;
 }
@@ -116,7 +114,8 @@ alpha_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 {
   /* Filter out any registers eliminated, but whose regnum is 
      reserved for backward compatibility, e.g. the vfp.  */
-  if (REGISTER_NAME (regnum) == NULL || *REGISTER_NAME (regnum) == '\0')
+  if (gdbarch_register_name (current_gdbarch, regnum) == NULL
+      || *gdbarch_register_name (current_gdbarch, regnum) == '\0')
     return 0;
 
   if (group == all_reggroup)
@@ -319,7 +318,7 @@ alpha_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	  if (accumulate_size < sizeof (arg_reg_buffer)
 	      && TYPE_LENGTH (arg_type) == 4)
 	    {
-	      arg_type = builtin_type_ieee_double_little;
+	      arg_type = builtin_type_ieee_double;
 	      arg = value_cast (arg_type, arg);
 	    }
 	  /* Tru64 5.1 has a 128-bit long double, and passes this by
@@ -640,13 +639,13 @@ alpha_after_prologue (CORE_ADDR pc)
 unsigned int
 alpha_read_insn (CORE_ADDR pc)
 {
-  gdb_byte buf[4];
+  gdb_byte buf[ALPHA_INSN_SIZE];
   int status;
 
-  status = read_memory_nobpt (pc, buf, 4);
+  status = read_memory_nobpt (pc, buf, sizeof (buf));
   if (status)
     memory_error (status, pc);
-  return extract_unsigned_integer (buf, 4);
+  return extract_unsigned_integer (buf, sizeof (buf));
 }
 
 /* To skip prologues, I use this predicate.  Returns either PC itself
@@ -662,7 +661,7 @@ alpha_skip_prologue (CORE_ADDR pc)
   unsigned long inst;
   int offset;
   CORE_ADDR post_prologue_pc;
-  gdb_byte buf[4];
+  gdb_byte buf[ALPHA_INSN_SIZE];
 
   /* Silently return the unaltered pc upon memory errors.
      This could happen on OSF/1 if decode_line_1 tries to skip the
@@ -671,7 +670,7 @@ alpha_skip_prologue (CORE_ADDR pc)
      Reading target memory is slow over serial lines, so we perform
      this check only if the target has shared libraries (which all
      Alpha targets do).  */
-  if (target_read_memory (pc, buf, 4))
+  if (target_read_memory (pc, buf, sizeof (buf)))
     return pc;
 
   /* See if we can determine the end of the prologue via the symbol table.
@@ -688,7 +687,7 @@ alpha_skip_prologue (CORE_ADDR pc)
   /* Skip the typical prologue instructions. These are the stack adjustment
      instruction and the instructions that save registers on the stack
      or in the gcc frame.  */
-  for (offset = 0; offset < 100; offset += 4)
+  for (offset = 0; offset < 100; offset += ALPHA_INSN_SIZE)
     {
       inst = alpha_read_insn (pc + offset);
 
@@ -723,13 +722,13 @@ alpha_skip_prologue (CORE_ADDR pc)
    into the "pc".  This routine returns true on success.  */
 
 static int
-alpha_get_longjmp_target (CORE_ADDR *pc)
+alpha_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (frame));
   CORE_ADDR jb_addr;
   gdb_byte raw_buffer[ALPHA_REGISTER_SIZE];
 
-  jb_addr = read_register (ALPHA_A0_REGNUM);
+  jb_addr = get_frame_register_unsigned (frame, ALPHA_A0_REGNUM);
 
   if (target_read_memory (jb_addr + (tdep->jb_pc * tdep->jb_elt_size),
 			  raw_buffer, tdep->jb_elt_size))
@@ -820,7 +819,7 @@ alpha_sigtramp_frame_this_id (struct frame_info *next_frame,
 	code_addr = 0;
     }
   else
-    code_addr = frame_func_unwind (next_frame);
+    code_addr = frame_func_unwind (next_frame, SIGTRAMP_FRAME);
 
   /* The stack address is trivially read from the sigcontext.  */
   stack_addr = alpha_sigtramp_register_address (info->sigcontext_addr,
@@ -864,8 +863,12 @@ alpha_sigtramp_frame_prev_register (struct frame_info *next_frame,
      current description of it in alpha_sigtramp_frame_unwind_cache
      doesn't include it.  Too bad.  Fall back on whatever's in the
      outer frame.  */
-  frame_register (next_frame, regnum, optimizedp, lvalp, addrp,
-		  realnump, bufferp);
+  *optimizedp = 0;
+  *lvalp = lval_register;
+  *addrp = 0;
+  *realnump = regnum;
+  if (bufferp)
+    frame_unwind_register (next_frame, *realnump, bufferp);
 }
 
 static const struct frame_unwind alpha_sigtramp_frame_unwind = {
@@ -946,7 +949,7 @@ alpha_heuristic_proc_start (CORE_ADDR pc)
   /* Search back for previous return; also stop at a 0, which might be
      seen for instance before the start of a code section.  Don't include
      nops, since this usually indicates padding between functions.  */
-  for (pc -= 4; pc >= fence; pc -= 4)
+  for (pc -= ALPHA_INSN_SIZE; pc >= fence; pc -= ALPHA_INSN_SIZE)
     {
       unsigned int insn = alpha_read_insn (pc);
       switch (insn)
@@ -1028,7 +1031,7 @@ alpha_heuristic_frame_unwind_cache (struct frame_info *next_frame,
       if (start_pc + 200 < limit_pc)
 	limit_pc = start_pc + 200;
 
-      for (cur_pc = start_pc; cur_pc < limit_pc; cur_pc += 4)
+      for (cur_pc = start_pc; cur_pc < limit_pc; cur_pc += ALPHA_INSN_SIZE)
 	{
 	  unsigned int word = alpha_read_insn (cur_pc);
 
@@ -1137,7 +1140,7 @@ alpha_heuristic_frame_unwind_cache (struct frame_info *next_frame,
 		  break;
 		}
 
-	      cur_pc += 4;
+	      cur_pc += ALPHA_INSN_SIZE;
 	    }
 	}
     }
@@ -1218,8 +1221,12 @@ alpha_heuristic_frame_prev_register (struct frame_info *next_frame,
     }
 
   /* Otherwise assume the next frame has the same register value.  */
-  frame_register_unwind (next_frame, regnum, optimizedp, lvalp, addrp,
-                         realnump, bufferp);
+  *optimizedp = 0;
+  *lvalp = lval_register;
+  *addrp = 0;
+  *realnump = regnum;
+  if (bufferp)
+    frame_unwind_register (next_frame, *realnump, bufferp);
 }
 
 static const struct frame_unwind alpha_heuristic_frame_unwind = {
@@ -1288,71 +1295,74 @@ alpha_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
    targets don't supply this value in their core files.  */
 
 void
-alpha_supply_int_regs (int regno, const void *r0_r30,
-		       const void *pc, const void *unique)
+alpha_supply_int_regs (struct regcache *regcache, int regno,
+		       const void *r0_r30, const void *pc, const void *unique)
 {
   const gdb_byte *regs = r0_r30;
   int i;
 
   for (i = 0; i < 31; ++i)
     if (regno == i || regno == -1)
-      regcache_raw_supply (current_regcache, i, regs + i * 8);
+      regcache_raw_supply (regcache, i, regs + i * 8);
 
   if (regno == ALPHA_ZERO_REGNUM || regno == -1)
-    regcache_raw_supply (current_regcache, ALPHA_ZERO_REGNUM, NULL);
+    regcache_raw_supply (regcache, ALPHA_ZERO_REGNUM, NULL);
 
   if (regno == ALPHA_PC_REGNUM || regno == -1)
-    regcache_raw_supply (current_regcache, ALPHA_PC_REGNUM, pc);
+    regcache_raw_supply (regcache, ALPHA_PC_REGNUM, pc);
 
   if (regno == ALPHA_UNIQUE_REGNUM || regno == -1)
-    regcache_raw_supply (current_regcache, ALPHA_UNIQUE_REGNUM, unique);
+    regcache_raw_supply (regcache, ALPHA_UNIQUE_REGNUM, unique);
 }
 
 void
-alpha_fill_int_regs (int regno, void *r0_r30, void *pc, void *unique)
+alpha_fill_int_regs (const struct regcache *regcache,
+		     int regno, void *r0_r30, void *pc, void *unique)
 {
   gdb_byte *regs = r0_r30;
   int i;
 
   for (i = 0; i < 31; ++i)
     if (regno == i || regno == -1)
-      regcache_raw_collect (current_regcache, i, regs + i * 8);
+      regcache_raw_collect (regcache, i, regs + i * 8);
 
   if (regno == ALPHA_PC_REGNUM || regno == -1)
-    regcache_raw_collect (current_regcache, ALPHA_PC_REGNUM, pc);
+    regcache_raw_collect (regcache, ALPHA_PC_REGNUM, pc);
 
   if (unique && (regno == ALPHA_UNIQUE_REGNUM || regno == -1))
-    regcache_raw_collect (current_regcache, ALPHA_UNIQUE_REGNUM, unique);
+    regcache_raw_collect (regcache, ALPHA_UNIQUE_REGNUM, unique);
 }
 
 void
-alpha_supply_fp_regs (int regno, const void *f0_f30, const void *fpcr)
+alpha_supply_fp_regs (struct regcache *regcache, int regno,
+		      const void *f0_f30, const void *fpcr)
 {
   const gdb_byte *regs = f0_f30;
   int i;
 
   for (i = ALPHA_FP0_REGNUM; i < ALPHA_FP0_REGNUM + 31; ++i)
     if (regno == i || regno == -1)
-      regcache_raw_supply (current_regcache, i,
+      regcache_raw_supply (regcache, i,
 			   regs + (i - ALPHA_FP0_REGNUM) * 8);
 
   if (regno == ALPHA_FPCR_REGNUM || regno == -1)
-    regcache_raw_supply (current_regcache, ALPHA_FPCR_REGNUM, fpcr);
+    regcache_raw_supply (regcache, ALPHA_FPCR_REGNUM, fpcr);
 }
 
 void
-alpha_fill_fp_regs (int regno, void *f0_f30, void *fpcr)
+alpha_fill_fp_regs (const struct regcache *regcache,
+		    int regno, void *f0_f30, void *fpcr)
 {
   gdb_byte *regs = f0_f30;
   int i;
 
   for (i = ALPHA_FP0_REGNUM; i < ALPHA_FP0_REGNUM + 31; ++i)
     if (regno == i || regno == -1)
-      regcache_raw_collect (current_regcache, i,
+      regcache_raw_collect (regcache, i,
 			    regs + (i - ALPHA_FP0_REGNUM) * 8);
 
   if (regno == ALPHA_FPCR_REGNUM || regno == -1)
-    regcache_raw_collect (current_regcache, ALPHA_FPCR_REGNUM, fpcr);
+    regcache_raw_collect (regcache, ALPHA_FPCR_REGNUM, fpcr);
 }
 
 
@@ -1383,20 +1393,16 @@ fp_register_sign_bit (LONGEST reg)
 /* alpha_software_single_step() is called just before we want to resume
    the inferior, if we want to single-step it but there is no hardware
    or kernel single-step support (NetBSD on Alpha, for example).  We find
-   the target of the coming instruction and breakpoint it.
-
-   single_step is also called just after the inferior stops.  If we had
-   set up a simulated single-step, we undo our damage.  */
+   the target of the coming instruction and breakpoint it.  */
 
 static CORE_ADDR
-alpha_next_pc (CORE_ADDR pc)
+alpha_next_pc (struct frame_info *frame, CORE_ADDR pc)
 {
   unsigned int insn;
   unsigned int op;
   int regno;
   int offset;
   LONGEST rav;
-  gdb_byte reg[8];
 
   insn = alpha_read_insn (pc);
 
@@ -1407,7 +1413,7 @@ alpha_next_pc (CORE_ADDR pc)
     {
       /* Jump format: target PC is:
 	 RB & ~3  */
-      return (read_register ((insn >> 16) & 0x1f) & ~3);
+      return (get_frame_register_unsigned (frame, (insn >> 16) & 0x1f) & ~3);
     }
 
   if ((op & 0x30) == 0x30)
@@ -1421,8 +1427,8 @@ alpha_next_pc (CORE_ADDR pc)
           offset = (insn & 0x001fffff);
 	  if (offset & 0x00100000)
 	    offset  |= 0xffe00000;
-	  offset *= 4;
-	  return (pc + 4 + offset);
+	  offset *= ALPHA_INSN_SIZE;
+	  return (pc + ALPHA_INSN_SIZE + offset);
 	}
 
       /* Need to determine if branch is taken; read RA.  */
@@ -1435,11 +1441,10 @@ alpha_next_pc (CORE_ADDR pc)
           case 0x33:              /* FBLE */
           case 0x32:              /* FBLT */
           case 0x35:              /* FBNE */
-            regno += FP0_REGNUM;
+            regno += gdbarch_fp0_regnum (current_gdbarch);
 	}
       
-      regcache_cooked_read (current_regcache, regno, reg);
-      rav = extract_signed_integer (reg, 8);
+      rav = get_frame_register_signed (frame, regno);
 
       switch (op)
 	{
@@ -1507,27 +1512,19 @@ alpha_next_pc (CORE_ADDR pc)
 
   /* Not a branch or branch not taken; target PC is:
      pc + 4  */
-  return (pc + 4);
+  return (pc + ALPHA_INSN_SIZE);
 }
 
-void
-alpha_software_single_step (enum target_signal sig, int insert_breakpoints_p)
+int
+alpha_software_single_step (struct frame_info *frame)
 {
-  static CORE_ADDR next_pc;
-  CORE_ADDR pc;
+  CORE_ADDR pc, next_pc;
 
-  if (insert_breakpoints_p)
-    {
-      pc = read_pc ();
-      next_pc = alpha_next_pc (pc);
+  pc = get_frame_pc (frame);
+  next_pc = alpha_next_pc (frame, pc);
 
-      insert_single_step_breakpoint (next_pc);
-    }
-  else
-    {
-      remove_single_step_breakpoints ();
-      write_pc (next_pc);
-    }
+  insert_single_step_breakpoint (next_pc);
+  return 1;
 }
 
 
@@ -1625,7 +1622,7 @@ alpha_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);
 
   set_gdbarch_breakpoint_from_pc (gdbarch, alpha_breakpoint_from_pc);
-  set_gdbarch_decr_pc_after_break (gdbarch, 4);
+  set_gdbarch_decr_pc_after_break (gdbarch, ALPHA_INSN_SIZE);
   set_gdbarch_cannot_step_breakpoint (gdbarch, 1);
 
   /* Hook in ABI-specific overrides, if they have been registered.  */

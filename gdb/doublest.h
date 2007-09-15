@@ -1,14 +1,14 @@
 /* Floating point definitions for GDB.
 
-   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2003, 2005, 2006
+   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
+   1997, 1998, 1999, 2000, 2001, 2003, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef DOUBLEST_H
 #define DOUBLEST_H
@@ -64,6 +62,17 @@ typedef double DOUBLEST;
 # undef SCANF_HAS_LONG_DOUBLE
 #endif
 
+/* Different kinds of floatformat numbers recognized by
+   floatformat_classify.  To avoid portability issues, we use local
+   values instead of the C99 macros (FP_NAN et cetera).  */
+enum float_kind {
+  float_nan,
+  float_infinite,
+  float_zero,
+  float_normal,
+  float_subnormal
+};
+
 extern void floatformat_to_doublest (const struct floatformat *,
 				     const void *in, DOUBLEST *out);
 extern void floatformat_from_doublest (const struct floatformat *,
@@ -71,7 +80,8 @@ extern void floatformat_from_doublest (const struct floatformat *,
 
 extern int floatformat_is_negative (const struct floatformat *,
 				    const bfd_byte *);
-extern int floatformat_is_nan (const struct floatformat *, const bfd_byte *);
+extern enum float_kind floatformat_classify (const struct floatformat *,
+					     const bfd_byte *);
 extern const char *floatformat_mantissa (const struct floatformat *,
 					 const bfd_byte *);
 
@@ -99,12 +109,5 @@ extern void store_typed_floating (void *addr, const struct type *type,
 extern void convert_typed_floating (const void *from,
 				    const struct type *from_type,
                                     void *to, const struct type *to_type);
-
-/* Table of convenient float-formats.  */
-extern const struct floatformat *floatformat_ieee_single[BFD_ENDIAN_UNKNOWN];
-extern const struct floatformat *floatformat_ieee_double[BFD_ENDIAN_UNKNOWN];
-extern const struct floatformat *floatformat_ieee_quad[BFD_ENDIAN_UNKNOWN];
-extern const struct floatformat *floatformat_arm_ext[BFD_ENDIAN_UNKNOWN];
-extern const struct floatformat *floatformat_ia64_spill[BFD_ENDIAN_UNKNOWN];
 
 #endif

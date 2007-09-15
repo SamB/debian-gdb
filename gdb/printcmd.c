@@ -1,14 +1,14 @@
 /* Print values for GNU debugger GDB.
 
-   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -69,6 +67,10 @@ static char last_size = 'w';
 /* Default address to examine next.  */
 
 static CORE_ADDR next_address;
+
+/* Number of delay instructions following current disassembled insn.  */
+
+static int branch_delay_insns;
 
 /* Last address examined.  */
 
@@ -212,14 +214,14 @@ decode_format (char **string_ptr, int oformat, int osize)
       case 'a':
       case 's':
 	/* Pick the appropriate size for an address.  */
-	if (TARGET_PTR_BIT == 64)
+	if (gdbarch_ptr_bit (current_gdbarch) == 64)
 	  val.size = osize ? 'g' : osize;
-	else if (TARGET_PTR_BIT == 32)
+	else if (gdbarch_ptr_bit (current_gdbarch) == 32)
 	  val.size = osize ? 'w' : osize;
-	else if (TARGET_PTR_BIT == 16)
+	else if (gdbarch_ptr_bit (current_gdbarch) == 16)
 	  val.size = osize ? 'h' : osize;
 	else
-	  /* Bad value for TARGET_PTR_BIT.  */
+	  /* Bad value for gdbarch_ptr_bit.  */
 	  internal_error (__FILE__, __LINE__,
 			  _("failed internal consistency check"));
 	break;
@@ -248,7 +250,8 @@ decode_format (char **string_ptr, int oformat, int osize)
    Do not end with a newline.
    0 means print VAL according to its own type.
    SIZE is the letter for the size of datum being printed.
-   This is used to pad hex numbers so they line up.  */
+   This is used to pad hex numbers so they line up.  SIZE is 0
+   for print / output and set for examine.  */
 
 static void
 print_formatted (struct value *val, int format, int size,
@@ -260,44 +263,41 @@ print_formatted (struct value *val, int format, int size,
   if (VALUE_LVAL (val) == lval_memory)
     next_address = VALUE_ADDRESS (val) + len;
 
-  switch (format)
+  if (size)
     {
-    case 's':
-      /* FIXME: Need to handle wchar_t's here... */
-      next_address = VALUE_ADDRESS (val)
-	+ val_print_string (VALUE_ADDRESS (val), -1, 1, stream);
-      break;
+      switch (format)
+	{
+	case 's':
+	  /* FIXME: Need to handle wchar_t's here... */
+	  next_address = VALUE_ADDRESS (val)
+	    + val_print_string (VALUE_ADDRESS (val), -1, 1, stream);
+	  return;
 
-    case 'i':
-      /* The old comment says
-         "Force output out, print_insn not using _filtered".
-         I'm not completely sure what that means, I suspect most print_insn
-         now do use _filtered, so I guess it's obsolete.
-         --Yes, it does filter now, and so this is obsolete.  -JB  */
-
-      /* We often wrap here if there are long symbolic names.  */
-      wrap_here ("    ");
-      next_address = VALUE_ADDRESS (val)
-	+ gdb_print_insn (VALUE_ADDRESS (val), stream);
-      break;
-
-    default:
-      if (format == 0
-	  || TYPE_CODE (type) == TYPE_CODE_ARRAY
-	  || TYPE_CODE (type) == TYPE_CODE_STRING
-	  || TYPE_CODE (type) == TYPE_CODE_STRUCT
-	  || TYPE_CODE (type) == TYPE_CODE_UNION
-	  || TYPE_CODE (type) == TYPE_CODE_NAMESPACE)
-	/* If format is 0, use the 'natural' format for that type of
-	   value.  If the type is non-scalar, we have to use language
-	   rules to print it as a series of scalars.  */
-	value_print (val, stream, format, Val_pretty_default);
-      else
-	/* User specified format, so don't look to the the type to
-	   tell us what to do.  */
-	print_scalar_formatted (value_contents (val), type,
-				format, size, stream);
+	case 'i':
+	  /* We often wrap here if there are long symbolic names.  */
+	  wrap_here ("    ");
+	  next_address = (VALUE_ADDRESS (val)
+			  + gdb_print_insn (VALUE_ADDRESS (val), stream,
+					    &branch_delay_insns));
+	  return;
+	}
     }
+
+  if (format == 0 || format == 's'
+      || TYPE_CODE (type) == TYPE_CODE_ARRAY
+      || TYPE_CODE (type) == TYPE_CODE_STRING
+      || TYPE_CODE (type) == TYPE_CODE_STRUCT
+      || TYPE_CODE (type) == TYPE_CODE_UNION
+      || TYPE_CODE (type) == TYPE_CODE_NAMESPACE)
+    /* If format is 0, use the 'natural' format for that type of
+       value.  If the type is non-scalar, we have to use language
+       rules to print it as a series of scalars.  */
+    value_print (val, stream, format, Val_pretty_default);
+  else
+    /* User specified format, so don't look to the the type to
+       tell us what to do.  */
+    print_scalar_formatted (value_contents (val), type,
+			    format, size, stream);
 }
 
 /* Print a scalar of data of type TYPE, pointed to in GDB by VALADDR,
@@ -313,6 +313,15 @@ print_scalar_formatted (const void *valaddr, struct type *type,
 {
   LONGEST val_long = 0;
   unsigned int len = TYPE_LENGTH (type);
+
+  /* If we get here with a string format, try again without it.  Go
+     all the way back to the language printers, which may call us
+     again.  */
+  if (format == 's')
+    {
+      val_print (type, valaddr, 0, 0, stream, 0, 0, 0, Val_pretty_default);
+      return;
+    }
 
   if (len > sizeof(LONGEST) &&
       (TYPE_CODE (type) == TYPE_CODE_INT
@@ -346,9 +355,9 @@ print_scalar_formatted (const void *valaddr, struct type *type,
 
   /* If the value is a pointer, and pointers and addresses are not the
      same, then at this point, the value's length (in target bytes) is
-     TARGET_ADDR_BIT/TARGET_CHAR_BIT, not TYPE_LENGTH (type).  */
+     gdbarch_addr_bit/TARGET_CHAR_BIT, not TYPE_LENGTH (type).  */
   if (TYPE_CODE (type) == TYPE_CODE_PTR)
-    len = TARGET_ADDR_BIT / TARGET_CHAR_BIT;
+    len = gdbarch_addr_bit (current_gdbarch) / TARGET_CHAR_BIT;
 
   /* If we are printing it as unsigned, truncate it in case it is actually
      a negative signed value (e.g. "print/u (short)-1" should print 65535
@@ -404,8 +413,17 @@ print_scalar_formatted (const void *valaddr, struct type *type,
       break;
 
     case 'c':
-      value_print (value_from_longest (builtin_type_true_char, val_long),
-		   stream, 0, Val_pretty_default);
+      if (TYPE_UNSIGNED (type))
+	{
+	  struct type *utype;
+
+	  utype = builtin_type (current_gdbarch)->builtin_true_unsigned_char;
+	  value_print (value_from_longest (utype, val_long),
+		       stream, 0, Val_pretty_default);
+	}
+      else
+	value_print (value_from_longest (builtin_type_true_char, val_long),
+		     stream, 0, Val_pretty_default);
       break;
 
     case 'f':
@@ -560,7 +578,6 @@ build_address_symbolic (CORE_ADDR addr,  /* IN */
 {
   struct minimal_symbol *msymbol;
   struct symbol *symbol;
-  struct symtab *symtab = 0;
   CORE_ADDR name_location = 0;
   asection *section = 0;
   char *name_temp = "";
@@ -608,7 +625,6 @@ build_address_symbolic (CORE_ADDR addr,  /* IN */
 	  /* The msymbol is closer to the address than the symbol;
 	     use the msymbol instead.  */
 	  symbol = 0;
-	  symtab = 0;
 	  name_location = SYMBOL_VALUE_ADDRESS (msymbol);
 	  if (do_demangle || asm_demangle)
 	    name_temp = SYMBOL_PRINT_NAME (msymbol);
@@ -645,16 +661,6 @@ build_address_symbolic (CORE_ADDR addr,  /* IN */
 	  *filename = xstrdup (sal.symtab->filename);
 	  *line = sal.line;
 	}
-      else if (symtab && symbol && symbol->line)
-	{
-	  *filename = xstrdup (symtab->filename);
-	  *line = symbol->line;
-	}
-      else if (symtab)
-	{
-	  *filename = xstrdup (symtab->filename);
-	  *line = -1;
-	}
     }
   return 0;
 }
@@ -669,7 +675,7 @@ deprecated_print_address_numeric (CORE_ADDR addr, int use_local,
     fputs_filtered (paddress (addr), stream);
   else
     {
-      int addr_bit = TARGET_ADDR_BIT;
+      int addr_bit = gdbarch_addr_bit (current_gdbarch);
 
       if (addr_bit < (sizeof (CORE_ADDR) * HOST_CHAR_BIT))
 	addr &= ((CORE_ADDR) 1 << addr_bit) - 1;
@@ -786,8 +792,8 @@ do_examine (struct format_data fmt, CORE_ADDR addr)
 	    value_free (last_examine_value);
 
 	  /* The value to be displayed is not fetched greedily.
-	     Instead, to avoid the posibility of a fetched value not
-	     being used, its retreval is delayed until the print code
+	     Instead, to avoid the possibility of a fetched value not
+	     being used, its retrieval is delayed until the print code
 	     uses it.  When examining an instruction stream, the
 	     disassembler will perform its own memory fetch using just
 	     the address stored in LAST_EXAMINE_VALUE.  FIXME: Should
@@ -800,6 +806,10 @@ do_examine (struct format_data fmt, CORE_ADDR addr)
 	    release_value (last_examine_value);
 
 	  print_formatted (last_examine_value, format, size, gdb_stdout);
+
+	  /* Display any branch delay slots following the final insn.  */
+	  if (format == 'i' && count == 1)
+	    count += branch_delay_insns;
 	}
       printf_filtered ("\n");
       gdb_flush (gdb_stdout);
@@ -814,7 +824,7 @@ validate_format (struct format_data fmt, char *cmdname)
   if (fmt.count != 1)
     error (_("Item count other than 1 is meaningless in \"%s\" command."),
 	   cmdname);
-  if (fmt.format == 'i' || fmt.format == 's')
+  if (fmt.format == 'i')
     error (_("Format letter \"%c\" is meaningless in \"%s\" command."),
 	   fmt.format, cmdname);
 }
@@ -1113,7 +1123,8 @@ address_info (char *exp, int from_tty)
       break;
 
     case LOC_REGISTER:
-      printf_filtered (_("a variable in register %s"), REGISTER_NAME (val));
+      printf_filtered (_("a variable in register %s"),
+			 gdbarch_register_name (current_gdbarch, val));
       break;
 
     case LOC_STATIC:
@@ -1144,12 +1155,13 @@ address_info (char *exp, int from_tty)
       break;
 
     case LOC_REGPARM:
-      printf_filtered (_("an argument in register %s"), REGISTER_NAME (val));
+      printf_filtered (_("an argument in register %s"),
+			 gdbarch_register_name (current_gdbarch, val));
       break;
 
     case LOC_REGPARM_ADDR:
       printf_filtered (_("address of an argument in register %s"),
-		       REGISTER_NAME (val));
+		       gdbarch_register_name (current_gdbarch, val));
       break;
 
     case LOC_ARG:
@@ -1170,12 +1182,12 @@ address_info (char *exp, int from_tty)
 
     case LOC_BASEREG:
       printf_filtered (_("a variable at offset %ld from register %s"),
-		       val, REGISTER_NAME (basereg));
+		       val, gdbarch_register_name (current_gdbarch, basereg));
       break;
 
     case LOC_BASEREG_ARG:
       printf_filtered (_("an argument at offset %ld from register %s"),
-		       val, REGISTER_NAME (basereg));
+		       val, gdbarch_register_name (current_gdbarch, basereg));
       break;
 
     case LOC_TYPEDEF:
@@ -1222,7 +1234,7 @@ address_info (char *exp, int from_tty)
     case LOC_HP_THREAD_LOCAL_STATIC:
       printf_filtered (_("\
 a thread-local variable at offset %ld from the thread base register %s"),
-		       val, REGISTER_NAME (basereg));
+		       val, gdbarch_register_name (current_gdbarch, basereg));
       break;
 
     case LOC_OPTIMIZED_OUT:
@@ -1509,7 +1521,7 @@ do_one_display (struct display *d)
       print_expression (d->exp, gdb_stdout);
       annotate_display_expression_end ();
 
-      if (d->format.count != 1)
+      if (d->format.count != 1 || d->format.format == 'i')
 	printf_filtered ("\n");
       else
 	printf_filtered ("  ");
@@ -1517,7 +1529,7 @@ do_one_display (struct display *d)
       val = evaluate_expression (d->exp);
       addr = value_as_address (val);
       if (d->format.format == 'i')
-	addr = ADDR_BITS_REMOVE (addr);
+	addr = gdbarch_addr_bits_remove (current_gdbarch, addr);
 
       annotate_display_value ();
 
@@ -2082,9 +2094,68 @@ printf_command (char *arg, int from_tty)
 	      printf_filtered (current_substring, val);
 	      break;
 	    }
+	  case ptr_arg:
+	    {
+	      /* We avoid the host's %p because pointers are too
+		 likely to be the wrong size.  The only interesting
+		 modifier for %p is a width; extract that, and then
+		 handle %p as glibc would: %#x or a literal "(nil)".  */
+
+	      char *p, *fmt, *fmt_p;
+#if defined (CC_HAS_LONG_LONG) && defined (PRINTF_HAS_LONG_LONG)
+	      long long val = value_as_long (val_args[i]);
+#else
+	      long val = value_as_long (val_args[i]);
+#endif
+
+	      fmt = alloca (strlen (current_substring) + 5);
+
+	      /* Copy up to the leading %.  */
+	      p = current_substring;
+	      fmt_p = fmt;
+	      while (*p)
+		{
+		  int is_percent = (*p == '%');
+		  *fmt_p++ = *p++;
+		  if (is_percent)
+		    {
+		      if (*p == '%')
+			*fmt_p++ = *p++;
+		      else
+			break;
+		    }
+		}
+
+	      if (val != 0)
+		*fmt_p++ = '#';
+
+	      /* Copy any width.  */
+	      while (*p >= '0' && *p < '9')
+		*fmt_p++ = *p++;
+
+	      gdb_assert (*p == 'p' && *(p + 1) == '\0');
+	      if (val != 0)
+		{
+#if defined (CC_HAS_LONG_LONG) && defined (PRINTF_HAS_LONG_LONG)
+		  *fmt_p++ = 'l';
+#endif
+		  *fmt_p++ = 'l';
+		  *fmt_p++ = 'x';
+		  *fmt_p++ = '\0';
+		  printf_filtered (fmt, val);
+		}
+	      else
+		{
+		  *fmt_p++ = 's';
+		  *fmt_p++ = '\0';
+		  printf_filtered (fmt, "(nil)");
+		}
+
+	      break;
+	    }
 	  default:
 	    internal_error (__FILE__, __LINE__,
-			    _("failed internal consitency check"));
+			    _("failed internal consistency check"));
 	  }
 	/* Skip to the next substring.  */
 	current_substring += strlen (current_substring) + 1;

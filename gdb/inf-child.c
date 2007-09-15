@@ -1,14 +1,14 @@
 /* Default child (native) target interface, for GDB when running under
    Unix.
 
-   Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1998, 1999, 2000, 2001, 2002, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998,
+   1999, 2000, 2001, 2002, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "regcache.h"
@@ -33,22 +31,22 @@
    for all registers.  */
 
 static void
-inf_child_fetch_inferior_registers (int regnum)
+inf_child_fetch_inferior_registers (struct regcache *regcache, int regnum)
 {
   if (regnum == -1)
     {
-      for (regnum = 0; regnum < NUM_REGS; regnum++)
-	regcache_raw_supply (current_regcache, regnum, NULL);
+      for (regnum = 0; regnum < gdbarch_num_regs (current_gdbarch); regnum++)
+	regcache_raw_supply (regcache, regnum, NULL);
     }
   else
-    regcache_raw_supply (current_regcache, regnum, NULL);
+    regcache_raw_supply (regcache, regnum, NULL);
 }
 
 /* Store register REGNUM back into the inferior.  If REGNUM is -1, do
    this for all registers (including the floating point registers).  */
 
 static void
-inf_child_store_inferior_registers (int regnum)
+inf_child_store_inferior_registers (struct regcache *regcache, int regnum)
 {
 }
 
@@ -66,7 +64,7 @@ inf_child_post_attach (int pid)
    program being debugged.  */
 
 static void
-inf_child_prepare_to_store (void)
+inf_child_prepare_to_store (struct regcache *regcache)
 {
 }
 

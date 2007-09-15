@@ -95,6 +95,9 @@ Something like changing or bypassing an interface is _not_ an obvious
 fix, since such a change without discussion will result in
 instantaneous and loud complaints.
 
+For documentation changes, about the only kind of fix that is obvious
+is correction of a typo or bad English usage.
+
 
 	     GDB Steering Committee
 	     ----------------------
@@ -118,7 +121,7 @@ their affiliation, and they act on behalf of the GNU project.
 	Klee Dienes (Apple)
 	Paul Hilfinger (UC Berkeley)
 	Dan Jacobowitz (CodeSourcery)
-	Stan Shebs (Apple)
+	Stan Shebs (Mozilla)
 	Richard Stallman (FSF)
 	Ian Lance Taylor (C2)
 	Todd Whitesel
@@ -156,13 +159,14 @@ future, if there are, a reference to the list will be included here.
 The current global maintainers are (in alphabetical order):
 
 Jim Blandy			jimb@codesourcery.com
+Joel Brobecker			brobecker@adacore.com
 Kevin Buettner			kevinb@redhat.com
 Andrew Cagney			cagney@gnu.org
-Fred Fish			fnf@ninemoons.com
 Daniel Jacobowitz		dan@debian.org
 Mark Kettenis           	kettenis@gnu.org
-Stan Shebs			shebs@apple.com
-Michael Snyder			Michael.Snyder@PalmSource.com
+Stan Shebs			shebs@mozilla.com
+Michael Snyder			Michael.Snyder@access-company.com
+Ulrich Weigand			Ulrich.Weigand@de.ibm.com
 Elena Zannoni			ezannoni@redhat.com
 Eli Zaretskii			eliz@gnu.org
 
@@ -193,7 +197,6 @@ patches; and ensure that contributors are given credit.
 Current patch champions (in alphabetical order):
 
 	Randolph Chung     <tausq@debian.org>
-	Daniel Jacobowitz  <dan@debian.org>
 
 
 
@@ -252,9 +255,8 @@ the native maintainer when resolving ABI issues.
 
 	avr		--target=avr ,-Werror
 
-	cris		--target=cris-elf ,-Werror
-
-	d10v		OBSOLETE
+	cris		--target=cris-elf ,-Werror ,
+			(sim does not build with -Werror)
 
 	frv		--target=frv-elf ,-Werror
 
@@ -281,11 +283,14 @@ the native maintainer when resolving ABI issues.
 
 	mcore		Deleted
 
+	mep		--target=mep-elf ,-Werror
+			Kevin Buettner		kevinb@redhat.com
+
 	mips		--target=mips-elf ,-Werror
 
 	mn10300		--target=mn10300-elf broken
 			(sim/ dies with make -j)
-			Michael Snyder		Michael.Snyder@PalmSource.com
+			Michael Snyder		Michael.Snyder@access-company.com
 
 	ms1		--target=ms1-elf ,-Werror
 			Kevin Buettner		kevinb@redhat.com
@@ -298,10 +303,14 @@ the native maintainer when resolving ABI issues.
 
 	s390		--target=s390-linux-gnu ,-Werror
 
+	score	--target=score-elf
+			Qinwei		qinwei@sunnorth.com.cn
+
 	sh		--target=sh-elf ,-Werror
 			--target=sh64-elf ,-Werror
 
-	sparc		--target=sparc-elf ,-Werror
+	sparc		--target=sparc64-solaris2.10 ,-Werror
+			(--target=sparc-elf broken)
 
 	spu		--target=spu-elf ,-Werror
 			Ulrich Weigand		uweigand@de.ibm.com
@@ -314,6 +323,9 @@ the native maintainer when resolving ABI issues.
 
 	xstormy16	--target=xstormy16-elf
 			Corinna Vinschen	vinschen@redhat.com
+
+	xtensa		--target=xtensa-elf
+			Maxim Grigoriev		maxim2405@gmail.com
 
 All developers recognized by this file can make arbitrary changes to
 OBSOLETE targets.
@@ -349,8 +361,8 @@ FreeBSD native & host	Mark Kettenis		kettenis@gnu.org
 
 Core: Generic components used by all of GDB
 
-tracing			Michael Snyder		Michael.Snyder@PalmSource.com
-threads			Michael Snyder		Michael.Snyder@PalmSource.com
+tracing			Michael Snyder		Michael.Snyder@access-company.com
+threads			Michael Snyder		Michael.Snyder@access-company.com
 			Mark Kettenis		kettenis@gnu.org
 language support
   C++			Daniel Jacobowitz	dan@debian.org
@@ -361,8 +373,8 @@ documentation		Eli Zaretskii		eliz@gnu.org
   (including NEWS)
 testsuite
   gdbtk (gdb.gdbtk)     Keith Seitz             keiths@redhat.com
-  threads (gdb.threads) Michael Snyder          Michael.Snyder@PalmSource.com
-  trace (gdb.trace)     Michael Snyder          Michael.Snyder@PalmSource.com
+  threads (gdb.threads) Michael Snyder          Michael.Snyder@access-company.com
+  trace (gdb.trace)     Michael Snyder          Michael.Snyder@access-company.com
 
 
 UI: External (user) interfaces.
@@ -434,6 +446,7 @@ Modula-2 support	Gaius Mulley		gaius@glam.ac.uk
 To get recommended for the Write After Approval list you need a valid
 FSF assignment and have submitted one good patch.
 
+Pedro Alves					pedro_alves@portugalmail.pt
 David Anderson					davea@sgi.com
 John David Anglin				dave.anglin@nrc-cnrc.gc.ca
 Shrinivas Atre					shrinivasa@kpitcummins.com
@@ -456,22 +469,26 @@ Randolph Chung					tausq@debian.org
 Nick Clifton					nickc@redhat.com
 J.T. Conklin					jtc@acorntoolworks.com
 Brendan Conoboy					blc@redhat.com
+Ludovic Courtès					ludo@gnu.org
 DJ Delorie					dj@redhat.com
 Philippe De Muyter				phdm@macqel.be
 Dhananjay Deshpande				dhananjayd@kpitcummins.com
 Klee Dienes					kdienes@apple.com
+Gabriel Dos Reis                                gdr@integrable-solutions.net
 Richard Earnshaw				rearnsha@arm.com
 Steve Ellcey					sje@cup.hp.com
 Frank Ch. Eigler				fche@redhat.com
 Ben Elliston					bje@gnu.org
 Adam Fedor					fedor@gnu.org
-Fred Fish					fnf@ninemoons.com
 Brian Ford					ford@vss.fsi.com
 Orjan Friberg					orjanf@axis.com
+Nathan Froyd					froydnj@codesourcery.com
+Gary Funck					gary@intrepid.com
 Paul Gilliam					pgilliam@us.ibm.com
 Raoul Gough					RaoulGough@yahoo.co.uk
 Anthony Green			 		green@redhat.com
 Matthew Green					mrg@eterna.com.au
+Maxim Grigoriev					maxim2405@gmail.com
 Jerome Guitton					guitton@act-europe.fr
 Ben Harris					bjh21@netbsd.org
 Richard Henderson				rth@redhat.com
@@ -491,6 +508,7 @@ Jeff Johnston					jjohnstn@redhat.com
 Geoff Keating					geoffk@redhat.com
 Mark Kettenis					kettenis@gnu.org
 Jim Kingdon					kingdon@panix.com
+Jan Kratochvil					jan.kratochvil@redhat.com
 Jonathan Larmour				jlarmour@redhat.co.uk
 Jeff Law					law@redhat.com
 David Lecomber					david@streamline-computing.com
@@ -511,10 +529,14 @@ Pierre Muller					muller@sources.redhat.com
 Gaius Mulley                                    gaius@glam.ac.uk
 Joseph Myers					joseph@codesourcery.com
 Fernando Nasser					fnasser@redhat.com
+Adam Nemet					anemet@caviumnetworks.com
 Nathanael Nerode				neroden@gcc.gnu.org
 Hans-Peter Nilsson				hp@bitrange.com
 David O'Brien					obrien@freebsd.org
 Alexandre Oliva					aoliva@redhat.com
+Denis Pilat					denis.pilat@st.com
+Vladimir Prus                                   vladimir@codesourcery.com
+Qinwei						qinwei@sunnorth.com.cn
 Ramana Radhakrishnan 				ramana.radhakrishnan@codito.com
 Frederic Riss					frederic.riss@st.com
 Tom Rix						trix@redhat.com
@@ -522,6 +544,7 @@ Nick Roberts					nickrob@snap.net.nz
 Bob Rossi 					bob_rossi@cox.net
 Theodore A. Roth				troth@openavr.org
 Ian Roxborough					irox@redhat.com
+Maciej W. Rozycki				macro@linux-mips.org
 Grace Sainsbury					graces@redhat.com
 Kei Sakamoto					sakamoto.kei@renesas.com
 Mark Salter					msalter@redhat.com
@@ -529,18 +552,20 @@ Richard Sandiford				richard@codesourcery.com
 Peter Schauer					Peter.Schauer@mytum.de
 Andreas Schwab					schwab@suse.de
 Keith Seitz					keiths@redhat.com
-Stan Shebs					shebs@apple.com
+Stan Shebs					shebs@mozilla.com
+Mark Shinwell					shinwell@codesourcery.com
 Aidan Skinner					aidan@velvet.net
 Jiri Smid					smid@suse.cz
 David Smith					dsmith@redhat.com
 Stephen P. Smith				ischis2@cox.net
 Jackie Smith Cashion				jsmith@redhat.com
-Michael Snyder					Michael.Snyder@PalmSource.com
+Michael Snyder					Michael.Snyder@access-company.com
 Petr Sorfa					petrs@caldera.com
 Andrew Stubbs					andrew.stubbs@st.com
 Ian Lance Taylor				ian@airs.com
 Gary Thomas					gthomas@redhat.com
 Jason Thorpe					thorpej@netbsd.org
+Caroline Tice					ctice@apple.com
 Tom Tromey					tromey@redhat.com
 David Ung					davidu@mips.com
 D Venkatasubramanian				dvenkat@noida.hcltech.com
@@ -584,9 +609,14 @@ Peter Schauer (global, AIX, xcoffsolib,
 Scott Bambrough (ARM)				scottb at netwinder dot org
 Philippe De Muyter (coff)			phdm at macqel dot be
 Michael Chastain (testsuite)			mec.gnu at mindspring dot com
+Fred Fish (global)
 
 
 
 Folks that have been caught up in a paper trail:
 
 David Carlton					carlton@bactrian.org
+
+;; Local Variables:
+;; coding: utf-8
+;; End:

@@ -1,14 +1,14 @@
 /* Definitions for values of C expressions, for GDB.
 
-   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (VALUE_H)
 #define VALUE_H 1
@@ -193,6 +191,12 @@ extern int value_contents_equal (struct value *val1, struct value *val2);
 extern int value_optimized_out (struct value *value);
 extern void set_value_optimized_out (struct value *value, int val);
 
+/* Set or return field indicating whether a variable is initialized or
+   not, based on debugging information supplied by the compiler. 
+   1 = initialized; 0 = uninitialized.  */
+extern int value_initialized (struct value *);
+extern void set_value_initialized (struct value *, int);
+
 /* While the following fields are per- VALUE .CONTENT .PIECE (i.e., a
    single value might have multiple LVALs), this hacked interface is
    limited to just the first PIECE.  Expect further change.  */
@@ -271,6 +275,8 @@ extern LONGEST unpack_field_as_long (struct type *type,
 				     const gdb_byte *valaddr,
 				     int fieldno);
 
+extern void pack_long (gdb_byte *buf, struct type *type, LONGEST num);
+
 extern struct value *value_from_longest (struct type *type, LONGEST num);
 extern struct value *value_from_pointer (struct type *type, CORE_ADDR addr);
 extern struct value *value_from_double (struct type *type, DOUBLEST num);
@@ -278,6 +284,10 @@ extern struct value *value_from_string (char *string);
 
 extern struct value *value_at (struct type *type, CORE_ADDR addr);
 extern struct value *value_at_lazy (struct type *type, CORE_ADDR addr);
+
+extern struct value *default_value_from_register (struct type *type,
+						  int regnum,
+						  struct frame_info *frame);
 
 extern struct value *value_from_register (struct type *type, int regnum,
 					  struct frame_info *frame);
@@ -345,7 +355,9 @@ extern struct value *value_struct_elt (struct value **argp,
 				       char *err);
 
 extern struct value *value_aggregate_elt (struct type *curtype,
-					  char *name, enum noside noside);
+					  char *name,
+					  int want_address,
+					  enum noside noside);
 
 extern struct value *value_static_field (struct type *type, int fieldno);
 

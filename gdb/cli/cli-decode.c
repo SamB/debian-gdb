@@ -1,11 +1,11 @@
 /* Handle lists of commands, their decoding and documentation, for GDB.
 
-   Copyright (c) 1986, 1989, 1990, 1991, 1998, 2000, 2001, 2002, 2004 Free
-   Software Foundation, Inc.
+   Copyright (c) 1986, 1989, 1990, 1991, 1998, 2000, 2001, 2002, 2004, 2007
+   Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -14,9 +14,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -1226,28 +1224,27 @@ lookup_cmd (char **line, struct cmd_list_element *list, char *cmdtype,
 	    int allow_unknown, int ignore_help_classes)
 {
   struct cmd_list_element *last_list = 0;
-  struct cmd_list_element *c =
-  lookup_cmd_1 (line, list, &last_list, ignore_help_classes);
+  struct cmd_list_element *c;
 
   /* Note: Do not remove trailing whitespace here because this
      would be wrong for complete_command.  Jim Kingdon  */
+
+  if (!*line)
+    error (_("Lack of needed %scommand"), cmdtype);
+
+  c = lookup_cmd_1 (line, list, &last_list, ignore_help_classes);
 
   if (!c)
     {
       if (!allow_unknown)
 	{
-	  if (!*line)
-	    error (_("Lack of needed %scommand"), cmdtype);
-	  else
-	    {
-	      char *q;
-	      int len = find_command_name_length (*line);
+	  char *q;
+	  int len = find_command_name_length (*line);
 
-	      q = (char *) alloca (len + 1);
-	      strncpy (q, *line, len);
-	      q[len] = '\0';
-	      undef_cmd_error (cmdtype, q);
-	    }
+	  q = (char *) alloca (len + 1);
+	  strncpy (q, *line, len);
+	  q[len] = '\0';
+	  undef_cmd_error (cmdtype, q);
 	}
       else
 	return 0;

@@ -1,27 +1,25 @@
 /* Target dependent code for CRIS, for GDB, the GNU debugger.
 
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    Contributed by Axis Communications AB.
    Written by Hendrik Ruijter, Stefan Andersson, and Orjan Friberg.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor,
-Boston, MA 02110-1301, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -74,8 +72,8 @@ enum cris_num_regs
    ARG2_REGNUM Contains the second parameter to a function.
    ARG3_REGNUM Contains the third parameter to a function.
    ARG4_REGNUM Contains the fourth parameter to a function. Rest on stack.
-   SP_REGNUM   Contains address of top of stack.
-   PC_REGNUM   Contains address of next instruction.
+   gdbarch_sp_regnum Contains address of top of stack.
+   gdbarch_pc_regnum Contains address of next instruction.
    SRP_REGNUM  Subroutine return pointer register.
    BRP_REGNUM  Breakpoint return pointer register.  */
 
@@ -279,7 +277,7 @@ cris_sigcontext_addr (struct frame_info *next_frame)
   CORE_ADDR sp;
   char buf[4];
 
-  frame_unwind_register (next_frame, SP_REGNUM, buf);
+  frame_unwind_register (next_frame, gdbarch_sp_regnum (current_gdbarch), buf);
   sp = extract_unsigned_integer (buf, 4);
 
   /* Look for normal sigtramp frame first.  */
@@ -359,7 +357,7 @@ cris_sigtramp_frame_unwind_cache (struct frame_info *next_frame,
   info->return_pc = 0;
   info->leaf_function = 0;
 
-  frame_unwind_register (next_frame, SP_REGNUM, buf);
+  frame_unwind_register (next_frame, gdbarch_sp_regnum (current_gdbarch), buf);
   info->base = extract_unsigned_integer (buf, 4);
 
   addr = cris_sigcontext_addr (next_frame);
@@ -385,8 +383,10 @@ cris_sigtramp_frame_unwind_cache (struct frame_info *next_frame,
 	 it though since that will mean that the backtrace will show a PC 
 	 different from what is shown when stopped.  */
       info->saved_regs[IRP_REGNUM].addr = addr + (19 * 4);
-      info->saved_regs[PC_REGNUM] = info->saved_regs[IRP_REGNUM];
-      info->saved_regs[SP_REGNUM].addr = addr + (24 * 4);
+      info->saved_regs[gdbarch_pc_regnum (current_gdbarch)]
+	= info->saved_regs[IRP_REGNUM];
+      info->saved_regs[gdbarch_sp_regnum (current_gdbarch)].addr
+	= addr + (24 * 4);
     }
   else
     {
@@ -413,9 +413,11 @@ cris_sigtramp_frame_unwind_cache (struct frame_info *next_frame,
 	 
 	 This could be solved by a couple of read_memory_unsigned_integer and a
 	 trad_frame_set_value.  */
-      info->saved_regs[PC_REGNUM] = info->saved_regs[ERP_REGNUM];
+      info->saved_regs[gdbarch_pc_regnum (current_gdbarch)]
+	= info->saved_regs[ERP_REGNUM];
 
-      info->saved_regs[SP_REGNUM].addr = addr + (25 * 4);
+      info->saved_regs[gdbarch_sp_regnum (current_gdbarch)].addr
+	= addr + (25 * 4);
     }
   
   return info;
@@ -535,7 +537,7 @@ CORE_ADDR
 cris_stopped_data_address (void)
 {
   CORE_ADDR eda;
-  eda = read_register (EDA_REGNUM);
+  eda = get_frame_register_unsigned (get_current_frame (), EDA_REGNUM);
   return eda;
 }
 
@@ -792,9 +794,11 @@ cris_frame_unwind_cache (struct frame_info *next_frame,
 
   /* Prologue analysis does the rest...  */
   if (cris_version () == 32)
-    crisv32_scan_prologue (frame_func_unwind (next_frame), next_frame, info);
+    crisv32_scan_prologue (frame_func_unwind (next_frame, NORMAL_FRAME),
+			   next_frame, info);
   else
-    cris_scan_prologue (frame_func_unwind (next_frame), next_frame, info);
+    cris_scan_prologue (frame_func_unwind (next_frame, NORMAL_FRAME),
+			next_frame, info);
 
   return info;
 }
@@ -814,7 +818,7 @@ cris_frame_this_id (struct frame_info *next_frame,
   struct frame_id id;
 
   /* The FUNC is easy.  */
-  func = frame_func_unwind (next_frame);
+  func = frame_func_unwind (next_frame, NORMAL_FRAME);
 
   /* Hopefully the prologue analysis either correctly determined the
      frame's base (which is the SP from the previous frame), or set
@@ -866,7 +870,8 @@ cris_push_dummy_code (struct gdbarch *gdbarch,
                       CORE_ADDR sp, CORE_ADDR funaddr, int using_gcc,
                       struct value **args, int nargs,
                       struct type *value_type,
-                      CORE_ADDR *real_pc, CORE_ADDR *bp_addr)
+                      CORE_ADDR *real_pc, CORE_ADDR *bp_addr,
+		      struct regcache *regcache)
 {
   /* Allocate space sufficient for a breakpoint.  */
   sp = (sp - 4) & ~3;
@@ -983,7 +988,8 @@ cris_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
     }
 
   /* Finally, update the SP register.  */
-  regcache_cooked_write_unsigned (regcache, SP_REGNUM, sp);
+  regcache_cooked_write_unsigned (regcache,
+				  gdbarch_sp_regnum (current_gdbarch), sp);
 
   return sp;
 }
@@ -1177,7 +1183,7 @@ cris_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
 	    }
           continue;
         }
-      else if (cris_get_operand2 (insn) == SP_REGNUM 
+      else if (cris_get_operand2 (insn) == gdbarch_sp_regnum (current_gdbarch)
                && cris_get_mode (insn) == 0x0000
                && cris_get_opcode (insn) == 0x000A)
         {
@@ -1190,12 +1196,13 @@ cris_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
       else if (cris_get_mode (insn) == 0x0002 
                && cris_get_opcode (insn) == 0x000F
                && cris_get_size (insn) == 0x0003
-               && cris_get_operand1 (insn) == SP_REGNUM)
+               && cris_get_operand1 (insn) == gdbarch_sp_regnum
+					      (current_gdbarch))
         {
           /* movem r<regsave>,[sp] */
           regsave = cris_get_operand2 (insn);
         }
-      else if (cris_get_operand2 (insn) == SP_REGNUM
+      else if (cris_get_operand2 (insn) == gdbarch_sp_regnum (current_gdbarch)
                && ((insn & 0x0F00) >> 8) == 0x0001
                && (cris_get_signed_offset (insn) < 0))
         {
@@ -1212,7 +1219,8 @@ cris_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
           if (cris_get_mode (insn_next) == PREFIX_ASSIGN_MODE
               && cris_get_opcode (insn_next) == 0x000F
               && cris_get_size (insn_next) == 0x0003
-              && cris_get_operand1 (insn_next) == SP_REGNUM)
+              && cris_get_operand1 (insn_next) == gdbarch_sp_regnum
+						  (current_gdbarch))
             {
               regsave = cris_get_operand2 (insn_next);
             }
@@ -1254,7 +1262,7 @@ cris_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
           insn_next = read_memory_unsigned_integer (pc, 2);
           pc += 2;
           regno = cris_get_operand2 (insn_next);
-          if ((regno >= 0 && regno < SP_REGNUM)
+          if ((regno >= 0 && regno < gdbarch_sp_regnum (current_gdbarch))
               && cris_get_mode (insn_next) == PREFIX_OFFSET_MODE
               && cris_get_opcode (insn_next) == 0x000F)
             {
@@ -1278,7 +1286,7 @@ cris_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
 	  insn_next = read_memory_unsigned_integer (pc, 2);
           pc += 2;
           regno = cris_get_operand2 (insn_next);
-          if ((regno >= 0 && regno < SP_REGNUM)
+          if ((regno >= 0 && regno < gdbarch_sp_regnum (current_gdbarch))
               && cris_get_mode (insn_next) == PREFIX_OFFSET_MODE
               && cris_get_opcode (insn_next) == 0x0009
               && cris_get_operand1 (insn_next) == regno)
@@ -1332,7 +1340,9 @@ cris_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
       ULONGEST this_base;      
       /* Assume that the FP is this frame's SP but with that pushed
          stack space added back.  */
-      frame_unwind_unsigned_register (next_frame, SP_REGNUM, &this_base);
+      frame_unwind_unsigned_register (next_frame,
+				      gdbarch_sp_regnum (current_gdbarch),
+				      &this_base);
       info->base = this_base;
       info->prev_sp = info->base + info->size;
     }
@@ -1351,7 +1361,8 @@ cris_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
 
   /* The previous frame's SP needed to be computed.  Save the computed
      value.  */
-  trad_frame_set_value (info->saved_regs, SP_REGNUM, info->prev_sp);
+  trad_frame_set_value (info->saved_regs,
+			gdbarch_sp_regnum (current_gdbarch), info->prev_sp);
 
   if (!info->leaf_function)
     {
@@ -1369,7 +1380,8 @@ cris_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
     }
 
   /* The PC is found in SRP (the actual register or located on the stack).  */
-  info->saved_regs[PC_REGNUM] = info->saved_regs[SRP_REGNUM];
+  info->saved_regs[gdbarch_pc_regnum (current_gdbarch)]
+    = info->saved_regs[SRP_REGNUM];
 
   return pc;
 }
@@ -1400,12 +1412,15 @@ crisv32_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
     }
 
   /* The SP is assumed to be unaltered.  */
-  frame_unwind_unsigned_register (next_frame, SP_REGNUM, &this_base);
+  frame_unwind_unsigned_register (next_frame,
+				  gdbarch_sp_regnum (current_gdbarch),
+				   &this_base);
   info->base = this_base;
   info->prev_sp = this_base;
       
   /* The PC is assumed to be found in SRP.  */
-  info->saved_regs[PC_REGNUM] = info->saved_regs[SRP_REGNUM];
+  info->saved_regs[gdbarch_pc_regnum (current_gdbarch)]
+    = info->saved_regs[SRP_REGNUM];
 
   return pc;
 }
@@ -1444,7 +1459,8 @@ static CORE_ADDR
 cris_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   ULONGEST pc;
-  frame_unwind_unsigned_register (next_frame, PC_REGNUM, &pc);
+  frame_unwind_unsigned_register (next_frame,
+				  gdbarch_pc_regnum (current_gdbarch), &pc);
   return pc;
 }
 
@@ -1452,7 +1468,8 @@ static CORE_ADDR
 cris_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   ULONGEST sp;
-  frame_unwind_unsigned_register (next_frame, SP_REGNUM, &sp);
+  frame_unwind_unsigned_register (next_frame,
+				  gdbarch_sp_regnum (current_gdbarch), &sp);
   return sp;
 }
 
@@ -1547,7 +1564,8 @@ cris_register_size (int regno)
       /* Special register not applicable to this CRIS version.  */
       return 0;
     }
-  else if (regno >= PC_REGNUM && regno < NUM_REGS)
+  else if (regno >= gdbarch_pc_regnum (current_gdbarch)
+	   && regno < gdbarch_num_regs (current_gdbarch))
     {
       /* This will apply to CRISv32 only where there are additional registers
 	 after the special registers (pseudo PC and support registers).  */
@@ -1564,7 +1582,7 @@ cris_register_size (int regno)
 static int
 cris_cannot_fetch_register (int regno)
 {
-  return ((regno < 0 || regno >= NUM_REGS) 
+  return ((regno < 0 || regno >= gdbarch_num_regs (current_gdbarch))
           || (cris_register_size (regno) == 0));
 }
 
@@ -1580,7 +1598,9 @@ cris_cannot_store_register (int regno)
      3. Those registers to which a write has no effect.
   */
 
-  if (regno < 0 || regno >= NUM_REGS || cris_register_size (regno) == 0)
+  if (regno < 0
+      || regno >= gdbarch_num_regs (current_gdbarch)
+      || cris_register_size (regno) == 0)
     /* Not implemented.  */
     return 1;
 
@@ -1604,7 +1624,7 @@ cris_cannot_store_register (int regno)
 static int
 crisv32_cannot_fetch_register (int regno)
 {
-  return ((regno < 0 || regno >= NUM_REGS) 
+  return ((regno < 0 || regno >= gdbarch_num_regs (current_gdbarch))
           || (cris_register_size (regno) == 0));
 }
 
@@ -1620,7 +1640,9 @@ crisv32_cannot_store_register (int regno)
      3. Those registers to which a write has no effect.
   */
 
-  if (regno < 0 || regno >= NUM_REGS || cris_register_size (regno) == 0)
+  if (regno < 0
+      || regno >= gdbarch_num_regs (current_gdbarch)
+      || cris_register_size (regno) == 0)
     /* Not implemented.  */
     return 1;
 
@@ -1644,11 +1666,12 @@ crisv32_cannot_store_register (int regno)
 static struct type *
 cris_register_type (struct gdbarch *gdbarch, int regno)
 {
-  if (regno == PC_REGNUM)
+  if (regno == gdbarch_pc_regnum (current_gdbarch))
     return builtin_type_void_func_ptr;
-  else if (regno == SP_REGNUM || regno == CRIS_FP_REGNUM)
+  else if (regno == gdbarch_sp_regnum (current_gdbarch)
+	   || regno == CRIS_FP_REGNUM)
     return builtin_type_void_data_ptr;
-  else if ((regno >= 0 && regno < SP_REGNUM)
+  else if ((regno >= 0 && regno < gdbarch_sp_regnum (current_gdbarch))
 	   || (regno >= MOF_REGNUM && regno <= USP_REGNUM))
     /* Note: R8 taken care of previous clause.  */
     return builtin_type_uint32;
@@ -1664,9 +1687,10 @@ cris_register_type (struct gdbarch *gdbarch, int regno)
 static struct type *
 crisv32_register_type (struct gdbarch *gdbarch, int regno)
 {
-  if (regno == PC_REGNUM)
+  if (regno == gdbarch_pc_regnum (current_gdbarch))
     return builtin_type_void_func_ptr;
-  else if (regno == SP_REGNUM || regno == CRIS_FP_REGNUM)
+  else if (regno == gdbarch_sp_regnum (current_gdbarch)
+	   || regno == CRIS_FP_REGNUM)
     return builtin_type_void_data_ptr;
   else if ((regno >= 0 && regno <= ACR_REGNUM)
 	   || (regno >= EXS_REGNUM && regno <= SPC_REGNUM)
@@ -1757,7 +1781,7 @@ cris_register_name (int regno)
       /* General register.  */
       return cris_genreg_names[regno];
     }
-  else if (regno >= NUM_GENREGS && regno < NUM_REGS)
+  else if (regno >= NUM_GENREGS && regno < gdbarch_num_regs (current_gdbarch))
     {
       return cris_special_register_name (regno);
     }
@@ -1794,7 +1818,7 @@ crisv32_register_name (int regno)
     {
       return cris_special_register_name (regno);
     }
-  else if (regno == PC_REGNUM)
+  else if (regno == gdbarch_pc_regnum (current_gdbarch))
     {
       return "pc";
     }
@@ -1847,11 +1871,11 @@ cris_dwarf2_frame_init_reg (struct gdbarch *gdbarch, int regnum,
 			    struct frame_info *next_frame)
 {
   /* The return address column.  */
-  if (regnum == PC_REGNUM)
+  if (regnum == gdbarch_pc_regnum (current_gdbarch))
     reg->how = DWARF2_FRAME_REG_RA;
 
   /* The call frame address.  */
-  else if (regnum == SP_REGNUM)
+  else if (regnum == gdbarch_sp_regnum (current_gdbarch))
     reg->how = DWARF2_FRAME_REG_CFA;
 }
 
@@ -2053,7 +2077,7 @@ find_cris_op (unsigned short insn, inst_env_type *inst_env)
    actually an internal error.  */
 
 static int
-find_step_target (inst_env_type *inst_env)
+find_step_target (struct frame_info *frame, inst_env_type *inst_env)
 {
   int i;
   int offset;
@@ -2062,12 +2086,14 @@ find_step_target (inst_env_type *inst_env)
   /* Create a local register image and set the initial state.  */
   for (i = 0; i < NUM_GENREGS; i++)
     {
-      inst_env->reg[i] = (unsigned long) read_register (i);
+      inst_env->reg[i] = 
+	(unsigned long) get_frame_register_unsigned (frame, i);
     }
   offset = NUM_GENREGS;
   for (i = 0; i < NUM_SPECREGS; i++)
     {
-      inst_env->preg[i] = (unsigned long) read_register (offset + i);
+      inst_env->preg[i] = 
+	(unsigned long) get_frame_register_unsigned (frame, offset + i);
     }
   inst_env->branch_found = 0;
   inst_env->slot_needed = 0;
@@ -2081,7 +2107,8 @@ find_step_target (inst_env_type *inst_env)
   do
     {
       /* Read an instruction from the client.  */
-      insn = read_memory_unsigned_integer (inst_env->reg[PC_REGNUM], 2);
+      insn = read_memory_unsigned_integer
+	     (inst_env->reg[gdbarch_pc_regnum (current_gdbarch)], 2);
 
       /* If the instruction is not in a delay slot the new content of the
          PC is [PC] + 2.  If the instruction is in a delay slot it is not
@@ -2090,12 +2117,13 @@ find_step_target (inst_env_type *inst_env)
          Just make sure it is a valid instruction.  */
       if (!inst_env->delay_slot_pc_active)
         {
-          inst_env->reg[PC_REGNUM] += 2;
+          inst_env->reg[gdbarch_pc_regnum (current_gdbarch)] += 2;
         }
       else
         {
           inst_env->delay_slot_pc_active = 0;
-          inst_env->reg[PC_REGNUM] = inst_env->delay_slot_pc;
+          inst_env->reg[gdbarch_pc_regnum (current_gdbarch)]
+	    = inst_env->delay_slot_pc;
         }
       /* Analyse the present instruction.  */
       i = find_cris_op (insn, inst_env);
@@ -2117,39 +2145,37 @@ find_step_target (inst_env_type *inst_env)
    digs through the opcodes in order to find all possible targets. 
    Either one ordinary target or two targets for branches may be found.  */
 
-static void
-cris_software_single_step (enum target_signal ignore, int insert_breakpoints)
+static int
+cris_software_single_step (struct frame_info *frame)
 {
   inst_env_type inst_env;
 
-  if (insert_breakpoints)
+  /* Analyse the present instruction environment and insert 
+     breakpoints.  */
+  int status = find_step_target (frame, &inst_env);
+  if (status == -1)
     {
-      /* Analyse the present instruction environment and insert 
-         breakpoints.  */
-      int status = find_step_target (&inst_env);
-      if (status == -1)
-        {
-          /* Could not find a target.  Things are likely to go downhill 
-	     from here.  */
-	  warning (_("CRIS software single step could not find a step target."));
-        }
-      else
-        {
-          /* Insert at most two breakpoints.  One for the next PC content
-             and possibly another one for a branch, jump, etc.  */
-          CORE_ADDR next_pc = (CORE_ADDR) inst_env.reg[PC_REGNUM];
-          insert_single_step_breakpoint (next_pc);
-          if (inst_env.branch_found 
-              && (CORE_ADDR) inst_env.branch_break_address != next_pc)
-            {
-              CORE_ADDR branch_target_address
-                = (CORE_ADDR) inst_env.branch_break_address;
-              insert_single_step_breakpoint (branch_target_address);
-            }
-        }
+      /* Could not find a target.  Things are likely to go downhill 
+	 from here.  */
+      warning (_("CRIS software single step could not find a step target."));
     }
   else
-    remove_single_step_breakpoints ();
+    {
+      /* Insert at most two breakpoints.  One for the next PC content
+         and possibly another one for a branch, jump, etc.  */
+      CORE_ADDR next_pc =
+	(CORE_ADDR) inst_env.reg[gdbarch_pc_regnum (current_gdbarch)];
+      insert_single_step_breakpoint (next_pc);
+      if (inst_env.branch_found 
+	  && (CORE_ADDR) inst_env.branch_break_address != next_pc)
+	{
+	  CORE_ADDR branch_target_address
+		= (CORE_ADDR) inst_env.branch_break_address;
+	  insert_single_step_breakpoint (branch_target_address);
+	}
+    }
+
+  return 1;
 }
 
 /* Calculates the prefix value for quick offset addressing mode.  */
@@ -3857,7 +3883,7 @@ typedef elf_greg_t crisv32_elf_gregset_t[CRISV32_ELF_NGREG];
 /* Unpack an elf_gregset_t into GDB's register cache.  */
 
 static void 
-supply_gregset (elf_gregset_t *gregsetp)
+cris_supply_gregset (struct regcache *regcache, elf_gregset_t *gregsetp)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
   int i;
@@ -3868,7 +3894,7 @@ supply_gregset (elf_gregset_t *gregsetp)
      knows about the actual size of each register so that's no problem.  */
   for (i = 0; i < NUM_GENREGS + NUM_SPECREGS; i++)
     {
-      regcache_raw_supply (current_regcache, i, (char *)&regp[i]);
+      regcache_raw_supply (regcache, i, (char *)&regp[i]);
     }
 
   if (tdep->cris_version == 32)
@@ -3876,7 +3902,7 @@ supply_gregset (elf_gregset_t *gregsetp)
       /* Needed to set pseudo-register PC for CRISv32.  */
       /* FIXME: If ERP is in a delay slot at this point then the PC will
 	 be wrong.  Issue a warning to alert the user.  */
-      regcache_raw_supply (current_regcache, PC_REGNUM, 
+      regcache_raw_supply (regcache, gdbarch_pc_regnum (current_gdbarch),
 			   (char *)&regp[ERP_REGNUM]);
 
       if (*(char *)&regp[ERP_REGNUM] & 0x1)
@@ -3888,7 +3914,8 @@ supply_gregset (elf_gregset_t *gregsetp)
     regsets, until multi-arch core support is ready.  */
 
 static void
-fetch_core_registers (char *core_reg_sect, unsigned core_reg_size,
+fetch_core_registers (struct regcache *regcache,
+		      char *core_reg_sect, unsigned core_reg_size,
                       int which, CORE_ADDR reg_addr)
 {
   elf_gregset_t gregset;
@@ -3904,7 +3931,7 @@ fetch_core_registers (char *core_reg_sect, unsigned core_reg_size,
       else
         {
           memcpy (&gregset, core_reg_sect, sizeof (gregset));
-          supply_gregset (&gregset);
+          cris_supply_gregset (regcache, &gregset);
         }
 
     default:
@@ -4103,7 +4130,7 @@ cris_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
      register is.  */
 
   set_gdbarch_double_bit (gdbarch, 64);
-  /* The default definition of a long double is 2 * TARGET_DOUBLE_BIT,
+  /* The default definition of a long double is 2 * gdbarch_double_bit,
      which means we have to set this explicitly.  */
   set_gdbarch_long_double_bit (gdbarch, 64);
 

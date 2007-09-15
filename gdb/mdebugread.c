@@ -1,8 +1,8 @@
 /* Read a symbol table in ECOFF format (Third-Eye).
 
-   Copyright (C) 1986, 1987, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free Software
-   Foundation, Inc.
+   Copyright (C) 1986, 1987, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
+   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007
+   Free Software Foundation, Inc.
 
    Original version contributed by Alessandro Forin (af@cs.cmu.edu) at
    CMU.  Major work by Per Bothner, John Gilmore and Ian Lance Taylor
@@ -12,7 +12,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -21,9 +21,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This module provides the function mdebug_build_psymtabs.  It reads
    ECOFF debugging information into partial symbol tables.  The
@@ -236,11 +234,6 @@ static struct type *mdebug_type_double_complex;
 static struct type *mdebug_type_fixed_dec;
 static struct type *mdebug_type_float_dec;
 static struct type *mdebug_type_string;
-
-/* Types for symbols from files compiled without debugging info.  */
-
-static struct type *nodebug_func_symbol_type;
-static struct type *nodebug_var_symbol_type;
 
 /* Nonzero if we have seen ecoff debugging info for a file.  */
 
@@ -644,7 +637,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
       if (sh->sc == scRegister)
 	{
 	  class = LOC_REGISTER;
-	  svalue = ECOFF_REG_TO_REGNUM (svalue);
+	  svalue = gdbarch_ecoff_reg_to_regnum (current_gdbarch, svalue);
 	}
       else
 	class = LOC_LOCAL;
@@ -660,7 +653,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
       /* Type could be missing if file is compiled without debugging info.  */
       if (SC_IS_UNDEF (sh->sc)
 	  || sh->sc == scNil || sh->index == indexNil)
-	SYMBOL_TYPE (s) = nodebug_var_symbol_type;
+	SYMBOL_TYPE (s) = builtin_type (current_gdbarch)->nodebug_data_symbol;
       else
 	SYMBOL_TYPE (s) = parse_type (cur_fd, ax, sh->index, 0, bigend, name);
       /* Value of a data symbol is its memory address */
@@ -682,7 +675,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 	case scRegister:
 	  /* Pass by value in register.  */
 	  SYMBOL_CLASS (s) = LOC_REGPARM;
-	  svalue = ECOFF_REG_TO_REGNUM (svalue);
+	  svalue = gdbarch_ecoff_reg_to_regnum (current_gdbarch, svalue);
 	  break;
 	case scVar:
 	  /* Pass by reference on stack.  */
@@ -691,7 +684,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 	case scVarRegister:
 	  /* Pass by reference in register.  */
 	  SYMBOL_CLASS (s) = LOC_REGPARM_ADDR;
-	  svalue = ECOFF_REG_TO_REGNUM (svalue);
+	  svalue = gdbarch_ecoff_reg_to_regnum (current_gdbarch, svalue);
 	  break;
 	default:
 	  /* Pass by value on stack.  */
@@ -1046,7 +1039,8 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 	       that too.  */
 	    if (TYPE_LENGTH (t) == TYPE_NFIELDS (t)
 		|| TYPE_LENGTH (t) == 0)
-	      TYPE_LENGTH (t) = TARGET_INT_BIT / HOST_CHAR_BIT;
+	      TYPE_LENGTH (t) = 
+		gdbarch_int_bit (current_gdbarch) / HOST_CHAR_BIT;
 	    for (ext_tsym = ext_sh + external_sym_size;
 		 ;
 		 ext_tsym += external_sym_size)
@@ -1983,7 +1977,7 @@ parse_procedure (PDR *pr, struct symtab *search_symtab,
   if (processing_gcc_compilation == 0
       && found_ecoff_debugging_info == 0
       && TYPE_CODE (TYPE_TARGET_TYPE (SYMBOL_TYPE (s))) == TYPE_CODE_VOID)
-    SYMBOL_TYPE (s) = nodebug_func_symbol_type;
+    SYMBOL_TYPE (s) = builtin_type (current_gdbarch)->nodebug_text_symbol;
 }
 
 /* Parse the external symbol ES. Just call parse_symbol() after
@@ -4840,22 +4834,22 @@ _initialize_mdebugread (void)
 	       "adr_64", (struct objfile *) NULL);
   TYPE_TARGET_TYPE (mdebug_type_adr_64) = mdebug_type_void;
   mdebug_type_float =
-    init_type (TYPE_CODE_FLT, TARGET_FLOAT_BIT / TARGET_CHAR_BIT,
-	       0,
-	       "float", (struct objfile *) NULL);
+    init_type (TYPE_CODE_FLT,
+	       gdbarch_float_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       0, "float", (struct objfile *) NULL);
   mdebug_type_double =
-    init_type (TYPE_CODE_FLT, TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
-	       0,
-	       "double", (struct objfile *) NULL);
+    init_type (TYPE_CODE_FLT,
+	       gdbarch_double_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       0, "double", (struct objfile *) NULL);
   mdebug_type_complex =
-    init_type (TYPE_CODE_COMPLEX, 2 * TARGET_FLOAT_BIT / TARGET_CHAR_BIT,
-	       0,
-	       "complex", (struct objfile *) NULL);
+    init_type (TYPE_CODE_COMPLEX,
+	       2 * gdbarch_float_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       0, "complex", (struct objfile *) NULL);
   TYPE_TARGET_TYPE (mdebug_type_complex) = mdebug_type_float;
   mdebug_type_double_complex =
-    init_type (TYPE_CODE_COMPLEX, 2 * TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
-	       0,
-	       "double complex", (struct objfile *) NULL);
+    init_type (TYPE_CODE_COMPLEX,
+	       2 * gdbarch_double_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       0, "double complex", (struct objfile *) NULL);
   TYPE_TARGET_TYPE (mdebug_type_double_complex) = mdebug_type_double;
 
   /* Is a "string" the way btString means it the same as TYPE_CODE_STRING?
@@ -4871,20 +4865,13 @@ _initialize_mdebugread (void)
      TYPE_CODE_ERROR print things in hex if it knows the size?  */
   mdebug_type_fixed_dec =
     init_type (TYPE_CODE_INT,
-	       TARGET_INT_BIT / TARGET_CHAR_BIT,
+	       gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 	       0, "fixed decimal",
 	       (struct objfile *) NULL);
 
   mdebug_type_float_dec =
     init_type (TYPE_CODE_ERROR,
-	       TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
+	       gdbarch_double_bit (current_gdbarch) / TARGET_CHAR_BIT,
 	       0, "floating decimal",
 	       (struct objfile *) NULL);
-
-  nodebug_func_symbol_type = init_type (TYPE_CODE_FUNC, 1, 0,
-					"<function, no debug info>", NULL);
-  TYPE_TARGET_TYPE (nodebug_func_symbol_type) = mdebug_type_int;
-  nodebug_var_symbol_type =
-    init_type (TYPE_CODE_INT, TARGET_INT_BIT / HOST_CHAR_BIT, 0,
-	       "<variable, no debug info>", NULL);
 }

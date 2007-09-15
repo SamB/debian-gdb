@@ -1,12 +1,12 @@
 /* Handle SOM shared libraries.
 
-   Copyright (C) 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "som.h"
@@ -112,13 +110,6 @@ som_relocate_section_addresses (struct so_list *so,
 				struct section_table *sec)
 {
   flagword aflag = bfd_get_section_flags(so->abfd, sec->the_bfd_section);
-
-  /* solib.c does something similar, but it only recognizes ".text", SOM calls
-     the text section "$CODE$".  */
-  if (strcmp (sec->the_bfd_section->name, "$CODE$") == 0)
-    {
-      so->textsection = sec;
-    }
 
   if (aflag & SEC_CODE)
     {
@@ -622,6 +613,9 @@ som_current_sos (void)
 	    printf ("  'tsd_start_addr' is 0x%s\n", 
 	    	    paddr_nz (new->lm_info->tsd_start_addr));
 #endif
+
+	    new->addr_low = lmi->text_addr;
+	    new->addr_high = lmi->text_end;
 
 	    /* Link the new object onto the list.  */
 	    new->next = NULL;

@@ -1,12 +1,12 @@
 /* Native-dependent code for PA-RISC HP-UX.
 
-   Copyright (C) 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "inferior.h"
@@ -87,7 +85,7 @@ hppa_hpux_save_state_offset (struct regcache *regcache, int regnum)
 #endif
 
 static void
-hppa_hpux_fetch_register (int regnum)
+hppa_hpux_fetch_register (struct regcache *regcache, int regnum)
 {
   CORE_ADDR addr;
   size_t size;
@@ -98,7 +96,7 @@ hppa_hpux_fetch_register (int regnum)
   pid = ptid_get_pid (inferior_ptid);
 
   /* This isn't really an address, but ptrace thinks of it as one.  */
-  addr = hppa_hpux_save_state_offset(current_regcache, regnum);
+  addr = hppa_hpux_save_state_offset (regcache, regnum);
   size = register_size (current_gdbarch, regnum);
 
   gdb_assert (size == 4 || size == 8);
@@ -110,7 +108,8 @@ hppa_hpux_fetch_register (int regnum)
 
     if (ttrace (TT_LWP_RUREGS, pid, lwp, addr, size, (uintptr_t)buf) == -1)
       error (_("Couldn't read register %s (#%d): %s"),
-	     REGISTER_NAME (regnum), regnum, safe_strerror (errno));
+	     gdbarch_register_name (current_gdbarch, regnum),
+	     regnum, safe_strerror (errno));
   }
 #else
   {
@@ -123,7 +122,8 @@ hppa_hpux_fetch_register (int regnum)
 	buf[i] = ptrace (PT_RUREGS, pid, (PTRACE_TYPE_ARG3) addr, 0, 0);
 	if (errno != 0)
 	  error (_("Couldn't read register %s (#%d): %s"),
-		 REGISTER_NAME (regnum), regnum, safe_strerror (errno));
+		 gdbarch_register_name (current_gdbarch, regnum),
+		 regnum, safe_strerror (errno));
 
 	addr += sizeof (PTRACE_TYPE_RET);
       }
@@ -138,23 +138,23 @@ hppa_hpux_fetch_register (int regnum)
       store_unsigned_integer ((gdb_byte *)buf, 8, flags);
     }
 
-  regcache_raw_supply (current_regcache, regnum, buf);
+  regcache_raw_supply (regcache, regnum, buf);
 }
 
 static void
-hppa_hpux_fetch_inferior_registers (int regnum)
+hppa_hpux_fetch_inferior_registers (struct regcache *regcache, int regnum)
 {
   if (regnum == -1)
-    for (regnum = 0; regnum < NUM_REGS; regnum++)
-      hppa_hpux_fetch_register (regnum);
+    for (regnum = 0; regnum < gdbarch_num_regs (current_gdbarch); regnum++)
+      hppa_hpux_fetch_register (regcache, regnum);
   else
-    hppa_hpux_fetch_register (regnum);
+    hppa_hpux_fetch_register (regcache, regnum);
 }
 
 /* Store register REGNUM into the inferior.  */
 
 static void
-hppa_hpux_store_register (int regnum)
+hppa_hpux_store_register (struct regcache *regcache, int regnum)
 {
   CORE_ADDR addr;
   size_t size;
@@ -164,13 +164,13 @@ hppa_hpux_store_register (int regnum)
   pid = ptid_get_pid (inferior_ptid);
 
   /* This isn't really an address, but ptrace thinks of it as one.  */
-  addr = hppa_hpux_save_state_offset(current_regcache, regnum);
+  addr = hppa_hpux_save_state_offset (regcache, regnum);
   size = register_size (current_gdbarch, regnum);
 
   gdb_assert (size == 4 || size == 8);
   buf = alloca (size);
 
-  regcache_raw_collect (current_regcache, regnum, buf);
+  regcache_raw_collect (regcache, regnum, buf);
 
   /* Take care with the "flags" register.  It's stored as an `int' in
      `struct save_state', even for 64-bit code.  */
@@ -187,7 +187,8 @@ hppa_hpux_store_register (int regnum)
 
     if (ttrace (TT_LWP_WUREGS, pid, lwp, addr, size, (uintptr_t)buf) == -1)
       error (_("Couldn't write register %s (#%d): %s"),
-	     REGISTER_NAME (regnum), regnum, safe_strerror (errno));
+	     gdbarch_register_name (current_gdbarch, regnum),
+	     regnum, safe_strerror (errno));
   }
 #else
   {
@@ -200,7 +201,8 @@ hppa_hpux_store_register (int regnum)
 	ptrace (PT_WUREGS, pid, (PTRACE_TYPE_ARG3) addr, buf[i], 0);
 	if (errno != 0)
 	  error (_("Couldn't write register %s (#%d): %s"),
-		 REGISTER_NAME (regnum), regnum, safe_strerror (errno));
+		 gdbarch_register_name (current_gdbarch, regnum),
+		 regnum, safe_strerror (errno));
 
 	addr += sizeof (PTRACE_TYPE_RET);
       }
@@ -212,13 +214,13 @@ hppa_hpux_store_register (int regnum)
    this for all registers (including the floating point registers).  */
 
 static void
-hppa_hpux_store_inferior_registers (int regnum)
+hppa_hpux_store_inferior_registers (struct regcache *regcache, int regnum)
 {
   if (regnum == -1)
-    for (regnum = 0; regnum < NUM_REGS; regnum++)
-      hppa_hpux_store_register (regnum);
+    for (regnum = 0; regnum < gdbarch_num_regs (current_gdbarch); regnum++)
+      hppa_hpux_store_register (regcache, regnum);
   else
-    hppa_hpux_store_register (regnum);
+    hppa_hpux_store_register (regcache, regnum);
 }
 
 static int

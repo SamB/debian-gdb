@@ -1,14 +1,14 @@
 /* Memory-access and commands for "inferior" process, for GDB.
 
-   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include <signal.h>
@@ -48,6 +46,7 @@
 #include <ctype.h>
 #include "gdb_assert.h"
 #include "observer.h"
+#include "target-descriptions.h"
 
 /* Functions exported for general use, in inferior.h: */
 
@@ -405,11 +404,22 @@ tty_command (char *file, int from_tty)
 void
 post_create_inferior (struct target_ops *target, int from_tty)
 {
+  /* Be sure we own the terminal in case write operations are performed.  */ 
+  target_terminal_ours ();
+
+  /* If the target hasn't taken care of this already, do it now.
+     Targets which need to access registers during to_open,
+     to_create_inferior, or to_attach should do it earlier; but many
+     don't need to.  */
+  target_find_description ();
+
   if (exec_bfd)
     {
       /* Sometimes the platform-specific hook loads initial shared
 	 libraries, and sometimes it doesn't.  Try to do so first, so
-	 that we can add them with the correct value for FROM_TTY.  */
+	 that we can add them with the correct value for FROM_TTY.
+	 If we made all the inferior hook methods consistent,
+	 this call could be removed.  */
 #ifdef SOLIB_ADD
       SOLIB_ADD (NULL, from_tty, target, auto_solib_add);
 #else
@@ -550,7 +560,9 @@ run_command_1 (char *args, int from_tty, int tbreak_at_main)
   target_create_inferior (exec_file, get_inferior_args (),
 			  environ_vector (inferior_environ), from_tty);
 
-  post_create_inferior (&current_target, from_tty);
+  /* Pass zero for FROM_TTY, because at this point the "run" command
+     has done its thing; now we are setting up the running program.  */
+  post_create_inferior (&current_target, 0);
 
   /* Start the target running.  */
   proceed ((CORE_ADDR) -1, TARGET_SIGNAL_0, 0);
@@ -615,22 +627,26 @@ continue_command (char *proc_count_exp, int from_tty)
   if (proc_count_exp != NULL)
     {
       bpstat bs = stop_bpstat;
-      int num = bpstat_num (&bs);
-      if (num == 0 && from_tty)
+      int num, stat;
+      int stopped = 0;
+
+      while ((stat = bpstat_num (&bs, &num)) != 0)
+	if (stat > 0)
+	  {
+	    set_ignore_count (num,
+			      parse_and_eval_long (proc_count_exp) - 1,
+			      from_tty);
+	    /* set_ignore_count prints a message ending with a period.
+	       So print two spaces before "Continuing.".  */
+	    if (from_tty)
+	      printf_filtered ("  ");
+	    stopped = 1;
+	  }
+
+      if (!stopped && from_tty)
 	{
 	  printf_filtered
 	    ("Not stopped at any breakpoint; argument ignored.\n");
-	}
-      while (num != 0)
-	{
-	  set_ignore_count (num,
-			    parse_and_eval_long (proc_count_exp) - 1,
-			    from_tty);
-	  /* set_ignore_count prints a message ending with a period.
-	     So print two spaces before "Continuing.".  */
-	  if (from_tty)
-	    printf_filtered ("  ");
-	  num = bpstat_num (&bs);
 	}
     }
 
@@ -1288,10 +1304,8 @@ finish_command (char *arg, int from_tty)
     error (_("The \"finish\" command does not take any arguments."));
   if (!target_has_execution)
     error (_("The program is not running."));
-  if (deprecated_selected_frame == NULL)
-    error (_("No selected frame."));
 
-  frame = get_prev_frame (deprecated_selected_frame);
+  frame = get_prev_frame (get_selected_frame (_("No selected frame.")));
   if (frame == 0)
     error (_("\"finish\" not meaningful in the outermost frame."));
 
@@ -1309,7 +1323,7 @@ finish_command (char *arg, int from_tty)
 
   /* Find the function we will return from.  */
 
-  function = find_pc_function (get_frame_pc (deprecated_selected_frame));
+  function = find_pc_function (get_frame_pc (get_selected_frame (NULL)));
 
   /* Print info on the selected frame, including level number but not
      source.  */
@@ -1381,7 +1395,8 @@ static void
 program_info (char *args, int from_tty)
 {
   bpstat bs = stop_bpstat;
-  int num = bpstat_num (&bs);
+  int num;
+  int stat = bpstat_num (&bs, &num);
 
   if (!target_has_execution)
     {
@@ -1394,20 +1409,20 @@ program_info (char *args, int from_tty)
 		   hex_string ((unsigned long) stop_pc));
   if (stop_step)
     printf_filtered (_("It stopped after being stepped.\n"));
-  else if (num != 0)
+  else if (stat != 0)
     {
       /* There may be several breakpoints in the same place, so this
          isn't as strange as it seems.  */
-      while (num != 0)
+      while (stat != 0)
 	{
-	  if (num < 0)
+	  if (stat < 0)
 	    {
 	      printf_filtered (_("\
 It stopped at a breakpoint that has since been deleted.\n"));
 	    }
 	  else
 	    printf_filtered (_("It stopped at breakpoint %d.\n"), num);
-	  num = bpstat_num (&bs);
+	  stat = bpstat_num (&bs, &num);
 	}
     }
   else if (stop_signal != TARGET_SIGNAL_0)
@@ -1586,7 +1601,8 @@ default_print_registers_info (struct gdbarch *gdbarch,
 			      int regnum, int print_all)
 {
   int i;
-  const int numregs = NUM_REGS + NUM_PSEUDO_REGS;
+  const int numregs = gdbarch_num_regs (current_gdbarch)
+		      + gdbarch_num_pseudo_regs (current_gdbarch);
   gdb_byte buffer[MAX_REGISTER_SIZE];
 
   for (i = 0; i < numregs; i++)
@@ -1614,11 +1630,13 @@ default_print_registers_info (struct gdbarch *gdbarch,
 
       /* If the register name is empty, it is undefined for this
          processor, so don't display anything.  */
-      if (REGISTER_NAME (i) == NULL || *(REGISTER_NAME (i)) == '\0')
+      if (gdbarch_register_name (current_gdbarch, i) == NULL
+	  || *(gdbarch_register_name (current_gdbarch, i)) == '\0')
 	continue;
 
-      fputs_filtered (REGISTER_NAME (i), file);
-      print_spaces_filtered (15 - strlen (REGISTER_NAME (i)), file);
+      fputs_filtered (gdbarch_register_name (current_gdbarch, i), file);
+      print_spaces_filtered (15 - strlen (gdbarch_register_name
+					  (current_gdbarch, i)), file);
 
       /* Get the data in raw format.  */
       if (! frame_register_read (frame, i, buffer))
@@ -1640,7 +1658,7 @@ default_print_registers_info (struct gdbarch *gdbarch,
 	  for (j = 0; j < register_size (current_gdbarch, i); j++)
 	    {
 	      int idx;
-	      if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+	      if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
 		idx = j;
 	      else
 		idx = register_size (current_gdbarch, i) - 1 - j;
@@ -1670,18 +1688,18 @@ default_print_registers_info (struct gdbarch *gdbarch,
 void
 registers_info (char *addr_exp, int fpregs)
 {
+  struct frame_info *frame;
   int regnum, numregs;
   char *end;
 
   if (!target_has_registers)
     error (_("The program has no registers now."));
-  if (deprecated_selected_frame == NULL)
-    error (_("No selected frame."));
+  frame = get_selected_frame (NULL);
 
   if (!addr_exp)
     {
       gdbarch_print_registers_info (current_gdbarch, gdb_stdout,
-				    deprecated_selected_frame, -1, fpregs);
+				    frame, -1, fpregs);
       return;
     }
 
@@ -1714,12 +1732,12 @@ registers_info (char *addr_exp, int fpregs)
 
       /* A register name?  */
       {
-	int regnum = frame_map_name_to_regnum (deprecated_selected_frame,
+	int regnum = frame_map_name_to_regnum (frame,
 					       start, end - start);
 	if (regnum >= 0)
 	  {
 	    gdbarch_print_registers_info (current_gdbarch, gdb_stdout,
-					  deprecated_selected_frame, regnum, fpregs);
+					  frame, regnum, fpregs);
 	    continue;
 	  }
       }
@@ -1730,10 +1748,11 @@ registers_info (char *addr_exp, int fpregs)
 	int regnum = strtol (start, &endptr, 0);
 	if (endptr == end
 	    && regnum >= 0
-	    && regnum < NUM_REGS + NUM_PSEUDO_REGS)
+	    && regnum < gdbarch_num_regs (current_gdbarch)
+			+ gdbarch_num_pseudo_regs (current_gdbarch))
 	  {
 	    gdbarch_print_registers_info (current_gdbarch, gdb_stdout,
-					  deprecated_selected_frame, regnum, fpregs);
+					  frame, regnum, fpregs);
 	    continue;
 	  }
       }
@@ -1754,12 +1773,15 @@ registers_info (char *addr_exp, int fpregs)
 	if (group != NULL)
 	  {
 	    int regnum;
-	    for (regnum = 0; regnum < NUM_REGS + NUM_PSEUDO_REGS; regnum++)
+	    for (regnum = 0;
+		 regnum < gdbarch_num_regs (current_gdbarch)
+			  + gdbarch_num_pseudo_regs (current_gdbarch);
+		 regnum++)
 	      {
 		if (gdbarch_register_reggroup_p (current_gdbarch, regnum,
 						 group))
 		  gdbarch_print_registers_info (current_gdbarch,
-						gdb_stdout, deprecated_selected_frame,
+						gdb_stdout, frame,
 						regnum, fpregs);
 	      }
 	    continue;
@@ -1787,11 +1809,6 @@ static void
 print_vector_info (struct gdbarch *gdbarch, struct ui_file *file,
 		   struct frame_info *frame, const char *args)
 {
-  if (!target_has_registers)
-    error (_("The program has no registers now."));
-  if (deprecated_selected_frame == NULL)
-    error (_("No selected frame."));
-
   if (gdbarch_print_vector_info_p (gdbarch))
     gdbarch_print_vector_info (gdbarch, file, frame, args);
   else
@@ -1799,7 +1816,10 @@ print_vector_info (struct gdbarch *gdbarch, struct ui_file *file,
       int regnum;
       int printed_something = 0;
 
-      for (regnum = 0; regnum < NUM_REGS + NUM_PSEUDO_REGS; regnum++)
+      for (regnum = 0;
+	   regnum < gdbarch_num_regs (current_gdbarch)
+		    + gdbarch_num_pseudo_regs (current_gdbarch);
+	   regnum++)
 	{
 	  if (gdbarch_register_reggroup_p (gdbarch, regnum, vector_reggroup))
 	    {
@@ -1815,7 +1835,11 @@ print_vector_info (struct gdbarch *gdbarch, struct ui_file *file,
 static void
 vector_info (char *args, int from_tty)
 {
-  print_vector_info (current_gdbarch, gdb_stdout, deprecated_selected_frame, args);
+  if (!target_has_registers)
+    error (_("The program has no registers now."));
+
+  print_vector_info (current_gdbarch, gdb_stdout,
+		     get_selected_frame (NULL), args);
 }
 
 
@@ -2005,11 +2029,6 @@ static void
 print_float_info (struct gdbarch *gdbarch, struct ui_file *file,
 		  struct frame_info *frame, const char *args)
 {
-  if (!target_has_registers)
-    error (_("The program has no registers now."));
-  if (deprecated_selected_frame == NULL)
-    error (_("No selected frame."));
-
   if (gdbarch_print_float_info_p (gdbarch))
     gdbarch_print_float_info (gdbarch, file, frame, args);
   else
@@ -2017,7 +2036,10 @@ print_float_info (struct gdbarch *gdbarch, struct ui_file *file,
       int regnum;
       int printed_something = 0;
 
-      for (regnum = 0; regnum < NUM_REGS + NUM_PSEUDO_REGS; regnum++)
+      for (regnum = 0;
+	   regnum < gdbarch_num_regs (current_gdbarch)
+		    + gdbarch_num_pseudo_regs (current_gdbarch);
+	   regnum++)
 	{
 	  if (gdbarch_register_reggroup_p (gdbarch, regnum, float_reggroup))
 	    {
@@ -2034,8 +2056,11 @@ No floating-point info available for this processor.\n");
 static void
 float_info (char *args, int from_tty)
 {
+  if (!target_has_registers)
+    error (_("The program has no registers now."));
+
   print_float_info (current_gdbarch, gdb_stdout, 
-		    deprecated_selected_frame, args);
+		    get_selected_frame (NULL), args);
 }
 
 static void

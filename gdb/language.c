@@ -1,7 +1,7 @@
 /* Multiple source language support for GDB.
 
-   Copyright (C) 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001,
+   2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    Contributed by the Department of Computer Science at the State University
    of New York at Buffalo.
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This file contains functions that return things that are specific
    to languages.  Each function should examine current_language if necessary,
@@ -77,7 +75,7 @@ static void unk_lang_print_type (struct type *, char *, struct ui_file *,
 
 static int unk_lang_value_print (struct value *, struct ui_file *, int, enum val_prettyprint);
 
-static CORE_ADDR unk_lang_trampoline (CORE_ADDR pc);
+static CORE_ADDR unk_lang_trampoline (struct frame_info *, CORE_ADDR pc);
 
 /* Forward declaration */
 extern const struct language_defn unknown_language_defn;
@@ -1005,7 +1003,7 @@ add_language (const struct language_defn *lang)
    Return the result from the first that returns non-zero, or 0 if all
    `fail'.  */
 CORE_ADDR 
-skip_language_trampoline (CORE_ADDR pc)
+skip_language_trampoline (struct frame_info *frame, CORE_ADDR pc)
 {
   int i;
 
@@ -1013,7 +1011,7 @@ skip_language_trampoline (CORE_ADDR pc)
     {
       if (languages[i]->skip_trampoline)
 	{
-	  CORE_ADDR real_pc = (languages[i]->skip_trampoline) (pc);
+	  CORE_ADDR real_pc = (languages[i]->skip_trampoline) (frame, pc);
 	  if (real_pc)
 	    return real_pc;
 	}
@@ -1130,7 +1128,7 @@ unk_lang_value_print (struct value *val, struct ui_file *stream, int format,
   error (_("internal error - unimplemented function unk_lang_value_print called."));
 }
 
-static CORE_ADDR unk_lang_trampoline (CORE_ADDR pc)
+static CORE_ADDR unk_lang_trampoline (struct frame_info *frame, CORE_ADDR pc)
 {
   return 0;
 }

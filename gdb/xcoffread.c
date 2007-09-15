@@ -1,6 +1,6 @@
 /* Read AIX xcoff symbol tables and convert to internal format, for GDB.
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007
    Free Software Foundation, Inc.
    Derived from coffread.c, dbxread.c, and a lot of hacking.
    Contributed by IBM Corporation.
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "bfd.h"
@@ -925,7 +923,7 @@ read_xcoff_symtab (struct partial_symtab *pst)
   int depth = 0;
   int fcn_start_addr = 0;
 
-  struct coff_symbol fcn_stab_saved;
+  struct coff_symbol fcn_stab_saved = { 0 };
 
   /* fcn_cs_saved is global because process_xcoff_symbol needs it. */
   union internal_auxent fcn_aux_saved;
@@ -1432,9 +1430,6 @@ read_xcoff_symtab (struct partial_symtab *pst)
   (ALLOCED) ? (NAME) : obsavestring ((NAME), strlen (NAME), &objfile->objfile_obstack);
 
 
-static struct type *func_symbol_type;
-static struct type *var_symbol_type;
-
 /* process one xcoff symbol. */
 
 static struct symbol *
@@ -1479,7 +1474,7 @@ process_xcoff_symbol (struct coff_symbol *cs, struct objfile *objfile)
          patch_block_stabs (), unless the file was compiled without -g.  */
 
       DEPRECATED_SYMBOL_NAME (sym) = SYMNAME_ALLOC (name, symname_alloced);
-      SYMBOL_TYPE (sym) = func_symbol_type;
+      SYMBOL_TYPE (sym) = builtin_type (current_gdbarch)->nodebug_text_symbol;
 
       SYMBOL_CLASS (sym) = LOC_BLOCK;
       SYMBOL_DUP (sym, sym2);
@@ -1492,7 +1487,7 @@ process_xcoff_symbol (struct coff_symbol *cs, struct objfile *objfile)
   else
     {
       /* In case we can't figure out the type, provide default. */
-      SYMBOL_TYPE (sym) = var_symbol_type;
+      SYMBOL_TYPE (sym) = builtin_type (current_gdbarch)->nodebug_data_symbol;
 
       switch (cs->c_sclass)
 	{
@@ -3015,6 +3010,8 @@ static struct sym_fns xcoff_sym_fns =
   xcoff_initial_scan,		/* sym_read: read a symbol file into symtab */
   xcoff_symfile_finish,		/* sym_finish: finished with file, cleanup */
   xcoff_symfile_offsets,	/* sym_offsets: xlate offsets ext->int form */
+  default_symfile_segments,	/* sym_segments: Get segment information from
+				   a file.  */
   NULL				/* next: pointer to next struct sym_fns */
 };
 
@@ -3022,11 +3019,4 @@ void
 _initialize_xcoffread (void)
 {
   add_symtab_fns (&xcoff_sym_fns);
-
-  func_symbol_type = init_type (TYPE_CODE_FUNC, 1, 0,
-				"<function, no debug info>", NULL);
-  TYPE_TARGET_TYPE (func_symbol_type) = builtin_type_int;
-  var_symbol_type =
-    init_type (TYPE_CODE_INT, TARGET_INT_BIT / HOST_CHAR_BIT, 0,
-	       "<variable, no debug info>", NULL);
 }

@@ -1,5 +1,5 @@
 /* Event loop machinery for GDB, the GNU debugger.
-   Copyright (C) 1999, 2000, 2001, 2002, 2005, 2006
+   Copyright (C) 1999, 2000, 2001, 2002, 2005, 2006, 2007
    Free Software Foundation, Inc.
    Written by Elena Zannoni <ezannoni@cygnus.com> of Cygnus Solutions.
 
@@ -7,7 +7,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA. */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>. */
 
 #include "defs.h"
 #include "event-loop.h"
@@ -825,9 +823,8 @@ gdb_wait_for_event (void)
 		  file_event_ptr = create_file_event (file_ptr->fd);
 		  async_queue_event (file_event_ptr, TAIL);
 		}
+	      file_ptr->ready_mask = (gdb_notifier.poll_fds + i)->revents;
 	    }
-
-	  file_ptr->ready_mask = (gdb_notifier.poll_fds + i)->revents;
 	}
 #else
       internal_error (__FILE__, __LINE__,
@@ -951,7 +948,7 @@ delete_async_signal_handler (async_signal_handler ** async_handler_ptr)
   else
     {
       prev_ptr = sighandler_list.first_handler;
-      while (prev_ptr->next_handler != (*async_handler_ptr) && prev_ptr)
+      while (prev_ptr && prev_ptr->next_handler != (*async_handler_ptr))
 	prev_ptr = prev_ptr->next_handler;
       prev_ptr->next_handler = (*async_handler_ptr)->next_handler;
       if (sighandler_list.last_handler == (*async_handler_ptr))

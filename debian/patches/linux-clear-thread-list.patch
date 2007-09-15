@@ -4,24 +4,14 @@ This patch was for Debian bug #303736.  I now believe it's in the wrong
 place; the generic mourn inferior should do this, perhaps.
 
 ---
- gdb/linux-thread-db.c |    6 ++++++
- 1 file changed, 6 insertions(+)
+ gdb/linux-thread-db.c |    3 +++
+ 1 file changed, 3 insertions(+)
 
-Index: gdb-6.6.dfsg/gdb/linux-thread-db.c
+Index: gdb-6.6.dfsg.90.20070912/gdb/linux-thread-db.c
 ===================================================================
---- gdb-6.6.dfsg.orig/gdb/linux-thread-db.c	2007-01-27 20:35:31.000000000 -0500
-+++ gdb-6.6.dfsg/gdb/linux-thread-db.c	2007-01-27 20:35:34.000000000 -0500
-@@ -778,6 +778,9 @@ thread_db_detach (char *args, int from_t
-      inferior is supposed to be survive this function call.  */
-   inferior_ptid = lwp_from_thread (inferior_ptid);
- 
-+  /* Destroy thread info; it's no longer valid.  */
-+  init_thread_list ();
-+
-   /* Forget about the child's process ID.  We shouldn't need it
-      anymore.  */
-   proc_handle.pid = 0;
-@@ -1009,6 +1012,9 @@ thread_db_mourn_inferior (void)
+--- gdb-6.6.dfsg.90.20070912.orig/gdb/linux-thread-db.c	2007-09-15 10:17:36.000000000 -0400
++++ gdb-6.6.dfsg.90.20070912/gdb/linux-thread-db.c	2007-09-15 10:21:01.000000000 -0400
+@@ -966,6 +966,9 @@ thread_db_mourn_inferior (void)
  
    target_beneath->to_mourn_inferior ();
  

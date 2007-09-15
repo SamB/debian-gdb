@@ -1,13 +1,12 @@
 /* Shared library declarations for GDB, the GNU Debugger.
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000,
-   2001
-   Free Software Foundation, Inc.
+   2001, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,14 +15,14 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef SOLIST_H
 #define SOLIST_H
 
 #define SO_NAME_MAX_PATH_SIZE 512	/* FIXME: Should be dynamic */
+/* For domain_enum domain.  */
+#include "symtab.h"
 
 /* Forward declaration for target specific link map information.  This
    struct is opaque to all but the target specific file.  */
@@ -65,7 +64,11 @@ struct so_list
     struct objfile *objfile;	/* objfile for loaded lib */
     struct section_table *sections;
     struct section_table *sections_end;
-    struct section_table *textsection;
+
+    /* Record the range of addresses belonging to this shared library.
+       There may not be just one (e.g. if two segments are relocated
+       differently); but this is only used for "info sharedlibrary".  */
+    CORE_ADDR addr_low, addr_high;
   };
 
 struct target_so_ops
@@ -104,7 +107,14 @@ struct target_so_ops
        Convenience function for remote debuggers finding host libs.  */
     int (*find_and_open_solib) (char *soname,
         unsigned o_flags, char **temp_pathname);
-    
+
+    /* Hook for looking up global symbols in a library-specific way.  */
+    struct symbol * (*lookup_lib_global_symbol) (const struct objfile *objfile,
+						 const char *name,
+						 const char *linkage_name,
+						 const domain_enum domain,
+						 struct symtab **symtab);
+
   };
 
 /* Free the memory associated with a (so_list *).  */
@@ -125,5 +135,12 @@ extern struct target_so_ops *current_target_so_ops;
   (current_target_so_ops->find_and_open_solib)
 #define TARGET_SO_IN_DYNSYM_RESOLVE_CODE \
   (current_target_so_ops->in_dynsym_resolve_code)
+
+/* Handler for library-specific global symbol lookup in solib.c.  */
+struct symbol *solib_global_lookup (const struct objfile *objfile,
+				    const char *name,
+				    const char *linkage_name,
+				    const domain_enum domain,
+				    struct symtab **symtab);
 
 #endif
