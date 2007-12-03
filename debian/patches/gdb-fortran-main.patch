@@ -22,15 +22,15 @@ might disturb the debugging.  But I am not sure how much it is.
 
 Index: gdb/symtab.c
 ===================================================================
---- gdb/symtab.c.orig	2007-01-27 20:35:18.000000000 -0500
-+++ gdb/symtab.c	2007-01-27 20:35:34.000000000 -0500
-@@ -4189,8 +4189,12 @@ find_main_name (void)
+--- gdb/symtab.c.orig	2007-12-03 09:37:59.000000000 -0500
++++ gdb/symtab.c	2007-12-03 09:38:06.000000000 -0500
+@@ -4150,8 +4150,12 @@ find_main_name (void)
      }
  
    /* The languages above didn't identify the name of the main procedure.
 -     Fallback to "main".  */
 -  set_main_name ("main");
-+     Fallback to "MAIN__" (g77 and gfortran) if we can find it in the 
++     Fallback to "MAIN__" (g77 and gfortran) if we can find it in the
 +     minimal symtab, to "main" otherwise.  */
 +  if (lookup_minimal_symbol ("MAIN__", NULL, NULL))
 +    set_main_name ("MAIN__");
@@ -42,7 +42,7 @@ Index: gdb/symtab.c
 Index: gdb/testsuite/gdb.fortran/lang.exp
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ gdb/testsuite/gdb.fortran/lang.exp	2007-01-27 20:35:34.000000000 -0500
++++ gdb/testsuite/gdb.fortran/lang.exp	2007-12-03 09:38:06.000000000 -0500
 @@ -0,0 +1,40 @@
 +# Copyright 2005 Free Software Foundation, Inc.
 +
@@ -50,15 +50,15 @@ Index: gdb/testsuite/gdb.fortran/lang.exp
 +# it under the terms of the GNU General Public License as published by
 +# the Free Software Foundation; either version 2 of the License, or
 +# (at your option) any later version.
-+# 
++#
 +# This program is distributed in the hope that it will be useful,
 +# but WITHOUT ANY WARRANTY; without even the implied warranty of
 +# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 +# GNU General Public License for more details.
-+# 
++#
 +# You should have received a copy of the GNU General Public License
 +# along with this program; if not, write to the Free Software
-+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
++# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 +
 +# This file was written by Wu Zhou. (woodzltc@cn.ibm.com)
 +

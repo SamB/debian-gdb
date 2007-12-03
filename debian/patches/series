@@ -1,7 +1,6 @@
 member-field-symtab.patch 
 cp-pass-by-reference.patch 
 thread-db-multiple-libraries.patch 
-static-threads-test.patch 
 dwarf2-cfi-warning.patch 
 gdbinit-ownership.patch
 pending-breakpoints-and-sigttou.patch
@@ -11,3 +10,5 @@ linux-clear-thread-list.patch
 man-page-args.patch
 bfd-get-mtime-less.patch
 hppa-linux-build.patch
+division-by-zero-u.patch
+gdb-mi-varobj-crash.patch

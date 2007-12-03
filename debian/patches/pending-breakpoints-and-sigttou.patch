@@ -4,11 +4,11 @@ Don't generate SIGTTOU when resolving a pending breakpoint.
  gdb/infrun.c |    3 ++-
  1 file changed, 2 insertions(+), 1 deletion(-)
 
-Index: gdb-6.6.dfsg/gdb/infrun.c
+Index: gdb-6.7.1/gdb/infrun.c
 ===================================================================
---- gdb-6.6.dfsg.orig/gdb/infrun.c	2007-01-27 20:35:28.000000000 -0500
-+++ gdb-6.6.dfsg/gdb/infrun.c	2007-01-27 20:35:33.000000000 -0500
-@@ -2197,12 +2197,13 @@ process_event_stop_test:
+--- gdb-6.7.1.orig/gdb/infrun.c	2007-12-03 09:37:03.000000000 -0500
++++ gdb-6.7.1/gdb/infrun.c	2007-12-03 09:37:47.000000000 -0500
+@@ -2244,12 +2244,13 @@ process_event_stop_test:
  #else
  	  solib_add (NULL, 0, &current_target, auto_solib_add);
  #endif

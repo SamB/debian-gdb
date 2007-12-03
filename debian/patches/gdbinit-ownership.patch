@@ -7,11 +7,11 @@ several problems with the implementation.  It needs to be revisited.
  gdb/main.c         |    4 ++--
  3 files changed, 40 insertions(+), 7 deletions(-)
 
-Index: gdb-6.6.dfsg/gdb/cli/cli-cmds.c
+Index: gdb-6.7.1/gdb/cli/cli-cmds.c
 ===================================================================
---- gdb-6.6.dfsg.orig/gdb/cli/cli-cmds.c	2007-01-27 20:35:28.000000000 -0500
-+++ gdb-6.6.dfsg/gdb/cli/cli-cmds.c	2007-01-27 20:35:32.000000000 -0500
-@@ -38,6 +38,7 @@
+--- gdb-6.7.1.orig/gdb/cli/cli-cmds.c	2007-12-03 09:37:03.000000000 -0500
++++ gdb-6.7.1/gdb/cli/cli-cmds.c	2007-12-03 09:37:44.000000000 -0500
+@@ -36,6 +36,7 @@
  #include "objfiles.h"
  #include "source.h"
  #include "disasm.h"
@@ -19,7 +19,7 @@ Index: gdb-6.6.dfsg/gdb/cli/cli-cmds.c
  
  #include "ui-out.h"
  
-@@ -53,6 +54,8 @@
+@@ -51,6 +52,8 @@
  
  #include <fcntl.h>
  
@@ -28,7 +28,7 @@ Index: gdb-6.6.dfsg/gdb/cli/cli-cmds.c
  /* Prototypes for local command functions */
  
  static void complete_command (char *, int);
-@@ -432,6 +435,10 @@ cd_command (char *dir, int from_tty)
+@@ -430,6 +433,10 @@ cd_command (char *dir, int from_tty)
      pwd_command ((char *) 0, 1);
  }
  
@@ -39,7 +39,7 @@ Index: gdb-6.6.dfsg/gdb/cli/cli-cmds.c
  void
  source_script (char *file, int from_tty)
  {
-@@ -441,9 +448,7 @@ source_script (char *file, int from_tty)
+@@ -439,9 +446,7 @@ source_script (char *file, int from_tty)
    int fd;
  
    if (file == NULL || *file == 0)
@@ -50,7 +50,7 @@ Index: gdb-6.6.dfsg/gdb/cli/cli-cmds.c
  
    file = tilde_expand (file);
    old_cleanups = make_cleanup (xfree, file);
-@@ -461,13 +466,41 @@ source_script (char *file, int from_tty)
+@@ -459,13 +464,41 @@ source_script (char *file, int from_tty)
  
    if (fd == -1)
      {
@@ -93,11 +93,11 @@ Index: gdb-6.6.dfsg/gdb/cli/cli-cmds.c
    script_from_file (stream, file);
  
    do_cleanups (old_cleanups);
-Index: gdb-6.6.dfsg/gdb/main.c
+Index: gdb-6.7.1/gdb/main.c
 ===================================================================
---- gdb-6.6.dfsg.orig/gdb/main.c	2007-01-27 20:35:19.000000000 -0500
-+++ gdb-6.6.dfsg/gdb/main.c	2007-01-27 20:35:32.000000000 -0500
-@@ -644,7 +644,7 @@ extern int gdbtk_test (char *);
+--- gdb-6.7.1.orig/gdb/main.c	2007-12-03 09:37:03.000000000 -0500
++++ gdb-6.7.1/gdb/main.c	2007-12-03 09:37:44.000000000 -0500
+@@ -688,7 +688,7 @@ extern int gdbtk_test (char *);
  
        if (!inhibit_gdbinit)
  	{
@@ -106,7 +106,7 @@ Index: gdb-6.6.dfsg/gdb/main.c
  	}
  
        /* Do stats; no need to do them elsewhere since we'll only
-@@ -722,7 +722,7 @@ extern int gdbtk_test (char *);
+@@ -766,7 +766,7 @@ extern int gdbtk_test (char *);
        || memcmp ((char *) &homebuf, (char *) &cwdbuf, sizeof (struct stat)))
      if (!inhibit_gdbinit)
        {
@@ -115,11 +115,11 @@ Index: gdb-6.6.dfsg/gdb/main.c
        }
  
    for (i = 0; i < ncmd; i++)
-Index: gdb-6.6.dfsg/gdb/Makefile.in
+Index: gdb-6.7.1/gdb/Makefile.in
 ===================================================================
---- gdb-6.6.dfsg.orig/gdb/Makefile.in	2007-01-27 20:35:30.000000000 -0500
-+++ gdb-6.6.dfsg/gdb/Makefile.in	2007-01-27 20:35:32.000000000 -0500
-@@ -2905,7 +2905,7 @@ cli-cmds.o: $(srcdir)/cli/cli-cmds.c $(d
+--- gdb-6.7.1.orig/gdb/Makefile.in	2007-12-03 09:37:37.000000000 -0500
++++ gdb-6.7.1/gdb/Makefile.in	2007-12-03 09:37:44.000000000 -0500
+@@ -2882,7 +2882,7 @@ cli-cmds.o: $(srcdir)/cli/cli-cmds.c $(d
  	$(expression_h) $(frame_h) $(value_h) $(language_h) $(filenames_h) \
  	$(objfiles_h) $(source_h) $(disasm_h) $(ui_out_h) $(top_h) \
  	$(cli_decode_h) $(cli_script_h) $(cli_setshow_h) $(cli_cmds_h) \

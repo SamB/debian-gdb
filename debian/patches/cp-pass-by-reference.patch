@@ -1,9 +1,4 @@
-This patch needs to be submitted for the FSF.  Also, there may be testcases
-already in the GDB testsuite (currently disabled) that it would probably fix.
-
-2005-11-20
-
-Patch updated, but still not submitted.
+A version of this patch was committed to GDB HEAD after 6.7 branched.
 
 ---
  gdb/Makefile.in                      |    2 

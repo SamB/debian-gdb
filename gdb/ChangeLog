@@ -1,3 +1,144 @@
+2007-10-29  Joel Brobecker  <brobecker@adacore.com>
+
+	* version.in: Set version to 6.7.1.
+
+2007-10-29  Joel Brobecker  <brobecker@adacore.com>
+
+	* README: Update GDB version number to 6.7.1.
+
+2007-10-25  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* memory-map.c (parse_memory_map): Don't use an empty struct
+	initializer.
+
+2007-10-25  Joel Brobecker  <brobecker@adacore.com>
+
+	* NEWS: Document status of hppa64-hpux support.
+
+2007-10-24  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	PR gdb/2341
+	* sol-thread.c (sol_thread_fetch_registers): Work around gcc 3.4
+	alias warning bug.
+
+2007-10-23  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	PR gdb/2336
+	* configure.ac: Modify $LIBINTL before the BFD check.
+	* configure: Regenerated.
+
+2007-10-21  Luis Machado  <luisgpm@br.ibm.com>
+
+	* rs6000-tdep.c (ppc_dwarf2_frame_init_reg): New function.
+	* (rs6000_gdbarch_init): Install ppc_dwarf2_frame_init_reg as
+	default dwarf2_frame_set_init_reg function.
+		
+2007-10-16  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* mi/mi-main.c (captured_mi_execute_command): Clear mi_error_message
+	after freeing it.
+
+2007-10-13  Joel Brobecker  <brobecker@adacore.com>
+
+	* solib-target.c (solib_target_parse_libraries)
+	[HAVEHAVE_LIBEXPAT not defined]: Fix thinko in return type.
+
+2007-10-10  Joel Brobecker  <brobecker@adacore.com>
+
+	* version.in: Set version to 6.7.0.20071010-cvs.
+
+2007-10-10  Joel Brobecker  <brobecker@adacore.com>
+
+	GDB 6.7 released.
+
+2007-10-10  Joel Brobecker  <brobecker@adacore.com>
+
+	* version.in: Set version to 6.7.
+
+2007-10-10  Joel Brobecker  <brobecker@adacore.com>
+
+	* README: Update GDB version number to 6.7.
+
+2007-10-09  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* solib-svr4.c (enable_break): Add the dynamic linker also if
+	auxv succeeds.
+
+2007-10-08  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	Revert:
+	2007-08-10  Michael Snyder  <msnyder@access-company.com>
+
+	* stabsread.c (read_huge_number): Attempt to compute value before
+	values that it depends on.
+
+2007-10-05  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* remote.c (get_offsets): Only call free_symfile_segment_data if
+	data was allocated.
+
+2007-10-03  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* NEWS: Mention XML support for M68K in GDB 6.7.
+
+2007-10-02  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* s390-tdep.c (s390_regset_from_core_section): Allow excess section
+	size to enable bi-arch generate-core-file support.
+
+2007-10-02  Markus Deuling  <deuling@de.ibm.com>
+
+	* spu-tdep.c (info_spu_signal_command): Fix output for SPU signal.
+
+2007-09-29  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* configure.ac: Add $LIBINTL when testing libbfd.
+	* configure: Regenerated.
+
+2007-09-24  Jim Blandy  <jimb@codesourcery.com>
+
+	* symfile.h (struct symfile_segment_data): Doc fixes.
+	* symfile.c (symfile_map_offsets_to_segments): Doc fixes.
+	Assert that we were passed some loaded segment addresses,
+	and that sections' segment numbers are valid.
+	Simplify offset calculation.
+	* remote.c (get_offsets): Clarify selection of relocate-by-segment
+	strategy, and set num_segments correctly.  Delete redundant
+	assignments to do_sections.
+ 
+2007-09-19  Joel Brobecker  <brobecker@adacore.com>
+
+	* version.in: Set version to 6.6.90.20070919-cvs.
+
+2007-09-19  Joel Brobecker  <brobecker@adacore.com>
+
+	GDB 6.6.90 released.
+
+2007-09-19  Joel Brobecker  <brobecker@adacore.com>
+
+	* version.in: Set version to 6.6.90.
+
+2007-09-19  Joel Brobecker  <brobecker@adacore.com>
+
+	* NEWS: Re-phrase "Changes since..." into "Changes in..." in
+	preparation for the gdb-6.7 release and its associated pre-releases.
+
+2007-09-19  Joel Brobecker  <brobecker@adacore.com>
+
+	* README: Update GDB version number to 6.6.90.
+
+2007-09-19  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* mips-tdep.c (mips_stub_frame_cache): Correct the saved return
+	address register.  Correct the call to frame_id_build.
+	(mips_stub_frame_sniffer): Use the stub unwinder when the PC
+	is invalid.
+
+2007-09-18  Joel Brobecker  <brobecker@adacore.com>
+
+	* ia64-tdep.c (refine_prologue_limit): Make sure we don't scan
+	the linetable past the function end.
+
 2007-09-11  Joel Brobecker  <brobecker@adacore.com>
 
 	GDB 6.7 branch created (branch timestamp: 2007-09-07 14:00 UTC)

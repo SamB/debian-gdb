@@ -1,3 +1,18 @@
+gdb (6.7.1-1) unstable; urgency=low
+
+  * New upstream release.
+    - Correct makeinfo version check (Closes: #453202).
+  * Merge Ubuntu support for a gdb64 package (Closes: #254270).
+  * Run the testsuite on all GNU/Linux platforms.
+  * Remove old support for skipping thread tests.
+  * Add an expat build dependency and add --with-expat.
+  * Update copyright notice.
+  * Do not freeze on division by zero (Closes: #414887).
+  * Rewrite HPPA kernel offsets patch to support HPPA64.
+  * Include Vladimir Prus's varobj fix for kdevelop (Closes: #443080).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Mon, 03 Dec 2007 10:12:27 -0500
+
 gdb (6.6.dfsg.90.20070912-1) unstable; urgency=low
 
   * New upstream snapshot (pre-release for GDB 6.7).

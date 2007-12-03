@@ -7,11 +7,11 @@ place; the generic mourn inferior should do this, perhaps.
  gdb/linux-thread-db.c |    3 +++
  1 file changed, 3 insertions(+)
 
-Index: gdb-6.6.dfsg.90.20070912/gdb/linux-thread-db.c
+Index: gdb-6.7.1/gdb/linux-thread-db.c
 ===================================================================
---- gdb-6.6.dfsg.90.20070912.orig/gdb/linux-thread-db.c	2007-09-15 10:17:36.000000000 -0400
-+++ gdb-6.6.dfsg.90.20070912/gdb/linux-thread-db.c	2007-09-15 10:21:01.000000000 -0400
-@@ -966,6 +966,9 @@ thread_db_mourn_inferior (void)
+--- gdb-6.7.1.orig/gdb/linux-thread-db.c	2007-12-03 09:38:14.000000000 -0500
++++ gdb-6.7.1/gdb/linux-thread-db.c	2007-12-03 09:38:18.000000000 -0500
+@@ -965,6 +965,9 @@ thread_db_mourn_inferior (void)
  
    target_beneath->to_mourn_inferior ();
  

@@ -21,11 +21,11 @@ sets.
  gdb/dwarf2-frame.c |    2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-Index: gdb-6.6.dfsg/gdb/dwarf2-frame.c
+Index: gdb-6.7.1/gdb/dwarf2-frame.c
 ===================================================================
---- gdb-6.6.dfsg.orig/gdb/dwarf2-frame.c	2007-01-27 20:35:19.000000000 -0500
-+++ gdb-6.6.dfsg/gdb/dwarf2-frame.c	2007-01-27 20:35:32.000000000 -0500
-@@ -850,7 +850,7 @@ dwarf2_frame_cache (struct frame_info *n
+--- gdb-6.7.1.orig/gdb/dwarf2-frame.c	2007-12-03 09:37:03.000000000 -0500
++++ gdb-6.7.1/gdb/dwarf2-frame.c	2007-12-03 09:37:39.000000000 -0500
+@@ -928,7 +928,7 @@ dwarf2_frame_cache (struct frame_info *n
  	   DWARF2 register numbers.  */
  	if (fs->regs.reg[column].how == DWARF2_FRAME_REG_UNSPECIFIED)
  	  {
