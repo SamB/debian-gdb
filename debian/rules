@@ -187,6 +187,9 @@ endif
 	# not the real manuals.
 	rm -rf debian/tmp/usr/share/info
 
+	install -d debian/tmp/usr/lib
+	install -m 644 $(DEB_BUILDDIR)/gdb/libgdb.a debian/tmp/usr/lib/
+
 debian/control:: debian/control.in $(CROSS_FORCE)
 	cat debian/control.in \
 		| sed "s/@kfreebsd@/`type-handling any kfreebsd`/g" \
@@ -196,9 +199,11 @@ debian/control:: debian/control.in $(CROSS_FORCE)
 
 DEB_INSTALL_DOCS_gdb$(TS) = gdb/NEWS gdb/README gdb/doc/refcard.tex \
 		objdir/gdb/doc/refcard.dvi objdir/gdb/doc/refcard.ps
-
 DEB_INSTALL_CHANGELOGS_gdb$(TS) = gdb/ChangeLog
 DEB_INSTALL_MANPAGES_gdb$(TS) = gdb/gdb.1
+
+DEB_INSTALL_DOCS_libgdb-dev = gdb/NEWS gdb/README
+DEB_INSTALL_CHANGELOGS_libgdb-dev = gdb/ChangeLog
 
 .PHONY: FORCE
 FORCE:

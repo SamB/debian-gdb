@@ -12,3 +12,5 @@ bfd-get-mtime-less.patch
 hppa-linux-build.patch
 division-by-zero-u.patch
 gdb-mi-varobj-crash.patch
+powerpc-plt-stubs.patch
+gcc43-werror.patch

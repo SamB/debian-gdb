@@ -1,0 +1,153 @@
+Debian bug #432461.
+
+From gdb-patches-return-51861-listarch-gdb-patches=sources.redhat.com@sourceware.org Wed Oct 31 01:36:47 2007
+Return-Path: <gdb-patches-return-51861-listarch-gdb-patches=sources.redhat.com@sourceware.org>
+Delivered-To: listarch-gdb-patches@sources.redhat.com
+Received: (qmail 24242 invoked by alias); 31 Oct 2007 01:36:47 -0000
+Received: (qmail 24233 invoked by uid 22791); 31 Oct 2007 01:36:46 -0000
+X-Spam-Check-By: sourceware.org
+Received: from mtagate3.de.ibm.com (HELO mtagate3.de.ibm.com) (195.212.29.152)     by sourceware.org (qpsmtpd/0.31) with ESMTP; Wed, 31 Oct 2007 01:36:42 +0000
+Received: from d12nrmr1607.megacenter.de.ibm.com (d12nrmr1607.megacenter.de.ibm.com [9.149.167.49]) 	by mtagate3.de.ibm.com (8.13.8/8.13.8) with ESMTP id l9V1aeTA168668 	for <gdb-patches@sourceware.org>; Wed, 31 Oct 2007 01:36:40 GMT
+Received: from d12av02.megacenter.de.ibm.com (d12av02.megacenter.de.ibm.com [9.149.165.228]) 	by d12nrmr1607.megacenter.de.ibm.com (8.13.8/8.13.8/NCO v8.5) with ESMTP id l9V1adpS1749070 	for <gdb-patches@sourceware.org>; Wed, 31 Oct 2007 02:36:39 +0100
+Received: from d12av02.megacenter.de.ibm.com (loopback [127.0.0.1]) 	by d12av02.megacenter.de.ibm.com (8.12.11.20060308/8.13.3) with ESMTP id l9V1adsH000918 	for <gdb-patches@sourceware.org>; Wed, 31 Oct 2007 02:36:39 +0100
+Received: from tuxmaker.boeblingen.de.ibm.com (tuxmaker.boeblingen.de.ibm.com [9.152.85.9]) 	by d12av02.megacenter.de.ibm.com (8.12.11.20060308/8.12.11) with SMTP id l9V1adrr000915 	for <gdb-patches@sourceware.org>; Wed, 31 Oct 2007 02:36:39 +0100
+Message-Id: <200710310136.l9V1adrr000915@d12av02.megacenter.de.ibm.com>
+Received: by tuxmaker.boeblingen.de.ibm.com (sSMTP sendmail emulation); Wed, 31 Oct 2007 02:36:39 +0100
+Subject: [rfc] Fix mst_solib_trampoline symbol sections for PLT stubs
+To: gdb-patches@sourceware.org
+Date: Wed, 31 Oct 2007 02:36:39 +0100 (CET)
+From: "Ulrich Weigand" <uweigand@de.ibm.com>
+X-Mailer: ELM [version 2.5 PL2]
+MIME-Version: 1.0
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+Mailing-List: contact gdb-patches-help@sourceware.org; run by ezmlm
+Precedence: bulk
+List-Id: <gdb-patches.sourceware.org>
+List-Subscribe: <mailto:gdb-patches-subscribe@sourceware.org>
+List-Archive: <http://sourceware.org/ml/gdb-patches/>
+List-Post: <mailto:gdb-patches@sourceware.org>
+List-Help: <mailto:gdb-patches-help@sourceware.org>, <http://sourceware.org/ml/#faqs>
+Sender: gdb-patches-owner@sourceware.org
+Delivered-To: mailing list gdb-patches@sourceware.org
+
+Hello,
+
+we're still seeing problems on ppc when stepping over shared library
+function calls, due to the issue previously discussed e.g. in:
+http://sourceware.org/ml/gdb-patches/2006-06/msg00368.html
+
+Now, at the time the discussion primarily focussed on ways how to
+identify PLT stubs via e.g. code reading or BFD synthetic symbols.
+
+However, looking at the existing code, it occurs to me that the
+current method seems to be a valid approach, it's just that the
+implementation is not quite correct.
+
+The basic idea is to make use of a hint the linker adds to 
+undefined dynamic symbols.  When the main executable imports
+a function from a shared library, it will have an undefined
+symbol refering to that function in its dynamic symbol table.
+
+Now, for undefined symbols, the "value" is generally meaningless.
+However, in this specific case, the linker actually may place a
+significant piece of information into the value field: the address
+of the PLT stub used to call the imported function.
+
+It is my understanding that this information is generally reliable,
+as it is implemented e.g. to determine the value of a function
+pointer constant refering to that symbol (due to the special ABI
+rule that the "address" of a function imported into the main 
+executable, for function pointer comparison purpuses, is the
+address of the PLT stub in the main executable).
+
+Thus, the current elf_symtab_read code attempts to use that hint
+to construct a minimal symbol associating that address with the
+name of the function.  This is generally the correct thing to do,
+as the code found at that address really is the stub used to call
+that function.
+
+However, this place in elf_symtab_read uses the section information
+from the original undefined symbol as the section that synthetic
+minimal symbol resides in .  This seems not particularly useful to me,
+as that section is of course always the "undefined" section.
+
+This causes the minimal symbol to be defined in the "undefined"
+section, which later on leads to it being ignored ...
+
+
+Note that this is not a problem with minimal symbols in general,
+nor even with mst_solib_trampoline symbols in general, only those
+generated using this particular sort of hints in elf_symtab_read.
+
+Thus my suggestion would be to fix this problem by creating those
+symbols with a proper section in the first place.  The patch I'm
+proposing below attempts to do that by searching for the section
+covering the VMA identified as PLT stub address.  If it cannot 
+find any, the hint is ignored.
+
+
+This patch fixes the ppc32 step-over-shared-library-call problem,
+fixing about two dozen FAILs in the test suite.
+
+
+Any comments on that approach?  Am I missing something here?
+
+Bye,
+Ulrich
+
+
+ChangeLog:
+
+	* elfread.c (elf_symtab_read): When constructing a solib trampoline
+	minimal symbol from an undefined dynamic symbol, use proper section.
+
+---
+ gdb/elfread.c |   26 +++++++++++++++++++++++---
+ 1 file changed, 23 insertions(+), 3 deletions(-)
+
+Index: gdb-6.7.1/gdb/elfread.c
+===================================================================
+--- gdb-6.7.1.orig/gdb/elfread.c	2007-08-23 14:08:28.000000000 -0400
++++ gdb-6.7.1/gdb/elfread.c	2007-12-31 11:02:10.000000000 -0500
+@@ -242,6 +242,8 @@ elf_symtab_read (struct objfile *objfile
+ 	  && (sym->flags & BSF_FUNCTION))
+ 	{
+ 	  struct minimal_symbol *msym;
++	  bfd *abfd = objfile->obfd;
++	  asection *sect;
+ 
+ 	  /* Symbol is a reference to a function defined in
+ 	     a shared library.
+@@ -254,10 +256,28 @@ elf_symtab_read (struct objfile *objfile
+ 	  symaddr = sym->value;
+ 	  if (symaddr == 0)
+ 	    continue;
+-	  symaddr += offset;
++
++	  /* sym->section is the undefined section.  However, we want to
++	     record the section where the PLT stub resides with the
++	     minimal symbol.  Search the section table for the one that
++	     covers the stub's address.  */
++	  for (sect = abfd->sections; sect != NULL; sect = sect->next)
++	    {
++	      if ((bfd_get_section_flags (abfd, sect) & SEC_ALLOC) == 0)
++		continue;
++
++	      if (symaddr >= bfd_get_section_vma (abfd, sect)
++		  && symaddr < bfd_get_section_vma (abfd, sect)
++			       + bfd_get_section_size (sect))
++		break;
++	    }
++	  if (!sect)
++	    continue;
++
++	  symaddr += ANOFFSET (objfile->section_offsets, sect->index);
++
+ 	  msym = record_minimal_symbol
+-	    ((char *) sym->name, symaddr,
+-	     mst_solib_trampoline, sym->section, objfile);
++	    ((char *) sym->name, symaddr, mst_solib_trampoline, sect, objfile);
+ #ifdef SOFUN_ADDRESS_MAYBE_MISSING
+ 	  if (msym != NULL)
+ 	    msym->filename = filesymname;

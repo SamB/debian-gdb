@@ -1,3 +1,14 @@
+gdb (6.7.1-2) unstable; urgency=low
+
+  * Add patch from Ulrich Weigand to fix stepping over shared library
+  functions on PowerPC (Closes: #432461).
+  * Add libgdb-dev package for fp-ide (Closes: #458250).
+  * Avoid gcc-4.3 uninitialized warnings (Closes: #455669).
+  * Updated Standards-Version to 3.7.3
+    - Correct Apps -> Applications in gdb.menu.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Wed, 02 Jan 2008 08:49:43 -0500
+
 gdb (6.7.1-1) unstable; urgency=low
 
   * New upstream release.

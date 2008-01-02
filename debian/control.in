@@ -2,7 +2,7 @@ Source: gdb
 Maintainer: Daniel Jacobowitz <dan@debian.org>
 Section: devel
 Priority: optional
-Standards-Version: 3.7.2
+Standards-Version: 3.7.3
 Build-Depends: autoconf, libtool, texinfo (>= 4.7-2.2), texlive-base, libncurses5-dev, libreadline5-dev, bison, gettext, debhelper (>= 4.9.0), dejagnu, gcj [!kfreebsd-amd64 !kfreebsd-i386 !hurd-i386 !armel], gobjc [!armel], mig [@gnu@], cdbs (>= 0.4.17), quilt (>= 0.30-1), libkvm-dev [@kfreebsd@], type-handling (>= 0.2.1), libunwind7-dev [ia64], flex | flex-old, libexpat1-dev, g++-multilib [i386 powerpc s390 sparc], lib64readline5-dev [i386 powerpc s390 sparc]
 
 Package: gdb@TS@
@@ -29,3 +29,18 @@ Description: The GNU Debugger (64-bit)
  where errors occurred. Currently, it works for C, C++, Fortran
  Modula 2 and Java programs. A must-have for any serious
  programmer.
+
+Package: libgdb-dev
+Architecture: any
+Section: libdevel
+Priority: extra
+Description: The GNU Debugger (libgdb.a)
+ GDB is a source-level debugger, capable of breaking programs at
+ any specific line, displaying variable values, and determining
+ where errors occurred. Currently, it works for C, C++, Fortran
+ Modula 2 and Java programs. A must-have for any serious
+ programmer.
+ .
+ This package contains libgdb.a, the bulk of GDB as a linkable
+ library.  It is provided for an IDE which links to libgdb.a.  Please
+ do not use libgdb.a for new projects.
