@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2002, 2003, 2004, 2007 Free Software Foundation, Inc.
+   Copyright 2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -56,7 +56,7 @@ void *thread_function(void *arg) {
     /* Don't run forever.  Run just short of it :)  */
     while (*myp > 0)
       {
-	(*myp) ++;  /* Loop increment.  */
+	(*myp) ++; usleep (1);  /* Loop increment.  */
       }
 
     pthread_exit(NULL);

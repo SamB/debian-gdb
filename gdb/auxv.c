@@ -1,6 +1,6 @@
 /* Auxiliary vector support for GDB, the GNU debugger.
 
-   Copyright (C) 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -208,6 +208,8 @@ fprint_target_auxv (struct ui_file *file, struct target_ops *ops)
 	       _("Canonicalized file name given to execve"), str);
 	  TAG (AT_SUN_MMU, _("String for name of MMU module"), str);
 	  TAG (AT_SUN_LDDATA, _("Dynamic linker's data segment address"), hex);
+	  TAG (AT_SUN_AUXFLAGS,
+	       _("AF_SUN_ flags passed from the kernel"), hex);
 	}
 
       fprintf_filtered (file, "%-4s %-20s %-30s ",

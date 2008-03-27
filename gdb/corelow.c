@@ -1,7 +1,7 @@
 /* Core dump and executable file functions below target vector, for GDB.
 
    Copyright (C) 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2001, 2003, 2004, 2005, 2006, 2007
+   1998, 1999, 2000, 2001, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -44,6 +44,7 @@
 #include "gdb_assert.h"
 #include "exceptions.h"
 #include "solib.h"
+#include "filenames.h"
 
 
 #ifndef O_LARGEFILE
@@ -199,11 +200,7 @@ core_close (int quitting)
 
       /* Clear out solib state while the bfd is still open. See
          comments in clear_solib in solib.c. */
-#ifdef CLEAR_SOLIB
-      CLEAR_SOLIB ();
-#else
       clear_solib ();
-#endif
 
       name = bfd_get_filename (core_bfd);
       if (!bfd_close (core_bfd))
@@ -275,7 +272,7 @@ core_open (char *filename, int from_tty)
     }
 
   filename = tilde_expand (filename);
-  if (filename[0] != '/')
+  if (!IS_ABSOLUTE_PATH(filename))
     {
       temp = concat (current_directory, "/", filename, (char *)NULL);
       xfree (filename);
@@ -499,9 +496,11 @@ get_core_registers (struct regcache *regcache, int regno)
 			     ".reg2", 2, "floating-point", 0);
   get_core_register_section (regcache,
 			     ".reg-xfp", 3, "extended floating-point", 0);
+  get_core_register_section (regcache,
+  			     ".reg-ppc-vmx", 3, "ppc Altivec", 0);
 
   /* Supply dummy value for all registers not found in the core.  */
-  for (i = 0; i < gdbarch_num_regs (current_gdbarch); i++)
+  for (i = 0; i < gdbarch_num_regs (get_regcache_arch (regcache)); i++)
     if (!regcache_valid_p (regcache, i))
       regcache_raw_supply (regcache, i, NULL);
 }
@@ -522,7 +521,7 @@ core_xfer_partial (struct target_ops *ops, enum target_object object,
     case TARGET_OBJECT_MEMORY:
       if (readbuf)
 	return (*ops->deprecated_xfer_memory) (offset, readbuf,
-					       len, 0/*write*/, NULL, ops);
+					       len, 0/*read*/, NULL, ops);
       if (writebuf)
 	return (*ops->deprecated_xfer_memory) (offset, (gdb_byte *) writebuf,
 					       len, 1/*write*/, NULL, ops);
@@ -635,6 +634,20 @@ core_file_thread_alive (ptid_t tid)
   return 1;
 }
 
+/* Ask the current architecture what it knows about this core file.
+   That will be used, in turn, to pick a better architecture.  This
+   wrapper could be avoided if targets got a chance to specialize
+   core_ops.  */
+
+static const struct target_desc *
+core_read_description (struct target_ops *target)
+{
+  if (gdbarch_core_read_description_p (current_gdbarch))
+    return gdbarch_core_read_description (current_gdbarch, target, core_bfd);
+
+  return NULL;
+}
+
 /* Fill in core_ops with its defined operations and properties.  */
 
 static void
@@ -656,6 +669,7 @@ init_core_ops (void)
   core_ops.to_remove_breakpoint = ignore;
   core_ops.to_create_inferior = find_default_create_inferior;
   core_ops.to_thread_alive = core_file_thread_alive;
+  core_ops.to_read_description = core_read_description;
   core_ops.to_stratum = core_stratum;
   core_ops.to_has_memory = 1;
   core_ops.to_has_stack = 1;

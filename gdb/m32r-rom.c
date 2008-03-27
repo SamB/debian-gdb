@@ -1,7 +1,7 @@
 /* Remote debugging interface to m32r and mon2000 ROM monitors for GDB, 
    the GNU debugger.
 
-   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2004, 2005, 2007
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
    Adapted by Michael Snyder of Cygnus Support.
@@ -85,8 +85,9 @@ m32r_load_section (bfd *abfd, asection *s, void *obj)
       *data_count += section_size;
 
       printf_filtered ("Loading section %s, size 0x%lx lma ",
-		       bfd_section_name (abfd, s), section_size);
-      deprecated_print_address_numeric (section_base, 1, gdb_stdout);
+		       bfd_section_name (abfd, s),
+		       (unsigned long) section_size);
+      fputs_filtered (paddress (section_base), gdb_stdout);
       printf_filtered ("\n");
       gdb_flush (gdb_stdout);
       monitor_printf ("%s mw\r", paddr_nz (section_base));
@@ -145,7 +146,7 @@ m32r_load (char *filename, int from_tty)
 
 	printf_filtered ("Loading section %s, size 0x%lx vma ",
 			 bfd_section_name (abfd, s), section_size);
-	deprecated_print_address_numeric (section_base, 1, gdb_stdout);
+	fputs_filtered (paddress (section_base), gdb_stdout);
 	printf_filtered ("\n");
 	gdb_flush (gdb_stdout);
 	monitor_printf ("%x mw\r", section_base);
@@ -167,7 +168,8 @@ m32r_load (char *filename, int from_tty)
     }
 #endif
   gettimeofday (&end_time, NULL);
-  printf_filtered ("Start address 0x%lx\n", bfd_get_start_address (abfd));
+  printf_filtered ("Start address 0x%lx\n",
+		   (unsigned long) bfd_get_start_address (abfd));
   print_transfer_performance (gdb_stdout, data_count, 0, &start_time,
 			      &end_time);
 
@@ -213,6 +215,7 @@ m32r_supply_register (struct regcache *regcache, char *regname,
 {
   int regno;
   int num_regs = sizeof (m32r_regnames) / sizeof (m32r_regnames[0]);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
 
   for (regno = 0; regno < num_regs; regno++)
     if (strncmp (regname, m32r_regnames[regno], regnamelen) == 0)
@@ -275,10 +278,10 @@ m32r_supply_register (struct regcache *regcache, char *regname,
 
 	  if (regno == SPI_REGNUM && !stackmode)	/* SP == SPI */
 	    monitor_supply_register (regcache,
-				     gdbarch_sp_regnum (current_gdbarch), val);
+				     gdbarch_sp_regnum (gdbarch), val);
 	  else if (regno == SPU_REGNUM && stackmode)	/* SP == SPU */
 	    monitor_supply_register (regcache,
-				     gdbarch_sp_regnum (current_gdbarch), val);
+				     gdbarch_sp_regnum (gdbarch), val);
 	}
     }
 }
@@ -522,14 +525,16 @@ m32r_upload_command (char *args, int from_tty)
 	    data_count += section_size;
 
 	    printf_filtered ("Loading section %s, size 0x%lx lma ",
-			     bfd_section_name (abfd, s), section_size);
-	    deprecated_print_address_numeric (section_base, 1, gdb_stdout);
+			     bfd_section_name (abfd, s),
+			     (unsigned long) section_size);
+	    fputs_filtered (paddress (section_base), gdb_stdout);
 	    printf_filtered ("\n");
 	    gdb_flush (gdb_stdout);
 	  }
       /* Finally, make the PC point at the start address */
       write_pc (bfd_get_start_address (abfd));
-      printf_filtered ("Start address 0x%lx\n", bfd_get_start_address (abfd));
+      printf_filtered ("Start address 0x%lx\n", 
+		       (unsigned long) bfd_get_start_address (abfd));
       print_transfer_performance (gdb_stdout, data_count, 0, &start_time,
 				  &end_time);
     }

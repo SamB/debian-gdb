@@ -1,5 +1,5 @@
 /* GDB-specific functions for operating on agent expressions
-   Copyright (C) 1998, 1999, 2000, 2007 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -90,16 +90,6 @@ struct axs_value
 
 
 /* Translating GDB expressions into agent expressions.  */
-
-/* Given a GDB expression EXPR, translate it into the agent bytecode,
-   and return it.  FLAGS are from enum expr_to_agent_flags.  */
-extern struct agent_expr *expr_to_agent (struct expression *EXPR,
-					 struct axs_value *VALUE);
-
-/* Given a GDB expression EXPR denoting an lvalue in memory, produce a
-   string of agent bytecode which will leave its address and size on
-   the top of stack.  Return the agent expression.  */
-extern struct agent_expr *expr_to_address_and_size (struct expression *EXPR);
 
 /* Given a GDB expression EXPR, return bytecode to trace its value.
    The result will use the `trace' and `trace_quick' bytecodes to

@@ -1,7 +1,7 @@
 /* Generic serial interface functions.
 
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2003,
-   2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -279,9 +279,7 @@ do_ser_base_readchar (struct serial *scb, int timeout)
   if (status <= 0)
     {
       if (status == 0)
-	/* 0 chars means timeout.  (We may need to distinguish between EOF
-	   & timeouts someday.)  */
-	return SERIAL_TIMEOUT;	
+        return SERIAL_EOF;
       else
 	/* Got an error from read.  */
 	return SERIAL_ERROR;	

@@ -1,6 +1,6 @@
 /* General utility routines for the remote server for GDB.
    Copyright (C) 1986, 1989, 1993, 1995, 1996, 1997, 1999, 2000, 2002, 2003,
-   2007 Free Software Foundation, Inc.
+   2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -78,7 +78,7 @@ fatal (const char *string,...)
 {
   va_list args;
   va_start (args, string);
-  fprintf (stderr, "gdb: ");
+  fprintf (stderr, "gdbserver: ");
   vfprintf (stderr, string, args);
   fprintf (stderr, "\n");
   va_end (args);
@@ -91,7 +91,7 @@ warning (const char *string,...)
 {
   va_list args;
   va_start (args, string);
-  fprintf (stderr, "gdb: ");
+  fprintf (stderr, "gdbserver: ");
   vfprintf (stderr, string, args);
   fprintf (stderr, "\n");
   va_end (args);

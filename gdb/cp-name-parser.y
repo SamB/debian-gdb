@@ -1,6 +1,6 @@
 /* YACC parser for C++ names, for GDB.
 
-   Copyright (C) 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    Parts of the lexer are based on c-exp.y from GDB.
 
@@ -54,13 +54,38 @@ static const char *lexptr, *prev_lexptr, *error_lexptr, *global_errmsg;
 /* The components built by the parser are allocated ahead of time,
    and cached in this structure.  */
 
+#define ALLOC_CHUNK 100
+
 struct demangle_info {
   int used;
-  struct demangle_component comps[1];
+  struct demangle_info *prev, *next;
+  struct demangle_component comps[ALLOC_CHUNK];
 };
 
 static struct demangle_info *demangle_info;
-#define d_grab() (&demangle_info->comps[demangle_info->used++])
+
+static struct demangle_component *
+d_grab (void)
+{
+  struct demangle_info *more;
+
+  if (demangle_info->used >= ALLOC_CHUNK)
+    {
+      if (demangle_info->next == NULL)
+	{
+	  more = malloc (sizeof (struct demangle_info));
+	  more->prev = demangle_info;
+	  more->next = NULL;
+	  demangle_info->next = more;
+	}
+      else
+	more = demangle_info->next;
+
+      more->used = 0;
+      demangle_info = more;
+    }
+  return &demangle_info->comps[demangle_info->used++];
+}
 
 /* The parse tree created by the parser is stored here after a successful
    parse.  */
@@ -986,6 +1011,8 @@ exp1	:	exp '>' exp
    in parentheses.  */
 exp1	:	'&' start
 		{ $$ = fill_comp (DEMANGLE_COMPONENT_UNARY, make_operator ("&", 1), $2); }
+	|	'&' '(' start ')'
+		{ $$ = fill_comp (DEMANGLE_COMPONENT_UNARY, make_operator ("&", 1), $3); }
 	;
 
 /* Expressions, not including the comma operator.  */
@@ -1041,18 +1068,13 @@ exp	:	REINTERPRET_CAST '<' type '>' '(' exp1 ')' %prec UNARY
 		}
 	;
 
-/* Another form of C++-style cast.  "type ( exp1 )" is not allowed (it's too
-   ambiguous), but "name ( exp1 )" is.  Because we don't need to support
-   function types, we can handle this unambiguously (the use of typespec_2
-   prevents a silly, harmless conflict with qualifiers_opt).  This does not
-   appear in demangler output so it's not a great loss if we need to
-   disable it.  */
-exp	:	typespec_2 '(' exp1 ')' %prec UNARY
-		{ $$ = fill_comp (DEMANGLE_COMPONENT_UNARY,
-				    fill_comp (DEMANGLE_COMPONENT_CAST, $1, NULL),
-				    $3);
-		}
-	;
+/* Another form of C++-style cast is "type ( exp1 )".  This creates too many
+   conflicts to support.  For a while we supported the simpler
+   "typespec_2 ( exp1 )", but that conflicts with "& ( start )" as a
+   reference, deep within the wilderness of abstract declarators:
+   Qux<int(&(*))> vs Qux<int(&(var))>, a shift-reduce conflict at the
+   innermost left parenthesis.  So we do not support function-like casts.
+   Fortunately they never appear in demangler output.  */
 
 /* TO INVESTIGATE: ._0 style anonymous names; anonymous namespaces */
 
@@ -1923,19 +1945,24 @@ yyerror (char *msg)
   global_errmsg = msg ? msg : "parse error";
 }
 
-/* Allocate all the components we'll need to build a tree.  We generally
-   allocate too many components, but the extra memory usage doesn't hurt
-   because the trees are temporary.  If we start keeping the trees for
-   a longer lifetime we'll need to be cleverer.  */
-static struct demangle_info *
-allocate_info (int comps)
+/* Allocate a chunk of the components we'll need to build a tree.  We
+   generally allocate too many components, but the extra memory usage
+   doesn't hurt because the trees are temporary and the storage is
+   reused.  More may be allocated later, by d_grab.  */
+static void
+allocate_info (void)
 {
-  struct demangle_info *ret;
+  if (demangle_info == NULL)
+    {
+      demangle_info = malloc (sizeof (struct demangle_info));
+      demangle_info->prev = NULL;
+      demangle_info->next = NULL;
+    }
+  else
+    while (demangle_info->prev)
+      demangle_info = demangle_info->prev;
 
-  ret = malloc (sizeof (struct demangle_info)
-		+ sizeof (struct demangle_component) * (comps - 1));
-  ret->used = 0;
-  return ret;
+  demangle_info->used = 0;
 }
 
 /* Convert RESULT to a string.  The return value is allocated
@@ -1975,26 +2002,23 @@ cp_comp_to_string (struct demangle_component *result, int estimated_len)
   return (buf);
 }
 
-/* Convert a demangled name to a demangle_component tree.  *MEMORY is set to the
-   block of used memory that should be freed when finished with the
-   tree.  On error, NULL is returned, and an error message will be
-   set in *ERRMSG (which does not need to be freed).  */
+/* Convert a demangled name to a demangle_component tree.  On success,
+   the root of the new tree is returned; it is valid until the next
+   call to this function and should not be freed.  On error, NULL is
+   returned, and an error message will be set in *ERRMSG (which does
+   not need to be freed).  */
 
 struct demangle_component *
-cp_demangled_name_to_comp (const char *demangled_name, void **memory,
-			   const char **errmsg)
+cp_demangled_name_to_comp (const char *demangled_name, const char **errmsg)
 {
   static char errbuf[60];
   struct demangle_component *result;
 
-  int len = strlen (demangled_name);
-
-  len = len + len / 8;
   prev_lexptr = lexptr = demangled_name;
   error_lexptr = NULL;
   global_errmsg = NULL;
 
-  demangle_info = allocate_info (len);
+  allocate_info ();
 
   if (yyparse ())
     {
@@ -2005,11 +2029,9 @@ cp_demangled_name_to_comp (const char *demangled_name, void **memory,
 	  strcat (errbuf, "'");
 	  *errmsg = errbuf;
 	}
-      free (demangle_info);
       return NULL;
     }
 
-  *memory = demangle_info;
   result = global_result;
   global_result = NULL;
 
@@ -2063,11 +2085,10 @@ trim_chars (char *lexptr, char **extra_chars)
 int
 main (int argc, char **argv)
 {
-  char *str2, *extra_chars, c;
+  char *str2, *extra_chars = "", c;
   char buf[65536];
   int arg;
   const char *errmsg;
-  void *memory;
   struct demangle_component *result;
 
   arg = 1;
@@ -2094,7 +2115,7 @@ main (int argc, char **argv)
 	      printf ("%s\n", buf);
 	    continue;
 	  }
-	result = cp_demangled_name_to_comp (str2, &memory, &errmsg);
+	result = cp_demangled_name_to_comp (str2, &errmsg);
 	if (result == NULL)
 	  {
 	    fputs (errmsg, stderr);
@@ -2103,7 +2124,6 @@ main (int argc, char **argv)
 	  }
 
 	cp_print (result);
-	free (memory);
 
 	free (str2);
 	if (c)
@@ -2115,7 +2135,7 @@ main (int argc, char **argv)
       }
   else
     {
-      result = cp_demangled_name_to_comp (argv[arg], &memory, &errmsg);
+      result = cp_demangled_name_to_comp (argv[arg], &errmsg);
       if (result == NULL)
 	{
 	  fputs (errmsg, stderr);
@@ -2124,7 +2144,6 @@ main (int argc, char **argv)
 	}
       cp_print (result);
       putchar ('\n');
-      free (memory);
     }
   return 0;
 }

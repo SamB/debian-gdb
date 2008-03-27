@@ -1,7 +1,7 @@
 /* Definitions for reading symbol files into GDB.
 
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2007 Free Software Foundation, Inc.
+   2000, 2001, 2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -160,6 +160,11 @@ struct sym_fns
 
   struct symfile_segment_data *(*sym_segments) (bfd *abfd);
 
+  /* This function should read the linetable from the objfile when
+     the line table cannot be read while processing the debugging
+     information.  */
+  void (*sym_read_linetable) (void);
+
   /* Finds the next struct sym_fns.  They are allocated and
      initialized in whatever module implements the functions pointed
      to; an initializer calls add_symtab_fns to add them to the global
@@ -201,8 +206,6 @@ extern void sort_pst_symbols (struct partial_symtab *);
 extern struct symtab *allocate_symtab (char *, struct objfile *);
 
 extern int free_named_symtabs (char *);
-
-extern void fill_in_vptr_fieldno (struct type *);
 
 extern void add_symtab_fns (struct sym_fns *);
 
@@ -287,6 +290,8 @@ extern int auto_solib_limit;
 
 /* From symfile.c */
 
+extern void set_initial_language (void);
+
 extern struct partial_symtab *allocate_psymtab (char *, struct objfile *);
 
 extern void discard_psymtab (struct partial_symtab *);
@@ -359,6 +364,8 @@ extern int dwarf2_has_info (struct objfile *);
 
 extern void dwarf2_build_psymtabs (struct objfile *, int);
 extern void dwarf2_build_frame_info (struct objfile *);
+
+void dwarf2_free_objfile (struct objfile *);
 
 /* From mdebugread.c */
 

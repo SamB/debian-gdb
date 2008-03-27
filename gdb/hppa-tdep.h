@@ -1,6 +1,7 @@
 /* Target-dependent code for the HP PA-RISC architecture.
 
-   Copyright (C) 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -86,7 +87,7 @@ struct gdbarch_tdep
 
   /* Given a function address, try to find the global pointer for the 
      corresponding shared object.  */
-  CORE_ADDR (*find_global_pointer) (struct value *);
+  CORE_ADDR (*find_global_pointer) (struct gdbarch *, struct value *);
 
   /* For shared libraries, each call goes through a small piece of
      trampoline code in the ".plt", or equivalent, section.

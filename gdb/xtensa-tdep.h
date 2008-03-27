@@ -1,6 +1,6 @@
 /* Target-dependent code for the Xtensa port of GDB, the GNU debugger.
 
-   Copyright (C) 2003, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -59,6 +59,7 @@ typedef enum
   xtRegisterGroupVectra		= 0x0800,    /* Vectra.  */
   xtRegisterGroupSystem		= 0x1000,    /* System.  */
 
+  xtRegisterGroupNCP	    = 0x00800000,    /* Non-CP non-base opt/custom.  */
   xtRegisterGroupCP0	    = 0x01000000,    /* CP0.  */
   xtRegisterGroupCP1	    = 0x02000000,    /* CP1.  */
   xtRegisterGroupCP2	    = 0x04000000,    /* CP2.  */
@@ -87,27 +88,20 @@ typedef unsigned long xtensa_elf_greg_t;
 
 typedef struct
 {
-  xtensa_elf_greg_t xchal_config_id0;
-  xtensa_elf_greg_t xchal_config_id1;
-  xtensa_elf_greg_t cpux;
-  xtensa_elf_greg_t cpuy;
   xtensa_elf_greg_t pc;
   xtensa_elf_greg_t ps;
-  xtensa_elf_greg_t exccause;
-  xtensa_elf_greg_t excvaddr;
-  xtensa_elf_greg_t windowbase;
-  xtensa_elf_greg_t windowstart;
   xtensa_elf_greg_t lbeg;
   xtensa_elf_greg_t lend;
   xtensa_elf_greg_t lcount;
   xtensa_elf_greg_t sar;
-  xtensa_elf_greg_t syscall;
-  xtensa_elf_greg_t ar[0];	/* variable size (per config).  */
+  xtensa_elf_greg_t windowstart;
+  xtensa_elf_greg_t windowbase;
+  xtensa_elf_greg_t reserved[8+48];
+  xtensa_elf_greg_t ar[64];
 } xtensa_elf_gregset_t;
 
-#define SIZEOF_GREGSET (sizeof (xtensa_elf_gregset_t) + NUM_AREGS * 4)
-#define XTENSA_ELF_NGREG (SIZEOF_GREGSET / sizeof(xtensa_elf_greg_t))
-
+#define XTENSA_ELF_NGREG (sizeof (xtensa_elf_gregset_t) \
+			  / sizeof (xtensa_elf_greg_t))
 
 /*  Mask.  */
 
@@ -141,18 +135,23 @@ typedef struct
   unsigned int target_number;	/* Register target number.  */
 
   int flags;			/* Flags.  */
+  int coprocessor;		/* Coprocessor num, -1 for non-CP, else -2.  */
 
   const xtensa_mask_t *mask;	/* Register is a compilation of other regs.  */
   const char *fetch;		/* Instruction sequence to fetch register.  */
   const char *store;		/* Instruction sequence to store register.  */
 } xtensa_register_t;
 
+/*  For xtensa-config.c to expand to the structure above.  */
+#define XTREG(index,ofs,bsz,sz,al,tnum,flg,cp,ty,gr,name,fet,sto,mas,ct,x,y) \
+	{#name, ofs, ty, ((gr)|((xtRegisterGroupNCP>>2)<<(cp+2))), \
+	 ct, bsz, sz, al, tnum, flg, cp, mas, fet, sto},
+#define XTREG_END {0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0},
 
-#define XTENSA_REGISTER_FLAGS_PRIVILEDGED	0x0001
+#define XTENSA_REGISTER_FLAGS_PRIVILEGED	0x0001
 #define XTENSA_REGISTER_FLAGS_READABLE		0x0002
 #define XTENSA_REGISTER_FLAGS_WRITABLE		0x0004
 #define XTENSA_REGISTER_FLAGS_VOLATILE		0x0008
-
 
 /*  Call-ABI for stack frame.  */
 
@@ -197,7 +196,8 @@ struct gdbarch_tdep
 
   xtensa_register_t* regmap;
 
-  unsigned int num_regs;	/* Number of registers in regmap.  */
+  unsigned int num_regs;	/* Number of registers in register map.  */
+  unsigned int num_nopriv_regs;	/* Number of non-privileged registers.  */
   unsigned int num_pseudo_regs;	/* Number of pseudo registers.  */
   unsigned int num_aregs;	/* Size of register file.  */
   unsigned int num_contexts;
@@ -228,85 +228,69 @@ struct gdbarch_tdep
   unsigned long *gregmap;
 };
 
+/* Macro to instantiate a gdbarch_tdep structure.  */
 
-/* Define macros to access some of the gdbarch entries.  */
-#define XTENSA_TARGET_FLAGS \
-  (gdbarch_tdep (current_gdbarch)->target_flags)
-#define SPILL_LOCATION \
-  (gdbarch_tdep (current_gdbarch)->spill_location)
-#define SPILL_SIZE \
-  (gdbarch_tdep (current_gdbarch)->spill_size)
-#define CALL_ABI		\
-  (gdbarch_tdep (current_gdbarch)->call_abi)
-#define ISA_USE_WINDOWED_REGISTERS \
-  (gdbarch_tdep (current_gdbarch)->isa_use_windowed_registers)
-#define ISA_USE_DENSITY_INSTRUCTIONS \
-  (gdbarch_tdep (current_gdbarch)->isa_use_density_instructions)
-#define ISA_USE_EXCEPTIONS \
-  (gdbarch_tdep (current_gdbarch)->isa_use_exceptions)
-#define ISA_USE_EXT_L32R \
-  (gdbarch_tdep (current_gdbarch)->isa_use_ext_l32r)
-#define DEBUG_DATA_VADDR_TRAP_COUNT \
-  (gdbarch_tdep (current_gdbarch)->debug_data_vaddr_trap_count)
-#define DEBUG_INST_VADDR_TRAP_COUNT \
-  (gdbarch_tdep (current_gdbarch)->debug_inst_vaddr_trap_count)
-#define ISA_MAX_INSN_SIZE \
-  (gdbarch_tdep (current_gdbarch)->isa_max_insn_size)
-#define DEBUG_NUM_IBREAKS \
-  (gdbarch_tdep (current_gdbarch)->debug_num_ibreaks)
-#define DEBUG_NUM_DBREAKS \
-  (gdbarch_tdep (current_gdbarch)->debug_num_dbreaks)
+#define XTENSA_GDBARCH_TDEP_INSTANTIATE(rmap,spillsz)		\
+	{							\
+	  .target_flags = 0,					\
+	  .spill_location = -1,					\
+	  .spill_size = (spillsz),				\
+	  .unused = 0,						\
+	  .call_abi = 0,					\
+	  .debug_interrupt_level = XCHAL_DEBUGLEVEL,		\
+	  .icache_line_bytes = XCHAL_ICACHE_LINESIZE,		\
+	  .dcache_line_bytes = XCHAL_DCACHE_LINESIZE,		\
+	  .dcache_writeback = XCHAL_DCACHE_IS_WRITEBACK,	\
+	  .isa_use_windowed_registers = (XSHAL_ABI != XTHAL_ABI_CALL0),	\
+	  .isa_use_density_instructions = XCHAL_HAVE_DENSITY,	\
+	  .isa_use_exceptions = XCHAL_HAVE_EXCEPTIONS,		\
+	  .isa_use_ext_l32r = XSHAL_USE_ABSOLUTE_LITERALS,	\
+	  .isa_max_insn_size = XCHAL_MAX_INSTRUCTION_SIZE,	\
+	  .debug_num_ibreaks = XCHAL_NUM_IBREAK,		\
+	  .debug_num_dbreaks = XCHAL_NUM_DBREAK,		\
+	  .regmap = rmap,			\
+	  .num_regs = 0,			\
+	  .num_nopriv_regs = 0,			\
+	  .num_pseudo_regs = 0,			\
+	  .num_aregs = XCHAL_NUM_AREGS,		\
+	  .num_contexts = XCHAL_NUM_CONTEXTS,	\
+	  .ar_base = -1,			\
+	  .a0_base = -1,			\
+	  .wb_regnum = -1,			\
+	  .ws_regnum = -1,			\
+	  .pc_regnum = -1,			\
+	  .ps_regnum = -1,			\
+	  .lbeg_regnum = -1,			\
+	  .lend_regnum = -1,			\
+	  .lcount_regnum = -1,			\
+	  .sar_regnum = -1,			\
+	  .litbase_regnum = -1,			\
+	  .interrupt_regnum = -1,		\
+	  .interrupt2_regnum = -1,		\
+	  .cpenable_regnum = -1,		\
+	  .debugcause_regnum = -1,		\
+	  .exccause_regnum = -1,		\
+	  .excvaddr_regnum = -1,		\
+	  .max_register_raw_size = 0,		\
+	  .max_register_virtual_size = 0,	\
+	  .fp_layout = 0,			\
+	  .fp_layout_bytes = 0,			\
+	  .gregmap = 0,				\
+	}
+#define XTENSA_CONFIG_INSTANTIATE(rmap,spill_size)	\
+	struct gdbarch_tdep xtensa_tdep = \
+	  XTENSA_GDBARCH_TDEP_INSTANTIATE(rmap,spill_size);
 
-#define NUM_AREGS         (gdbarch_tdep (current_gdbarch)->num_aregs)
-#define WB_REGNUM         (gdbarch_tdep (current_gdbarch)->wb_regnum)
-#define WS_REGNUM         (gdbarch_tdep (current_gdbarch)->ws_regnum)
-#define LBEG_REGNUM       (gdbarch_tdep (current_gdbarch)->lbeg_regnum)
-#define LEND_REGNUM       (gdbarch_tdep (current_gdbarch)->lend_regnum)
-#define LCOUNT_REGNUM     (gdbarch_tdep (current_gdbarch)->lcount_regnum)
-#define SAR_REGNUM        (gdbarch_tdep (current_gdbarch)->sar_regnum)
-#define REGMAP            (gdbarch_tdep (current_gdbarch)->regmap)
-
-#define LITBASE_REGNUM    (gdbarch_tdep (current_gdbarch)->litbase_regnum)
-#define DEBUGCAUSE_REGNUM (gdbarch_tdep (current_gdbarch)->debugcause_regnum)
-#define EXCCAUSE_REGNUM   (gdbarch_tdep (current_gdbarch)->exccause_regnum)
-#define EXCVADDR_REGNUM   (gdbarch_tdep (current_gdbarch)->excvaddr_regnum)
-#define NUM_IBREAKS       (gdbarch_tdep (current_gdbarch)->num_ibreaks)
-#define REGMAP_BYTES      (gdbarch_tdep (current_gdbarch)->regmap_bytes)
-#define A0_BASE           (gdbarch_tdep (current_gdbarch)->a0_base)
-#define AR_BASE           (gdbarch_tdep (current_gdbarch)->ar_base)
-#define FP_ALIAS \
-  (gdbarch_num_regs (current_gdbarch) \
-   + gdbarch_num_pseudo_regs (current_gdbarch))
-#define CALL_ABI          (gdbarch_tdep (current_gdbarch)->call_abi)
-#define NUM_CONTEXTS      (gdbarch_tdep (current_gdbarch)->num_contexts)
-  
-#define FP_LAYOUT         (gdbarch_tdep (current_gdbarch)->fp_layout)
-#define FP_LAYOUT_BYTES   (gdbarch_tdep (current_gdbarch)->fp_layout_bytes)
-#define GREGMAP           (gdbarch_tdep (current_gdbarch)->gregmap)
-
-#define AREGS_MASK	  (NUM_AREGS - 1)
-#define WB_MASK		  (AREGS_MASK >> 2)
+#ifndef XCHAL_NUM_CONTEXTS
+#define XCHAL_NUM_CONTEXTS	0
+#endif
+#ifndef XCHAL_HAVE_EXCEPTIONS
+#define XCHAL_HAVE_EXCEPTIONS	1
+#endif
 #define WB_SHIFT	  2
 
 /* We assign fixed numbers to the registers of the "current" window 
    (i.e., relative to WB).  The registers get remapped via the reg_map 
    data structure to their corresponding register in the AR register 
    file (see xtensa-tdep.c).  */
-
-#define A0_REGNUM  (A0_BASE + 0)
-#define A1_REGNUM  (A0_BASE + 1)
-#define A2_REGNUM  (A0_BASE + 2)
-#define A3_REGNUM  (A0_BASE + 3)
-#define A4_REGNUM  (A0_BASE + 4)
-#define A5_REGNUM  (A0_BASE + 5)
-#define A6_REGNUM  (A0_BASE + 6)
-#define A7_REGNUM  (A0_BASE + 7)
-#define A8_REGNUM  (A0_BASE + 8)
-#define A9_REGNUM  (A0_BASE + 9)
-#define A10_REGNUM (A0_BASE + 10)
-#define A11_REGNUM (A0_BASE + 11)
-#define A12_REGNUM (A0_BASE + 12)
-#define A13_REGNUM (A0_BASE + 13)
-#define A14_REGNUM (A0_BASE + 14)
-#define A15_REGNUM (A0_BASE + 15)
 

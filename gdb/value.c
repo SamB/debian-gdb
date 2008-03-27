@@ -1,7 +1,7 @@
 /* Low level packing and unpacking of values for GDB, the GNU Debugger.
 
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2002, 2003, 2004, 2005, 2006, 2007
+   1996, 1997, 1998, 1999, 2000, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -34,6 +34,7 @@
 #include "gdb_assert.h"
 #include "regcache.h"
 #include "block.h"
+#include "dfp.h"
 
 /* Prototypes for exported functions. */
 
@@ -71,8 +72,8 @@ struct value
   int bitsize;
 
   /* Only used for bitfields; position of start of field.  For
-     BITS_BIG_ENDIAN=0 targets, it is the position of the LSB.  For
-     BITS_BIG_ENDIAN=1 targets, it is the position of the MSB. */
+     gdbarch_bits_big_endian=0 targets, it is the position of the LSB.  For
+     gdbarch_bits_big_endian=1 targets, it is the position of the MSB. */
   int bitpos;
 
   /* Frame register value is relative to.  This will be described in
@@ -742,10 +743,10 @@ init_if_undefined_command (char* args, int from_tty)
    normally include a dollar sign.
 
    If the specified internal variable does not exist,
-   one is created, with a void value.  */
+   the return value is NULL.  */
 
 struct internalvar *
-lookup_internalvar (char *name)
+lookup_only_internalvar (char *name)
 {
   struct internalvar *var;
 
@@ -753,6 +754,17 @@ lookup_internalvar (char *name)
     if (strcmp (var->name, name) == 0)
       return var;
 
+  return NULL;
+}
+
+
+/* Create an internal variable with name NAME and with a void value.
+   NAME should not normally include a dollar sign.  */
+
+struct internalvar *
+create_internalvar (char *name)
+{
+  struct internalvar *var;
   var = (struct internalvar *) xmalloc (sizeof (struct internalvar));
   var->name = concat (name, (char *)NULL);
   var->value = allocate_value (builtin_type_void);
@@ -761,6 +773,25 @@ lookup_internalvar (char *name)
   var->next = internalvars;
   internalvars = var;
   return var;
+}
+
+
+/* Look up an internal variable with name NAME.  NAME should not
+   normally include a dollar sign.
+
+   If the specified internal variable does not exist,
+   one is created, with a void value.  */
+
+struct internalvar *
+lookup_internalvar (char *name)
+{
+  struct internalvar *var;
+
+  var = lookup_only_internalvar (name);
+  if (var)
+    return var;
+
+  return create_internalvar (name);
 }
 
 struct value *
@@ -951,6 +982,7 @@ value_as_double (struct value *val)
     error (_("Invalid floating value found in program."));
   return foo;
 }
+
 /* Extract a value as a C pointer. Does not deallocate the value.  
    Note that val's type may not actually be a pointer; value_as_long
    handles all the cases.  */
@@ -1096,6 +1128,11 @@ unpack_long (struct type *type, const gdb_byte *valaddr)
     case TYPE_CODE_FLT:
       return extract_typed_floating (valaddr, type);
 
+    case TYPE_CODE_DECFLOAT:
+      /* libdecnumber has a function to convert from decimal to integer, but
+	 it doesn't work when the decimal number has a fractional part.  */
+      return decimal_to_doublest (valaddr, len);
+
     case TYPE_CODE_PTR:
     case TYPE_CODE_REF:
       /* Assume a CORE_ADDR can fit in a LONGEST (for now).  Not sure
@@ -1153,6 +1190,8 @@ unpack_double (struct type *type, const gdb_byte *valaddr, int *invp)
 
       return extract_typed_floating (valaddr, type);
     }
+  else if (code == TYPE_CODE_DECFLOAT)
+    return decimal_to_doublest (valaddr, len);
   else if (nosign)
     {
       /* Unsigned -- be sure we compensate for signed LONGEST.  */
@@ -1442,7 +1481,7 @@ unpack_field_as_long (struct type *type, const gdb_byte *valaddr, int fieldno)
 
   /* Extract bits.  See comment above. */
 
-  if (BITS_BIG_ENDIAN)
+  if (gdbarch_bits_big_endian (current_gdbarch))
     lsbcount = (sizeof val * 8 - bitpos % 8 - bitsize);
   else
     lsbcount = (bitpos % 8);
@@ -1498,7 +1537,7 @@ modify_field (gdb_byte *addr, LONGEST fieldval, int bitpos, int bitsize)
   oword = extract_unsigned_integer (addr, sizeof oword);
 
   /* Shifting for bit field depends on endianness of the target machine.  */
-  if (BITS_BIG_ENDIAN)
+  if (gdbarch_bits_big_endian (current_gdbarch))
     bitpos = sizeof (oword) * 8 - bitpos - bitsize;
 
   oword &= ~(mask << bitpos);
@@ -1612,6 +1651,16 @@ value_from_double (struct type *type, DOUBLEST num)
 }
 
 struct value *
+value_from_decfloat (struct type *type, const gdb_byte *dec)
+{
+  struct value *val = allocate_value (type);
+
+  memcpy (value_contents_raw (val), dec, TYPE_LENGTH (type));
+
+  return val;
+}
+
+struct value *
 coerce_ref (struct value *arg)
 {
   struct type *value_type_arg_tmp = check_typedef (value_type (arg));
@@ -1651,39 +1700,12 @@ coerce_enum (struct value *arg)
 }
 
 
-/* Should we use DEPRECATED_EXTRACT_STRUCT_VALUE_ADDRESS instead of
-   gdbarch_extract_return_value?  GCC_P is true if compiled with gcc and TYPE
-   is the type (which is known to be struct, union or array).
-
-   On most machines, the struct convention is used unless we are
-   using gcc and the type is of a special size.  */
-/* As of about 31 Mar 93, GCC was changed to be compatible with the
-   native compiler.  GCC 2.3.3 was the last release that did it the
-   old way.  Since gcc2_compiled was not changed, we have no
-   way to correctly win in all cases, so we just do the right thing
-   for gcc1 and for gcc2 after this change.  Thus it loses for gcc
-   2.0-2.3.3.  This is somewhat unfortunate, but changing gcc2_compiled
-   would cause more chaos than dealing with some struct returns being
-   handled wrong.  */
-/* NOTE: cagney/2004-06-13: Deleted check for "gcc_p".  GCC 1.x is
-   dead.  */
-
-int
-generic_use_struct_convention (int gcc_p, struct type *value_type)
-{
-  return !(TYPE_LENGTH (value_type) == 1
-	   || TYPE_LENGTH (value_type) == 2
-	   || TYPE_LENGTH (value_type) == 4
-	   || TYPE_LENGTH (value_type) == 8);
-}
-
 /* Return true if the function returning the specified type is using
    the convention of returning structures in memory (passing in the
-   address as a hidden first parameter).  GCC_P is nonzero if compiled
-   with GCC.  */
+   address as a hidden first parameter).  */
 
 int
-using_struct_return (struct type *value_type, int gcc_p)
+using_struct_return (struct type *value_type)
 {
   enum type_code code = TYPE_CODE (value_type);
 

@@ -1,6 +1,7 @@
 /* Target-dependent code for the Matsushita MN10300 for GDB, the GNU debugger.
 
-   Copyright (C) 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -515,6 +516,7 @@ struct sigframe
 {
 	void (*pretcode)(void);
 	int sig;
+	struct sigcontext *psc;
 	struct sigcontext sc;
 	struct fpucontext fpuctx;
 	unsigned long extramask[_NSIG_WORDS-1];
@@ -624,6 +626,7 @@ am33_linux_sigframe_cache_init (const struct tramp_frame *self,
   if (self == &am33_linux_sigframe)
     {
       sc_base += 8;
+      sc_base = get_frame_memory_unsigned (next_frame, sc_base, 4);
     }
   else
     {

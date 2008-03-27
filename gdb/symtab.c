@@ -1,7 +1,7 @@
 /* Symbol table lookup for the GNU debugger, GDB.
 
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -40,6 +40,7 @@
 #include "filenames.h"		/* for FILENAME_CMP */
 #include "objc-lang.h"
 #include "ada-lang.h"
+#include "p-lang.h"
 
 #include "hashtab.h"
 
@@ -516,6 +517,24 @@ symbol_set_names (struct general_symbol_info *gsymbol,
   if (objfile->demangled_names_hash == NULL)
     create_demangled_names_hash (objfile);
 
+  if (gsymbol->language == language_ada)
+    {
+      /* In Ada, we do the symbol lookups using the mangled name, so
+         we can save some space by not storing the demangled name.
+
+         As a side note, we have also observed some overlap between
+         the C++ mangling and Ada mangling, similarly to what has
+         been observed with Java.  Because we don't store the demangled
+         name with the symbol, we don't need to use the same trick
+         as Java.  */
+      gsymbol->name = obstack_alloc (&objfile->objfile_obstack, len + 1);
+      memcpy (gsymbol->name, linkage_name, len);
+      gsymbol->name[len] = '\0';
+      gsymbol->language_specific.cplus_specific.demangled_name = NULL;
+
+      return;
+    }
+
   /* The stabs reader generally provides names that are not
      NUL-terminated; most of the other readers don't do this, so we
      can just use the given copy, unless we're in the Java case.  */
@@ -691,6 +710,8 @@ init_sal (struct symtab_and_line *sal)
   sal->line = 0;
   sal->pc = 0;
   sal->end = 0;
+  sal->explicit_pc = 0;
+  sal->explicit_line = 0;
 }
 
 
@@ -1359,6 +1380,11 @@ lookup_global_symbol_from_objfile (const struct objfile *objfile,
 	return fixup_symbol_section (sym, (struct objfile *)objfile);
       }
   }
+
+  if (objfile->separate_debug_objfile)
+    return lookup_global_symbol_from_objfile (objfile->separate_debug_objfile,
+					      name, linkage_name, domain,
+					      symtab);
 
   return NULL;
 }
@@ -2101,13 +2127,13 @@ find_pc_sect_line (CORE_ADDR pc, struct bfd_section *section, int notcurrent)
 	   * So I commented out the warning. RT */
 	  /* warning ("In stub for %s; unable to find real function/line info", SYMBOL_LINKAGE_NAME (msymbol)) */ ;
 	/* fall through */
-	else if (SYMBOL_VALUE (mfunsym) == SYMBOL_VALUE (msymbol))
+	else if (SYMBOL_VALUE_ADDRESS (mfunsym) == SYMBOL_VALUE_ADDRESS (msymbol))
 	  /* Avoid infinite recursion */
 	  /* See above comment about why warning is commented out */
 	  /* warning ("In stub for %s; unable to find real function/line info", SYMBOL_LINKAGE_NAME (msymbol)) */ ;
 	/* fall through */
 	else
-	  return find_pc_line (SYMBOL_VALUE (mfunsym), 0);
+	  return find_pc_line (SYMBOL_VALUE_ADDRESS (mfunsym), 0);
       }
 
 
@@ -2278,11 +2304,19 @@ find_line_symtab (struct symtab *symtab, int line, int *index, int *exact_match)
 
       struct objfile *objfile;
       struct symtab *s;
+      struct partial_symtab *p;
 
       if (best_index >= 0)
 	best = best_linetable->item[best_index].line;
       else
 	best = 0;
+
+      ALL_PSYMTABS (objfile, p)
+      {
+        if (strcmp (symtab->filename, p->filename) != 0)
+          continue;
+        PSYMTAB_TO_SYMTAB (p);
+      }
 
       ALL_SYMTABS (objfile, s)
       {
@@ -2408,6 +2442,8 @@ find_line_common (struct linetable *l, int lineno,
   int best_index = -1;
   int best = 0;
 
+  *exact_match = 0;
+
   if (lineno <= 0)
     return -1;
   if (l == 0)
@@ -2433,8 +2469,6 @@ find_line_common (struct linetable *l, int lineno,
     }
 
   /* If we got here, we didn't get an exact match.  */
-
-  *exact_match = 0;
   return best_index;
 }
 
@@ -3489,17 +3523,13 @@ language_search_unquoted_string (char *text, char *p)
   return p;
 }
 
-
-/* Return a NULL terminated array of all symbols (regardless of class)
-   which begin by matching TEXT.  If the answer is no symbols, then
-   the return value is an array which contains only a NULL pointer.
-
-   Problem: All of the symbols have to be copied because readline frees them.
-   I'm not going to worry about this; hopefully there won't be that many.  */
-
 char **
-make_symbol_completion_list (char *text, char *word)
+default_make_symbol_completion_list (char *text, char *word)
 {
+  /* Problem: All of the symbols have to be copied because readline
+     frees them.  I'm not going to worry about this; hopefully there
+     won't be that many.  */
+
   struct symbol *sym;
   struct symtab *s;
   struct partial_symtab *ps;
@@ -3514,8 +3544,7 @@ make_symbol_completion_list (char *text, char *word)
   /* Length of sym_text.  */
   int sym_text_len;
 
-  /* Now look for the symbol we are supposed to complete on.
-     FIXME: This should be language-specific.  */
+  /* Now look for the symbol we are supposed to complete on.  */
   {
     char *p;
     char quote_found;
@@ -3681,6 +3710,16 @@ make_symbol_completion_list (char *text, char *word)
   }
 
   return (return_val);
+}
+
+/* Return a NULL terminated array of all symbols (regardless of class)
+   which begin by matching TEXT.  If the answer is no symbols, then
+   the return value is an array which contains only a NULL pointer.  */
+
+char **
+make_symbol_completion_list (char *text, char *word)
+{
+  return current_language->la_make_symbol_completion_list (text, word);
 }
 
 /* Like make_symbol_completion_list, but returns a list of symbols
@@ -4124,7 +4163,7 @@ set_main_name (const char *name)
 static void
 find_main_name (void)
 {
-  char *new_main_name;
+  const char *new_main_name;
 
   /* Try to see if the main procedure is in Ada.  */
   /* FIXME: brobecker/2005-03-07: Another way of doing this would
@@ -4143,6 +4182,13 @@ find_main_name (void)
      that order of call for these methods becomes important, which means
      a more complicated approach.  */
   new_main_name = ada_main_name ();
+  if (new_main_name != NULL)
+    { 
+      set_main_name (new_main_name);
+      return;
+    }
+
+  new_main_name = pascal_main_name ();
   if (new_main_name != NULL)
     { 
       set_main_name (new_main_name);
@@ -4171,6 +4217,166 @@ symtab_observer_executable_changed (void *unused)
   /* NAME_OF_MAIN may no longer be the same, so reset it for now.  */
   set_main_name (NULL);
 }
+
+/* Helper to expand_line_sal below.  Appends new sal to SAL,
+   initializing it from SYMTAB, LINENO and PC.  */
+static void
+append_expanded_sal (struct symtabs_and_lines *sal,
+		     struct symtab *symtab,
+		     int lineno, CORE_ADDR pc)
+{
+  CORE_ADDR func_addr, func_end;
+  
+  sal->sals = xrealloc (sal->sals, 
+			sizeof (sal->sals[0]) 
+			* (sal->nelts + 1));
+  init_sal (sal->sals + sal->nelts);
+  sal->sals[sal->nelts].symtab = symtab;
+  sal->sals[sal->nelts].section = NULL;
+  sal->sals[sal->nelts].end = 0;
+  sal->sals[sal->nelts].line = lineno;  
+  sal->sals[sal->nelts].pc = pc;
+  ++sal->nelts;      
+}
+
+/* Compute a set of all sals in
+   the entire program that correspond to same file
+   and line as SAL and return those.  If there
+   are several sals that belong to the same block,
+   only one sal for the block is included in results.  */
+   
+struct symtabs_and_lines
+expand_line_sal (struct symtab_and_line sal)
+{
+  struct symtabs_and_lines ret, this_line;
+  int i, j;
+  struct objfile *objfile;
+  struct partial_symtab *psymtab;
+  struct symtab *symtab;
+  int lineno;
+  int deleted = 0;
+  struct block **blocks = NULL;
+  int *filter;
+
+  ret.nelts = 0;
+  ret.sals = NULL;
+
+  if (sal.symtab == NULL || sal.line == 0 || sal.pc != 0)
+    {
+      ret.sals = xmalloc (sizeof (struct symtab_and_line));
+      ret.sals[0] = sal;
+      ret.nelts = 1;
+      return ret;
+    }
+  else
+    {
+      struct linetable_entry *best_item = 0;
+      struct symtab *best_symtab = 0;
+      int exact = 0;
+
+      lineno = sal.line;
+
+      /* We meed to find all symtabs for a file which name
+	 is described by sal. We cannot just directly 
+	 iterate over symtabs, since a symtab might not be
+	 yet created. We also cannot iterate over psymtabs,
+	 calling PSYMTAB_TO_SYMTAB and working on that symtab,
+	 since PSYMTAB_TO_SYMTAB will return NULL for psymtab
+	 corresponding to an included file. Therefore, we do
+	 first pass over psymtabs, reading in those with
+	 the right name.  Then, we iterate over symtabs, knowing
+	 that all symtabs we're interested in are loaded.  */
+
+      ALL_PSYMTABS (objfile, psymtab)
+	{
+	  if (strcmp (sal.symtab->filename,
+		      psymtab->filename) == 0)
+	    PSYMTAB_TO_SYMTAB (psymtab);
+	}
+
+	 
+      /* For each symtab, we add all pcs to ret.sals. I'm actually
+	 not sure what to do if we have exact match in one symtab,
+	 and non-exact match on another symtab.
+      */
+      ALL_SYMTABS (objfile, symtab)
+	{
+	  if (strcmp (sal.symtab->filename,
+		      symtab->filename) == 0)
+	    {
+	      struct linetable *l;
+	      int len;
+	      l = LINETABLE (symtab);
+	      if (!l)
+		continue;
+	      len = l->nitems;
+
+	      for (j = 0; j < len; j++)
+		{
+		  struct linetable_entry *item = &(l->item[j]);
+
+		  if (item->line == lineno)
+		    {
+		      exact = 1;
+		      append_expanded_sal (&ret, symtab, lineno, item->pc);
+		    }      
+		  else if (!exact && item->line > lineno
+			   && (best_item == NULL || item->line < best_item->line))
+		  
+		    {
+		      best_item = item;
+		      best_symtab = symtab;
+		    }
+		}
+	    }
+	}
+      if (!exact && best_item)
+	append_expanded_sal (&ret, best_symtab, lineno, best_item->pc);
+    }
+
+  /* For optimized code, compiler can scatter one source line accross
+     disjoint ranges of PC values, even when no duplicate functions
+     or inline functions are involved.  For example, 'for (;;)' inside
+     non-template non-inline non-ctor-or-dtor function can result
+     in two PC ranges.  In this case, we don't want to set breakpoint
+     on first PC of each range.  To filter such cases, we use containing
+     blocks -- for each PC found above we see if there are other PCs
+     that are in the same block.  If yes, the other PCs are filtered out.  */  
+
+  filter = xmalloc (ret.nelts * sizeof (int));
+  blocks = xmalloc (ret.nelts * sizeof (struct block *));
+  for (i = 0; i < ret.nelts; ++i)
+    {
+      filter[i] = 1;
+      blocks[i] = block_for_pc (ret.sals[i].pc);
+    }
+
+  for (i = 0; i < ret.nelts; ++i)
+    if (blocks[i] != NULL)
+      for (j = i+1; j < ret.nelts; ++j)
+	if (blocks[j] == blocks[i])
+	  {
+	    filter[j] = 0;
+	    ++deleted;
+	    break;
+	  }
+  
+  {
+    struct symtab_and_line *final = 
+      xmalloc (sizeof (struct symtab_and_line) * (ret.nelts-deleted));
+    
+    for (i = 0, j = 0; i < ret.nelts; ++i)
+      if (filter[i])
+	final[j++] = ret.sals[i];
+    
+    ret.nelts -= deleted;
+    xfree (ret.sals);
+    ret.sals = final;
+  }
+
+  return ret;
+}
+
 
 void
 _initialize_symtab (void)

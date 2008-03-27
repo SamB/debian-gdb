@@ -1,5 +1,5 @@
 /* SPU target-dependent code for GDB, the GNU debugger.
-   Copyright (C) 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Ulrich Weigand <uweigand@de.ibm.com>.
    Based on a port by Sid Manning <sid@us.ibm.com>.
@@ -94,7 +94,7 @@ static struct cmd_list_element *infospucmdlist = NULL;
 /* Registers.  */
 
 static const char *
-spu_register_name (int reg_nr)
+spu_register_name (struct gdbarch *gdbarch, int reg_nr)
 {
   static char *register_names[] = 
     {
@@ -700,7 +700,7 @@ spu_analyze_prologue (CORE_ADDR start_pc, CORE_ADDR end_pc,
 
 /* Return the first instruction after the prologue starting at PC.  */
 static CORE_ADDR
-spu_skip_prologue (CORE_ADDR pc)
+spu_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   struct spu_prologue_data data;
   return spu_analyze_prologue (pc, (CORE_ADDR)-1, &data);
@@ -708,7 +708,8 @@ spu_skip_prologue (CORE_ADDR pc)
 
 /* Return the frame pointer in use at address PC.  */
 static void
-spu_virtual_frame_pointer (CORE_ADDR pc, int *reg, LONGEST *offset)
+spu_virtual_frame_pointer (struct gdbarch *gdbarch, CORE_ADDR pc,
+			   int *reg, LONGEST *offset)
 {
   struct spu_prologue_data data;
   spu_analyze_prologue (pc, (CORE_ADDR)-1, &data);
@@ -1247,7 +1248,7 @@ spu_return_value (struct gdbarch *gdbarch, struct type *type,
 /* Breakpoints.  */
 
 static const gdb_byte *
-spu_breakpoint_from_pc (CORE_ADDR * pcptr, int *lenptr)
+spu_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR * pcptr, int *lenptr)
 {
   static const gdb_byte breakpoint[] = { 0x00, 0x00, 0x3f, 0xff };
 

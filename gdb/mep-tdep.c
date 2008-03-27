@@ -1,6 +1,6 @@
 /* Target-dependent code for the Toshiba MeP for GDB, the GNU debugger.
 
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    Contributed by Red Hat, Inc.
@@ -785,7 +785,7 @@ mep_init_pseudoregister_maps (void)
 
 
 static int
-mep_debug_reg_to_regnum (int debug_reg)
+mep_debug_reg_to_regnum (struct gdbarch *gdbarch, int debug_reg)
 {
   /* The debug info uses the raw register numbers.  */
   return mep_raw_to_pseudo[debug_reg];
@@ -928,9 +928,9 @@ current_ccr_names ()
 
 
 static const char *
-mep_register_name (int regnr)
+mep_register_name (struct gdbarch *gdbarch, int regnr)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);  
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);  
 
   /* General-purpose registers.  */
   static const char *gpr_names[] = {
@@ -1031,7 +1031,7 @@ mep_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 {
   /* Filter reserved or unused register numbers.  */
   {
-    const char *name = mep_register_name (regnum);
+    const char *name = mep_register_name (gdbarch, regnum);
 
     if (! name || name[0] == '\0')
       return 0;
@@ -1894,7 +1894,7 @@ mep_analyze_prologue (CORE_ADDR start_pc, CORE_ADDR limit_pc,
 
 
 static CORE_ADDR
-mep_skip_prologue (CORE_ADDR pc)
+mep_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   char *name;
   CORE_ADDR func_addr, func_end;
@@ -1913,7 +1913,7 @@ mep_skip_prologue (CORE_ADDR pc)
 /* Breakpoints.  */
 
 static const unsigned char *
-mep_breakpoint_from_pc (CORE_ADDR * pcptr, int *lenptr)
+mep_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR * pcptr, int *lenptr)
 {
   static unsigned char breakpoint[] = { 0x70, 0x32 };
   *lenptr = sizeof (breakpoint);

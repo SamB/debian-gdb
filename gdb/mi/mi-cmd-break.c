@@ -1,5 +1,5 @@
 /* MI Command Set - breakpoint and watchpoint commands.
-   Copyright (C) 2000, 2001, 2002, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions (a Red Hat company).
 
    This file is part of GDB.
@@ -26,6 +26,7 @@
 #include "mi-getopt.h"
 #include "gdb-events.h"
 #include "gdb.h"
+#include "exceptions.h"
 
 enum
   {
@@ -56,14 +57,8 @@ enum bp_type
     REGEXP_BP
   };
 
-/* Insert a breakpoint. The type of breakpoint is specified by the
-   first argument: -break-insert <location> --> insert a regular
-   breakpoint.  -break-insert -t <location> --> insert a temporary
-   breakpoint.  -break-insert -h <location> --> insert an hardware
-   breakpoint.  -break-insert -t -h <location> --> insert a temporary
-   hw bp.  
-   -break-insert -r <regexp> --> insert a bp at functions matching
-   <regexp> */
+/* Implements the -break-insert command.
+   See the MI manual for the list of possible options.  */
 
 enum mi_cmd_result
 mi_cmd_break_insert (char *command, char **argv, int argc)
@@ -74,12 +69,13 @@ mi_cmd_break_insert (char *command, char **argv, int argc)
   int thread = -1;
   int ignore_count = 0;
   char *condition = NULL;
-  enum gdb_rc rc;
+  int pending = 0;
+  struct gdb_exception e;
   struct gdb_events *old_hooks;
   enum opt
     {
       HARDWARE_OPT, TEMP_OPT /*, REGEXP_OPT */ , CONDITION_OPT,
-      IGNORE_COUNT_OPT, THREAD_OPT
+      IGNORE_COUNT_OPT, THREAD_OPT, PENDING_OPT
     };
   static struct mi_opt opts[] =
   {
@@ -88,6 +84,7 @@ mi_cmd_break_insert (char *command, char **argv, int argc)
     {"c", CONDITION_OPT, 1},
     {"i", IGNORE_COUNT_OPT, 1},
     {"p", THREAD_OPT, 1},
+    {"f", PENDING_OPT, 0},
     { 0, 0, 0 }
   };
 
@@ -122,6 +119,9 @@ mi_cmd_break_insert (char *command, char **argv, int argc)
 	case THREAD_OPT:
 	  thread = atol (optarg);
 	  break;
+	case PENDING_OPT:
+	  pending = 1;
+	  break;
 	}
     }
 
@@ -133,39 +133,42 @@ mi_cmd_break_insert (char *command, char **argv, int argc)
 
   /* Now we have what we need, let's insert the breakpoint! */
   old_hooks = deprecated_set_gdb_event_hooks (&breakpoint_hooks);
-  switch (type)
+  /* Make sure we restore hooks even if exception is thrown.  */
+  TRY_CATCH (e, RETURN_MASK_ALL)
     {
-    case REG_BP:
-      rc = gdb_breakpoint (address, condition,
-			   0 /*hardwareflag */ , temp_p,
-			   thread, ignore_count,
-			   &mi_error_message);
-      break;
-    case HW_BP:
-      rc = gdb_breakpoint (address, condition,
-			   1 /*hardwareflag */ , temp_p,
-			   thread, ignore_count,
-			   &mi_error_message);
-      break;
+      switch (type)
+	{
+	case REG_BP:
+	  set_breakpoint (address, condition,
+			  0 /*hardwareflag */ , temp_p,
+			  thread, ignore_count,
+			  pending);
+	  break;
+	case HW_BP:
+	  set_breakpoint (address, condition,
+			  1 /*hardwareflag */ , temp_p,
+			  thread, ignore_count,
+			  pending);
+	  break;
 #if 0
-    case REGEXP_BP:
-      if (temp_p)
-	error (_("mi_cmd_break_insert: Unsupported tempoary regexp breakpoint"));
-      else
-	rbreak_command_wrapper (address, FROM_TTY);
-      return MI_CMD_DONE;
-      break;
+	case REGEXP_BP:
+	  if (temp_p)
+	    error (_("mi_cmd_break_insert: Unsupported tempoary regexp breakpoint"));
+	  else
+	    rbreak_command_wrapper (address, FROM_TTY);
+	  return MI_CMD_DONE;
+	  break;
 #endif
-    default:
-      internal_error (__FILE__, __LINE__,
-		      _("mi_cmd_break_insert: Bad switch."));
+	default:
+	  internal_error (__FILE__, __LINE__,
+			  _("mi_cmd_break_insert: Bad switch."));
+	}
     }
   deprecated_set_gdb_event_hooks (old_hooks);
+  if (e.reason < 0)
+    throw_exception (e);
 
-  if (rc == GDB_RC_FAIL)
-    return MI_CMD_ERROR;
-  else
-    return MI_CMD_DONE;
+  return MI_CMD_DONE;
 }
 
 enum wp_type

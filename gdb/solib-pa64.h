@@ -1,6 +1,6 @@
 /* Handle PA64 shared libraries for GDB, the GNU Debugger.
 
-   Copyright (C) 2004, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,6 +20,6 @@
 #ifndef SOLIB_PA64_H
 #define SOLIB_PA64_H
 
-void pa64_solib_select (struct gdbarch_tdep *tdep);
+void pa64_solib_select (struct gdbarch *gdbarch);
 
 #endif

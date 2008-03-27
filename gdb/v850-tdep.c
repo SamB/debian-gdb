@@ -1,7 +1,7 @@
 /* Target-dependent code for the NEC V850 for GDB, the GNU debugger.
 
-   Copyright (C) 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
-   Free Software Foundation, Inc.
+   Copyright (C) 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007,
+   2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -139,7 +139,7 @@ struct pifsr		/* Info about one saved register.  */
 };
 
 static const char *
-v850_register_name (int regnum)
+v850_register_name (struct gdbarch *gdbarch, int regnum)
 {
   static const char *v850_reg_names[] =
   { "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", 
@@ -158,7 +158,7 @@ v850_register_name (int regnum)
 }
 
 static const char *
-v850e_register_name (int regnum)
+v850e_register_name (struct gdbarch *gdbarch, int regnum)
 {
   static const char *v850e_reg_names[] =
   {
@@ -621,7 +621,7 @@ v850_analyze_prologue (CORE_ADDR func_addr, CORE_ADDR pc,
 /* Return the address of the first code past the prologue of the function.  */
 
 static CORE_ADDR
-v850_skip_prologue (CORE_ADDR pc)
+v850_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   CORE_ADDR func_addr, func_end;
 
@@ -804,7 +804,7 @@ v850_return_value (struct gdbarch *gdbarch, struct type *type,
 }
 
 const static unsigned char *
-v850_breakpoint_from_pc (CORE_ADDR *pcptr, int *lenptr)
+v850_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr, int *lenptr)
 {
   static unsigned char breakpoint[] = { 0x85, 0x05 };
   *lenptr = sizeof (breakpoint);
@@ -939,14 +939,14 @@ static CORE_ADDR
 v850_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   return frame_unwind_register_unsigned (next_frame,
-					 gdbarch_sp_regnum (current_gdbarch));
+					 gdbarch_sp_regnum (gdbarch));
 } 
 
 static CORE_ADDR
 v850_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   return frame_unwind_register_unsigned (next_frame,
-					 gdbarch_pc_regnum (current_gdbarch));
+					 gdbarch_pc_regnum (gdbarch));
 }
 
 static struct frame_id

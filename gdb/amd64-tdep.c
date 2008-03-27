@@ -1,6 +1,6 @@
 /* Target-dependent code for AMD64.
 
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    Contributed by Jiri Smid, SuSE Labs.
@@ -73,7 +73,7 @@ static const char *amd64_register_names[] =
 /* Return the name of register REGNUM.  */
 
 const char *
-amd64_register_name (int regnum)
+amd64_register_name (struct gdbarch *gdbarch, int regnum)
 {
   if (regnum >= 0 && regnum < AMD64_NUM_REGS)
     return amd64_register_names[regnum];
@@ -187,7 +187,7 @@ static const int amd64_dwarf_regmap_len =
    number used by GDB.  */
 
 static int
-amd64_dwarf_reg_to_regnum (int reg)
+amd64_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 {
   int regnum = -1;
 
@@ -200,14 +200,6 @@ amd64_dwarf_reg_to_regnum (int reg)
   return regnum;
 }
 
-/* Return nonzero if a value of type TYPE stored in register REGNUM
-   needs any special handling.  */
-
-static int
-amd64_convert_register_p (int regnum, struct type *type)
-{
-  return i386_fp_regnum_p (regnum);
-}
 
 
 /* Register classes as defined in the psABI.  */
@@ -367,19 +359,24 @@ amd64_classify (struct type *type, enum amd64_reg_class class[2])
      class.  */
   if ((code == TYPE_CODE_INT || code == TYPE_CODE_ENUM
        || code == TYPE_CODE_BOOL || code == TYPE_CODE_RANGE
+       || code == TYPE_CODE_CHAR
        || code == TYPE_CODE_PTR || code == TYPE_CODE_REF)
       && (len == 1 || len == 2 || len == 4 || len == 8))
     class[0] = AMD64_INTEGER;
 
-  /* Arguments of types float, double and __m64 are in class SSE.  */
-  else if (code == TYPE_CODE_FLT && (len == 4 || len == 8))
+  /* Arguments of types float, double, _Decimal32, _Decimal64 and __m64
+     are in class SSE.  */
+  else if ((code == TYPE_CODE_FLT || code == TYPE_CODE_DECFLOAT)
+	   && (len == 4 || len == 8))
     /* FIXME: __m64 .  */
     class[0] = AMD64_SSE;
 
-  /* Arguments of types __float128 and __m128 are split into two
-     halves.  The least significant ones belong to class SSE, the most
+  /* Arguments of types __float128, _Decimal128 and __m128 are split into
+     two halves.  The least significant ones belong to class SSE, the most
      significant one to class SSEUP.  */
-  /* FIXME: __float128, __m128.  */
+  else if (code == TYPE_CODE_DECFLOAT && len == 16)
+    /* FIXME: __float128, __m128.  */
+    class[0] = AMD64_SSE, class[1] = AMD64_SSEUP;
 
   /* The 64-bit mantissa of arguments of type long double belongs to
      class X87, the 16-bit exponent plus 6 bytes of padding belongs to
@@ -774,7 +771,7 @@ amd64_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
 /* Return PC of first real instruction.  */
 
 static CORE_ADDR
-amd64_skip_prologue (CORE_ADDR start_pc)
+amd64_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR start_pc)
 {
   struct amd64_frame_cache cache;
   CORE_ADDR pc;
@@ -863,12 +860,13 @@ amd64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 			   enum lval_type *lvalp, CORE_ADDR *addrp,
 			   int *realnump, gdb_byte *valuep)
 {
+  struct gdbarch *gdbarch = get_frame_arch (next_frame);
   struct amd64_frame_cache *cache =
     amd64_frame_cache (next_frame, this_cache);
 
   gdb_assert (regnum >= 0);
 
-  if (regnum == gdbarch_sp_regnum (current_gdbarch) && cache->saved_sp)
+  if (regnum == gdbarch_sp_regnum (gdbarch) && cache->saved_sp)
     {
       *optimizedp = 0;
       *lvalp = not_lval;
@@ -892,7 +890,7 @@ amd64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	{
 	  /* Read the value in from memory.  */
 	  read_memory (*addrp, valuep,
-		       register_size (current_gdbarch, regnum));
+		       register_size (gdbarch, regnum));
 	}
       return;
     }
@@ -929,7 +927,7 @@ static struct amd64_frame_cache *
 amd64_sigtramp_frame_cache (struct frame_info *next_frame, void **this_cache)
 {
   struct amd64_frame_cache *cache;
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (next_frame));
   CORE_ADDR addr;
   gdb_byte buf[8];
   int i;
@@ -1154,7 +1152,7 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_frame_align (gdbarch, amd64_frame_align);
   set_gdbarch_frame_red_zone_size (gdbarch, 128);
 
-  set_gdbarch_convert_register_p (gdbarch, amd64_convert_register_p);
+  set_gdbarch_convert_register_p (gdbarch, i387_convert_register_p);
   set_gdbarch_register_to_value (gdbarch, i387_register_to_value);
   set_gdbarch_value_to_register (gdbarch, i387_value_to_register);
 

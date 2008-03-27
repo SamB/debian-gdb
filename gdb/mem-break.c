@@ -1,7 +1,7 @@
 /* Simulate breakpoints by patching locations in the target system, for GDB.
 
    Copyright (C) 1990, 1991, 1992, 1993, 1995, 1997, 1998, 1999, 2000, 2002,
-   2007 Free Software Foundation, Inc.
+   2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.  Written by John Gilmore.
 
@@ -41,7 +41,8 @@
    BREAKPOINT_MAX).  */
 
 int
-default_memory_insert_breakpoint (struct bp_target_info *bp_tgt)
+default_memory_insert_breakpoint (struct gdbarch *gdbarch,
+				  struct bp_target_info *bp_tgt)
 {
   int val;
   const unsigned char *bp;
@@ -49,7 +50,7 @@ default_memory_insert_breakpoint (struct bp_target_info *bp_tgt)
 
   /* Determine appropriate breakpoint contents and size for this address.  */
   bp = gdbarch_breakpoint_from_pc
-       (current_gdbarch, &bp_tgt->placed_address, &bp_tgt->placed_size);
+       (gdbarch, &bp_tgt->placed_address, &bp_tgt->placed_size);
   if (bp == NULL)
     error (_("Software breakpoints not implemented for this target."));
 
@@ -68,7 +69,8 @@ default_memory_insert_breakpoint (struct bp_target_info *bp_tgt)
 
 
 int
-default_memory_remove_breakpoint (struct bp_target_info *bp_tgt)
+default_memory_remove_breakpoint (struct gdbarch *gdbarch,
+				  struct bp_target_info *bp_tgt)
 {
   return target_write_memory (bp_tgt->placed_address, bp_tgt->shadow_contents,
 			      bp_tgt->placed_size);

@@ -1,7 +1,7 @@
 /* Generic symbol file reading for the GNU debugger, GDB.
 
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    Contributed by Cygnus Support, using pieces from other GDB modules.
@@ -52,6 +52,7 @@
 #include "parser-defs.h"
 #include "varobj.h"
 #include "elf-bfd.h"
+#include "solib.h"
 
 #include <sys/types.h>
 #include <fcntl.h>
@@ -86,8 +87,6 @@ extern void report_transfer_performance (unsigned long, time_t, time_t);
 static int simple_read_overlay_region_table (void);
 static void simple_free_overlay_region_table (void);
 #endif
-
-static void set_initial_language (void);
 
 static void load_command (char *, int);
 
@@ -1219,9 +1218,7 @@ symbol_file_clear (int from_tty)
        storage has just been released, we'd better wipe the solib
        descriptors as well.
      */
-#if defined(SOLIB_RESTART)
-    SOLIB_RESTART ();
-#endif
+    no_shared_libraries (NULL, from_tty);
 
     symfile_objfile = NULL;
     if (from_tty)
@@ -1576,7 +1573,7 @@ symbol_file_command (char *args, int from_tty)
    stabs we find, but we can't do that until later when we read in
    full symbols.  */
 
-static void
+void
 set_initial_language (void)
 {
   struct partial_symtab *pst;
@@ -2405,7 +2402,6 @@ reread_symbols (void)
 		      sizeof (objfile->msymbol_hash));
 	      memset (&objfile->msymbol_demangled_hash, 0,
 		      sizeof (objfile->msymbol_demangled_hash));
-	      objfile->fundamental_types = NULL;
 	      clear_objfile_data (objfile);
 	      if (objfile->sf != NULL)
 		{
@@ -2688,6 +2684,7 @@ init_filename_language_table (void)
       add_filename_language (".f", language_fortran);
       add_filename_language (".F", language_fortran);
       add_filename_language (".s", language_asm);
+      add_filename_language (".sx", language_asm);
       add_filename_language (".S", language_asm);
       add_filename_language (".pas", language_pascal);
       add_filename_language (".p", language_pascal);
@@ -3517,13 +3514,13 @@ list_overlays_command (char *args, int from_tty)
 	name = bfd_section_name (objfile->obfd, osect->the_bfd_section);
 
 	printf_filtered ("Section %s, loaded at ", name);
-	deprecated_print_address_numeric (lma, 1, gdb_stdout);
+	fputs_filtered (paddress (lma), gdb_stdout);
 	puts_filtered (" - ");
-	deprecated_print_address_numeric (lma + size, 1, gdb_stdout);
+	fputs_filtered (paddress (lma + size), gdb_stdout);
 	printf_filtered (", mapped at ");
-	deprecated_print_address_numeric (vma, 1, gdb_stdout);
+	fputs_filtered (paddress (vma), gdb_stdout);
 	puts_filtered (" - ");
-	deprecated_print_address_numeric (vma + size, 1, gdb_stdout);
+	fputs_filtered (paddress (vma + size), gdb_stdout);
 	puts_filtered ("\n");
 
 	nmapped++;

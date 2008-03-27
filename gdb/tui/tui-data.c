@@ -1,6 +1,6 @@
 /* TUI data manipulation routines.
 
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2006, 2007
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
@@ -370,7 +370,8 @@ tui_prev_win (struct tui_win_info *cur_win)
     type = cur_win->generic.type - 1;
   while (type != cur_win->generic.type && (prev == NULL))
     {
-      if (tui_win_list[type]->generic.is_visible)
+      if (tui_win_list[type]
+	  && tui_win_list[type]->generic.is_visible)
 	prev = tui_win_list[type];
       else
 	{

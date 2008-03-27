@@ -1,6 +1,6 @@
 /* DWARF 2 location expression support for GDB.
 
-   Copyright (C) 2003, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Daniel Jacobowitz, MontaVista Software, Inc.
 
@@ -37,6 +37,7 @@
 #include "dwarf2loc.h"
 
 #include "gdb_string.h"
+#include "gdb_assert.h"
 
 /* A helper function for dealing with location lists.  Given a
    symbol baton (BATON) and a pc value (PC), find the appropriate
@@ -145,6 +146,11 @@ dwarf_expr_frame_base (void *baton, gdb_byte **start, size_t * length)
 
   framefunc = get_frame_function (debaton->frame);
 
+  /* If we found a frame-relative symbol then it was certainly within
+     some function associated with a frame. If we can't find the frame,
+     something has gone wrong.  */
+  gdb_assert (framefunc != NULL);
+
   if (SYMBOL_OPS (framefunc) == &dwarf2_loclist_funcs)
     {
       struct dwarf2_loclist_baton *symbaton;
@@ -224,7 +230,7 @@ dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
 	    {
 	      bfd_byte regval[MAX_REGISTER_SIZE];
 	      int gdb_regnum = gdbarch_dwarf2_reg_to_regnum
-				 (current_gdbarch, p->value);
+				 (arch, p->value);
 	      get_frame_register (frame, gdb_regnum, regval);
 	      memcpy (contents + offset, regval, p->size);
 	    }
@@ -239,7 +245,7 @@ dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
     {
       CORE_ADDR dwarf_regnum = dwarf_expr_fetch (ctx, 0);
       int gdb_regnum = gdbarch_dwarf2_reg_to_regnum
-			 (current_gdbarch, dwarf_regnum);
+			 (arch, dwarf_regnum);
       retval = value_from_register (SYMBOL_TYPE (var), gdb_regnum, frame);
     }
   else

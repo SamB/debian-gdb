@@ -1,6 +1,6 @@
 /* Shared library declarations for GDB, the GNU Debugger.
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000,
-   2001, 2007 Free Software Foundation, Inc.
+   2001, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -115,6 +115,10 @@ struct target_so_ops
 						 const domain_enum domain,
 						 struct symtab **symtab);
 
+    /* Given two so_list objects, one from the GDB thread list
+       and another from the list returned by current_sos, return 1
+       if they represent the same library.  */
+    int (*same) (struct so_list *gdb, struct so_list *inferior);
   };
 
 /* Free the memory associated with a (so_list *).  */
@@ -128,13 +132,6 @@ extern int solib_open (char *in_pathname, char **found_pathname);
 
 /* FIXME: gdbarch needs to control this variable */
 extern struct target_so_ops *current_target_so_ops;
-
-#define TARGET_SO_RELOCATE_SECTION_ADDRESSES \
-  (current_target_so_ops->relocate_section_addresses)
-#define TARGET_SO_FIND_AND_OPEN_SOLIB \
-  (current_target_so_ops->find_and_open_solib)
-#define TARGET_SO_IN_DYNSYM_RESOLVE_CODE \
-  (current_target_so_ops->in_dynsym_resolve_code)
 
 /* Handler for library-specific global symbol lookup in solib.c.  */
 struct symbol *solib_global_lookup (const struct objfile *objfile,

@@ -1,3 +1,337 @@
+2008-02-19  Pedro Alves  <pedro@codesourcery.com>
+
+	* server.c (handle_v_requests): When handling the vRun and vAttach
+	packets, if already debugging a process, don't kill it.  Return an
+	error instead.
+
+2008-02-17  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* server.c (handle_query): Correct length check.
+
+2008-02-14  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.c (do_initial_child_stuff): Add process handle
+	parameter.  Set current_process_handle and current_process_id from the
+	parameters. Clear globals.
+	(win32_create_inferior): Don't set current_process_handle and
+	current_process_id here.  Instead pass them on the call to
+	do_initial_child_stuff.
+	(win32_attach): Likewise.
+	(win32_clear_inferiors): New.
+	(win32_kill): Don't close the current process handle or the
+	current thread handle here.  Instead call win32_clear_inferiors.
+	(win32_detach): Don't open a new handle to the process.  Call
+	win32_clear_inferiors.
+	(win32_join): Don't rely on current_process_handle; open a new
+	handle using the process id.
+	(win32_wait): Call win32_clear_inferiors when the inferior process
+	has exited.
+
+2008-02-14  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* server.c (monitor_show_help): Add "exit".
+
+2008-02-11  Maxim Grigoriev  <maxim2405@gmail.com>
+
+	* Makefile.in (SFILES): Add linux-xtensa-low.c.
+	(clean): Add reg-xtensa.c.
+	(linux-xtensa-low.o, reg-xtensa.o, reg-xtensa.c): New dependencies.
+	* configure.srv (xtensa*-*-linux*) New target.
+	* linux-xtensa-low.c: New.
+	* xtensa-xtregs.c: New.
+
+2008-02-01  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* hostio.c: Don't include errno.h.
+	(errno_to_fileio_errno): Move to hostio-errno.
+	* hostio.c: (hostio_error): Remove the error parameter.  Defer the
+	error number outputting to the target->hostio_last_error callback.
+	(hostio_packet_error): Use FILEIO_EINVAL directly.
+	(handle_open, handle_pread, hostio_error, handle_unlink): Update
+	calls to hostio_error.
+	* hostio-errno.c: New.
+	* server.h (hostio_last_error_from_errno): Declare.
+	* target.h (target_ops): Add hostio_last_error member.
+	* linux-low.c (linux_target_op): Register hostio_last_error_from_errno
+	as hostio_last_error handler.
+	* spu-low.c (spu_target_ops): Likewise. 
+	* win32-low.c [_WIN32_WCE] (win32_error_to_fileio_error)
+	(wince_hostio_last_error): New functions.
+	(win32_target_ops) [_WIN32_WCE]: Register wince_hostio_last_error
+	as hostio_last_error handler.
+	(win32_target_ops) [!_WIN32_WCE]: Register
+	hostio_last_error_from_errno as hostio_last_error handler.
+	* Makefile.in (SFILES): Add hostio.c and hostio-errno.c.
+	(hostio-errno.o): New rule.
+	* configure.ac (GDBSERVER_DEPFILES): Add $srv_hostio_err_objs.
+	* configure.srv (srv_hostio_err_objs): New variable.  Default to
+	hostio-errno.o.
+	(arm*-*-mingw32ce*): Set srv_hostio_err_objs to "".
+	* configure: Regenerate.
+
+2008-01-29  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* linux-low.c (linux_attach_lwp): Do not _exit after errors.
+	(linux_kill, linux_detach): Clean up the process list.
+	* remote-utils.c (remote_open): Improve port number parsing.
+	(putpkt_binary, input_interrupt): Only send interrupts if the target
+	is running.
+	* server.c (extended_protocol): Make static.
+	(attached): Define earlier.
+	(exit_requested, response_needed, program_argv): New variables.
+	(target_running): New.
+	(start_inferior): Clear attached here.
+	(attach_inferior): Set attached here.
+	(require_running): Define.
+	(handle_query): Use require_running and target_running.  Implement
+	"monitor exit".
+	(handle_v_attach, handle_v_run): New.
+	(handle_v_requests): Use require_running.  Handle vAttach and vRun.
+	(gdbserver_usage): Update.
+	(main): Redo argument parsing.  Handle --debug and --multi.  Handle
+	--attach along with other options or after the port.  Save
+	program_argv.  Support no initial program.  Resynchronize
+	communication with GDB after an error.  Handle "monitor exit".
+	Use require_running and target_running.  Always allow the extended
+	protocol.  Do not error out for Hc0 or Hc-1.  Do not automatically
+	restart in extended mode.
+	* README: Refer to the GDB manual.  Update --attach usage.
+
+2007-12-20  Andreas Schwab  <schwab@suse.de>
+
+	* linux-low.c (STACK_SIZE): Define.
+	(linux_tracefork_child): Use it.  Use __clone2 on ia64.
+	(linux_test_for_tracefork): Likewise.
+
+2007-12-18  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* linux-low.c (linux_wait_for_event): Update messages.  Do not
+	reinsert auto-delete breakpoints.
+	* mem-break.c (struct breakpoint): Change return type of handler to
+	int.
+	(set_breakpoint_at): Update handler type.
+	(reinsert_breakpoint_handler): Return 1 instead of calling
+	delete_breakpoint.
+	(reinsert_breakpoint_by_bp): Check for the original breakpoint before
+	setting a new one.
+	(check_breakpoints): Delete auto-delete breakpoints and return 2.
+	* mem-break.h (set_breakpoint_at): Update handler type.
+	* thread-db.c (thread_db_create_event, thread_db_create_event): Update.
+	* win32-low.c (auto_delete_breakpoint): New.
+	(get_child_debug_event): Use it.
+
+2007-12-16  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* configure.ac: Check for pread and pwrite.
+	* hostio.c (handle_pread): Fall back to lseek and read.
+	(handle_pwrite): Fall back to lseek and write.
+	* config.in, configure: Regenerated.
+
+2007-12-07  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* server.c (myresume): Add own_buf argument.
+	(main): Update calls.
+
+2007-12-06  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* linux-low.c (linux_wait, linux_resume): Do not handle async I/O.
+	* remote-utils.c (remote_open): Do not call disable_async_io.
+	(block_async_io): Delete.
+	(unblock_async_io): Make static.
+	(initialize_async_io): New.
+	* server.c (handle_v_cont): Handle async I/O here.
+	(myresume): Likewise.  Move other common resume tasks here...
+	(main): ... from here.  Call initialize_async_io.  Disable async
+	I/O before the main loop.
+	* server.h (initialize_async_io): Declare.
+	(block_async_io, unblock_async_io): Delete prototypes.
+	* spu-low.c (spu_resume, spu_wait): Do not handle async I/O here.
+
+2007-12-06  Mick Davis  <mickd@goanna.iinet.net.au>
+
+	* remote-utils.c (readchar): Allow binary data in received messages.
+
+2007-12-03  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.c (attaching): New global.
+	(win32_create_inferior): Clear the `attaching' global.
+	(win32_attach): Set the `attaching' global.
+	(get_child_debug_event) [_WIN32_WCE]: Stop the inferior when
+	attaching.  Only set a breakpoint at the entry point if not
+	attaching.
+
+2007-12-03  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* server.c (main): Don't report dll events on the initial
+	connection on attaches.
+
+2007-12-03  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* server.c (main): Relax numerical bases supported for the pid of
+	the --attach command line argument.
+
+2007-12-03  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.c (win32_attach): Call OpenProcess before
+	DebugActiveProcess, not after.  Add last error output to error
+	call.
+
+2007-12-03  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.c (win32_get_thread_context)
+	(win32_set_thread_context): New functions.
+	(thread_rec): Use win32_get_thread_context.
+	(continue_one_thread, win32_resume): Use win32_set_thread_context.
+	* win32-low.h (win32_thread_info) [_WIN32_WCE]: Add `base_context'
+	field.
+
+2007-12-03  Leo Zayas
+	    Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.c (soft_interrupt_requested, faked_breakpoint): New
+	global variables.
+	(child_add_thread): Minor cleanup.
+	(child_continue): Resume artificially suspended threads before
+	calling ContinueDebugEvent.
+	(suspend_one_thread): New.
+	(fake_breakpoint_event): New.
+	(get_child_debug_event): Change return type to int.  Check here if
+	gdb sent an interrupt request.  If a soft interrupt was requested,
+	fake a breakpoint event.  Return 0 if there is no event to handle,
+	and 1 otherwise.
+	(win32_wait): Don't check here if gdb sent an interrupt request.
+	Ensure there is a valid event to handle.
+	(win32_request_interrupt): Add soft interruption method as last
+	resort.
+
+2007-12-03  Leo Zayas
+	    Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.h (win32_thread_info): Add descriptions to the
+	structure members.  Replace `suspend_count' counter by a
+	`suspended' flag.
+	* win32-low.c (thread_rec): Update condition of when to get the
+	context from the inferior.  Rely on ContextFlags being set if it
+	has already been retrieved.  Only suspend the inferior thread if
+	we haven't already.  Warn if that fails.
+	(continue_one_thread): s/suspend_count/suspended/.  Only call
+	ResumeThread once.  Warn if that fails.
+
+2007-12-02  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.c (win32_wait): Don't read from the inferior when it
+	has already exited.
+
+2007-12-02  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* Makefile.in (win32_low_h): New variable.
+	(win32-low.o): Add dependency on $(win32_low_h).
+	(win32-arm-low.o, win32-i386-low.o): New rules.
+
+2007-11-30  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* hostio.c: Correct copyright year.
+
+2007-11-30  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* Makefile.in (OBS): Add hostio.o.
+	(hostio.o): New rule.
+	* server.h (handle_vFile): Declare.
+	* hostio.c: New file.
+	* server.c (handle_v_requests): Take packet_len and new_packet_len
+	for binary packets.  Call handle_vFile.
+	(main): Update call to handle_v_requests.
+
+2007-11-05  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* linux-low.c: Include <sched.h>.
+
+2007-11-01  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* linux-low.c (linux_tracefork_grandchild): New.
+	(linux_tracefork_child): Use clone.
+	(linux_test_for_tracefork): Use clone; allocate and free a stack.
+
+2007-10-31  Joel Brobecker  <brobecker@adacore.com>
+
+	* Makefile.in: Use $(SHELL) instead of "sh" to call regdat.sh.
+
+2007-10-24  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* linux-low.c (handle_extended_wait): Handle unexpected signals.
+
+2007-10-23  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* inferiors.c (change_inferior_id): Delete.
+	(add_pid_to_list, pull_pid_from_list): New.
+	* linux-low.c (PTRACE_SETOPTIONS, PTRACE_GETEVENTMSG)
+	(PTRACE_O_TRACESYSGOOD, PTRACE_O_TRACEFORK, PTRACE_O_TRACEVFORK)
+	(PTRACE_O_TRACECLONE, PTRACE_O_TRACEEXEC, PTRACE_O_TRACEVFORKDONE)
+	(PTRACE_O_TRACEEXIT, PTRACE_EVENT_FORK, PTRACE_EVENT_VFORK)
+	(PTRACE_EVENT_CLONE, PTRACE_EVENT_EXEC, PTRACE_EVENT_VFORK_DONE)
+	(PTRACE_EVENT_EXIT, __WALL): Provide default definitions.
+	(stopped_pids, thread_db_active, must_set_ptrace_flags): New variables.
+	(using_threads): Always set to 1.
+	(handle_extended_wait): New.
+	(add_process): Do not set TID.
+	(linux_create_inferior): Set must_set_ptrace_flags.
+	(linux_attach_lwp): Remove TID argument.  Do not check using_threads.
+	Use PTRACE_SETOPTIONS.  Call new_thread_notify.  Update all callers.
+	(linux_thread_alive): Rename TID argument to LWPID.
+	(linux_wait_for_process): Handle unknown processes.  Do not use TID.
+	(linux_wait_for_event): Do not use TID or check using_threads.  Update
+	call to dead_thread_notify.  Call handle_extended_wait.
+	(linux_create_inferior): Use PTRACE_SETOPTIONS.
+	(send_sigstop): Delete sigstop_sent.
+	(wait_for_sigstop): Avoid TID.
+	(linux_supports_tracefork_flag, linux_tracefork_child, my_waitpid)
+	(linux_test_for_tracefork): New.
+	(linux_lookup_signals): Use thread_db_active and
+	linux_supports_tracefork_flag.
+	(initialize_low): Use thread_db_active and linux_test_for_tracefork.
+	* linux-low.h (get_process_thread): Avoid TID.
+	(struct process_ifo): Move thread_known and tid to the end.  Remove
+	sigstop_sent.
+	(linux_attach_lwp, thread_db_init): Update prototypes.
+	* server.h (change_inferior_id): Delete prototype.
+	(add_pid_to_list, pull_pid_from_list): New prototypes.
+	* thread-db.c (thread_db_use_events): New.
+	(find_first_thread): Rename to...
+	(find_one_thread): ...this.  Update callers and messages.  Do not
+	call fatal.  Check thread_db_use_events.  Do not call
+	change_inferior_id or new_thread_notify.
+	(maybe_attach_thread): Update.  Do not call new_thread_notify.
+	(thread_db_init): Set thread_db_use_events.  Check use_events.
+	* utils.c (fatal, warning): Correct message prefix.
+
+2007-10-15  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* Makefile.in (clean): Remove new files.
+	(powerpc-32.o, powerpc-32.c, powerpc-e500.o, powerpc-e500.c)
+	(powerpc-64.o, powerpc-64.c): New rules.
+	* configure.srv: Use alternate register sets for powerpc64-*-linux*
+	with AltiVec, powerpc-*-linux* with AltiVec, and powerpc-*-linux*
+	with SPE.
+	* linux-ppc-low.c (ppc_regmap): Do not fetch the FP registers for
+	SPE targets.
+	(ppc_cannot_store_register): Do not check for FPSCR for SPE targets.
+	(PTRACE_GETVRREGS, PTRACE_SETVRREGS, SIZEOF_VRREGS, ppc_fill_vrregset)
+	(ppc_store_vrregset, PTRACE_GETEVRREGS, PTRACE_SETEVRREGS)
+	(struct gdb_evrregset_t, ppc_fill_evrregset, ppc_store_evrregset): New.
+	(target_regsets): Add AltiVec and SPE register sets.
+	* configure.ac: Check for AltiVec and SPE.
+	* linux-ppc64-low.c (PTRACE_GETVRREGS, PTRACE_SETVRREGS, SIZEOF_VRREGS)
+	(ppc_fill_vrregset, ppc_store_vrregset): New.
+	(target_regsets): Add AltiVec register set.
+	* configure: Regenerated.
+
+2007-09-19  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* linux-low.c (O_LARGEFILE): Define.
+	(linux_read_memory): Use /proc/PID/mem.
+	* configure.ac: Use AC_GNU_SOURCE.  Check for pread64.
+	* configure, config.in: Regenerated.
+
 2007-09-04  Daniel Jacobowitz  <dan@codesourcery.com>
 
 	* linux-low.c (linux_wait_for_event): Do not pass signals while

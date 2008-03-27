@@ -1,6 +1,6 @@
 /* Target-dependent code for Solaris UltraSPARC.
 
-   Copyright (C) 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -156,6 +156,16 @@ sparc64_sol2_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   frame_unwind_append_sniffer (gdbarch, sparc64_sol2_sigtramp_frame_sniffer);
 
   sparc64_init_abi (info, gdbarch);
+
+  /* The Sun compilers (Sun ONE Studio, Forte Developer, Sun WorkShop, SunPRO)
+     compiler puts out 0 instead of the address in N_SO stabs.  Starting with
+     SunPRO 3.0, the compiler does this for N_FUN stabs too.  */
+  set_gdbarch_sofun_address_maybe_missing (gdbarch, 1);
+
+  /* The Sun compilers also do "globalization"; see the comment in
+     sparc_sol2_static_transform_name for more information.  */
+  set_gdbarch_static_transform_name
+    (gdbarch, sparc_sol2_static_transform_name);
 
   /* Solaris has SVR4-style shared libraries...  */
   set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);

@@ -1,6 +1,6 @@
 /* TUI window generic functions.
 
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2007
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
@@ -48,6 +48,8 @@ extern int tui_border_attrs;
 extern int tui_active_border_attrs;
 
 extern int tui_update_variables (void);
+
+extern void tui_initialize_win (void);
 
 /* Update gdb's knowledge of the terminal size.  */
 extern void tui_update_gdb_sizes (void);

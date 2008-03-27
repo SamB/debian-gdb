@@ -1,6 +1,7 @@
 /* Build symbol tables in GDB's internal format.
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1995, 1996,
-   1997, 1998, 1999, 2000, 2002, 2003, 2007 Free Software Foundation, Inc.
+   1997, 1998, 1999, 2000, 2002, 2003, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,6 +23,7 @@
 
 struct objfile;
 struct symbol;
+struct addrmap;
 
 /* This module provides definitions used for creating and adding to
    the symbol table.  These routines are called from various symbol-
@@ -70,8 +72,6 @@ struct subfile
     char *debugformat;
     struct symtab *symtab;
   };
-
-EXTERN struct subfile *subfiles;
 
 EXTERN struct subfile *current_subfile;
 
@@ -232,11 +232,14 @@ extern void add_symbol_to_list (struct symbol *symbol,
 extern struct symbol *find_symbol_in_list (struct pending *list,
 					   char *name, int length);
 
-extern void finish_block (struct symbol *symbol,
-			  struct pending **listhead,
-			  struct pending_block *old_blocks,
-			  CORE_ADDR start, CORE_ADDR end,
-			  struct objfile *objfile);
+extern struct block *finish_block (struct symbol *symbol,
+                                   struct pending **listhead,
+                                   struct pending_block *old_blocks,
+                                   CORE_ADDR start, CORE_ADDR end,
+                                   struct objfile *objfile);
+
+extern void record_block_range (struct block *,
+                                CORE_ADDR start, CORE_ADDR end_inclusive);
 
 extern void really_free_pendings (void *dummy);
 

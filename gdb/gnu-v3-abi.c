@@ -1,7 +1,7 @@
 /* Abstraction of GNU v3 abi.
    Contributed by Jim Blandy <jimb@redhat.com>
 
-   Copyright (C) 2001, 2002, 2003, 2005, 2006, 2007
+   Copyright (C) 2001, 2002, 2003, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -98,9 +98,7 @@ enum {
    described above, laid out appropriately for ARCH.
 
    We use this function as the gdbarch per-architecture data
-   initialization function.  We assume that the gdbarch framework
-   calls the per-architecture data initialization functions after it
-   sets current_gdbarch to the new architecture.  */
+   initialization function.  */
 static void *
 build_gdb_vtable_type (struct gdbarch *arch)
 {
@@ -116,7 +114,7 @@ build_gdb_vtable_type (struct gdbarch *arch)
   /* ARCH can't give us the true ptrdiff_t type, so we guess.  */
   struct type *ptrdiff_type
     = init_type (TYPE_CODE_INT,
-		 gdbarch_ptr_bit (current_gdbarch) / TARGET_CHAR_BIT, 0,
+		 gdbarch_ptr_bit (arch) / TARGET_CHAR_BIT, 0,
                  "ptrdiff_t", 0);
 
   /* We assume no padding is necessary, since GDB doesn't know
@@ -203,6 +201,8 @@ gnuv3_rtti_type (struct value *value,
   struct type *run_time_type;
   struct type *base_type;
   LONGEST offset_to_top;
+  struct type *values_type_vptr_basetype;
+  int values_type_vptr_fieldno;
 
   /* We only have RTTI for class objects.  */
   if (TYPE_CODE (values_type) != TYPE_CODE_CLASS)
@@ -210,8 +210,9 @@ gnuv3_rtti_type (struct value *value,
 
   /* If we can't find the virtual table pointer for values_type, we
      can't find the RTTI.  */
-  fill_in_vptr_fieldno (values_type);
-  if (TYPE_VPTR_FIELDNO (values_type) == -1)
+  values_type_vptr_fieldno = get_vptr_fieldno (values_type,
+					       &values_type_vptr_basetype);
+  if (values_type_vptr_fieldno == -1)
     return NULL;
 
   if (using_enc_p)
@@ -219,7 +220,7 @@ gnuv3_rtti_type (struct value *value,
 
   /* Fetch VALUE's virtual table pointer, and tweak it to point at
      an instance of our imaginary gdb_gnu_v3_abi_vtable structure.  */
-  base_type = check_typedef (TYPE_VPTR_BASETYPE (values_type));
+  base_type = check_typedef (values_type_vptr_basetype);
   if (values_type != base_type)
     {
       value = value_cast (base_type, value);
@@ -227,7 +228,7 @@ gnuv3_rtti_type (struct value *value,
 	*using_enc_p = 1;
     }
   vtable_address
-    = value_as_address (value_field (value, TYPE_VPTR_FIELDNO (values_type)));
+    = value_as_address (value_field (value, values_type_vptr_fieldno));
   vtable = value_at_lazy (vtable_type,
                           vtable_address - vtable_address_point_offset ());
   
@@ -383,6 +384,7 @@ gnuv3_baseclass_offset (struct type *type, int index, const bfd_byte *valaddr,
   struct value *offset_val, *vbase_array;
   CORE_ADDR vtable_address;
   long int cur_base_offset, base_offset;
+  int vbasetype_vptr_fieldno;
 
   /* If it isn't a virtual base, this is easy.  The offset is in the
      type definition.  */
@@ -416,11 +418,10 @@ gnuv3_baseclass_offset (struct type *type, int index, const bfd_byte *valaddr,
      we have debugging information for that baseclass.  */
 
   vbasetype = TYPE_VPTR_BASETYPE (type);
-  if (TYPE_VPTR_FIELDNO (vbasetype) < 0)
-    fill_in_vptr_fieldno (vbasetype);
+  vbasetype_vptr_fieldno = get_vptr_fieldno (vbasetype, NULL);
 
-  if (TYPE_VPTR_FIELDNO (vbasetype) >= 0
-      && TYPE_FIELD_BITPOS (vbasetype, TYPE_VPTR_FIELDNO (vbasetype)) != 0)
+  if (vbasetype_vptr_fieldno >= 0
+      && TYPE_FIELD_BITPOS (vbasetype, vbasetype_vptr_fieldno) != 0)
     error (_("Illegal vptr offset in class %s"),
 	   TYPE_NAME (vbasetype) ? TYPE_NAME (vbasetype) : "<unknown>");
 
@@ -680,12 +681,12 @@ static CORE_ADDR
 gnuv3_skip_trampoline (struct frame_info *frame, CORE_ADDR stop_pc)
 {
   CORE_ADDR real_stop_pc, method_stop_pc;
+  struct gdbarch *gdbarch = get_frame_arch (frame);
   struct minimal_symbol *thunk_sym, *fn_sym;
   struct obj_section *section;
   char *thunk_name, *fn_name;
   
-  real_stop_pc = gdbarch_skip_trampoline_code
-		   (current_gdbarch, frame, stop_pc);
+  real_stop_pc = gdbarch_skip_trampoline_code (gdbarch, frame, stop_pc);
   if (real_stop_pc == 0)
     real_stop_pc = stop_pc;
 
@@ -709,11 +710,92 @@ gnuv3_skip_trampoline (struct frame_info *frame, CORE_ADDR stop_pc)
 
   method_stop_pc = SYMBOL_VALUE_ADDRESS (fn_sym);
   real_stop_pc = gdbarch_skip_trampoline_code
-		   (current_gdbarch, frame, method_stop_pc);
+		   (gdbarch, frame, method_stop_pc);
   if (real_stop_pc == 0)
     real_stop_pc = method_stop_pc;
 
   return real_stop_pc;
+}
+
+/* Return nonzero if a type should be passed by reference.
+
+   The rule in the v3 ABI document comes from section 3.1.1.  If the
+   type has a non-trivial copy constructor or destructor, then the
+   caller must make a copy (by calling the copy constructor if there
+   is one or perform the copy itself otherwise), pass the address of
+   the copy, and then destroy the temporary (if necessary).
+
+   For return values with non-trivial copy constructors or
+   destructors, space will be allocated in the caller, and a pointer
+   will be passed as the first argument (preceding "this").
+
+   We don't have a bulletproof mechanism for determining whether a
+   constructor or destructor is trivial.  For GCC and DWARF2 debug
+   information, we can check the artificial flag.
+
+   We don't do anything with the constructors or destructors,
+   but we have to get the argument passing right anyway.  */
+static int
+gnuv3_pass_by_reference (struct type *type)
+{
+  int fieldnum, fieldelem;
+
+  CHECK_TYPEDEF (type);
+
+  /* We're only interested in things that can have methods.  */
+  if (TYPE_CODE (type) != TYPE_CODE_STRUCT
+      && TYPE_CODE (type) != TYPE_CODE_CLASS
+      && TYPE_CODE (type) != TYPE_CODE_UNION)
+    return 0;
+
+  for (fieldnum = 0; fieldnum < TYPE_NFN_FIELDS (type); fieldnum++)
+    for (fieldelem = 0; fieldelem < TYPE_FN_FIELDLIST_LENGTH (type, fieldnum);
+	 fieldelem++)
+      {
+	struct fn_field *fn = TYPE_FN_FIELDLIST1 (type, fieldnum);
+	char *name = TYPE_FN_FIELDLIST_NAME (type, fieldnum);
+	struct type *fieldtype = TYPE_FN_FIELD_TYPE (fn, fieldelem);
+
+	/* If this function is marked as artificial, it is compiler-generated,
+	   and we assume it is trivial.  */
+	if (TYPE_FN_FIELD_ARTIFICIAL (fn, fieldelem))
+	  continue;
+
+	/* If we've found a destructor, we must pass this by reference.  */
+	if (name[0] == '~')
+	  return 1;
+
+	/* If the mangled name of this method doesn't indicate that it
+	   is a constructor, we're not interested.
+
+	   FIXME drow/2007-09-23: We could do this using the name of
+	   the method and the name of the class instead of dealing
+	   with the mangled name.  We don't have a convenient function
+	   to strip off both leading scope qualifiers and trailing
+	   template arguments yet.  */
+	if (!is_constructor_name (TYPE_FN_FIELD_PHYSNAME (fn, fieldelem)))
+	  continue;
+
+	/* If this method takes two arguments, and the second argument is
+	   a reference to this class, then it is a copy constructor.  */
+	if (TYPE_NFIELDS (fieldtype) == 2
+	    && TYPE_CODE (TYPE_FIELD_TYPE (fieldtype, 1)) == TYPE_CODE_REF
+	    && check_typedef (TYPE_TARGET_TYPE (TYPE_FIELD_TYPE (fieldtype, 1))) == type)
+	  return 1;
+      }
+
+  /* Even if all the constructors and destructors were artificial, one
+     of them may have invoked a non-artificial constructor or
+     destructor in a base class.  If any base class needs to be passed
+     by reference, so does this class.  Similarly for members, which
+     are constructed whenever this class is.  We do not need to worry
+     about recursive loops here, since we are only looking at members
+     of complete class type.  */
+  for (fieldnum = 0; fieldnum < TYPE_NFIELDS (type); fieldnum++)
+    if (gnuv3_pass_by_reference (TYPE_FIELD_TYPE (type, fieldnum)))
+      return 1;
+
+  return 0;
 }
 
 static void
@@ -738,6 +820,7 @@ init_gnuv3_ops (void)
   gnu_v3_abi_ops.make_method_ptr = gnuv3_make_method_ptr;
   gnu_v3_abi_ops.method_ptr_to_value = gnuv3_method_ptr_to_value;
   gnu_v3_abi_ops.skip_trampoline = gnuv3_skip_trampoline;
+  gnu_v3_abi_ops.pass_by_reference = gnuv3_pass_by_reference;
 }
 
 extern initialize_file_ftype _initialize_gnu_v3_abi; /* -Wmissing-prototypes */

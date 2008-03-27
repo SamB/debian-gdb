@@ -1,5 +1,6 @@
 #   Copyright 1988, 1990, 1991, 1992, 1994, 1995, 1996, 1997, 1998, 1999,
-#   2000, 2001, 2002, 2003, 2005, 2006, 2007 Free Software Foundation, Inc.
+#   2000, 2001, 2002, 2003, 2005, 2006, 2007, 2008
+#   Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -300,7 +301,7 @@ gdb_test "info bogus-gdb-command" "Undefined info command: \"bogus-gdb-command\"
 #test info breakpoints
 gdb_test "info breakpoints" "No breakpoints or watchpoints." "info breakpoints"
 #test info catch
-gdb_test "info catch" "You can't do that without a process to debug." "info catch"
+gdb_test "info catch" "No frame selected." "info catch"
 #test info copying
 # FIXME -- doesn't work worth a shit
 #send_gdb "info copying"

@@ -1,6 +1,6 @@
 /* Remote serial support interface definitions for GDB, the GNU Debugger.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2004,
-   2005, 2006, 2007 Free Software Foundation, Inc.
+   2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -244,7 +244,7 @@ struct serial_ops
        interesting.  */
     void (*async) (struct serial *scb, int async_p);
     /* Perform a low-level read operation, reading (at most) COUNT
-       bytes into SCB->BUF.  */
+       bytes into SCB->BUF.  Return zero at end of file.  */
     int (*read_prim)(struct serial *scb, size_t count);
     /* Perform a low-level write operation, writing (at most) COUNT
        bytes from BUF.  */

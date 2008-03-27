@@ -1,6 +1,6 @@
 /* TUI Interpreter definitions for GDB, the GNU debugger.
 
-   Copyright (C) 2003, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -56,6 +56,7 @@ tui_init (void)
   tui_initialize_static_data ();
 
   tui_initialize_io ();
+  tui_initialize_win ();
   tui_initialize_readline ();
 
   return NULL;

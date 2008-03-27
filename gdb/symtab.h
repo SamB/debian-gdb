@@ -1,7 +1,7 @@
 /* Symbol table definitions for GDB.
 
    Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007
+   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -32,7 +32,6 @@ struct block;
 struct blockvector;
 struct axs_value;
 struct agent_expr;
-enum language;
 
 /* Some of the structures in this file are space critical.
    The space-critical structures are:
@@ -345,10 +344,8 @@ struct minimal_symbol
 
   unsigned long size;
 
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
   /* Which source file is this symbol in?  Only relevant for mst_file_*.  */
   char *filename;
-#endif
 
   /* Classification type for this minimal symbol.  */
 
@@ -1213,6 +1210,8 @@ struct symtab_and_line
 
   CORE_ADDR pc;
   CORE_ADDR end;
+  int explicit_pc;
+  int explicit_line;
 };
 
 extern void init_sal (struct symtab_and_line *sal);
@@ -1323,6 +1322,7 @@ extern void forget_cached_source_info (void);
 
 extern void select_source_symtab (struct symtab *);
 
+extern char **default_make_symbol_completion_list (char *, char *);
 extern char **make_symbol_completion_list (char *, char *);
 
 extern char **make_file_symbol_completion_list (char *, char *, char *);
@@ -1404,5 +1404,7 @@ struct symbol *lookup_global_symbol_from_objfile (const struct objfile *objfile,
 						  const domain_enum domain,
 						  struct symtab **symtab);
 
+extern struct symtabs_and_lines
+expand_line_sal (struct symtab_and_line sal);
 
 #endif /* !defined(SYMTAB_H) */

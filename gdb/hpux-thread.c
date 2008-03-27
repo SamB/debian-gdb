@@ -1,7 +1,7 @@
 /* Low level interface for debugging HPUX/DCE threads for GDB, the GNU
    debugger.
 
-   Copyright (C) 1996, 1998, 1999, 2000, 2001, 2004, 2007
+   Copyright (C) 1996, 1998, 1999, 2000, 2001, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -180,15 +180,6 @@ hpux_thread_resume (ptid_t ptid, int step, enum target_signal signo)
   ptid = main_ptid;
   inferior_ptid = main_ptid;
 
-#if 0
-  if (pid != -1)
-    {
-      pid = thread_to_lwp (pid, -2);
-      if (pid == -2)		/* Inactive thread */
-	error (_("This version of Solaris can't start inactive threads."));
-    }
-#endif
-
   deprecated_child_ops.to_resume (ptid, step, signo);
 
   cached_thread = 0;
@@ -250,6 +241,7 @@ static char regmap[] =
 static void
 hpux_thread_fetch_registers (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   cma__t_int_tcb tcb, *tcb_ptr;
   struct cleanup *old_chain;
   int i;
@@ -273,7 +265,7 @@ hpux_thread_fetch_registers (struct regcache *regcache, int regno)
   if (regno == -1)
     {
       first_regno = 0;
-      last_regno = gdbarch_num_regs (current_gdbarch) - 1;
+      last_regno = gdbarch_num_regs (gdbarch) - 1;
     }
   else
     {
@@ -294,13 +286,14 @@ hpux_thread_fetch_registers (struct regcache *regcache, int regno)
 
 	  if (regno == HPPA_FLAGS_REGNUM)
 	    /* Flags must be 0 to avoid bogus value for SS_INSYSCALL */
-	    memset (buf, '\000', register_size (current_gdbarch, regno));
+	    memset (buf, '\000', register_size (gdbarch, regno));
 	  else if (regno == HPPA_SP_REGNUM)
 	    store_unsigned_integer (buf, sizeof sp, sp);
 	  else if (regno == HPPA_PCOQ_HEAD_REGNUM)
-	    read_memory (sp - 20, buf, register_size (current_gdbarch, regno));
+	    read_memory (sp - 20, buf, register_size (gdbarch, regno));
 	  else
-	    read_memory (sp + regmap[regno], buf, register_size (current_gdbarch, regno));
+	    read_memory (sp + regmap[regno], buf,
+			 register_size (gdbarch, regno));
 
 	  regcache_raw_supply (regcache, regno, buf);
 	}
@@ -312,6 +305,7 @@ hpux_thread_fetch_registers (struct regcache *regcache, int regno)
 static void
 hpux_thread_store_registers (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   cma__t_int_tcb tcb, *tcb_ptr;
   struct cleanup *old_chain;
   int i;
@@ -335,7 +329,7 @@ hpux_thread_store_registers (struct regcache *regcache, int regno)
   if (regno == -1)
     {
       first_regno = 0;
-      last_regno = gdbarch_num_regs (current_gdbarch) - 1;
+      last_regno = gdbarch_num_regs (gdbarch) - 1;
     }
   else
     {
@@ -360,7 +354,7 @@ hpux_thread_store_registers (struct regcache *regcache, int regno)
 	    {
 	      regcache_raw_collect (regcache, regno, buf);
 	      write_memory ((CORE_ADDR) &tcb_ptr->static_ctx.sp, buf,
-			    register_size (current_gdbarch, regno));
+			    register_size (gdbarch, regno));
 	      tcb_ptr->static_ctx.sp
 		= (cma__t_hppa_regs *) ((CORE_ADDR) buf + 160);
 	    }
@@ -368,13 +362,13 @@ hpux_thread_store_registers (struct regcache *regcache, int regno)
 	    {
 	      regcache_raw_collect (regcache, regno, buf);
 	      write_memory (sp - 20, buf,
-			    register_size (current_gdbarch, regno));
+			    register_size (gdbarch, regno));
 	    }
 	  else
 	    {
 	      regcache_raw_collect (regcache, regno, buf);
 	      write_memory (sp + regmap[regno], buf,
-			    register_size (current_gdbarch, regno));
+			    register_size (gdbarch, regno));
 	    }
 	}
     }

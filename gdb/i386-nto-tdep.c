@@ -1,6 +1,6 @@
 /* Target-dependent code for QNX Neutrino x86.
 
-   Copyright (C) 2003, 2004, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by QNX Software Systems Ltd.
 
@@ -31,6 +31,7 @@
 #include "i386-tdep.h"
 #include "i387-tdep.h"
 #include "nto-tdep.h"
+#include "solib.h"
 #include "solib-svr4.h"
 
 /* Target vector for QNX NTO x86.  */
@@ -81,10 +82,11 @@ nto_reg_offset (int regnum)
 static void
 i386nto_supply_gregset (struct regcache *regcache, char *gpregs)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   if(tdep->gregset == NULL)
-    tdep->gregset = regset_alloc (current_gdbarch, i386_supply_gregset,
+    tdep->gregset = regset_alloc (gdbarch, i386_supply_gregset,
 				  i386_collect_gregset);
 
   gdb_assert (tdep->gregset_reg_offset == i386nto_gregset_reg_offset);
@@ -250,6 +252,7 @@ static void
 i386nto_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  static struct target_so_ops nto_svr4_so_ops;
 
   /* Deal with our strange signals.  */
   nto_initialize_signals ();
@@ -276,14 +279,25 @@ i386nto_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_solib_svr4_fetch_link_map_offsets
     (gdbarch, svr4_ilp32_fetch_link_map_offsets);
 
-  /* Our loader handles solib relocations slightly differently than svr4.  */
-  TARGET_SO_RELOCATE_SECTION_ADDRESSES = nto_relocate_section_addresses;
+  /* Initialize this lazily, to avoid an initialization order
+     dependency on solib-svr4.c's _initialize routine.  */
+  if (nto_svr4_so_ops.in_dynsym_resolve_code == NULL)
+    {
+      nto_svr4_so_ops = svr4_so_ops;
 
-  /* Supply a nice function to find our solibs.  */
-  TARGET_SO_FIND_AND_OPEN_SOLIB = nto_find_and_open_solib;
+      /* Our loader handles solib relocations differently than svr4.  */
+      nto_svr4_so_ops.relocate_section_addresses
+        = nto_relocate_section_addresses;
 
-  /* Our linker code is in libc.  */
-  TARGET_SO_IN_DYNSYM_RESOLVE_CODE = nto_in_dynsym_resolve_code;
+      /* Supply a nice function to find our solibs.  */
+      nto_svr4_so_ops.find_and_open_solib
+        = nto_find_and_open_solib;
+
+      /* Our linker code is in libc.  */
+      nto_svr4_so_ops.in_dynsym_resolve_code
+        = nto_in_dynsym_resolve_code;
+    }
+  set_solib_ops (gdbarch, &nto_svr4_so_ops);
 
   nto_set_target (&i386_nto_target);
 }

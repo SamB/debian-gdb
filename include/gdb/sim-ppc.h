@@ -1,6 +1,6 @@
 /* sim-ppc.h --- interface between PowerPC simulator and GDB.
 
-   Copyright 2004, 2007 Free Software Foundation, Inc.
+   Copyright 2004, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Red Hat.
 
@@ -761,6 +761,10 @@ enum
     sim_ppc_num_sprs = 1024,
   };
 
+
+/* Return the register name for the supplied SPR number if any, or
+   NULL if none.  */
+extern const char *sim_spr_register_name (int);
 
 #ifdef __cplusplus
 }

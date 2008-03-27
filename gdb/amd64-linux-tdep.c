@@ -1,6 +1,6 @@
 /* Target-dependent code for GNU/Linux x86-64.
 
-   Copyright (C) 2001, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 2001, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Jiri Smid, SuSE Labs.
 
@@ -154,7 +154,8 @@ amd64_linux_sigcontext_addr (struct frame_info *next_frame)
   CORE_ADDR sp;
   gdb_byte buf[8];
 
-  frame_unwind_register (next_frame, gdbarch_sp_regnum (current_gdbarch), buf);
+  frame_unwind_register (next_frame,
+			 gdbarch_sp_regnum (get_frame_arch (next_frame)), buf);
   sp = extract_unsigned_integer (buf, 8);
 
   /* The sigcontext structure is part of the user context.  A pointer
@@ -204,12 +205,12 @@ static int amd64_linux_sc_reg_offset[] =
 /* Replacement register functions which know about %orig_rax.  */
 
 static const char *
-amd64_linux_register_name (int reg)
+amd64_linux_register_name (struct gdbarch *gdbarch, int reg)
 {
   if (reg == AMD64_LINUX_ORIG_RAX_REGNUM)
     return "orig_rax";
 
-  return amd64_register_name (reg);
+  return amd64_register_name (gdbarch, reg);
 }
 
 static struct type *

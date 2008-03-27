@@ -1,7 +1,7 @@
 /* Support routines for manipulating internal types for GDB.
 
-   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2002,
+   2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
@@ -95,6 +95,10 @@ const struct floatformat *floatformats_vax_d[BFD_ENDIAN_UNKNOWN] = {
   &floatformat_vax_d,
   &floatformat_vax_d
 };
+const struct floatformat *floatformats_ibm_long_double[BFD_ENDIAN_UNKNOWN] = {
+  &floatformat_ibm_long_double,
+  &floatformat_ibm_long_double
+};
 
 struct type *builtin_type_ieee_single;
 struct type *builtin_type_ieee_double;
@@ -135,7 +139,6 @@ static void print_bit_vector (B_TYPE *, int);
 static void print_arg_types (struct field *, int, int);
 static void dump_fn_fieldlists (struct type *, int);
 static void print_cplus_stuff (struct type *, int);
-static void virtual_base_list_aux (struct type *dclass);
 
 
 /* Alloc a new type structure and fill it with some defaults.  If
@@ -705,8 +708,6 @@ create_range_type (struct type *result_type, struct type *index_type,
   memset (TYPE_FIELDS (result_type), 0, 2 * sizeof (struct field));
   TYPE_FIELD_BITPOS (result_type, 0) = low_bound;
   TYPE_FIELD_BITPOS (result_type, 1) = high_bound;
-  TYPE_FIELD_TYPE (result_type, 0) = builtin_type_int;	/* FIXME */
-  TYPE_FIELD_TYPE (result_type, 1) = builtin_type_int;	/* FIXME */
 
   if (low_bound >= 0)
     TYPE_FLAGS (result_type) |= TYPE_FLAG_UNSIGNED;
@@ -810,8 +811,14 @@ create_array_type (struct type *result_type,
   if (get_discrete_bounds (range_type, &low_bound, &high_bound) < 0)
     low_bound = high_bound = 0;
   CHECK_TYPEDEF (element_type);
-  TYPE_LENGTH (result_type) =
-    TYPE_LENGTH (element_type) * (high_bound - low_bound + 1);
+  /* Be careful when setting the array length.  Ada arrays can be
+     empty arrays with the high_bound being smaller than the low_bound.
+     In such cases, the array length should be zero.  */
+  if (high_bound < low_bound)
+    TYPE_LENGTH (result_type) = 0;
+  else
+    TYPE_LENGTH (result_type) =
+      TYPE_LENGTH (element_type) * (high_bound - low_bound + 1);
   TYPE_NFIELDS (result_type) = 1;
   TYPE_FIELDS (result_type) =
     (struct field *) TYPE_ALLOC (result_type, sizeof (struct field));
@@ -950,7 +957,7 @@ init_vector_type (struct type *elt_type, int n)
  
   array_type = create_array_type (0, elt_type,
 				  create_range_type (0, 
-						     builtin_type_int,
+						     builtin_type_int32,
 						     0, n-1));
   make_vector_type (array_type);
   return array_type;
@@ -1281,15 +1288,19 @@ lookup_struct_elt_type (struct type *type, char *name, int noerr)
   return (struct type *) -1;	/* For lint */
 }
 
-/* If possible, make the vptr_fieldno and vptr_basetype fields of TYPE
-   valid.  Callers should be aware that in some cases (for example,
+/* Lookup the vptr basetype/fieldno values for TYPE.
+   If found store vptr_basetype in *BASETYPEP if non-NULL, and return
+   vptr_fieldno.  Also, if found and basetype is from the same objfile,
+   cache the results.
+   If not found, return -1 and ignore BASETYPEP.
+   Callers should be aware that in some cases (for example,
    the type or one of its baseclasses is a stub type and we are
    debugging a .o file), this function will not be able to find the
    virtual function table pointer, and vptr_fieldno will remain -1 and
-   vptr_basetype will remain NULL.  */
+   vptr_basetype will remain NULL or incomplete.  */
 
-void
-fill_in_vptr_fieldno (struct type *type)
+int
+get_vptr_fieldno (struct type *type, struct type **basetypep)
 {
   CHECK_TYPEDEF (type);
 
@@ -1301,16 +1312,34 @@ fill_in_vptr_fieldno (struct type *type)
          is virtual (and hence we cannot share the table pointer).  */
       for (i = 0; i < TYPE_N_BASECLASSES (type); i++)
 	{
-	  struct type *baseclass = check_typedef (TYPE_BASECLASS (type,
-								  i));
-	  fill_in_vptr_fieldno (baseclass);
-	  if (TYPE_VPTR_FIELDNO (baseclass) >= 0)
+	  struct type *baseclass = check_typedef (TYPE_BASECLASS (type, i));
+	  int fieldno;
+	  struct type *basetype;
+
+	  fieldno = get_vptr_fieldno (baseclass, &basetype);
+	  if (fieldno >= 0)
 	    {
-	      TYPE_VPTR_FIELDNO (type) = TYPE_VPTR_FIELDNO (baseclass);
-	      TYPE_VPTR_BASETYPE (type) = TYPE_VPTR_BASETYPE (baseclass);
-	      break;
+	      /* If the type comes from a different objfile we can't cache
+		 it, it may have a different lifetime. PR 2384 */
+	      if (TYPE_OBJFILE (type) == TYPE_OBJFILE (baseclass))
+		{
+		  TYPE_VPTR_FIELDNO (type) = fieldno;
+		  TYPE_VPTR_BASETYPE (type) = basetype;
+		}
+	      if (basetypep)
+		*basetypep = basetype;
+	      return fieldno;
 	    }
 	}
+
+      /* Not found.  */
+      return -1;
+    }
+  else
+    {
+      if (basetypep)
+	*basetypep = TYPE_VPTR_BASETYPE (type);
+      return TYPE_VPTR_FIELDNO (type);
     }
 }
 
@@ -1491,11 +1520,19 @@ check_typedef (struct type *type)
 		   == TYPE_CODE_RANGE))
 	{
 	  /* Now recompute the length of the array type, based on its
-	     number of elements and the target type's length.  */
-	  TYPE_LENGTH (type) =
-	    ((TYPE_FIELD_BITPOS (range_type, 1)
-	      - TYPE_FIELD_BITPOS (range_type, 0) + 1)
-	     * TYPE_LENGTH (target_type));
+	     number of elements and the target type's length.
+	     Watch out for Ada null Ada arrays where the high bound
+	     is smaller than the low bound.  */
+	  const int low_bound = TYPE_FIELD_BITPOS (range_type, 0);
+	  const int high_bound = TYPE_FIELD_BITPOS (range_type, 1);
+	  int nb_elements;
+	
+	  if (high_bound < low_bound)
+	    nb_elements = 0;
+	  else
+	    nb_elements = high_bound - low_bound + 1;
+	
+	  TYPE_LENGTH (type) = nb_elements * TYPE_LENGTH (target_type);
 	  TYPE_FLAGS (type) &= ~TYPE_FLAG_TARGET_STUB;
 	}
       else if (TYPE_CODE (type) == TYPE_CODE_RANGE)
@@ -1797,65 +1834,6 @@ append_composite_type_field (struct type *t, char *name,
     }
 }
 
-/* Look up a fundamental type for the specified objfile.
-   May need to construct such a type if this is the first use.
-
-   Some object file formats (ELF, COFF, etc) do not define fundamental
-   types such as "int" or "double".  Others (stabs for example), do
-   define fundamental types.
-
-   For the formats which don't provide fundamental types, gdb can
-   create such types, using defaults reasonable for the current
-   language and the current target machine.
-
-   NOTE: This routine is obsolescent.  Each debugging format reader
-   should manage it's own fundamental types, either creating them from
-   suitable defaults or reading them from the debugging information,
-   whichever is appropriate.  The DWARF reader has already been fixed
-   to do this.  Once the other readers are fixed, this routine will go
-   away.  Also note that fundamental types should be managed on a
-   compilation unit basis in a multi-language environment, not on a
-   linkage unit basis as is done here.  */
-
-
-struct type *
-lookup_fundamental_type (struct objfile *objfile, int typeid)
-{
-  struct type **typep;
-  int nbytes;
-
-  if (typeid < 0 || typeid >= FT_NUM_MEMBERS)
-    {
-      error (_("internal error - invalid fundamental type id %d"), 
-	     typeid);
-    }
-
-  /* If this is the first time we need a fundamental type for this
-     objfile then we need to initialize the vector of type
-     pointers.  */
-
-  if (objfile->fundamental_types == NULL)
-    {
-      nbytes = FT_NUM_MEMBERS * sizeof (struct type *);
-      objfile->fundamental_types = (struct type **)
-	obstack_alloc (&objfile->objfile_obstack, nbytes);
-      memset ((char *) objfile->fundamental_types, 0, nbytes);
-      OBJSTAT (objfile, n_types += FT_NUM_MEMBERS);
-    }
-
-  /* Look for this particular type in the fundamental type vector.  If
-     one is not found, create and install one appropriate for the
-     current language.  */
-
-  typep = objfile->fundamental_types + typeid;
-  if (*typep == NULL)
-    {
-      *typep = create_fundamental_type (objfile, typeid);
-    }
-
-  return (*typep);
-}
-
 int
 can_dereference (struct type *t)
 {
@@ -1907,338 +1885,6 @@ is_ancestor (struct type *base, struct type *dclass)
       return 1;
 
   return 0;
-}
-
-
-
-/* See whether DCLASS has a virtual table.  This routine is aimed at
-   the HP/Taligent ANSI C++ runtime model, and may not work with other
-   runtime models.  Return 1 => Yes, 0 => No.  */
-
-int
-has_vtable (struct type *dclass)
-{
-  /* In the HP ANSI C++ runtime model, a class has a vtable only if it
-     has virtual functions or virtual bases.  */
-
-  int i;
-
-  if (TYPE_CODE (dclass) != TYPE_CODE_CLASS)
-    return 0;
-
-  /* First check for the presence of virtual bases.  */
-  if (TYPE_FIELD_VIRTUAL_BITS (dclass))
-    for (i = 0; i < TYPE_N_BASECLASSES (dclass); i++)
-      if (B_TST (TYPE_FIELD_VIRTUAL_BITS (dclass), i))
-	return 1;
-
-  /* Next check for virtual functions.  */
-  if (TYPE_FN_FIELDLISTS (dclass))
-    for (i = 0; i < TYPE_NFN_FIELDS (dclass); i++)
-      if (TYPE_FN_FIELD_VIRTUAL_P (TYPE_FN_FIELDLIST1 (dclass, i), 0))
-	return 1;
-
-  /* Recurse on non-virtual bases to see if any of them needs a
-     vtable.  */
-  if (TYPE_FIELD_VIRTUAL_BITS (dclass))
-    for (i = 0; i < TYPE_N_BASECLASSES (dclass); i++)
-      if ((!B_TST (TYPE_FIELD_VIRTUAL_BITS (dclass), i)) 
-	  && (has_vtable (TYPE_FIELD_TYPE (dclass, i))))
-	return 1;
-
-  /* Well, maybe we don't need a virtual table.  */
-  return 0;
-}
-
-/* Return a pointer to the "primary base class" of DCLASS.
-
-   A NULL return indicates that DCLASS has no primary base, or that it
-   couldn't be found (insufficient information).
-
-   This routine is aimed at the HP/Taligent ANSI C++ runtime model,
-   and may not work with other runtime models.  */
-
-struct type *
-primary_base_class (struct type *dclass)
-{
-  /* In HP ANSI C++'s runtime model, a "primary base class" of a class
-     is the first directly inherited, non-virtual base class that
-     requires a virtual table.  */
-
-  int i;
-
-  if (TYPE_CODE (dclass) != TYPE_CODE_CLASS)
-    return NULL;
-
-  for (i = 0; i < TYPE_N_BASECLASSES (dclass); i++)
-    if (!TYPE_FIELD_VIRTUAL (dclass, i) 
-	&& has_vtable (TYPE_FIELD_TYPE (dclass, i)))
-      return TYPE_FIELD_TYPE (dclass, i);
-
-  return NULL;
-}
-
-/* Global manipulated by virtual_base_list[_aux]().  */
-
-static struct vbase *current_vbase_list = NULL;
-
-/* Return a pointer to a null-terminated list of struct vbase items.
-   The vbasetype pointer of each item in the list points to the type
-   information for a virtual base of the argument DCLASS.
-
-   Helper function for virtual_base_list(). 
-   Note: the list goes backward, right-to-left.  
-   virtual_base_list() copies the items out in reverse order.  */
-
-static void
-virtual_base_list_aux (struct type *dclass)
-{
-  struct vbase *tmp_vbase;
-  int i;
-
-  if (TYPE_CODE (dclass) != TYPE_CODE_CLASS)
-    return;
-
-  for (i = 0; i < TYPE_N_BASECLASSES (dclass); i++)
-    {
-      /* Recurse on this ancestor, first */
-      virtual_base_list_aux (TYPE_FIELD_TYPE (dclass, i));
-
-      /* If this current base is itself virtual, add it to the list */
-      if (BASETYPE_VIA_VIRTUAL (dclass, i))
-	{
-	  struct type *basetype = TYPE_FIELD_TYPE (dclass, i);
-
-	  /* Check if base already recorded */
-	  tmp_vbase = current_vbase_list;
-	  while (tmp_vbase)
-	    {
-	      if (tmp_vbase->vbasetype == basetype)
-		break;		/* found it */
-	      tmp_vbase = tmp_vbase->next;
-	    }
-
-	  if (!tmp_vbase)	/* normal exit from loop */
-	    {
-	      /* Allocate new item for this virtual base */
-	      tmp_vbase = (struct vbase *) xmalloc (sizeof (struct vbase));
-
-	      /* Stick it on at the end of the list */
-	      tmp_vbase->vbasetype = basetype;
-	      tmp_vbase->next = current_vbase_list;
-	      current_vbase_list = tmp_vbase;
-	    }
-	}			/* if virtual */
-    }				/* for loop over bases */
-}
-
-
-/* Compute the list of virtual bases in the right order.  Virtual
-   bases are laid out in the object's memory area in order of their
-   occurrence in a depth-first, left-to-right search through the
-   ancestors.
-
-   Argument DCLASS is the type whose virtual bases are required.
-   Return value is the address of a null-terminated array of pointers
-   to struct type items.
-
-   This routine is aimed at the HP/Taligent ANSI C++ runtime model,
-   and may not work with other runtime models.
-
-   This routine merely hands off the argument to virtual_base_list_aux()
-   and then copies the result into an array to save space.  */
-
-static struct type **
-virtual_base_list (struct type *dclass)
-{
-  struct vbase *tmp_vbase;
-  struct vbase *tmp_vbase_2;
-  int i;
-  int count;
-  struct type **vbase_array;
-
-  current_vbase_list = NULL;
-  virtual_base_list_aux (dclass);
-
-  for (i = 0, tmp_vbase = current_vbase_list; 
-       tmp_vbase != NULL; 
-       i++, tmp_vbase = tmp_vbase->next)
-    /* no body */ ;
-
-  count = i;
-
-  vbase_array = (struct type **) 
-    xmalloc ((count + 1) * sizeof (struct type *));
-
-  for (i = count - 1, tmp_vbase = current_vbase_list; 
-       i >= 0; i--, 
-	 tmp_vbase = tmp_vbase->next)
-    vbase_array[i] = tmp_vbase->vbasetype;
-
-  /* Get rid of constructed chain.  */
-  tmp_vbase_2 = tmp_vbase = current_vbase_list;
-  while (tmp_vbase)
-    {
-      tmp_vbase = tmp_vbase->next;
-      xfree (tmp_vbase_2);
-      tmp_vbase_2 = tmp_vbase;
-    }
-
-  vbase_array[count] = NULL;
-  return vbase_array;
-}
-
-/* Return the length of the virtual base list of the type DCLASS.  */
-
-int
-virtual_base_list_length (struct type *dclass)
-{
-  int i;
-  struct vbase *tmp_vbase;
-
-  current_vbase_list = NULL;
-  virtual_base_list_aux (dclass);
-
-  for (i = 0, tmp_vbase = current_vbase_list; 
-       tmp_vbase != NULL; 
-       i++, tmp_vbase = tmp_vbase->next)
-    /* no body */ ;
-  return i;
-}
-
-/* Return the number of elements of the virtual base list of the type
-   DCLASS, ignoring those appearing in the primary base (and its
-   primary base, recursively).  */
-
-int
-virtual_base_list_length_skip_primaries (struct type *dclass)
-{
-  int i;
-  struct vbase *tmp_vbase;
-  struct type *primary;
-
-  primary = TYPE_RUNTIME_PTR (dclass) ? TYPE_PRIMARY_BASE (dclass) : NULL;
-
-  if (!primary)
-    return virtual_base_list_length (dclass);
-
-  current_vbase_list = NULL;
-  virtual_base_list_aux (dclass);
-
-  for (i = 0, tmp_vbase = current_vbase_list; 
-       tmp_vbase != NULL; 
-       tmp_vbase = tmp_vbase->next)
-    {
-      if (virtual_base_index (tmp_vbase->vbasetype, primary) >= 0)
-	continue;
-      i++;
-    }
-  return i;
-}
-
-/* Return the index (position) of type BASE, which is a virtual base
-   class of DCLASS, in the latter's virtual base list.  A return of -1
-   indicates "not found" or a problem.  */
-
-int
-virtual_base_index (struct type *base, struct type *dclass)
-{
-  struct type *vbase, **vbase_list;
-  int i;
-
-  if ((TYPE_CODE (dclass) != TYPE_CODE_CLASS) 
-      || (TYPE_CODE (base) != TYPE_CODE_CLASS))
-    return -1;
-
-  vbase_list = virtual_base_list (dclass);
-  for (i = 0, vbase = vbase_list[0];
-       vbase != NULL;
-       vbase = vbase_list[++i])
-    if (vbase == base)
-      break;
-
-  xfree (vbase_list);
-  return vbase ? i : -1;
-}
-
-/* Return the index (position) of type BASE, which is a virtual base
-   class of DCLASS, in the latter's virtual base list.  Skip over all
-   bases that may appear in the virtual base list of the primary base
-   class of DCLASS (recursively).  A return of -1 indicates "not
-   found" or a problem.  */
-
-int
-virtual_base_index_skip_primaries (struct type *base, 
-				   struct type *dclass)
-{
-  struct type *vbase, **vbase_list;
-  int i, j;
-  struct type *primary;
-
-  if ((TYPE_CODE (dclass) != TYPE_CODE_CLASS) 
-      || (TYPE_CODE (base) != TYPE_CODE_CLASS))
-    return -1;
-
-  primary = TYPE_RUNTIME_PTR (dclass) ? TYPE_PRIMARY_BASE (dclass) : NULL;
-
-  vbase_list = virtual_base_list (dclass);
-  for (i = 0, j = -1, vbase = vbase_list[0];
-       vbase != NULL;
-       vbase = vbase_list[++i])
-    {
-      if (!primary 
-	  || (virtual_base_index_skip_primaries (vbase, primary) < 0))
-	j++;
-      if (vbase == base)
-	break;
-    }
-  xfree (vbase_list);
-  return vbase ? j : -1;
-}
-
-/* Return position of a derived class DCLASS in the list of primary
-   bases starting with the remotest ancestor.  Position returned is
-   0-based.  */
-
-int
-class_index_in_primary_list (struct type *dclass)
-{
-  struct type *pbc;		/* primary base class */
-
-  /* Simply recurse on primary base */
-  pbc = TYPE_PRIMARY_BASE (dclass);
-  if (pbc)
-    return 1 + class_index_in_primary_list (pbc);
-  else
-    return 0;
-}
-
-/* Return a count of the number of virtual functions a type has.  This
-   includes all the virtual functions it inherits from its base
-   classes too.  */
-
-/* pai: FIXME This doesn't do the right thing: count redefined virtual
-   functions only once (latest redefinition).  */
-
-int
-count_virtual_fns (struct type *dclass)
-{
-  int fn, oi;			/* function and overloaded instance indices */
-  int vfuncs;			/* count to return */
-
-  /* recurse on bases that can share virtual table */
-  struct type *pbc = primary_base_class (dclass);
-  if (pbc)
-    vfuncs = count_virtual_fns (pbc);
-  else
-    vfuncs = 0;
-
-  for (fn = 0; fn < TYPE_NFN_FIELDS (dclass); fn++)
-    for (oi = 0; oi < TYPE_FN_FIELDLIST_LENGTH (dclass, fn); oi++)
-      if (TYPE_FN_FIELD_VIRTUAL_P (TYPE_FN_FIELDLIST1 (dclass, fn), oi))
-	vfuncs++;
-
-  return vfuncs;
 }
 
 
@@ -3429,8 +3075,7 @@ gdbtypes_post_init (struct gdbarch *gdbarch)
   builtin_type->builtin_char =
     init_type (TYPE_CODE_INT, TARGET_CHAR_BIT / TARGET_CHAR_BIT,
 	       (TYPE_FLAG_NOSIGN
-                | (gdbarch_char_signed (current_gdbarch) ? 
-		   0 : TYPE_FLAG_UNSIGNED)),
+                | (gdbarch_char_signed (gdbarch) ? 0 : TYPE_FLAG_UNSIGNED)),
 	       "char", (struct objfile *) NULL);
   builtin_type->builtin_true_char =
     init_type (TYPE_CODE_CHAR, TARGET_CHAR_BIT / TARGET_CHAR_BIT,
@@ -3450,38 +3095,38 @@ gdbtypes_post_init (struct gdbarch *gdbarch)
 	       "unsigned char", (struct objfile *) NULL);
   builtin_type->builtin_short =
     init_type (TYPE_CODE_INT, 
-	       gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       gdbarch_short_bit (gdbarch) / TARGET_CHAR_BIT,
 	       0, "short", (struct objfile *) NULL);
   builtin_type->builtin_unsigned_short =
     init_type (TYPE_CODE_INT, 
-	       gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       gdbarch_short_bit (gdbarch) / TARGET_CHAR_BIT,
 	       TYPE_FLAG_UNSIGNED, "unsigned short", 
 	       (struct objfile *) NULL);
   builtin_type->builtin_int =
     init_type (TYPE_CODE_INT, 
-	       gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       gdbarch_int_bit (gdbarch) / TARGET_CHAR_BIT,
 	       0, "int", (struct objfile *) NULL);
   builtin_type->builtin_unsigned_int =
     init_type (TYPE_CODE_INT, 
-	       gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       gdbarch_int_bit (gdbarch) / TARGET_CHAR_BIT,
 	       TYPE_FLAG_UNSIGNED, "unsigned int", 
 	       (struct objfile *) NULL);
   builtin_type->builtin_long =
     init_type (TYPE_CODE_INT, 
-	       gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT,
 	       0, "long", (struct objfile *) NULL);
   builtin_type->builtin_unsigned_long =
     init_type (TYPE_CODE_INT, 
-	       gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT,
 	       TYPE_FLAG_UNSIGNED, "unsigned long", 
 	       (struct objfile *) NULL);
   builtin_type->builtin_long_long =
     init_type (TYPE_CODE_INT,
-	       gdbarch_long_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       gdbarch_long_long_bit (gdbarch) / TARGET_CHAR_BIT,
 	       0, "long long", (struct objfile *) NULL);
   builtin_type->builtin_unsigned_long_long =
     init_type (TYPE_CODE_INT,
-	       gdbarch_long_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       gdbarch_long_long_bit (gdbarch) / TARGET_CHAR_BIT,
 	       TYPE_FLAG_UNSIGNED, "unsigned long long", 
 	       (struct objfile *) NULL);
   builtin_type->builtin_float
@@ -3507,6 +3152,21 @@ gdbtypes_post_init (struct gdbarch *gdbarch)
     init_type (TYPE_CODE_BOOL, TARGET_CHAR_BIT / TARGET_CHAR_BIT,
 	       0,
 	       "bool", (struct objfile *) NULL);
+
+  /* The following three are about decimal floating point types, which
+     are 32-bits, 64-bits and 128-bits respectively.  */
+  builtin_type->builtin_decfloat
+    = init_type (TYPE_CODE_DECFLOAT, 32 / 8,
+	        0,
+	       "_Decimal32", (struct objfile *) NULL);
+  builtin_type->builtin_decdouble
+    = init_type (TYPE_CODE_DECFLOAT, 64 / 8,
+	       0,
+	       "_Decimal64", (struct objfile *) NULL);
+  builtin_type->builtin_declong
+    = init_type (TYPE_CODE_DECFLOAT, 128 / 8,
+	       0,
+	       "_Decimal128", (struct objfile *) NULL);
 
   /* Pointer/Address types.  */
 
@@ -3543,7 +3203,7 @@ gdbtypes_post_init (struct gdbarch *gdbarch)
     lookup_pointer_type (lookup_function_type (builtin_type->builtin_void));
   builtin_type->builtin_core_addr =
     init_type (TYPE_CODE_INT, 
-	       gdbarch_addr_bit (current_gdbarch) / 8,
+	       gdbarch_addr_bit (gdbarch) / 8,
 	       TYPE_FLAG_UNSIGNED,
 	       "__CORE_ADDR", (struct objfile *) NULL);
 

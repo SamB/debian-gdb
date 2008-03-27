@@ -1,16 +1,11 @@
 member-field-symtab.patch 
-cp-pass-by-reference.patch 
 thread-db-multiple-libraries.patch 
 dwarf2-cfi-warning.patch 
 gdbinit-ownership.patch
-pending-breakpoints-and-sigttou.patch
 gdb-pascal-support.patch
 gdb-fortran-main.patch -p0
 linux-clear-thread-list.patch
 man-page-args.patch
 bfd-get-mtime-less.patch
-hppa-linux-build.patch
-division-by-zero-u.patch
-gdb-mi-varobj-crash.patch
-powerpc-plt-stubs.patch
-gcc43-werror.patch
+
+gdb-rbreak-quoting.patch

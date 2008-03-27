@@ -1,7 +1,7 @@
 /* Code dealing with dummy stack frames, for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -87,6 +87,7 @@ void
 dummy_frame_push (struct regcache *caller_regcache,
 		  const struct frame_id *dummy_id)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (caller_regcache);
   struct dummy_frame *dummy_frame;
 
   /* Check to see if there are stale dummy frames, perhaps left over
@@ -95,7 +96,7 @@ dummy_frame_push (struct regcache *caller_regcache,
   dummy_frame = dummy_frame_stack;
   while (dummy_frame)
     /* FIXME: cagney/2004-08-02: Should just test IDs.  */
-    if (frame_id_inner (dummy_frame->id, (*dummy_id)))
+    if (frame_id_inner (gdbarch, dummy_frame->id, (*dummy_id)))
       /* Stale -- destroy!  */
       {
 	dummy_frame_stack = dummy_frame->next;

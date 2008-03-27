@@ -1,5 +1,5 @@
 /* Target-dependent code for GNU/Linux on Alpha.
-   Copyright (C) 2002, 2003, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -105,7 +105,7 @@ alpha_linux_sigcontext_addr (struct frame_info *next_frame)
   long off;
 
   pc = frame_pc_unwind (next_frame);
-  frame_unwind_unsigned_register (next_frame, ALPHA_SP_REGNUM, &sp);
+  sp = frame_unwind_register_unsigned (next_frame, ALPHA_SP_REGNUM);
 
   off = alpha_linux_sigtramp_offset (pc);
   gdb_assert (off >= 0);
@@ -223,6 +223,9 @@ alpha_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->jb_elt_size = 8;
 
   set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);
+
+  set_solib_svr4_fetch_link_map_offsets
+    (gdbarch, svr4_lp64_fetch_link_map_offsets);
 
   /* Enable TLS support.  */
   set_gdbarch_fetch_tls_load_module_address (gdbarch,

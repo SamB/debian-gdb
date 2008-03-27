@@ -1,6 +1,7 @@
 /* Target-dependent code for UltraSPARC.
 
-   Copyright (C) 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -225,7 +226,7 @@ static const char *sparc64_pseudo_register_names[] =
 /* Return the name of register REGNUM.  */
 
 static const char *
-sparc64_register_name (int regnum)
+sparc64_register_name (struct gdbarch *gdbarch, int regnum)
 {
   if (regnum >= 0 && regnum < SPARC64_NUM_REGS)
     return sparc64_register_names[regnum];
@@ -410,7 +411,7 @@ sparc64_pseudo_register_write (struct gdbarch *gdbarch,
    START_PC.  */
 
 static CORE_ADDR
-sparc64_skip_prologue (CORE_ADDR start_pc)
+sparc64_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR start_pc)
 {
   struct symtab_and_line sal;
   CORE_ADDR func_start, func_end;
@@ -427,7 +428,8 @@ sparc64_skip_prologue (CORE_ADDR start_pc)
 	return sal.end;
     }
 
-  return sparc_analyze_prologue (start_pc, 0xffffffffffffffffULL, &cache);
+  return sparc_analyze_prologue (gdbarch, start_pc, 0xffffffffffffffffULL,
+				 &cache);
 }
 
 /* Normal frames.  */
@@ -1170,7 +1172,7 @@ sparc64_supply_gregset (const struct sparc_gregset *gregset,
 			struct regcache *regcache,
 			int regnum, const void *gregs)
 {
-  int sparc32 = (gdbarch_ptr_bit (current_gdbarch) == 32);
+  int sparc32 = (gdbarch_ptr_bit (get_regcache_arch (regcache)) == 32);
   const gdb_byte *regs = gregs;
   int i;
 
@@ -1284,7 +1286,7 @@ sparc64_collect_gregset (const struct sparc_gregset *gregset,
 			 const struct regcache *regcache,
 			 int regnum, void *gregs)
 {
-  int sparc32 = (gdbarch_ptr_bit (current_gdbarch) == 32);
+  int sparc32 = (gdbarch_ptr_bit (get_regcache_arch (regcache)) == 32);
   gdb_byte *regs = gregs;
   int i;
 
@@ -1391,7 +1393,7 @@ void
 sparc64_supply_fpregset (struct regcache *regcache,
 			 int regnum, const void *fpregs)
 {
-  int sparc32 = (gdbarch_ptr_bit (current_gdbarch) == 32);
+  int sparc32 = (gdbarch_ptr_bit (get_regcache_arch (regcache)) == 32);
   const gdb_byte *regs = fpregs;
   int i;
 
@@ -1426,7 +1428,7 @@ void
 sparc64_collect_fpregset (const struct regcache *regcache,
 			  int regnum, void *fpregs)
 {
-  int sparc32 = (gdbarch_ptr_bit (current_gdbarch) == 32);
+  int sparc32 = (gdbarch_ptr_bit (get_regcache_arch (regcache)) == 32);
   gdb_byte *regs = fpregs;
   int i;
 

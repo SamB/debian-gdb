@@ -1,7 +1,7 @@
 /* Print and select stack frames for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -49,6 +49,13 @@
 #include "gdb_string.h"
 
 void (*deprecated_selected_frame_level_changed_hook) (int);
+
+/* The possible choices of "set print frame-arguments, and the value
+   of this setting.  */
+
+static const char *print_frame_arguments_choices[] =
+  {"all", "scalars", "none", NULL};
+static const char *print_frame_arguments = "all";
 
 /* Prototypes for local functions. */
 
@@ -108,7 +115,7 @@ print_stack_frame (struct frame_info *frame, int print_level,
   args.print_what = ui_out_is_mi_like_p (uiout) ? LOC_AND_ADDRESS : print_what;
   args.print_args = 1;
 
-  catch_errors (print_stack_frame_stub, &args, "", RETURN_MASK_ALL);
+  catch_errors (print_stack_frame_stub, &args, "", RETURN_MASK_ERROR);
 }  
 
 struct print_args_args
@@ -145,6 +152,46 @@ print_frame_nameless_args (struct frame_info *frame, long start, int num,
       fprintf_filtered (stream, "%ld", arg_value);
       first = 0;
       start += sizeof (int);
+    }
+}
+
+/* Return non-zero if the debugger should print the value of the provided
+   symbol parameter (SYM).  */
+
+static int
+print_this_frame_argument_p (struct symbol *sym)
+{
+  struct type *type;
+  
+  /* If the user asked to print no argument at all, then obviously
+     do not print this argument.  */
+
+  if (strcmp (print_frame_arguments, "none") == 0)
+    return 0;
+
+  /* If the user asked to print all arguments, then we should print
+     that one.  */
+
+  if (strcmp (print_frame_arguments, "all") == 0)
+    return 1;
+
+  /* The user asked to print only the scalar arguments, so do not
+     print the non-scalar ones.  */
+
+  type = CHECK_TYPEDEF (SYMBOL_TYPE (sym));
+  while (TYPE_CODE (type) == TYPE_CODE_REF)
+    type = CHECK_TYPEDEF (TYPE_TARGET_TYPE (type));
+  switch (TYPE_CODE (type))
+    {
+      case TYPE_CODE_ARRAY:
+      case TYPE_CODE_STRUCT:
+      case TYPE_CODE_UNION:
+      case TYPE_CODE_SET:
+      case TYPE_CODE_STRING:
+      case TYPE_CODE_BITSTRING:
+        return 0;
+      default:
+        return 1;
     }
 }
 
@@ -304,23 +351,30 @@ print_frame_args (struct symbol *func, struct frame_info *frame,
 	  annotate_arg_name_end ();
 	  ui_out_text (uiout, "=");
 
-	  /* Avoid value_print because it will deref ref parameters.
-	     We just want to print their addresses.  Print ??? for
-	     args whose address we do not know.  We pass 2 as
-	     "recurse" to val_print because our standard indentation
-	     here is 4 spaces, and val_print indents 2 for each
-	     recurse.  */
-	  val = read_var_value (sym, frame);
+          if (print_this_frame_argument_p (sym))
+            {
+	      /* Avoid value_print because it will deref ref parameters.
+		 We just want to print their addresses.  Print ??? for
+		 args whose address we do not know.  We pass 2 as
+		 "recurse" to val_print because our standard indentation
+		 here is 4 spaces, and val_print indents 2 for each
+		 recurse.  */
+	      val = read_var_value (sym, frame);
 
-	  annotate_arg_value (val == NULL ? NULL : value_type (val));
+	      annotate_arg_value (val == NULL ? NULL : value_type (val));
 
-	  if (val)
-	    {
-	      common_val_print (val, stb->stream, 0, 0, 2, Val_no_prettyprint);
-	      ui_out_field_stream (uiout, "value", stb);
-	    }
-	  else
-	    ui_out_text (uiout, "???");
+	      if (val)
+	        {
+		  common_val_print (val, stb->stream, 0, 0, 2,
+				    Val_no_prettyprint);
+		  ui_out_field_stream (uiout, "value", stb);
+	        }
+	      else
+		ui_out_text (uiout, "???");
+            }
+          else
+            ui_out_text (uiout, "...");
+
 
 	  /* Invoke ui_out_tuple_end.  */
 	  do_cleanups (list_chain);
@@ -338,7 +392,7 @@ print_frame_args (struct symbol *func, struct frame_info *frame,
       long start;
 
       if (highest_offset == -1)
-	start = gdbarch_frame_args_skip (current_gdbarch);
+	start = gdbarch_frame_args_skip (get_frame_arch (frame));
       else
 	start = highest_offset;
 
@@ -355,11 +409,12 @@ static int
 print_args_stub (void *args)
 {
   struct print_args_args *p = args;
+  struct gdbarch *gdbarch = get_frame_arch (p->frame);
   int numargs;
 
-  if (gdbarch_frame_num_args_p (current_gdbarch))
+  if (gdbarch_frame_num_args_p (gdbarch))
     {
-      numargs = gdbarch_frame_num_args (current_gdbarch, p->frame);
+      numargs = gdbarch_frame_num_args (gdbarch, p->frame);
       gdb_assert (numargs >= 0);
     }
   else
@@ -633,7 +688,7 @@ print_frame (struct frame_info *frame, int print_level,
       args.func = func;
       args.stream = gdb_stdout;
       args_list_chain = make_cleanup_ui_out_list_begin_end (uiout, "args");
-      catch_errors (print_args_stub, &args, "", RETURN_MASK_ALL);
+      catch_errors (print_args_stub, &args, "", RETURN_MASK_ERROR);
       /* FIXME: ARGS must be a list. If one argument is a string it
 	  will have " that will not be properly escaped.  */
       /* Invoke ui_out_tuple_end.  */
@@ -836,17 +891,18 @@ frame_info (char *addr_exp, int from_tty)
   enum language funlang = language_unknown;
   const char *pc_regname;
   int selected_frame_p;
+  struct gdbarch *gdbarch;
 
   fi = parse_frame_specification_1 (addr_exp, "No stack.", &selected_frame_p);
+  gdbarch = get_frame_arch (fi);
 
   /* Name of the value returned by get_frame_pc().  Per comments, "pc"
      is not a good name.  */
-  if (gdbarch_pc_regnum (current_gdbarch) >= 0)
+  if (gdbarch_pc_regnum (gdbarch) >= 0)
     /* OK, this is weird.  The gdbarch_pc_regnum hardware register's value can
        easily not match that of the internal value returned by
        get_frame_pc().  */
-    pc_regname = gdbarch_register_name (current_gdbarch,
-					gdbarch_pc_regnum (current_gdbarch));
+    pc_regname = gdbarch_register_name (gdbarch, gdbarch_pc_regnum (gdbarch));
   else
     /* But then, this is weird to.  Even without gdbarch_pc_regnum, an
        architectures will often have a hardware register called "pc",
@@ -908,10 +964,10 @@ frame_info (char *addr_exp, int from_tty)
     {
       printf_filtered (_("Stack frame at "));
     }
-  deprecated_print_address_numeric (get_frame_base (fi), 1, gdb_stdout);
+  fputs_filtered (paddress (get_frame_base (fi)), gdb_stdout);
   printf_filtered (":\n");
   printf_filtered (" %s = ", pc_regname);
-  deprecated_print_address_numeric (get_frame_pc (fi), 1, gdb_stdout);
+  fputs_filtered (paddress (get_frame_pc (fi)), gdb_stdout);
 
   wrap_here ("   ");
   if (funname)
@@ -926,7 +982,7 @@ frame_info (char *addr_exp, int from_tty)
   puts_filtered ("; ");
   wrap_here ("    ");
   printf_filtered ("saved %s ", pc_regname);
-  deprecated_print_address_numeric (frame_pc_unwind (fi), 1, gdb_stdout);
+  fputs_filtered (paddress (frame_pc_unwind (fi)), gdb_stdout);
   printf_filtered ("\n");
 
   if (calling_frame_info == NULL)
@@ -942,8 +998,8 @@ frame_info (char *addr_exp, int from_tty)
   if (calling_frame_info)
     {
       printf_filtered (" called by frame at ");
-      deprecated_print_address_numeric (get_frame_base (calling_frame_info),
-			     1, gdb_stdout);
+      fputs_filtered (paddress (get_frame_base (calling_frame_info)),
+		      gdb_stdout);
     }
   if (get_next_frame (fi) && calling_frame_info)
     puts_filtered (",");
@@ -951,8 +1007,8 @@ frame_info (char *addr_exp, int from_tty)
   if (get_next_frame (fi))
     {
       printf_filtered (" caller of frame at ");
-      deprecated_print_address_numeric (get_frame_base (get_next_frame (fi)), 1,
-			     gdb_stdout);
+      fputs_filtered (paddress (get_frame_base (get_next_frame (fi))),
+		      gdb_stdout);
     }
   if (get_next_frame (fi) || calling_frame_info)
     puts_filtered ("\n");
@@ -972,17 +1028,17 @@ frame_info (char *addr_exp, int from_tty)
     else
       {
 	printf_filtered (" Arglist at ");
-	deprecated_print_address_numeric (arg_list, 1, gdb_stdout);
+	fputs_filtered (paddress (arg_list), gdb_stdout);
 	printf_filtered (",");
 
-	if (!gdbarch_frame_num_args_p (current_gdbarch))
+	if (!gdbarch_frame_num_args_p (gdbarch))
 	  {
 	    numargs = -1;
 	    puts_filtered (" args: ");
 	  }
 	else
 	  {
-	    numargs = gdbarch_frame_num_args (current_gdbarch, fi);
+	    numargs = gdbarch_frame_num_args (gdbarch, fi);
 	    gdb_assert (numargs >= 0);
 	    if (numargs == 0)
 	      puts_filtered (" no args.");
@@ -1004,7 +1060,7 @@ frame_info (char *addr_exp, int from_tty)
     else
       {
 	printf_filtered (" Locals at ");
-	deprecated_print_address_numeric (arg_list, 1, gdb_stdout);
+	fputs_filtered (paddress (arg_list), gdb_stdout);
 	printf_filtered (",");
       }
   }
@@ -1025,53 +1081,53 @@ frame_info (char *addr_exp, int from_tty)
        at one stage the frame cached the previous frame's SP instead
        of its address, hence it was easiest to just display the cached
        value.  */
-    if (gdbarch_sp_regnum (current_gdbarch) >= 0)
+    if (gdbarch_sp_regnum (gdbarch) >= 0)
       {
 	/* Find out the location of the saved stack pointer with out
            actually evaluating it.  */
-	frame_register_unwind (fi, gdbarch_sp_regnum (current_gdbarch),
+	frame_register_unwind (fi, gdbarch_sp_regnum (gdbarch),
 			       &optimized, &lval, &addr,
 			       &realnum, NULL);
 	if (!optimized && lval == not_lval)
 	  {
 	    gdb_byte value[MAX_REGISTER_SIZE];
 	    CORE_ADDR sp;
-	    frame_register_unwind (fi, gdbarch_sp_regnum (current_gdbarch),
+	    frame_register_unwind (fi, gdbarch_sp_regnum (gdbarch),
 				   &optimized, &lval, &addr,
 				   &realnum, value);
 	    /* NOTE: cagney/2003-05-22: This is assuming that the
                stack pointer was packed as an unsigned integer.  That
                may or may not be valid.  */
 	    sp = extract_unsigned_integer (value,
-					   register_size (current_gdbarch,
-					   gdbarch_sp_regnum (current_gdbarch)));
+					   register_size (gdbarch,
+					   gdbarch_sp_regnum (gdbarch)));
 	    printf_filtered (" Previous frame's sp is ");
-	    deprecated_print_address_numeric (sp, 1, gdb_stdout);
+	    fputs_filtered (paddress (sp), gdb_stdout);
 	    printf_filtered ("\n");
 	    need_nl = 0;
 	  }
 	else if (!optimized && lval == lval_memory)
 	  {
 	    printf_filtered (" Previous frame's sp at ");
-	    deprecated_print_address_numeric (addr, 1, gdb_stdout);
+	    fputs_filtered (paddress (addr), gdb_stdout);
 	    printf_filtered ("\n");
 	    need_nl = 0;
 	  }
 	else if (!optimized && lval == lval_register)
 	  {
 	    printf_filtered (" Previous frame's sp in %s\n",
-			     gdbarch_register_name (current_gdbarch, realnum));
+			     gdbarch_register_name (gdbarch, realnum));
 	    need_nl = 0;
 	  }
 	/* else keep quiet.  */
       }
 
     count = 0;
-    numregs = gdbarch_num_regs (current_gdbarch)
-	      + gdbarch_num_pseudo_regs (current_gdbarch);
+    numregs = gdbarch_num_regs (gdbarch)
+	      + gdbarch_num_pseudo_regs (gdbarch);
     for (i = 0; i < numregs; i++)
-      if (i != gdbarch_sp_regnum (current_gdbarch)
-	  && gdbarch_register_reggroup_p (current_gdbarch, i, all_reggroup))
+      if (i != gdbarch_sp_regnum (gdbarch)
+	  && gdbarch_register_reggroup_p (gdbarch, i, all_reggroup))
 	{
 	  /* Find out the location of the saved register without
              fetching the corresponding value.  */
@@ -1087,8 +1143,8 @@ frame_info (char *addr_exp, int from_tty)
 		puts_filtered (",");
 	      wrap_here (" ");
 	      printf_filtered (" %s at ",
-			       gdbarch_register_name (current_gdbarch, i));
-	      deprecated_print_address_numeric (addr, 1, gdb_stdout);
+			       gdbarch_register_name (gdbarch, i));
+	      fputs_filtered (paddress (addr), gdb_stdout);
 	      count++;
 	    }
 	}
@@ -1365,7 +1421,7 @@ print_block_frame_labels (struct block *b, int *have_default,
 	  if (addressprint)
 	    {
 	      fprintf_filtered (stream, " ");
-	      deprecated_print_address_numeric (SYMBOL_VALUE_ADDRESS (sym), 1, stream);
+	      fputs_filtered (paddress (SYMBOL_VALUE_ADDRESS (sym)), stream);
 	    }
 	  fprintf_filtered (stream, " in file %s, line %d\n",
 			    sal.symtab->filename, sal.line);
@@ -1415,6 +1471,9 @@ static void
 print_frame_label_vars (struct frame_info *frame, int this_level_only,
 			struct ui_file *stream)
 {
+#if 1
+  fprintf_filtered (stream, "print_frame_label_vars disabled.\n");
+#else
   struct blockvector *bl;
   struct block *block = get_frame_block (frame, 0);
   int values_printed = 0;
@@ -1475,6 +1534,7 @@ print_frame_label_vars (struct frame_info *frame, int this_level_only,
 
   if (!values_printed && !this_level_only)
     fprintf_filtered (stream, _("No catches.\n"));
+#endif
 }
 
 void
@@ -1489,22 +1549,9 @@ catch_info (char *ignore, int from_tty)
 {
   struct symtab_and_line *sal;
 
-  /* Check for target support for exception handling */
-  sal = target_enable_exception_callback (EX_EVENT_CATCH, 1);
-  if (sal)
-    {
-      /* Currently not handling this.  Ideally, here we should
-         interact with the C++ runtime system to find the list of
-         active handlers, etc.  */
-      fprintf_filtered (gdb_stdout, _("\
-Info catch not supported with this target/compiler combination.\n"));
-    }
-  else
-    {
-      /* Assume g++ compiled code; old GDB 4.16 behaviour.  */
-      print_frame_label_vars (get_selected_frame (_("No frame selected.")),
-			      0, gdb_stdout);
-    }
+  /* Assume g++ compiled code; old GDB 4.16 behaviour.  */
+  print_frame_label_vars (get_selected_frame (_("No frame selected.")),
+                          0, gdb_stdout);
 }
 
 static void
@@ -1787,23 +1834,7 @@ return_command (char *retval_exp, int from_tty)
            is discarded, side effects such as "return i++" still
            occur.  */
 	return_value = NULL;
-      /* FIXME: cagney/2004-01-17: If the architecture implements both
-         return_value and extract_returned_value_address, should allow
-         "return" to work - don't set return_value to NULL.  */
-      else if (!gdbarch_return_value_p (current_gdbarch)
-	       && (TYPE_CODE (return_type) == TYPE_CODE_STRUCT
-		   || TYPE_CODE (return_type) == TYPE_CODE_UNION))
-	{
-	  /* NOTE: cagney/2003-10-20: Compatibility hack for legacy
-	     code.  Old architectures don't expect gdbarch_store_return_value
-	     to be called with with a small struct that needs to be
-	     stored in registers.  Don't start doing it now.  */
-	  query_prefix = "\
-A structure or union return type is not supported by this architecture.\n\
-If you continue, the return value that you specified will be ignored.\n";
-	  return_value = NULL;
-	}
-      else if (using_struct_return (return_type, 0))
+      else if (using_struct_return (return_type))
 	{
 	  query_prefix = "\
 The location at which to store the function's return value is unknown.\n\
@@ -1838,7 +1869,9 @@ If you continue, the return value that you specified will be ignored.\n";
     struct frame_id selected_id = get_frame_id (get_selected_frame (NULL));
     while (!frame_id_eq (selected_id, get_frame_id (get_current_frame ())))
       {
-	if (frame_id_inner (selected_id, get_frame_id (get_current_frame ())))
+	struct frame_info *frame = get_current_frame ();
+	if (frame_id_inner (get_frame_arch (frame), selected_id,
+			    get_frame_id (frame)))
 	  /* Caught in the safety net, oops!  We've gone way past the
              selected frame.  */
 	  error (_("Problem while popping stack frames (corrupt stack?)"));
@@ -1854,10 +1887,10 @@ If you continue, the return value that you specified will be ignored.\n";
   if (return_value != NULL)
     {
       struct type *return_type = value_type (return_value);
-      gdb_assert (gdbarch_return_value (current_gdbarch, return_type,
-					NULL, NULL, NULL)
+      struct gdbarch *gdbarch = get_regcache_arch (get_current_regcache ());
+      gdb_assert (gdbarch_return_value (gdbarch, return_type, NULL, NULL, NULL)
 		  == RETURN_VALUE_REGISTER_CONVENTION);
-      gdbarch_return_value (current_gdbarch, return_type,
+      gdbarch_return_value (gdbarch, return_type,
 			    get_current_regcache (), NULL /*read*/,
 			    value_contents (return_value) /*write*/);
     }
@@ -2050,6 +2083,12 @@ Usage: func <name>\n"));
 
   add_info ("catch", catch_info,
 	    _("Exceptions that can be caught in the current stack frame."));
+
+  add_setshow_enum_cmd ("frame-arguments", class_stack,
+			print_frame_arguments_choices, &print_frame_arguments,
+			_("Set printing of non-scalar frame arguments"),
+			_("Show printing of non-scalar frame arguments"),
+			NULL, NULL, NULL, &setprintlist, &showprintlist);
 
 #if 0
   add_cmd ("backtrace-limit", class_stack, set_backtrace_limit_command, _(\

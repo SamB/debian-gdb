@@ -1,6 +1,6 @@
 /* TUI data manipulation routines.
 
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2006, 2007
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
@@ -195,8 +195,11 @@ struct tui_command_element
   char *line;
 };
 
-
-#define MAX_LOCATOR_ELEMENT_LEN        100
+#ifdef PATH_MAX
+# define MAX_LOCATOR_ELEMENT_LEN        PATH_MAX
+#else
+# define MAX_LOCATOR_ELEMENT_LEN        1024
+#endif
 
 /* Elements in the locator window content.  */
 struct tui_locator_element

@@ -1,6 +1,6 @@
 /* Common definitions for remote server for GDB.
    Copyright (C) 1993, 1995, 1997, 1998, 1999, 2000, 2002, 2003, 2004, 2005,
-   2006, 2007 Free Software Foundation, Inc.
+   2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -137,8 +137,8 @@ void *inferior_target_data (struct thread_info *);
 void set_inferior_target_data (struct thread_info *, void *);
 void *inferior_regcache_data (struct thread_info *);
 void set_inferior_regcache_data (struct thread_info *, void *);
-void change_inferior_id (struct inferior_list *list,
-			 unsigned long new_id);
+void add_pid_to_list (struct inferior_list *list, unsigned long pid);
+int pull_pid_from_list (struct inferior_list *list, unsigned long pid);
 
 void loaded_dll (const char *name, CORE_ADDR base_addr);
 void unloaded_dll (const char *name, CORE_ADDR base_addr);
@@ -156,6 +156,12 @@ extern int pass_signals[];
 
 extern jmp_buf toplevel;
 
+/* Functions from hostio.c.  */
+extern int handle_vFile (char *, int, int *);
+
+/* Functions from hostio-errno.c.  */
+extern void hostio_last_error_from_errno (char *own_buf);
+
 /* From remote-utils.c */
 
 extern int remote_debug;
@@ -168,10 +174,9 @@ void remote_open (char *name);
 void remote_close (void);
 void write_ok (char *buf);
 void write_enn (char *buf);
+void initialize_async_io (void);
 void enable_async_io (void);
 void disable_async_io (void);
-void unblock_async_io (void);
-void block_async_io (void);
 void check_remote_input_interrupt_request (void);
 void convert_ascii_to_int (char *from, unsigned char *to, int n);
 void convert_int_to_ascii (unsigned char *from, char *to, int n);

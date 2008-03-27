@@ -1,6 +1,6 @@
 /* Support routines for building symbol tables in GDB's internal format.
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -43,6 +43,7 @@
 #include "block.h"
 #include "cp-support.h"
 #include "dictionary.h"
+#include "addrmap.h"
 
 /* Ask buildsym.h to define the vars it normally declares `extern'.  */
 #define	EXTERN
@@ -55,6 +56,10 @@
 
 #include "stabsread.h"
 
+/* List of subfiles.  */
+
+static struct subfile *subfiles;
+
 /* List of free `struct pending' structures for reuse.  */
 
 static struct pending *free_pendings;
@@ -63,6 +68,23 @@ static struct pending *free_pendings;
    otherwise empty symtab from being tossed.  */
 
 static int have_line_numbers;
+
+/* The mutable address map for the compilation unit whose symbols
+   we're currently reading.  The symtabs' shared blockvector will
+   point to a fixed copy of this.  */
+static struct addrmap *pending_addrmap;
+
+/* The obstack on which we allocate pending_addrmap.
+   If pending_addrmap is NULL, this is uninitialized; otherwise, it is
+   initialized (and holds pending_addrmap).  */
+static struct obstack pending_addrmap_obstack;
+
+/* Non-zero if we recorded any ranges in the addrmap that are
+   different from those in the blockvector already.  We set this to
+   zero when we start processing a symfile, and if it's still zero at
+   the end, then we just toss the addrmap.  */
+static int pending_addrmap_interesting;
+
 
 static int compare_line_numbers (const void *ln1p, const void *ln2p);
 
@@ -191,6 +213,12 @@ really_free_pendings (void *dummy)
 
   if (pending_macros)
     free_macro_table (pending_macros);
+
+  if (pending_addrmap)
+    {
+      obstack_free (&pending_addrmap_obstack, NULL);
+      pending_addrmap = NULL;
+    }
 }
 
 /* This function is called to discard any pending blocks. */
@@ -198,17 +226,8 @@ really_free_pendings (void *dummy)
 void
 free_pending_blocks (void)
 {
-#if 0				/* Now we make the links in the
-				   objfile_obstack, so don't free
-				   them.  */
-  struct pending_block *bnext, *bnext1;
-
-  for (bnext = pending_blocks; bnext; bnext = bnext1)
-    {
-      bnext1 = bnext->next;
-      xfree ((void *) bnext);
-    }
-#endif
+  /* The links are made in the objfile_obstack, so we only need to
+     reset PENDING_BLOCKS.  */
   pending_blocks = NULL;
 }
 
@@ -216,7 +235,7 @@ free_pending_blocks (void)
    the order the symbols have in the list (reversed from the input
    file).  Put the block on the list of pending blocks.  */
 
-void
+struct block *
 finish_block (struct symbol *symbol, struct pending **listhead,
 	      struct pending_block *old_blocks,
 	      CORE_ADDR start, CORE_ADDR end,
@@ -245,8 +264,6 @@ finish_block (struct symbol *symbol, struct pending **listhead,
   /* Superblock filled in when containing block is made */
   BLOCK_SUPERBLOCK (block) = NULL;
   BLOCK_NAMESPACE (block) = NULL;
-
-  BLOCK_GCC_COMPILED (block) = processing_gcc_compilation;
 
   /* Put the block in as the value of the symbol that names it.  */
 
@@ -362,7 +379,6 @@ finish_block (struct symbol *symbol, struct pending **listhead,
     }
   *listhead = NULL;
 
-#if 1
   /* Check to be sure that the blocks have an end address that is
      greater than starting address */
 
@@ -383,7 +399,6 @@ finish_block (struct symbol *symbol, struct pending **listhead,
       /* Better than nothing */
       BLOCK_END (block) = BLOCK_START (block);
     }
-#endif
 
   /* Install this block as the superblock of all blocks made since the
      start of this scope that don't have superblocks yet.  */
@@ -395,7 +410,6 @@ finish_block (struct symbol *symbol, struct pending **listhead,
     {
       if (BLOCK_SUPERBLOCK (pblock->block) == NULL)
 	{
-#if 1
 	  /* Check to be sure the blocks are nested as we receive
 	     them. If the compiler/assembler/linker work, this just
 	     burns a small amount of time.
@@ -427,13 +441,14 @@ finish_block (struct symbol *symbol, struct pending **listhead,
 	      if (BLOCK_END (pblock->block) > BLOCK_END (block))
 		BLOCK_END (pblock->block) = BLOCK_END (block);
 	    }
-#endif
 	  BLOCK_SUPERBLOCK (pblock->block) = block;
 	}
       opblock = pblock;
     }
 
   record_pending_block (objfile, block, opblock);
+
+  return block;
 }
 
 
@@ -465,6 +480,38 @@ record_pending_block (struct objfile *objfile, struct block *block,
     }
 }
 
+
+/* Record that the range of addresses from START to END_INCLUSIVE
+   (inclusive, like it says) belongs to BLOCK.  BLOCK's start and end
+   addresses must be set already.  You must apply this function to all
+   BLOCK's children before applying it to BLOCK.
+
+   If a call to this function complicates the picture beyond that
+   already provided by BLOCK_START and BLOCK_END, then we create an
+   address map for the block.  */
+void
+record_block_range (struct block *block,
+                    CORE_ADDR start, CORE_ADDR end_inclusive)
+{
+  /* If this is any different from the range recorded in the block's
+     own BLOCK_START and BLOCK_END, then note that the address map has
+     become interesting.  Note that even if this block doesn't have
+     any "interesting" ranges, some later block might, so we still
+     need to record this block in the addrmap.  */
+  if (start != BLOCK_START (block)
+      || end_inclusive + 1 != BLOCK_END (block))
+    pending_addrmap_interesting = 1;
+
+  if (! pending_addrmap)
+    {
+      obstack_init (&pending_addrmap_obstack);
+      pending_addrmap = addrmap_create_mutable (&pending_addrmap_obstack);
+    }
+
+  addrmap_set_empty (pending_addrmap, start, end_inclusive, block);
+}
+
+
 static struct blockvector *
 make_blockvector (struct objfile *objfile)
 {
@@ -495,23 +542,19 @@ make_blockvector (struct objfile *objfile)
       BLOCKVECTOR_BLOCK (blockvector, --i) = next->block;
     }
 
-#if 0				/* Now we make the links in the
-				   obstack, so don't free them.  */
-  /* Now free the links of the list, and empty the list.  */
+  free_pending_blocks ();
 
-  for (next = pending_blocks; next; next = next1)
-    {
-      next1 = next->next;
-      xfree (next);
-    }
-#endif
-  pending_blocks = NULL;
-
-#if 1				/* FIXME, shut this off after a while
-				   to speed up symbol reading.  */
+  /* If we needed an address map for this symtab, record it in the
+     blockvector.  */
+  if (pending_addrmap && pending_addrmap_interesting)
+    BLOCKVECTOR_MAP (blockvector)
+      = addrmap_create_fixed (pending_addrmap, &objfile->objfile_obstack);
+  else
+    BLOCKVECTOR_MAP (blockvector) = 0;
+        
   /* Some compilers output blocks in the wrong order, but we depend on
      their being in the right order so we can binary search. Check the
-     order and moan about it.  FIXME.  */
+     order and moan about it.  */
   if (BLOCKVECTOR_NBLOCKS (blockvector) > 1)
     {
       for (i = 1; i < BLOCKVECTOR_NBLOCKS (blockvector); i++)
@@ -527,7 +570,6 @@ make_blockvector (struct objfile *objfile)
 	    }
 	}
     }
-#endif
 
   return (blockvector);
 }
@@ -535,7 +577,7 @@ make_blockvector (struct objfile *objfile)
 /* Start recording information about source code that came from an
    included (or otherwise merged-in) source file with a different
    name.  NAME is the name of the file (cannot be NULL), DIRNAME is
-   the directory in which it resides (or NULL if not known).  */
+   the directory in which the file was compiled (or NULL if not known).  */
 
 void
 start_subfile (char *name, char *dirname)
@@ -752,9 +794,34 @@ record_line (struct subfile *subfile, int line, CORE_ADDR pc)
 		      * sizeof (struct linetable_entry))));
     }
 
+  pc = gdbarch_addr_bits_remove (current_gdbarch, pc);
+
+  /* Normally, we treat lines as unsorted.  But the end of sequence
+     marker is special.  We sort line markers at the same PC by line
+     number, so end of sequence markers (which have line == 0) appear
+     first.  This is right if the marker ends the previous function,
+     and there is no padding before the next function.  But it is
+     wrong if the previous line was empty and we are now marking a
+     switch to a different subfile.  We must leave the end of sequence
+     marker at the end of this group of lines, not sort the empty line
+     to after the marker.  The easiest way to accomplish this is to
+     delete any empty lines from our table, if they are followed by
+     end of sequence markers.  All we lose is the ability to set
+     breakpoints at some lines which contain no instructions
+     anyway.  */
+  if (line == 0 && subfile->line_vector->nitems > 0)
+    {
+      e = subfile->line_vector->item + subfile->line_vector->nitems - 1;
+      while (subfile->line_vector->nitems > 0 && e->pc == pc)
+	{
+	  e--;
+	  subfile->line_vector->nitems--;
+	}
+    }
+
   e = subfile->line_vector->item + subfile->line_vector->nitems++;
   e->line = line;
-  e->pc = gdbarch_addr_bits_remove (current_gdbarch, pc);
+  e->pc = pc;
 }
 
 /* Needed in order to sort line tables from IBM xcoff files.  Sigh!  */
@@ -781,12 +848,15 @@ compare_line_numbers (const void *ln1p, const void *ln2p)
 /* Start a new symtab for a new source file.  Called, for example,
    when a stabs symbol of type N_SO is seen, or when a DWARF
    TAG_compile_unit DIE is seen.  It indicates the start of data for
-   one original source file.  */
+   one original source file.
+
+   NAME is the name of the file (cannot be NULL).  DIRNAME is the directory in
+   which the file was compiled (or NULL if not known).  START_ADDR is the
+   lowest address of objects in the file (or 0 if not known).  */
 
 void
 start_symtab (char *name, char *dirname, CORE_ADDR start_addr)
 {
-
   last_source_file = name;
   last_source_start_addr = start_addr;
   file_symbols = NULL;
@@ -803,6 +873,9 @@ start_symtab (char *name, char *dirname, CORE_ADDR start_addr)
 	xmalloc (context_stack_size * sizeof (struct context_stack));
     }
   context_stack_depth = 0;
+
+  /* We shouldn't have any address map at this point.  */
+  gdb_assert (! pending_addrmap);
 
   /* Set up support for C++ namespace support, in case we need it.  */
 
@@ -933,10 +1006,9 @@ end_symtab (CORE_ADDR end_addr, struct objfile *objfile, int section)
 			     &objfile->objfile_obstack);
     }
 
-#ifndef PROCESS_LINENUMBER_HOOK
-#define PROCESS_LINENUMBER_HOOK()
-#endif
-  PROCESS_LINENUMBER_HOOK ();	/* Needed for xcoff. */
+  /* Read the line table if it has to be read separately.  */
+  if (objfile->sf->sym_read_linetable != NULL)
+    objfile->sf->sym_read_linetable ();
 
   /* Now create the symtab objects proper, one for each subfile.  */
   /* (The main file is the last one on the chain.)  */
@@ -954,14 +1026,6 @@ end_symtab (CORE_ADDR end_addr, struct objfile *objfile, int section)
 	    {
 	      linetablesize = sizeof (struct linetable) +
 	        subfile->line_vector->nitems * sizeof (struct linetable_entry);
-#if 0
-	      /* I think this is artifact from before it went on the
-	         obstack. I doubt we'll need the memory between now
-	         and when we free it later in this function.  */
-	      /* First, shrink the linetable to make more memory.  */
-	      subfile->line_vector = (struct linetable *)
-		xrealloc ((char *) subfile->line_vector, linetablesize);
-#endif
 
 	      /* Like the pending blocks, the line table may be
 	         scrambled in reordered executables.  Sort it if
@@ -1088,6 +1152,11 @@ end_symtab (CORE_ADDR end_addr, struct objfile *objfile, int section)
   last_source_file = NULL;
   current_subfile = NULL;
   pending_macros = NULL;
+  if (pending_addrmap)
+    {
+      obstack_free (&pending_addrmap_obstack, NULL);
+      pending_addrmap = NULL;
+    }
 
   return symtab;
 }
@@ -1201,6 +1270,10 @@ buildsym_init (void)
   global_symbols = NULL;
   pending_blocks = NULL;
   pending_macros = NULL;
+
+  /* We shouldn't have any address map at this point.  */
+  gdb_assert (! pending_addrmap);
+  pending_addrmap_interesting = 0;
 }
 
 /* Initialize anything that needs initializing when a completely new

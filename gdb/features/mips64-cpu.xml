@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Copyright (C) 2007 Free Software Foundation, Inc.
+<!-- Copyright (C) 2007, 2008 Free Software Foundation, Inc.
 
      Copying and distribution of this file, with or without modification,
      are permitted in any medium without royalty provided the copyright
@@ -7,7 +7,7 @@
 
 <!DOCTYPE feature SYSTEM "gdb-target.dtd">
 <feature name="org.gnu.gdb.mips.cpu">
-  <reg name="r0" bitsize="64"/>
+  <reg name="r0" bitsize="64" regnum="0"/>
   <reg name="r1" bitsize="64"/>
   <reg name="r2" bitsize="64"/>
   <reg name="r3" bitsize="64"/>

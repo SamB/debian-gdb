@@ -1,5 +1,5 @@
 /* FLEX lexer for Ada expressions, for GDB.
-   Copyright (C) 1994, 1997, 1998, 2000, 2001, 2002, 2003, 2007
+   Copyright (C) 1994, 1997, 1998, 2000, 2001, 2002, 2003, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GDB.
@@ -373,7 +373,7 @@ processInt (const char *base0, const char *num0, const char *exp0)
 static int
 processReal (const char *num0)
 {
-  sscanf (num0, DOUBLEST_SCAN_FORMAT, &yylval.typed_val_float.dval);
+  sscanf (num0, "%" DOUBLEST_SCAN_FORMAT, &yylval.typed_val_float.dval);
 
   yylval.typed_val_float.type = type_float ();
   if (sizeof(DOUBLEST) >= gdbarch_double_bit (current_gdbarch)

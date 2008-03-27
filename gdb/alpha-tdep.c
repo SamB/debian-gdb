@@ -1,7 +1,7 @@
 /* Target-dependent code for the ALPHA architecture, for GDB, the GNU Debugger.
 
    Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2003, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -40,6 +40,7 @@
 #include "osabi.h"
 #include "block.h"
 #include "infcall.h"
+#include "trad-frame.h"
 
 #include "elf-bfd.h"
 
@@ -54,7 +55,7 @@
    compatibility with existing remote alpha targets.  */
 
 static const char *
-alpha_register_name (int regno)
+alpha_register_name (struct gdbarch *gdbarch, int regno)
 {
   static const char * const register_names[] =
   {
@@ -77,17 +78,17 @@ alpha_register_name (int regno)
 }
 
 static int
-alpha_cannot_fetch_register (int regno)
+alpha_cannot_fetch_register (struct gdbarch *gdbarch, int regno)
 {
   return (regno == ALPHA_ZERO_REGNUM
-          || strlen (alpha_register_name (regno)) == 0);
+          || strlen (alpha_register_name (gdbarch, regno)) == 0);
 }
 
 static int
-alpha_cannot_store_register (int regno)
+alpha_cannot_store_register (struct gdbarch *gdbarch, int regno)
 {
   return (regno == ALPHA_ZERO_REGNUM
-          || strlen (alpha_register_name (regno)) == 0);
+          || strlen (alpha_register_name (gdbarch, regno)) == 0);
 }
 
 static struct type *
@@ -114,8 +115,8 @@ alpha_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 {
   /* Filter out any registers eliminated, but whose regnum is 
      reserved for backward compatibility, e.g. the vfp.  */
-  if (gdbarch_register_name (current_gdbarch, regnum) == NULL
-      || *gdbarch_register_name (current_gdbarch, regnum) == '\0')
+  if (gdbarch_register_name (gdbarch, regnum) == NULL
+      || *gdbarch_register_name (gdbarch, regnum) == '\0')
     return 0;
 
   if (group == all_reggroup)
@@ -198,9 +199,10 @@ alpha_sts (void *out, const void *in)
    registers is different. */
 
 static int
-alpha_convert_register_p (int regno, struct type *type)
+alpha_convert_register_p (struct gdbarch *gdbarch, int regno, struct type *type)
 {
-  return (regno >= ALPHA_FP0_REGNUM && regno < ALPHA_FP0_REGNUM + 31);
+  return (regno >= ALPHA_FP0_REGNUM && regno < ALPHA_FP0_REGNUM + 31
+	  && TYPE_LENGTH (type) != 8);
 }
 
 static void
@@ -214,9 +216,6 @@ alpha_register_to_value (struct frame_info *frame, int regnum,
     {
     case 4:
       alpha_sts (out, in);
-      break;
-    case 8:
-      memcpy (out, in, 8);
       break;
     default:
       error (_("Cannot retrieve value from floating point register"));
@@ -233,9 +232,6 @@ alpha_value_to_register (struct frame_info *frame, int regnum,
     {
     case 4:
       alpha_lds (out, in);
-      break;
-    case 8:
-      memcpy (out, in, 8);
       break;
     default:
       error (_("Cannot store value in floating point register"));
@@ -604,7 +600,7 @@ alpha_return_in_memory_always (struct type *type)
 }
 
 static const gdb_byte *
-alpha_breakpoint_from_pc (CORE_ADDR *pc, int *len)
+alpha_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pc, int *len)
 {
   static const gdb_byte break_insn[] = { 0x80, 0, 0, 0 }; /* call_pal bpt */
 
@@ -656,7 +652,7 @@ alpha_read_insn (CORE_ADDR pc)
    anything which might clobber the registers which are being saved.  */
 
 static CORE_ADDR
-alpha_skip_prologue (CORE_ADDR pc)
+alpha_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   unsigned long inst;
   int offset;
@@ -763,7 +759,7 @@ alpha_sigtramp_frame_unwind_cache (struct frame_info *next_frame,
   info = FRAME_OBSTACK_ZALLOC (struct alpha_sigtramp_unwind_cache);
   *this_prologue_cache = info;
 
-  tdep = gdbarch_tdep (current_gdbarch);
+  tdep = gdbarch_tdep (get_frame_arch (next_frame));
   info->sigcontext_addr = tdep->sigcontext_addr (next_frame);
 
   return info;
@@ -773,9 +769,10 @@ alpha_sigtramp_frame_unwind_cache (struct frame_info *next_frame,
    all arithmetic, it doesn't seem worthwhile to cache it.  */
 
 static CORE_ADDR
-alpha_sigtramp_register_address (CORE_ADDR sigcontext_addr, int regnum)
+alpha_sigtramp_register_address (struct gdbarch *gdbarch,
+				 CORE_ADDR sigcontext_addr, int regnum)
 { 
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   if (regnum >= 0 && regnum < 32)
     return sigcontext_addr + tdep->sc_regs_offset + regnum * 8;
@@ -795,9 +792,10 @@ alpha_sigtramp_frame_this_id (struct frame_info *next_frame,
 			      void **this_prologue_cache,
 			      struct frame_id *this_id)
 {
+  struct gdbarch *gdbarch = get_frame_arch (next_frame);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   struct alpha_sigtramp_unwind_cache *info
     = alpha_sigtramp_frame_unwind_cache (next_frame, this_prologue_cache);
-  struct gdbarch_tdep *tdep;
   CORE_ADDR stack_addr, code_addr;
 
   /* If the OSABI couldn't locate the sigcontext, give up.  */
@@ -807,7 +805,6 @@ alpha_sigtramp_frame_this_id (struct frame_info *next_frame,
   /* If we have dynamic signal trampolines, find their start.
      If we do not, then we must assume there is a symbol record
      that can provide the start address.  */
-  tdep = gdbarch_tdep (current_gdbarch);
   if (tdep->dynamic_sigtramp_offset)
     {
       int offset;
@@ -822,7 +819,7 @@ alpha_sigtramp_frame_this_id (struct frame_info *next_frame,
     code_addr = frame_func_unwind (next_frame, SIGTRAMP_FRAME);
 
   /* The stack address is trivially read from the sigcontext.  */
-  stack_addr = alpha_sigtramp_register_address (info->sigcontext_addr,
+  stack_addr = alpha_sigtramp_register_address (gdbarch, info->sigcontext_addr,
 						ALPHA_SP_REGNUM);
   stack_addr = get_frame_memory_unsigned (next_frame, stack_addr,
 					  ALPHA_REGISTER_SIZE);
@@ -846,7 +843,8 @@ alpha_sigtramp_frame_prev_register (struct frame_info *next_frame,
   if (info->sigcontext_addr != 0)
     {
       /* All integer and fp registers are stored in memory.  */
-      addr = alpha_sigtramp_register_address (info->sigcontext_addr, regnum);
+      addr = alpha_sigtramp_register_address (get_frame_arch (next_frame),
+					      info->sigcontext_addr, regnum);
       if (addr != 0)
 	{
 	  *optimizedp = 0;
@@ -880,6 +878,7 @@ static const struct frame_unwind alpha_sigtramp_frame_unwind = {
 static const struct frame_unwind *
 alpha_sigtramp_frame_sniffer (struct frame_info *next_frame)
 {
+  struct gdbarch *gdbarch = get_frame_arch (next_frame);
   CORE_ADDR pc = frame_pc_unwind (next_frame);
   char *name;
 
@@ -889,29 +888,19 @@ alpha_sigtramp_frame_sniffer (struct frame_info *next_frame)
 
   /* We shouldn't even bother to try if the OSABI didn't register a
      sigcontext_addr handler or pc_in_sigtramp hander.  */
-  if (gdbarch_tdep (current_gdbarch)->sigcontext_addr == NULL)
+  if (gdbarch_tdep (gdbarch)->sigcontext_addr == NULL)
     return NULL;
-  if (gdbarch_tdep (current_gdbarch)->pc_in_sigtramp == NULL)
+  if (gdbarch_tdep (gdbarch)->pc_in_sigtramp == NULL)
     return NULL;
 
   /* Otherwise we should be in a signal frame.  */
   find_pc_partial_function (pc, &name, NULL, NULL);
-  if (gdbarch_tdep (current_gdbarch)->pc_in_sigtramp (pc, name))
+  if (gdbarch_tdep (gdbarch)->pc_in_sigtramp (pc, name))
     return &alpha_sigtramp_frame_unwind;
 
   return NULL;
 }
 
-/* Fallback alpha frame unwinder.  Uses instruction scanning and knows
-   something about the traditional layout of alpha stack frames.  */
-
-struct alpha_heuristic_unwind_cache
-{
-  CORE_ADDR *saved_regs;
-  CORE_ADDR vfp;
-  CORE_ADDR start_pc;
-  int return_reg;
-};
 
 /* Heuristic_proc_start may hunt through the text section for a long
    time across a 2400 baud serial line.  Allows the user to limit this
@@ -924,9 +913,9 @@ static unsigned int heuristic_fence_post = 0;
    function.  But we're guessing anyway...  */
 
 static CORE_ADDR
-alpha_heuristic_proc_start (CORE_ADDR pc)
+alpha_heuristic_proc_start (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   CORE_ADDR last_non_nop = pc;
   CORE_ADDR fence = pc - heuristic_fence_post;
   CORE_ADDR orig_pc = pc;
@@ -998,11 +987,23 @@ Otherwise, you told GDB there was a function where there isn't one, or\n\
   return 0;
 }
 
+/* Fallback alpha frame unwinder.  Uses instruction scanning and knows
+   something about the traditional layout of alpha stack frames.  */
+
+struct alpha_heuristic_unwind_cache
+{ 
+  CORE_ADDR vfp;
+  CORE_ADDR start_pc;
+  struct trad_frame_saved_reg *saved_regs;
+  int return_reg;
+};
+
 static struct alpha_heuristic_unwind_cache *
 alpha_heuristic_frame_unwind_cache (struct frame_info *next_frame,
 				    void **this_prologue_cache,
 				    CORE_ADDR start_pc)
 {
+  struct gdbarch *gdbarch = get_frame_arch (next_frame);
   struct alpha_heuristic_unwind_cache *info;
   ULONGEST val;
   CORE_ADDR limit_pc, cur_pc;
@@ -1013,11 +1014,11 @@ alpha_heuristic_frame_unwind_cache (struct frame_info *next_frame,
 
   info = FRAME_OBSTACK_ZALLOC (struct alpha_heuristic_unwind_cache);
   *this_prologue_cache = info;
-  info->saved_regs = frame_obstack_zalloc (SIZEOF_FRAME_SAVED_REGS);
+  info->saved_regs = trad_frame_alloc_saved_regs (next_frame);
 
   limit_pc = frame_pc_unwind (next_frame);
   if (start_pc == 0)
-    start_pc = alpha_heuristic_proc_start (limit_pc);
+    start_pc = alpha_heuristic_proc_start (gdbarch, limit_pc);
   info->start_pc = start_pc;
 
   frame_reg = ALPHA_SP_REGNUM;
@@ -1063,7 +1064,7 @@ alpha_heuristic_frame_unwind_cache (struct frame_info *next_frame,
                  All it says is that the function we are scanning reused
                  that register for some computation of its own, and is now
                  saving its result.  */
-              if (info->saved_regs[reg])
+              if (trad_frame_addr_p(info->saved_regs, reg))
                 continue;
 
 	      if (reg == 31)
@@ -1079,7 +1080,7 @@ alpha_heuristic_frame_unwind_cache (struct frame_info *next_frame,
 		 pointer or not.  */
 	      /* Hack: temporarily add one, so that the offset is non-zero
 		 and we can tell which registers have save offsets below.  */
-	      info->saved_regs[reg] = (word & 0xffff) + 1;
+	      info->saved_regs[reg].addr = (word & 0xffff) + 1;
 
 	      /* Starting with OSF/1-3.2C, the system libraries are shipped
 		 without local symbols, but they still contain procedure
@@ -1150,14 +1151,14 @@ alpha_heuristic_frame_unwind_cache (struct frame_info *next_frame,
     return_reg = ALPHA_RA_REGNUM;
   info->return_reg = return_reg;
 
-  frame_unwind_unsigned_register (next_frame, frame_reg, &val);
+  val = frame_unwind_register_unsigned (next_frame, frame_reg);
   info->vfp = val + frame_size;
 
   /* Convert offsets to absolute addresses.  See above about adding
      one to the offsets to make all detected offsets non-zero.  */
   for (reg = 0; reg < ALPHA_NUM_REGS; ++reg)
-    if (info->saved_regs[reg])
-      info->saved_regs[reg] += val - 1;
+    if (trad_frame_addr_p(info->saved_regs, reg))
+      info->saved_regs[reg].addr += val - 1;
 
   return info;
 }
@@ -1194,39 +1195,8 @@ alpha_heuristic_frame_prev_register (struct frame_info *next_frame,
   if (regnum == ALPHA_PC_REGNUM)
     regnum = info->return_reg;
   
-  /* For all registers known to be saved in the current frame, 
-     do the obvious and pull the value out.  */
-  if (info->saved_regs[regnum])
-    {
-      *optimizedp = 0;
-      *lvalp = lval_memory;
-      *addrp = info->saved_regs[regnum];
-      *realnump = -1;
-      if (bufferp != NULL)
-	get_frame_memory (next_frame, *addrp, bufferp, ALPHA_REGISTER_SIZE);
-      return;
-    }
-
-  /* The stack pointer of the previous frame is computed by popping
-     the current stack frame.  */
-  if (regnum == ALPHA_SP_REGNUM)
-    {
-      *optimizedp = 0;
-      *lvalp = not_lval;
-      *addrp = 0;
-      *realnump = -1;
-      if (bufferp != NULL)
-	store_unsigned_integer (bufferp, ALPHA_REGISTER_SIZE, info->vfp);
-      return;
-    }
-
-  /* Otherwise assume the next frame has the same register value.  */
-  *optimizedp = 0;
-  *lvalp = lval_register;
-  *addrp = 0;
-  *realnump = regnum;
-  if (bufferp)
-    frame_unwind_register (next_frame, *realnump, bufferp);
+  trad_frame_get_prev_register (next_frame, info->saved_regs, regnum,
+				optimizedp, lvalp, addrp, realnump, bufferp);
 }
 
 static const struct frame_unwind alpha_heuristic_frame_unwind = {
@@ -1277,7 +1247,7 @@ static struct frame_id
 alpha_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   ULONGEST base;
-  frame_unwind_unsigned_register (next_frame, ALPHA_SP_REGNUM, &base);
+  base = frame_unwind_register_unsigned (next_frame, ALPHA_SP_REGNUM);
   return frame_id_build (base, frame_pc_unwind (next_frame));
 }
 
@@ -1285,7 +1255,7 @@ static CORE_ADDR
 alpha_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   ULONGEST pc;
-  frame_unwind_unsigned_register (next_frame, ALPHA_PC_REGNUM, &pc);
+  pc = frame_unwind_register_unsigned (next_frame, ALPHA_PC_REGNUM);
   return pc;
 }
 
@@ -1441,7 +1411,7 @@ alpha_next_pc (struct frame_info *frame, CORE_ADDR pc)
           case 0x33:              /* FBLE */
           case 0x32:              /* FBLT */
           case 0x35:              /* FBNE */
-            regno += gdbarch_fp0_regnum (current_gdbarch);
+            regno += gdbarch_fp0_regnum (get_frame_arch (frame));
 	}
       
       rav = get_frame_register_signed (frame, regno);

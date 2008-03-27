@@ -1,7 +1,7 @@
 /* C language support definitions for GDB, the GNU debugger.
 
    Copyright (C) 1992, 1994, 1995, 1996, 1997, 1998, 2000, 2002, 2005, 2006,
-   2007 Free Software Foundation, Inc.
+   2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -58,8 +58,6 @@ extern void finished_macro_expansion (void);
 
 extern macro_lookup_ftype *expression_macro_lookup_func;
 extern void *expression_macro_lookup_baton;
-
-extern struct type *c_create_fundamental_type (struct objfile *, int);
 
 extern void c_language_arch_info (struct gdbarch *gdbarch,
 				  struct language_arch_info *lai);

@@ -1,6 +1,6 @@
 /* Target-dependent code for Solaris SPARC.
 
-   Copyright (C) 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -168,12 +168,53 @@ sparc32_sol2_sigtramp_frame_sniffer (struct frame_info *next_frame)
 
   return NULL;
 }
+
+/* Unglobalize NAME.  */
+
+char *
+sparc_sol2_static_transform_name (char *name)
+{
+  /* The Sun compilers (Sun ONE Studio, Forte Developer, Sun WorkShop,
+     SunPRO) convert file static variables into global values, a
+     process known as globalization.  In order to do this, the
+     compiler will create a unique prefix and prepend it to each file
+     static variable.  For static variables within a function, this
+     globalization prefix is followed by the function name (nested
+     static variables within a function are supposed to generate a
+     warning message, and are left alone).  The procedure is
+     documented in the Stabs Interface Manual, which is distrubuted
+     with the compilers, although version 4.0 of the manual seems to
+     be incorrect in some places, at least for SPARC.  The
+     globalization prefix is encoded into an N_OPT stab, with the form
+     "G=<prefix>".  The globalization prefix always seems to start
+     with a dollar sign '$'; a dot '.' is used as a seperator.  So we
+     simply strip everything up until the last dot.  */
+
+  if (name[0] == '$')
+    {
+      char *p = strrchr (name, '.');
+      if (p)
+        return p + 1;
+    }
+
+  return name;
+}
 
 
 void
 sparc32_sol2_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
+  /* The Sun compilers (Sun ONE Studio, Forte Developer, Sun WorkShop, SunPRO)
+     compiler puts out 0 instead of the address in N_SO stabs.  Starting with
+     SunPRO 3.0, the compiler does this for N_FUN stabs too.  */
+  set_gdbarch_sofun_address_maybe_missing (gdbarch, 1);
+
+  /* The Sun compilers also do "globalization"; see the comment in
+     sparc_sol2_static_transform_name for more information.  */
+  set_gdbarch_static_transform_name
+    (gdbarch, sparc_sol2_static_transform_name);
 
   /* Solaris has SVR4-style shared libraries...  */
   set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);

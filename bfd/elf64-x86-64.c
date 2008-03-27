@@ -1,5 +1,5 @@
 /* X86-64 specific support for 64-bit ELF
-   Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Jan Hubicka <jh@suse.cz>.
 
@@ -457,6 +457,18 @@ struct elf64_x86_64_obj_tdata
 #define elf64_x86_64_local_tlsdesc_gotent(abfd) \
   (elf64_x86_64_tdata (abfd)->local_tlsdesc_gotent)
 
+#define is_x86_64_elf(bfd)				\
+  (bfd_get_flavour (bfd) == bfd_target_elf_flavour	\
+   && elf_tdata (bfd) != NULL				\
+   && elf_object_id (bfd) == X86_64_ELF_TDATA)
+
+static bfd_boolean
+elf64_x86_64_mkobject (bfd *abfd)
+{
+  return bfd_elf_allocate_object (abfd, sizeof (struct elf64_x86_64_obj_tdata),
+				  X86_64_ELF_TDATA);
+}
+
 /* x86-64 ELF linker hash table.  */
 
 struct elf64_x86_64_link_hash_table
@@ -690,19 +702,6 @@ elf64_x86_64_copy_indirect_symbol (struct bfd_link_info *info,
     }
   else
     _bfd_elf_link_hash_copy_indirect (info, dir, ind);
-}
-
-static bfd_boolean
-elf64_x86_64_mkobject (bfd *abfd)
-{
-  if (abfd->tdata.any == NULL)
-    {
-      bfd_size_type amt = sizeof (struct elf64_x86_64_obj_tdata);
-      abfd->tdata.any = bfd_zalloc (abfd, amt);
-      if (abfd->tdata.any == NULL)
-	return FALSE;
-    }
-  return bfd_elf_mkobject (abfd);
 }
 
 static bfd_boolean
@@ -952,7 +951,7 @@ elf64_x86_64_tls_transition (struct bfd_link_info *info, bfd *abfd,
 					      symtab_hdr, sym_hashes,
 					      from_type, rel, relend))
     {
-      const reloc_howto_type *from, *to;
+      reloc_howto_type *from, *to;
 
       from = elf64_x86_64_rtype_to_howto (abfd, from_type);
       to = elf64_x86_64_rtype_to_howto (abfd, to_type);
@@ -990,8 +989,10 @@ elf64_x86_64_check_relocs (bfd *abfd, struct bfd_link_info *info,
   if (info->relocatable)
     return TRUE;
 
+  BFD_ASSERT (is_x86_64_elf (abfd));
+
   htab = elf64_x86_64_hash_table (info);
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   sym_hashes = elf_sym_hashes (abfd);
 
   sreloc = NULL;
@@ -1130,7 +1131,7 @@ elf64_x86_64_check_relocs (bfd *abfd, struct bfd_link_info *info,
 		else
 		  {
 		    (*_bfd_error_handler)
-		      (_("%B: %s' accessed both as normal and thread local symbol"),
+		      (_("%B: '%s' accessed both as normal and thread local symbol"),
 		       abfd, h ? h->root.root.string : "<local>");
 		    return FALSE;
 		  }
@@ -1378,7 +1379,9 @@ elf64_x86_64_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	  /* This relocation describes which C++ vtable entries are actually
 	     used.  Record for later use during GC.  */
 	case R_X86_64_GNU_VTENTRY:
-	  if (!bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
+	  BFD_ASSERT (h != NULL);
+	  if (h != NULL
+	      && !bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
 	    return FALSE;
 	  break;
 
@@ -1423,9 +1426,12 @@ elf64_x86_64_gc_sweep_hook (bfd *abfd, struct bfd_link_info *info,
   bfd_signed_vma *local_got_refcounts;
   const Elf_Internal_Rela *rel, *relend;
 
+  if (info->relocatable)
+    return TRUE;
+
   elf_section_data (sec)->local_dynrel = NULL;
 
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   sym_hashes = elf_sym_hashes (abfd);
   local_got_refcounts = elf_local_got_refcounts (abfd);
 
@@ -1967,7 +1973,7 @@ elf64_x86_64_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
       Elf_Internal_Shdr *symtab_hdr;
       asection *srel;
 
-      if (bfd_get_flavour (ibfd) != bfd_target_elf_flavour)
+      if (! is_x86_64_elf (ibfd))
 	continue;
 
       for (s = ibfd->sections; s != NULL; s = s->next)
@@ -2002,7 +2008,7 @@ elf64_x86_64_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
       if (!local_got)
 	continue;
 
-      symtab_hdr = &elf_tdata (ibfd)->symtab_hdr;
+      symtab_hdr = &elf_symtab_hdr (ibfd);
       locsymcount = symtab_hdr->sh_info;
       end_local_got = local_got + locsymcount;
       local_tls_type = elf64_x86_64_local_got_tls_type (ibfd);
@@ -2305,8 +2311,10 @@ elf64_x86_64_relocate_section (bfd *output_bfd, struct bfd_link_info *info,
   Elf_Internal_Rela *rel;
   Elf_Internal_Rela *relend;
 
+  BFD_ASSERT (is_x86_64_elf (input_bfd));
+
   htab = elf64_x86_64_hash_table (info);
-  symtab_hdr = &elf_tdata (input_bfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (input_bfd);
   sym_hashes = elf_sym_hashes (input_bfd);
   local_got_offsets = elf_local_got_offsets (input_bfd);
   local_tlsdesc_gotents = elf64_x86_64_local_tlsdesc_gotent (input_bfd);
@@ -3824,6 +3832,7 @@ static const struct bfd_elf_special_section
   elf64_x86_64_reloc_name_lookup
 
 #define elf_backend_adjust_dynamic_symbol   elf64_x86_64_adjust_dynamic_symbol
+#define elf_backend_relocs_compatible	    _bfd_elf_relocs_compatible
 #define elf_backend_check_relocs	    elf64_x86_64_check_relocs
 #define elf_backend_copy_indirect_symbol    elf64_x86_64_copy_indirect_symbol
 #define elf_backend_create_dynamic_sections elf64_x86_64_create_dynamic_sections

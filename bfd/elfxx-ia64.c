@@ -4894,24 +4894,11 @@ elfNN_ia64_relocate_section (bfd *output_bfd,
 	case R_IA64_SEGREL64MSB:
 	case R_IA64_SEGREL64LSB:
 	    {
-	      struct elf_segment_map *m;
-	      Elf_Internal_Phdr *p;
-
 	      /* Find the segment that contains the output_section.  */
-	      for (m = elf_tdata (output_bfd)->segment_map,
-		     p = elf_tdata (output_bfd)->phdr;
-		   m != NULL;
-		   m = m->next, p++)
-		{
-		  int i;
-		  for (i = m->count - 1; i >= 0; i--)
-		    if (m->sections[i] == input_section->output_section)
-		      break;
-		  if (i >= 0)
-		    break;
-		}
+	      Elf_Internal_Phdr *p = _bfd_elf_find_segment_containing_section
+		(output_bfd, input_section->output_section);
 
-	      if (m == NULL)
+	      if (p == NULL)
 		{
 		  r = bfd_reloc_notsupported;
 		}
@@ -5715,8 +5702,6 @@ elfNN_hpux_backend_symbol_processing (bfd *abfd ATTRIBUTE_UNUSED,
 #undef  elf_backend_want_p_paddr_set_to_zero
 #define elf_backend_want_p_paddr_set_to_zero 1
 
-#undef  ELF_MAXPAGESIZE
-#define ELF_MAXPAGESIZE                 0x1000  /* 4K */
 #undef ELF_COMMONPAGESIZE
 #undef ELF_OSABI
 #define ELF_OSABI			ELFOSABI_HPUX

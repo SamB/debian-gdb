@@ -1,5 +1,5 @@
 #   Copyright 1988, 1990, 1991, 1992, 1994, 1995, 1996, 1997, 1998, 1999,
-#   2000, 2002, 2003, 2004, 2007 Free Software Foundation, Inc.
+#   2000, 2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -41,7 +41,7 @@ set bug_id 0
 
 set testfile "sepdebug"
 set srcfile ${testfile}.c
-set binfile ${objdir}/${subdir}/${testfile}
+set binfile ${objdir}/${subdir}/${testfile}${EXEEXT}
 
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug nowarnings}] != "" } {
     untested sepdebug.exp
@@ -179,7 +179,7 @@ set bp_location8 [gdb_get_line_number "set breakpoint 8 here"]
 set bp_location9 [gdb_get_line_number "set breakpoint 9 here"]
 
 gdb_test "info break" \
-    "Num Type\[ \]+Disp Enb Address\[ \]+What.*
+    "Num     Type\[ \]+Disp Enb Address\[ \]+What.*
 \[0-9\]+\[\t \]+breakpoint     keep y.* in main at .*$srcfile:$main_line.*
 \[0-9\]+\[\t \]+breakpoint     keep y.* in marker2 at .*$srcfile:($bp_location8|$bp_location9).*
 \[0-9\]+\[\t \]+breakpoint     keep y.* in factorial at .*$srcfile:$bp_location7.*
@@ -298,7 +298,7 @@ gdb_test  "tbreak $srcfile:$bp_location11" "Breakpoint.*at.* file .*$srcfile, li
 #
 # check to see what breakpoints are set (temporary this time)
 #
-gdb_test "info break" "Num Type.*Disp Enb Address.*What.*\[\r\n\]
+gdb_test "info break" "Num     Type.*Disp Enb Address.*What.*\[\r\n\]
 \[0-9\]+\[\t \]+breakpoint     del.*y.*in main at .*$srcfile:$main_line.*\[\r\n\]
 \[0-9\]+\[\t \]+breakpoint     del.*y.*in factorial at .*$srcfile:$bp_location7.*\[\r\n\]
 \[0-9\]+\[\t \]+breakpoint     del.*y.*in main at .*$srcfile:$bp_location1.*\[\r\n\]
@@ -955,7 +955,7 @@ test_different_dir debuglink "${objdir}/${subdir}" 0
 # NT_GNU_BUILD_ID / .note.gnu.build-id test:
 
 set build_id_debug_filename [build_id_debug_filename_get $binfile]
-if {$build_id_debug_filename eq ""} {
+if ![string compare $build_id_debug_filename ""] then {
     unsupported "build-id is not supported by the compiler"
 
     # Spare debug files may confuse testsuite runs in the future.
@@ -964,10 +964,10 @@ if {$build_id_debug_filename eq ""} {
     set build_id_debugself_filename [build_id_debug_filename_get $debugfile]
     set test "build-id support by binutils"
     set xfail 0
-    if {$build_id_debugself_filename eq ""} {
+    if ![string compare $build_id_debugself_filename ""] then {
 	unsupported $test
 	set xfail 1
-    } elseif {$build_id_debugself_filename ne $build_id_debug_filename} {
+    } elseif {[string compare $build_id_debugself_filename $build_id_debug_filename] != 0} then {
 	fail $test
     } else {
 	pass $test

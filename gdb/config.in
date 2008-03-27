@@ -45,12 +45,6 @@
 /* Define to the default OS ABI for this configuration. */
 #undef GDB_OSABI_DEFAULT
 
-/* targetfile */
-#undef GDB_TM_FILE
-
-/* hostfile */
-#undef GDB_XM_FILE
-
 /* Define to 1 if you have `alloca', as a function or macro. */
 #undef HAVE_ALLOCA
 
@@ -112,6 +106,12 @@
 
 /* Define if ELF support should be included. */
 #undef HAVE_ELF
+
+/* Define to 1 if you have the <elf_hp.h> header file. */
+#undef HAVE_ELF_HP_H
+
+/* Define to 1 if your system has the etext variable. */
+#undef HAVE_ETEXT
 
 /* Define to 1 if you have the `fork' function. */
 #undef HAVE_FORK
@@ -503,6 +503,9 @@
 /* Define if the prfpregset_t type is broken. */
 #undef PRFPREGSET_T_BROKEN
 
+/* Define to 1 if the "%H, %D and %DD" formats work to print decfloats. */
+#undef PRINTF_HAS_DECFLOAT
+
 /* Define to 1 if the "%Lg" format works to print long doubles. */
 #undef PRINTF_HAS_LONG_DOUBLE
 
@@ -579,6 +582,10 @@
 
 /* Define if the simulator is being linked in. */
 #undef WITH_SIM
+
+/* Define to 1 if your processor stores words with the most significant byte
+   first (like Motorola and SPARC, unlike Intel and VAX). */
+#undef WORDS_BIGENDIAN
 
 /* Define to 1 if on AIX 3.
    System headers sometimes define this.

@@ -1,6 +1,7 @@
 /* Native-dependent code for NetBSD/powerpc.
 
-   Copyright (C) 2002, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    Contributed by Wasabi Systems, Inc.
 
@@ -40,9 +41,9 @@
 /* Returns true if PT_GETREGS fetches this register.  */
 
 static int
-getregs_supplies (int regnum)
+getregs_supplies (struct gdbarch *gdbarch, int regnum)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   return ((regnum >= tdep->ppc_gp0_regnum
            && regnum < tdep->ppc_gp0_regnum + ppc_num_gprs)
@@ -50,15 +51,15 @@ getregs_supplies (int regnum)
           || regnum == tdep->ppc_cr_regnum
           || regnum == tdep->ppc_xer_regnum
           || regnum == tdep->ppc_ctr_regnum
-	  || regnum == gdbarch_pc_regnum (current_gdbarch));
+	  || regnum == gdbarch_pc_regnum (gdbarch));
 }
 
 /* Like above, but for PT_GETFPREGS.  */
 
 static int
-getfpregs_supplies (int regnum)
+getfpregs_supplies (struct gdbarch *gdbarch, int regnum)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   /* FIXME: jimb/2004-05-05: Some PPC variants don't have floating
      point registers.  Traditionally, GDB's register set has still
@@ -70,7 +71,7 @@ getfpregs_supplies (int regnum)
      It's not clear to me how best to update this code, so this assert
      will alert the first person to encounter the NetBSD/E500
      combination to the problem.  */
-  gdb_assert (ppc_floating_point_unit_p (current_gdbarch));
+  gdb_assert (ppc_floating_point_unit_p (gdbarch));
 
   return ((regnum >= tdep->ppc_fp0_regnum
            && regnum < tdep->ppc_fp0_regnum + ppc_num_fprs)
@@ -80,7 +81,9 @@ getfpregs_supplies (int regnum)
 static void
 ppcnbsd_fetch_inferior_registers (struct regcache *regcache, int regnum)
 {
-  if (regnum == -1 || getregs_supplies (regnum))
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+
+  if (regnum == -1 || getregs_supplies (gdbarch, regnum))
     {
       struct reg regs;
 
@@ -92,7 +95,7 @@ ppcnbsd_fetch_inferior_registers (struct regcache *regcache, int regnum)
 			  regnum, &regs, sizeof regs);
     }
 
-  if (regnum == -1 || getfpregs_supplies (regnum))
+  if (regnum == -1 || getfpregs_supplies (gdbarch, regnum))
     {
       struct fpreg fpregs;
 
@@ -108,7 +111,9 @@ ppcnbsd_fetch_inferior_registers (struct regcache *regcache, int regnum)
 static void
 ppcnbsd_store_inferior_registers (struct regcache *regcache, int regnum)
 {
-  if (regnum == -1 || getregs_supplies (regnum))
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+
+  if (regnum == -1 || getregs_supplies (gdbarch, regnum))
     {
       struct reg regs;
 
@@ -124,7 +129,7 @@ ppcnbsd_store_inferior_registers (struct regcache *regcache, int regnum)
 	perror_with_name (_("Couldn't write registers"));
     }
 
-  if (regnum == -1 || getfpregs_supplies (regnum))
+  if (regnum == -1 || getfpregs_supplies (gdbarch, regnum))
     {
       struct fpreg fpregs;
 
@@ -146,7 +151,8 @@ ppcnbsd_supply_pcb (struct regcache *regcache, struct pcb *pcb)
 {
   struct switchframe sf;
   struct callframe cf;
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int i;
 
   /* The stack pointer shouldn't be zero.  */
@@ -167,7 +173,7 @@ ppcnbsd_supply_pcb (struct regcache *regcache, struct pcb *pcb)
 
   read_memory(cf.sp, (gdb_byte *)&cf, sizeof(cf));
   regcache_raw_supply (regcache, tdep->ppc_lr_regnum, &cf.lr);
-  regcache_raw_supply (regcache, gdbarch_pc_regnum (current_gdbarch), &cf.lr);
+  regcache_raw_supply (regcache, gdbarch_pc_regnum (gdbarch), &cf.lr);
 
   return 1;
 }

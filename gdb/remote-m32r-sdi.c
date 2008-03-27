@@ -1,6 +1,7 @@
 /* Remote debugging interface for M32R/SDI.
 
-   Copyright (C) 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    Contributed by Renesas Technology Co.
    Written by Kei Sakamoto <sakamoto.kei@renesas.com>.
@@ -908,7 +909,9 @@ m32r_fetch_registers (struct regcache *regcache)
 {
   int regno;
 
-  for (regno = 0; regno < gdbarch_num_regs (current_gdbarch); regno++)
+  for (regno = 0;
+       regno < gdbarch_num_regs (get_regcache_arch (regcache));
+       regno++)
     m32r_fetch_register (regcache, regno);
 }
 
@@ -957,7 +960,9 @@ m32r_store_registers (struct regcache *regcache)
 {
   int regno;
 
-  for (regno = 0; regno < gdbarch_num_regs (current_gdbarch); regno++)
+  for (regno = 0;
+       regno < gdbarch_num_regs (get_regcache_arch (regcache));
+       regno++)
     m32r_store_register (regcache, regno);
 
   registers_changed ();
@@ -1053,11 +1058,11 @@ m32r_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len,
   if (remote_debug)
     {
       if (write)
-	fprintf_unfiltered (gdb_stdlog, "m32r_xfer_memory(%08lx,%d,write)\n",
-			    memaddr, len);
+	fprintf_unfiltered (gdb_stdlog, "m32r_xfer_memory(%s,%d,write)\n",
+			    paddr (memaddr), len);
       else
-	fprintf_unfiltered (gdb_stdlog, "m32r_xfer_memory(%08lx,%d,read)\n",
-			    memaddr, len);
+	fprintf_unfiltered (gdb_stdlog, "m32r_xfer_memory(%s,%d,read)\n",
+			    paddr (memaddr), len);
     }
 
   if (write)
@@ -1151,8 +1156,8 @@ m32r_insert_breakpoint (struct bp_target_info *bp_tgt)
   int i, c;
 
   if (remote_debug)
-    fprintf_unfiltered (gdb_stdlog, "m32r_insert_breakpoint(%08lx,...)\n",
-			addr);
+    fprintf_unfiltered (gdb_stdlog, "m32r_insert_breakpoint(%s,...)\n",
+			paddr (addr));
 
   if (use_ib_breakpoints)
     ib_breakpoints = max_ib_breakpoints;
@@ -1192,8 +1197,8 @@ m32r_remove_breakpoint (struct bp_target_info *bp_tgt)
   int i;
 
   if (remote_debug)
-    fprintf_unfiltered (gdb_stdlog, "m32r_remove_breakpoint(%08lx)\n",
-			addr);
+    fprintf_unfiltered (gdb_stdlog, "m32r_remove_breakpoint(%s)\n",
+			paddr (addr));
 
   for (i = 0; i < MAX_BREAKPOINTS; i++)
     {
@@ -1294,7 +1299,8 @@ m32r_load (char *args, int from_tty)
 	  if (!quiet)
 	    printf_filtered ("[Loading section %s at 0x%lx (%d bytes)]\n",
 			     bfd_get_section_name (pbfd, section),
-			     section_address, (int) section_size);
+			     (unsigned long) section_address,
+			     (int) section_size);
 
 	  fptr = 0;
 
@@ -1374,7 +1380,8 @@ m32r_load (char *args, int from_tty)
       entry = bfd_get_start_address (pbfd);
 
       if (!quiet)
-	printf_unfiltered ("[Starting %s at 0x%lx]\n", filename, entry);
+	printf_unfiltered ("[Starting %s at 0x%lx]\n", filename,
+			   (unsigned long) entry);
     }
 
   print_transfer_performance (gdb_stdout, data_count, 0, &start_time,
@@ -1415,8 +1422,8 @@ m32r_insert_watchpoint (CORE_ADDR addr, int len, int type)
   int i;
 
   if (remote_debug)
-    fprintf_unfiltered (gdb_stdlog, "m32r_insert_watchpoint(%08lx,%d,%d)\n",
-			addr, len, type);
+    fprintf_unfiltered (gdb_stdlog, "m32r_insert_watchpoint(%s,%d,%d)\n",
+			paddr (addr), len, type);
 
   for (i = 0; i < MAX_ACCESS_BREAKS; i++)
     {
@@ -1439,8 +1446,8 @@ m32r_remove_watchpoint (CORE_ADDR addr, int len, int type)
   int i;
 
   if (remote_debug)
-    fprintf_unfiltered (gdb_stdlog, "m32r_remove_watchpoint(%08lx,%d,%d)\n",
-			addr, len, type);
+    fprintf_unfiltered (gdb_stdlog, "m32r_remove_watchpoint(%s,%d,%d)\n",
+			paddr (addr), len, type);
 
   for (i = 0; i < MAX_ACCESS_BREAKS; i++)
     {
@@ -1593,6 +1600,7 @@ init_m32r_ops (void)
   m32r_ops.to_create_inferior = m32r_create_inferior;
   m32r_ops.to_mourn_inferior = m32r_mourn_inferior;
   m32r_ops.to_stop = m32r_stop;
+  m32r_ops.to_log_command = serial_log_command;
   m32r_ops.to_stratum = process_stratum;
   m32r_ops.to_has_all_memory = 1;
   m32r_ops.to_has_memory = 1;

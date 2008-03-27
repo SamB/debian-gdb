@@ -1,7 +1,7 @@
 /* Internal type definitions for GDB.
 
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
@@ -28,44 +28,6 @@
 /* Forward declarations for prototypes.  */
 struct field;
 struct block;
-
-/* Codes for `fundamental types'.  This is a monstrosity based on the
-   bogus notion that there are certain compiler-independent
-   `fundamental types'.  None of these is well-defined (how big is
-   FT_SHORT?  Does it depend on the language?  How does the
-   language-specific code know which type to correlate to FT_SHORT?)  */
-
-#define FT_VOID			0
-#define FT_BOOLEAN		1
-#define FT_CHAR			2	/* we use this for not-unsigned C/C++ chars */
-#define FT_SIGNED_CHAR		3	/* we use this for C++ signed chars */
-#define FT_UNSIGNED_CHAR	4	/* we use this for C/C++ unsigned chars */
-#define FT_SHORT		5
-#define FT_SIGNED_SHORT		6
-#define FT_UNSIGNED_SHORT	7
-#define FT_INTEGER		8
-#define FT_SIGNED_INTEGER	9
-#define FT_UNSIGNED_INTEGER	10
-#define FT_LONG			11
-#define FT_SIGNED_LONG		12
-#define FT_UNSIGNED_LONG	13
-#define FT_LONG_LONG		14
-#define FT_SIGNED_LONG_LONG	15
-#define FT_UNSIGNED_LONG_LONG	16
-#define FT_FLOAT		17
-#define FT_DBL_PREC_FLOAT	18
-#define FT_EXT_PREC_FLOAT	19
-#define FT_COMPLEX		20
-#define FT_DBL_PREC_COMPLEX	21
-#define FT_EXT_PREC_COMPLEX	22
-#define FT_STRING		23
-#define FT_FIXED_DECIMAL	24
-#define FT_FLOAT_DECIMAL	25
-#define FT_BYTE			26
-#define FT_UNSIGNED_BYTE	27
-#define FT_TEMPLATE_ARG		28
-
-#define FT_NUM_MEMBERS		29	/* Highest FT_* above, plus one. */
 
 /* Some macros for char-based bitfields.  */
 
@@ -169,7 +131,9 @@ enum type_code
     TYPE_CODE_TEMPLATE,		/* C++ template */
     TYPE_CODE_TEMPLATE_ARG,	/* C++ template arg */
 
-    TYPE_CODE_NAMESPACE		/* C++ namespace.  */
+    TYPE_CODE_NAMESPACE,	/* C++ namespace.  */
+
+    TYPE_CODE_DECFLOAT		/* Decimal floating point.  */
   };
 
 /* For now allow source to use TYPE_CODE_CLASS for C++ classes, as an
@@ -411,7 +375,9 @@ struct main_type
   /* Field number of the virtual function table pointer in
      VPTR_BASETYPE.  If -1, we were unable to find the virtual
      function table pointer in initial symbol reading, and
-     fill_in_vptr_fieldno should be called to find it if possible.
+     get_vptr_fieldno should be called to find it if possible.
+     get_vptr_fieldno will update this field if possible.
+     Otherwise the value is left at -1.
 
      Unused if this type does not have virtual functions.  */
 
@@ -439,8 +405,8 @@ struct main_type
     {
       /* Position of this field, counting in bits from start of
 	 containing structure.
-	 For BITS_BIG_ENDIAN=1 targets, it is the bit offset to the MSB.
-	 For BITS_BIG_ENDIAN=0 targets, it is the bit offset to the LSB.
+	 For gdbarch_bits_big_endian=1 targets, it is the bit offset to the MSB.
+	 For gdbarch_bits_big_endian=0 targets, it is the bit offset to the LSB.
 	 For a range bound or enum value, this is the value itself. */
 
       int bitpos;
@@ -754,32 +720,6 @@ struct cplus_struct_type
     short ninstantiations;
     struct type **instantiations;
 
-    /* The following points to information relevant to the runtime model
-     * of the compiler.
-     * Currently being used only for HP's ANSI C++ compiler.
-     * (This type may have to be changed/enhanced for other compilers.)
-     *
-     * RUNTIME_PTR is NULL if there is no runtime information (currently
-     * this means the type was not compiled by HP aCC).
-     *
-     * Fields in structure pointed to:
-     * ->HAS_VTABLE : 0 => no virtual table, 1 => vtable present
-     * 
-     * ->PRIMARY_BASE points to the first non-virtual base class that has
-     * a virtual table.
-     *
-     * ->VIRTUAL_BASE_LIST points to a list of struct type * pointers that
-     * point to the type information for all virtual bases among this type's
-     * ancestors.
-     */
-    struct runtime_info
-      {
-	short has_vtable;
-	struct type *primary_base;
-	struct type **virtual_base_list;
-      }
-     *runtime_ptr;
-
     /* Pointer to information about enclosing scope, if this is a
      * local type.  If it is not a local type, this is NULL
      */
@@ -968,12 +908,6 @@ extern void allocate_cplus_struct_type (struct type *);
 #define TYPE_FN_FIELD_VIRTUAL_P(thisfn, n) ((thisfn)[n].voffset > 1)
 #define TYPE_FN_FIELD_STATIC_P(thisfn, n) ((thisfn)[n].voffset == VOFFSET_STATIC)
 
-#define TYPE_RUNTIME_PTR(thistype) (TYPE_CPLUS_SPECIFIC(thistype)->runtime_ptr)
-#define TYPE_VTABLE(thistype) (TYPE_RUNTIME_PTR(thistype)->has_vtable)
-#define TYPE_HAS_VTABLE(thistype) (TYPE_RUNTIME_PTR(thistype) && TYPE_VTABLE(thistype))
-#define TYPE_PRIMARY_BASE(thistype) (TYPE_RUNTIME_PTR(thistype)->primary_base)
-#define TYPE_VIRTUAL_BASE_LIST(thistype) (TYPE_RUNTIME_PTR(thistype)->virtual_base_list)
-
 #define TYPE_LOCALTYPE_PTR(thistype) (TYPE_CPLUS_SPECIFIC(thistype)->localtype_ptr)
 #define TYPE_LOCALTYPE_FILE(thistype) (TYPE_CPLUS_SPECIFIC(thistype)->localtype_ptr->file)
 #define TYPE_LOCALTYPE_LINE(thistype) (TYPE_CPLUS_SPECIFIC(thistype)->localtype_ptr->line)
@@ -1041,6 +975,9 @@ struct builtin_type
   struct type *builtin_bool;
   struct type *builtin_long_long;
   struct type *builtin_unsigned_long_long;
+  struct type *builtin_decfloat;
+  struct type *builtin_decdouble;
+  struct type *builtin_declong;
 };
 
 /* Return the type table for the specified architecture.  */
@@ -1121,6 +1058,7 @@ extern const struct floatformat *floatformats_ia64_spill[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_ia64_quad[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_vax_f[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_vax_d[BFD_ENDIAN_UNKNOWN];
+extern const struct floatformat *floatformats_ibm_long_double[BFD_ENDIAN_UNKNOWN];
 
 extern struct type *builtin_type_ieee_single;
 extern struct type *builtin_type_ieee_double;
@@ -1338,55 +1276,13 @@ extern struct type *lookup_typename (char *, struct block *, int);
 extern struct type *lookup_template_type (char *, struct type *,
 					  struct block *);
 
-extern struct type *lookup_fundamental_type (struct objfile *, int);
-
-extern void fill_in_vptr_fieldno (struct type *);
+extern int get_vptr_fieldno (struct type *, struct type **);
 
 extern int get_destructor_fn_field (struct type *, int *, int *);
 
 extern int get_discrete_bounds (struct type *, LONGEST *, LONGEST *);
 
 extern int is_ancestor (struct type *, struct type *);
-
-extern int has_vtable (struct type *);
-
-extern struct type *primary_base_class (struct type *);
-
-extern int virtual_base_list_length (struct type *);
-extern int virtual_base_list_length_skip_primaries (struct type *);
-
-extern int virtual_base_index (struct type *, struct type *);
-extern int virtual_base_index_skip_primaries (struct type *, struct type *);
-
-
-extern int class_index_in_primary_list (struct type *);
-
-extern int count_virtual_fns (struct type *);
-
-/* Constants for HP/Taligent ANSI C++ runtime model */
-
-/* Where virtual function entries begin in the
- * virtual table, in the non-RRBC vtable format.
- * First 4 are the metavtable pointer, top offset,
- * typeinfo pointer, and dup base info pointer */
-#define HP_ACC_VFUNC_START        4
-
-/* (Negative) Offset where virtual base offset entries begin 
- * in the virtual table. Skips over metavtable pointer and
- * the self-offset entry. 
- * NOTE: NEGATE THIS BEFORE USING! The virtual base offsets
- * appear before the address point of the vtable (the slot
- * pointed to by the object's vtable pointer), i.e. at lower
- * addresses than the vtable pointer. */
-#define HP_ACC_VBASE_START        2
-
-/* (Positive) Offset where the pointer to the typeinfo
- * object is present in the virtual table */
-#define HP_ACC_TYPEINFO_OFFSET    2
-
-/* (Positive) Offset where the ``top offset'' entry of
- * the virtual table is */
-#define HP_ACC_TOP_OFFSET_OFFSET  1
 
 /* Overload resolution */
 

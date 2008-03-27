@@ -1,7 +1,7 @@
 /* Tracing functionality for remote targets in custom GDB protocol
 
    Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
-   2007 Free Software Foundation, Inc.
+   2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -443,7 +443,7 @@ trace_mention (struct tracepoint *tp)
   if (addressprint || (tp->source_file == NULL))
     {
       printf_filtered (" at ");
-      deprecated_print_address_numeric (tp->address, 1, gdb_stdout);
+      printf_filtered ("%s", paddress (tp->address));
     }
   if (tp->source_file)
     printf_filtered (": file %s, line %d.",
@@ -583,10 +583,11 @@ tracepoint_operation (struct tracepoint *t, int from_tty,
       ALL_TRACEPOINTS (t2)
 	if (t2->next == t)
 	{
-	  tracepoint_delete_event (t2->number);
 	  t2->next = t->next;
 	  break;
 	}
+
+      tracepoint_delete_event (t->number);
 
       if (t->addr_string)
 	xfree (t->addr_string);
@@ -861,7 +862,10 @@ read_actions (struct tracepoint *t)
 	line = gdb_readline (0);
 
       if (!line)
-	line = "end";
+        {
+          line = xstrdup ("end");
+          printf_filtered ("end\n");
+        }
       
       linetype = validate_actionline (&line, t);
       if (linetype == BADLINE)
@@ -2449,8 +2453,7 @@ scope_info (char *args, int from_tty)
 	      break;
 	    case LOC_STATIC:
 	      printf_filtered ("in static storage at address ");
-	      deprecated_print_address_numeric (SYMBOL_VALUE_ADDRESS (sym), 
-				     1, gdb_stdout);
+	      printf_filtered ("%s", paddress (SYMBOL_VALUE_ADDRESS (sym)));
 	      break;
 	    case LOC_REGISTER:
 	      printf_filtered ("a local variable in register $%s",
@@ -2485,13 +2488,11 @@ scope_info (char *args, int from_tty)
 	      continue;
 	    case LOC_LABEL:
 	      printf_filtered ("a label at address ");
-	      deprecated_print_address_numeric (SYMBOL_VALUE_ADDRESS (sym), 
-				     1, gdb_stdout);
+	      printf_filtered ("%s", paddress (SYMBOL_VALUE_ADDRESS (sym)));
 	      break;
 	    case LOC_BLOCK:
 	      printf_filtered ("a function at address ");
-	      deprecated_print_address_numeric (BLOCK_START (SYMBOL_BLOCK_VALUE (sym)),
-				     1, gdb_stdout);
+	      printf_filtered ("%s", paddress (BLOCK_START (SYMBOL_BLOCK_VALUE (sym))));
 	      break;
 	    case LOC_BASEREG:
 	      printf_filtered ("a variable at offset %ld from register $%s",
@@ -2513,8 +2514,7 @@ scope_info (char *args, int from_tty)
 	      else
 		{
 		  printf_filtered ("static storage at address ");
-		  deprecated_print_address_numeric (SYMBOL_VALUE_ADDRESS (msym), 1,
-					 gdb_stdout);
+		  printf_filtered ("%s", paddress (SYMBOL_VALUE_ADDRESS (msym)));
 		}
 	      break;
 	    case LOC_OPTIMIZED_OUT:
@@ -2525,8 +2525,7 @@ scope_info (char *args, int from_tty)
 	      break;
 	    case LOC_INDIRECT:
 	      printf_filtered ("extern (local indirect) at address ");
-	      deprecated_print_address_numeric (SYMBOL_VALUE_ADDRESS (sym), 
-				     1, gdb_stdout);
+	      printf_filtered ("%s", paddress (SYMBOL_VALUE_ADDRESS (sym)));
 	      break;
 	    case LOC_COMPUTED:
 	    case LOC_COMPUTED_ARG:

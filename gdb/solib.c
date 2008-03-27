@@ -1,7 +1,8 @@
 /* Handle shared libraries for GDB, the GNU Debugger.
 
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2000, 2001, 2002, 2003, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -86,11 +87,7 @@ struct target_so_ops *current_target_so_ops;
 
 static struct so_list *so_list_head;	/* List of known shared objects */
 
-static int solib_cleanup_queued = 0;	/* make_run_cleanup called */
-
 /* Local function prototypes */
-
-static void do_clear_solib (void *);
 
 /* If non-empty, this is a search path for loading non-absolute shared library
    symbol files.  This takes precedence over the environment variables PATH
@@ -506,15 +503,6 @@ update_solib_list (int from_tty, struct target_ops *target)
 		  "Error reading attached process's symbol file.\n",
 		  RETURN_MASK_ALL);
 
-  /* Since this function might actually add some elements to the
-     so_list_head list, arrange for it to be cleaned up when
-     appropriate.  */
-  if (!solib_cleanup_queued)
-    {
-      make_run_cleanup (do_clear_solib, NULL);
-      solib_cleanup_queued = 1;
-    }
-
   /* GDB and the inferior's dynamic linker each maintain their own
      list of currently loaded shared objects; we want to bring the
      former in sync with the latter.  Scan both lists, seeing which
@@ -550,8 +538,16 @@ update_solib_list (int from_tty, struct target_ops *target)
 	 the inferior's current list.  */
       while (i)
 	{
-	  if (! strcmp (gdb->so_original_name, i->so_original_name))
-	    break;
+	  if (ops->same)
+	    {
+	      if (ops->same (gdb, i))
+		break;
+	    }
+	  else
+	    {
+	      if (! strcmp (gdb->so_original_name, i->so_original_name))
+		break;	      
+	    }
 
 	  i_link = &i->next;
 	  i = *i_link;
@@ -866,13 +862,6 @@ clear_solib (void)
   ops->clear_solib ();
 }
 
-static void
-do_clear_solib (void *dummy)
-{
-  solib_cleanup_queued = 0;
-  clear_solib ();
-}
-
 /* GLOBAL FUNCTION
 
    solib_create_inferior_hook -- shared library startup support
@@ -955,7 +944,7 @@ void
 no_shared_libraries (char *ignored, int from_tty)
 {
   objfile_purge_solibs ();
-  do_clear_solib (NULL);
+  clear_solib ();
 }
 
 static void
@@ -985,10 +974,11 @@ solib_global_lookup (const struct objfile *objfile,
 		     const domain_enum domain,
 		     struct symtab **symtab)
 {
-  if (current_target_so_ops->lookup_lib_global_symbol != NULL)
-    return current_target_so_ops->lookup_lib_global_symbol (objfile,
-				name, linkage_name, domain, symtab);
+  struct target_so_ops *ops = solib_ops (current_gdbarch);
 
+  if (ops->lookup_lib_global_symbol != NULL)
+    return ops->lookup_lib_global_symbol (objfile, name, linkage_name,
+					  domain, symtab);
   return NULL;
 }
 

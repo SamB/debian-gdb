@@ -1,7 +1,7 @@
 /* Code dealing with register stack frames, for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2007
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -54,7 +54,7 @@ sentinel_frame_prev_register (struct frame_info *next_frame,
      onto the corresponding hardware register.  */
   *optimized = 0;
   *lvalp = lval_register;
-  *addrp = register_offset_hack (current_gdbarch, regnum);
+  *addrp = 0;
   *realnum = regnum;
 
   /* If needed, find and return the value of the register.  */

@@ -1,4 +1,4 @@
-/* Copyright 1999, 2004, 2005, 2007 Free Software Foundation, Inc.
+/* Copyright 1999, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -206,8 +206,12 @@ do_children_tests (void)
   int *foo;
   int bar;
 
-  struct _struct_decl struct_declarations;
-  memset (&struct_declarations, 0, sizeof (struct_declarations));
+  /* Avoid pointing into NULL, as that is editable on some
+     systems.  */
+  int dummy;
+  int *dummy_ptr = &dummy;
+
+  struct _struct_decl struct_declarations = { 0, 0, NULL, 0, &dummy_ptr };
   weird = &struct_declarations;
 
   struct_declarations.integer = 123;
@@ -306,6 +310,29 @@ do_special_tests (void)
   incr_a(2);
 }
 
+struct very_simple_struct
+{
+  int a;
+  int b;
+};
+
+int
+do_child_deletion (void)
+{
+  /*: BEGIN: child_deletion :*/
+  struct very_simple_struct s = {1, 2};
+  /*:
+    mi_create_varobj S s "create varobj for s"
+    mi_list_varobj_children S {{S.a a 0 int} {S.b b 0 int}}	\
+       "list children of S"
+    mi_delete_varobj S.a "delete S.a"    
+    mi_delete_varobj S.b "delete S.b"
+    mi_delete_varobj S "delete S"
+    :*/
+  return 99;
+  /*: END: child_deletion :*/  
+}
+
 int
 main (int argc, char *argv [])
 {
@@ -313,6 +340,7 @@ main (int argc, char *argv [])
   do_block_tests ();
   do_children_tests ();
   do_special_tests ();
+  do_child_deletion ();
   exit (0);
 }
 

@@ -1,6 +1,6 @@
 /* Handle SOM shared libraries for GDB, the GNU Debugger.
 
-   Copyright (C) 2004, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,9 +22,9 @@
 
 struct objfile;
 struct section_offsets;
-struct gdbarch_tdep;
+struct gdbarch;
 
-void som_solib_select (struct gdbarch_tdep *tdep);
+void som_solib_select (struct gdbarch *gdbarch);
 
 int som_solib_section_offsets (struct objfile *objfile,
 			       struct section_offsets *offsets);

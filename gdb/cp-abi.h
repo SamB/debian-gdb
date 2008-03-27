@@ -3,7 +3,7 @@
 
    Contributed by Daniel Berlin <dberlin@redhat.com>
 
-   Copyright (C) 2001, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -172,6 +172,10 @@ void cplus_make_method_ptr (gdb_byte *CONTENTS, CORE_ADDR address,
 
 CORE_ADDR cplus_skip_trampoline (struct frame_info *frame, CORE_ADDR stop_pc);
 
+/* Return non-zero if an argument of type TYPE should be passed by reference
+   instead of value.  */
+extern int cp_pass_by_reference (struct type *type);
+
 struct cp_abi_ops
 {
   const char *shortname;
@@ -195,6 +199,7 @@ struct cp_abi_ops
   void (*make_method_ptr) (gdb_byte *, CORE_ADDR, int);
   struct value * (*method_ptr_to_value) (struct value **, struct value *);
   CORE_ADDR (*skip_trampoline) (struct frame_info *, CORE_ADDR);
+  int (*pass_by_reference) (struct type *type);
 };
 
 

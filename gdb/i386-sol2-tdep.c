@@ -1,6 +1,7 @@
 /* Target-dependent code for Solaris x86.
 
-   Copyright (C) 2002, 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -76,6 +77,29 @@ i386_sol2_mcontext_addr (struct frame_info *next_frame)
   return ucontext_addr + 36;
 }
 
+/* SunPRO encodes the static variables.  This is not related to C++
+   mangling, it is done for C too.  */
+
+static char *
+i386_sol2_static_transform_name (char *name)
+{
+  char *p;
+  if (name[0] == '.')
+    {
+      /* For file-local statics there will be a period, a bunch of
+         junk (the contents of which match a string given in the
+         N_OPT), a period and the name.  For function-local statics
+         there will be a bunch of junk (which seems to change the
+         second character from 'A' to 'B'), a period, the name of the
+         function, and the name.  So just skip everything before the
+         last period.  */
+      p = strrchr (name, '.');
+      if (p != NULL)
+        name = p + 1;
+    }
+  return name;
+}
+
 /* Solaris 2.  */
 
 static void
@@ -85,6 +109,13 @@ i386_sol2_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   /* Solaris is SVR4-based.  */
   i386_svr4_init_abi (info, gdbarch);
+
+  /* The SunPRO compiler puts out 0 instead of the address in N_SO symbols,
+     and for SunPRO 3.0, N_FUN symbols too.  */
+  set_gdbarch_sofun_address_maybe_missing (gdbarch, 1);
+
+  /* Handle SunPRO encoding of static symbols.  */
+  set_gdbarch_static_transform_name (gdbarch, i386_sol2_static_transform_name);
 
   /* Solaris reserves space for its FPU emulator in `fpregset_t'.
      There is also some space reserved for the registers of a Weitek

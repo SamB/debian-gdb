@@ -1,3 +1,19 @@
+gdb (6.8-1) unstable; urgency=low
+
+  * New upstream release.
+    - Remove patches merged upstream.
+    - GDB automatically sets breakpoints in every copy of C++ templates
+      and cloned constructors (Closes: #421540).
+    - Improved support for debugging optimized code - local variables are
+      displayed more often.
+    - Automatically recognizes ObjC sources (Closes: #462882).
+  * Backported patch to fix quoting for rbreak (Closes: #357319).
+  * Adjust copyright file, quilt build dependency, and oldest changelog entry
+    on lintian's advice.
+  * Add libsim.a to libgdb-dev (Closes: #473295).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Thu, 27 Mar 2008 18:13:39 -0400
+
 gdb (6.7.1-2) unstable; urgency=low
 
   * Add patch from Ulrich Weigand to fix stepping over shared library
@@ -935,10 +951,3 @@ gdb (4.16-2) unstable; urgency=MEDIUM
   * Reformatted the changelog :-)
 
  -- Stuart Lamble <lamble@yoyo.cc.monash.edu.au>  Sun, 20 Oct 1996 18:48:40 +1000
-
-gdb (4.16-1) unstable; urgency=low
-
-  * Updated to new upstream version (Bug#4373)
-  * Added a simple extended description (Bug#3599)
-
- -- David Engel

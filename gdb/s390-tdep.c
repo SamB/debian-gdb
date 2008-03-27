@@ -1,6 +1,6 @@
 /* Target-dependent code for GDB, the GNU debugger.
 
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    Contributed by D.J. Barrow (djbarrow@de.ibm.com,barrow_dj@yahoo.com)
@@ -65,7 +65,7 @@ struct gdbarch_tdep
 
 /* Return the name of register REGNUM.  */
 static const char *
-s390_register_name (int regnum)
+s390_register_name (struct gdbarch *gdbarch, int regnum)
 {
   static const char *register_names[S390_NUM_TOTAL_REGS] =
     {
@@ -147,7 +147,7 @@ static int s390_dwarf_regmap[] =
 /* Convert DWARF register number REG to the appropriate register
    number used by GDB.  */
 static int
-s390_dwarf_reg_to_regnum (int reg)
+s390_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 {
   int regnum = -1;
 
@@ -1093,11 +1093,11 @@ s390_analyze_prologue (struct gdbarch *gdbarch,
 /* Advance PC across any function entry prologue instructions to reach 
    some "real" code.  */
 static CORE_ADDR
-s390_skip_prologue (CORE_ADDR pc)
+s390_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   struct s390_prologue_data data;
   CORE_ADDR skip_pc;
-  skip_pc = s390_analyze_prologue (current_gdbarch, pc, (CORE_ADDR)-1, &data);
+  skip_pc = s390_analyze_prologue (gdbarch, pc, (CORE_ADDR)-1, &data);
   return skip_pc ? skip_pc : pc;
 }
 
@@ -1816,6 +1816,7 @@ is_float_singleton (struct type *type)
       CHECK_TYPEDEF (singleton_type);
 
       return (TYPE_CODE (singleton_type) == TYPE_CODE_FLT
+	      || TYPE_CODE (singleton_type) == TYPE_CODE_DECFLOAT
 	      || is_float_singleton (singleton_type));
     }
 
@@ -1854,6 +1855,7 @@ static int
 is_float_like (struct type *type)
 {
   return (TYPE_CODE (type) == TYPE_CODE_FLT
+	  || TYPE_CODE (type) == TYPE_CODE_DECFLOAT
           || is_float_singleton (type));
 }
 
@@ -1930,7 +1932,8 @@ alignment_of (struct type *type)
 
   if (is_integer_like (type)
       || is_pointer_like (type)
-      || TYPE_CODE (type) == TYPE_CODE_FLT)
+      || TYPE_CODE (type) == TYPE_CODE_FLT
+      || TYPE_CODE (type) == TYPE_CODE_DECFLOAT)
     alignment = TYPE_LENGTH (type);
   else if (TYPE_CODE (type) == TYPE_CODE_STRUCT
            || TYPE_CODE (type) == TYPE_CODE_UNION)
@@ -2185,7 +2188,8 @@ s390_return_value (struct gdbarch *gdbarch, struct type *type,
       switch (rvc)
 	{
 	case RETURN_VALUE_REGISTER_CONVENTION:
-	  if (TYPE_CODE (type) == TYPE_CODE_FLT)
+	  if (TYPE_CODE (type) == TYPE_CODE_FLT
+	      || TYPE_CODE (type) == TYPE_CODE_DECFLOAT)
 	    {
 	      /* When we store a single-precision value in an FP register,
 		 it occupies the leftmost bits.  */
@@ -2221,7 +2225,8 @@ s390_return_value (struct gdbarch *gdbarch, struct type *type,
       switch (rvc)
 	{
 	case RETURN_VALUE_REGISTER_CONVENTION:
-	  if (TYPE_CODE (type) == TYPE_CODE_FLT)
+	  if (TYPE_CODE (type) == TYPE_CODE_FLT
+	      || TYPE_CODE (type) == TYPE_CODE_DECFLOAT)
 	    {
 	      /* When we store a single-precision value in an FP register,
 		 it occupies the leftmost bits.  */
@@ -2256,7 +2261,7 @@ s390_return_value (struct gdbarch *gdbarch, struct type *type,
 /* Breakpoints.  */
 
 static const gdb_byte *
-s390_breakpoint_from_pc (CORE_ADDR *pcptr, int *lenptr)
+s390_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr, int *lenptr)
 {
   static const gdb_byte breakpoint[] = { 0x0, 0x1 };
 
@@ -2327,6 +2332,12 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_believe_pcc_promotion (gdbarch, 0);
   set_gdbarch_char_signed (gdbarch, 0);
+
+  /* S/390 GNU/Linux uses either 64-bit or 128-bit long doubles.
+     We can safely let them default to 128-bit, since the debug info
+     will give the size of type actually used in each case.  */
+  set_gdbarch_long_double_bit (gdbarch, 128);
+  set_gdbarch_long_double_format (gdbarch, floatformats_ia64_quad);
 
   /* Amount PC must be decremented by after a breakpoint.  This is
      often the number of bytes returned by gdbarch_breakpoint_from_pc but not

@@ -189,6 +189,9 @@ endif
 
 	install -d debian/tmp/usr/lib
 	install -m 644 $(DEB_BUILDDIR)/gdb/libgdb.a debian/tmp/usr/lib/
+	if test -e $(DEB_BUILDDIR)/sim/*/libsim.a; then \
+	  install -m 644 $(DEB_BUILDDIR)/sim/*/libsim.a debian/tmp/usr/lib/; \
+	fi
 
 debian/control:: debian/control.in $(CROSS_FORCE)
 	cat debian/control.in \

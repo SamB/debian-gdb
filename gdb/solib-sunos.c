@@ -1,7 +1,7 @@
 /* Handle SunOS shared libraries for GDB, the GNU Debugger.
 
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000,
-   2001, 2004, 2007 Free Software Foundation, Inc.
+   2001, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -765,7 +765,7 @@ sunos_solib_create_inferior_hook (void)
   do
     {
       target_resume (pid_to_ptid (-1), 0, stop_signal);
-      wait_for_inferior ();
+      wait_for_inferior (0);
     }
   while (stop_signal != TARGET_SIGNAL_TRAP);
   stop_soon = NO_STOP_QUIETLY;

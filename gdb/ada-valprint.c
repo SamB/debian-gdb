@@ -1,7 +1,7 @@
 /* Support for printing Ada values for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1988, 1989, 1991, 1992, 1993, 1994, 1997, 2001, 2002,
-   2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -246,7 +246,7 @@ val_print_packed_array_elements (struct type *type, const gdb_byte *valaddr,
 static struct type *
 printable_val_type (struct type *type, const gdb_byte *valaddr)
 {
-  return ada_to_fixed_type (ada_aligned_type (type), valaddr, 0, NULL);
+  return ada_to_fixed_type (ada_aligned_type (type), valaddr, 0, NULL, 1);
 }
 
 /* Print the character C on STREAM as part of the contents of a literal
@@ -726,9 +726,9 @@ ada_val_print_1 (struct type *type, const gdb_byte *valaddr0,
               fprintf_filtered (stream, "(");
               type_print (type, "", stream, -1);
               fprintf_filtered (stream, ") ");
-              deprecated_print_address_numeric 
-		(extract_typed_address (valaddr, builtin_type_void_data_ptr),
-                 1, stream);
+	      fputs_filtered (paddress (extract_typed_address
+					(valaddr, builtin_type_void_data_ptr)),
+			      stream);
             }
 	  else
 	    {
@@ -855,32 +855,35 @@ ada_val_print_1 (struct type *type, const gdb_byte *valaddr0,
       return len;
 
     case TYPE_CODE_REF:
+      /* For references, the debugger is expected to print the value as
+         an address if DEREF_REF is null.  But printing an address in place
+         of the object value would be confusing to an Ada programmer.
+         So, for Ada values, we print the actual dereferenced value
+         regardless.  */
       elttype = check_typedef (TYPE_TARGET_TYPE (type));
-      /* De-reference the reference */
-      if (deref_ref)
-	{
-	  if (TYPE_CODE (elttype) != TYPE_CODE_UNDEF)
-	    {
-	      LONGEST deref_val_int = (LONGEST)
-		unpack_pointer (lookup_pointer_type (builtin_type_void),
-				valaddr);
-	      if (deref_val_int != 0)
-		{
-		  struct value *deref_val =
-		    ada_value_ind (value_from_longest
-				   (lookup_pointer_type (elttype),
-				    deref_val_int));
-		  val_print (value_type (deref_val),
-			     value_contents (deref_val), 0,
-			     VALUE_ADDRESS (deref_val), stream, format,
-			     deref_ref, recurse + 1, pretty);
-		}
-	      else
-		fputs_filtered ("(null)", stream);
-	    }
-	  else
-	    fputs_filtered ("???", stream);
-	}
+      
+      if (TYPE_CODE (elttype) != TYPE_CODE_UNDEF)
+        {
+          LONGEST deref_val_int = (LONGEST)
+            unpack_pointer (lookup_pointer_type (builtin_type_void),
+                            valaddr);
+          if (deref_val_int != 0)
+            {
+              struct value *deref_val =
+                ada_value_ind (value_from_longest
+                               (lookup_pointer_type (elttype),
+                                deref_val_int));
+              val_print (value_type (deref_val),
+                         value_contents (deref_val), 0,
+                         VALUE_ADDRESS (deref_val), stream, format,
+                         deref_ref, recurse + 1, pretty);
+            }
+          else
+            fputs_filtered ("(null)", stream);
+        }
+      else
+        fputs_filtered ("???", stream);
+
       break;
     }
   gdb_flush (stream);
@@ -914,7 +917,7 @@ ada_value_print (struct value *val0, struct ui_file *stream, int format,
   const gdb_byte *valaddr = value_contents (val0);
   CORE_ADDR address = VALUE_ADDRESS (val0) + value_offset (val0);
   struct type *type =
-    ada_to_fixed_type (value_type (val0), valaddr, address, NULL);
+    ada_to_fixed_type (value_type (val0), valaddr, address, NULL, 1);
   struct value *val =
     value_from_contents_and_address (type, valaddr, address);
 

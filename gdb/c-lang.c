@@ -1,7 +1,7 @@
 /* C language support routines for GDB, the GNU debugger.
 
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2002, 2003,
-   2004, 2005, 2007 Free Software Foundation, Inc.
+   2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -179,190 +179,6 @@ c_printstr (struct ui_file *stream, const gdb_byte *string,
 
   if (force_ellipses || i < length)
     fputs_filtered ("...", stream);
-}
-
-/* Create a fundamental C type using default reasonable for the current
-   target machine.
-
-   Some object/debugging file formats (DWARF version 1, COFF, etc) do not
-   define fundamental types such as "int" or "double".  Others (stabs or
-   DWARF version 2, etc) do define fundamental types.  For the formats which
-   don't provide fundamental types, gdb can create such types using this
-   function.
-
-   FIXME:  Some compilers distinguish explicitly signed integral types
-   (signed short, signed int, signed long) from "regular" integral types
-   (short, int, long) in the debugging information.  There is some dis-
-   agreement as to how useful this feature is.  In particular, gcc does
-   not support this.  Also, only some debugging formats allow the
-   distinction to be passed on to a debugger.  For now, we always just
-   use "short", "int", or "long" as the type name, for both the implicit
-   and explicitly signed types.  This also makes life easier for the
-   gdb test suite since we don't have to account for the differences
-   in output depending upon what the compiler and debugging format
-   support.  We will probably have to re-examine the issue when gdb
-   starts taking its fundamental type information directly from the
-   debugging information supplied by the compiler.  fnf@cygnus.com */
-
-struct type *
-c_create_fundamental_type (struct objfile *objfile, int typeid)
-{
-  struct type *type = NULL;
-
-  switch (typeid)
-    {
-    default:
-      /* FIXME:  For now, if we are asked to produce a type not in this
-         language, create the equivalent of a C integer type with the
-         name "<?type?>".  When all the dust settles from the type
-         reconstruction work, this should probably become an error. */
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "<?type?>", objfile);
-      warning (_("internal error: no C/C++ fundamental type %d"), typeid);
-      break;
-    case FT_VOID:
-      type = init_type (TYPE_CODE_VOID,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			0, "void", objfile);
-      break;
-    case FT_BOOLEAN:
-      type = init_type (TYPE_CODE_BOOL,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			0, "bool", objfile);
-      break;
-    case FT_CHAR:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			TYPE_FLAG_NOSIGN, "char", objfile);
-      break;
-    case FT_SIGNED_CHAR:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			0, "signed char", objfile);
-      break;
-    case FT_UNSIGNED_CHAR:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "unsigned char", objfile);
-      break;
-    case FT_SHORT:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "short", objfile);
-      break;
-    case FT_SIGNED_SHORT:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "short", objfile);	/* FIXME-fnf */
-      break;
-    case FT_UNSIGNED_SHORT:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "unsigned short", objfile);
-      break;
-    case FT_INTEGER:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "int", objfile);
-      break;
-    case FT_SIGNED_INTEGER:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "int", objfile);	/* FIXME -fnf */
-      break;
-    case FT_UNSIGNED_INTEGER:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "unsigned int", objfile);
-      break;
-    case FT_LONG:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "long", objfile);
-      break;
-    case FT_SIGNED_LONG:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "long", objfile);	/* FIXME -fnf */
-      break;
-    case FT_UNSIGNED_LONG:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "unsigned long", objfile);
-      break;
-    case FT_LONG_LONG:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_long_long_bit (current_gdbarch) 
-			  / TARGET_CHAR_BIT,
-			0, "long long", objfile);
-      break;
-    case FT_SIGNED_LONG_LONG:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_long_long_bit (current_gdbarch) 
-			  / TARGET_CHAR_BIT,
-			0, "signed long long", objfile);
-      break;
-    case FT_UNSIGNED_LONG_LONG:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_long_long_bit (current_gdbarch) 
-			  / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "unsigned long long", objfile);
-      break;
-    case FT_FLOAT:
-      type = init_type (TYPE_CODE_FLT,
-			gdbarch_float_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "float", objfile);
-      break;
-    case FT_DBL_PREC_FLOAT:
-      type = init_type (TYPE_CODE_FLT,
-			gdbarch_double_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "double", objfile);
-      break;
-    case FT_EXT_PREC_FLOAT:
-      type = init_type (TYPE_CODE_FLT,
-			gdbarch_long_double_bit (current_gdbarch)
-			  / TARGET_CHAR_BIT,
-			0, "long double", objfile);
-      break;
-    case FT_COMPLEX:
-      type = init_type (TYPE_CODE_FLT,
-			2 * gdbarch_float_bit (current_gdbarch)
-			  / TARGET_CHAR_BIT,
-			0, "complex float", objfile);
-      TYPE_TARGET_TYPE (type)
-	= init_type (TYPE_CODE_FLT,
-		     gdbarch_float_bit (current_gdbarch) / TARGET_CHAR_BIT,
-		     0, "float", objfile);
-      break;
-    case FT_DBL_PREC_COMPLEX:
-      type = init_type (TYPE_CODE_FLT,
-			2 * gdbarch_double_bit (current_gdbarch)
-			  / TARGET_CHAR_BIT,
-			0, "complex double", objfile);
-      TYPE_TARGET_TYPE (type)
-	= init_type (TYPE_CODE_FLT,
-		     gdbarch_double_bit (current_gdbarch) / TARGET_CHAR_BIT,
-		     0, "double", objfile);
-      break;
-    case FT_EXT_PREC_COMPLEX:
-      type = init_type (TYPE_CODE_FLT,
-			2 * gdbarch_long_double_bit (current_gdbarch)
-			  / TARGET_CHAR_BIT,
-			0, "complex long double", objfile);
-      TYPE_TARGET_TYPE (type)
-	= init_type (TYPE_CODE_FLT,
-		     gdbarch_long_double_bit (current_gdbarch)
-		       / TARGET_CHAR_BIT,
-		     0, "long double", objfile);
-      break;
-    case FT_TEMPLATE_ARG:
-      type = init_type (TYPE_CODE_TEMPLATE_ARG,
-			0,
-			0, "<template arg>", objfile);
-      break;
-    }
-  return (type);
 }
 
 /* Preprocessing and parsing C and C++ expressions.  */
@@ -542,6 +358,9 @@ enum c_primitive_types {
   c_primitive_type_long_double,
   c_primitive_type_complex,
   c_primitive_type_double_complex,
+  c_primitive_type_decfloat,
+  c_primitive_type_decdouble,
+  c_primitive_type_declong,
   nr_c_primitive_types
 };
 
@@ -571,13 +390,15 @@ c_language_arch_info (struct gdbarch *gdbarch,
   lai->primitive_type_vector [c_primitive_type_long_double] = builtin->builtin_long_double;
   lai->primitive_type_vector [c_primitive_type_complex] = builtin->builtin_complex;
   lai->primitive_type_vector [c_primitive_type_double_complex] = builtin->builtin_double_complex;
+  lai->primitive_type_vector [c_primitive_type_decfloat] = builtin->builtin_decfloat;
+  lai->primitive_type_vector [c_primitive_type_decdouble] = builtin->builtin_decdouble;
+  lai->primitive_type_vector [c_primitive_type_declong] = builtin->builtin_declong;
 }
 
 const struct language_defn c_language_defn =
 {
   "c",				/* Language name */
   language_c,
-  NULL,
   range_check_off,
   type_check_off,
   case_sensitive_on,
@@ -589,7 +410,6 @@ const struct language_defn c_language_defn =
   c_printchar,			/* Print a character constant */
   c_printstr,			/* Function to print string constant */
   c_emit_char,			/* Print a single char */
-  c_create_fundamental_type,	/* Create fundamental type in this language */
   c_print_type,			/* Print a type using appropriate syntax */
   c_val_print,			/* Print a value using appropriate syntax */
   c_value_print,		/* Print a top-level value */
@@ -602,10 +422,11 @@ const struct language_defn c_language_defn =
   c_op_print_tab,		/* expression operators for printing */
   1,				/* c-style arrays */
   0,				/* String lower bound */
-  NULL,
   default_word_break_characters,
+  default_make_symbol_completion_list,
   c_language_arch_info,
   default_print_array_index,
+  default_pass_by_reference,
   LANG_MAGIC
 };
 
@@ -628,6 +449,9 @@ enum cplus_primitive_types {
   cplus_primitive_type_complex,
   cplus_primitive_type_double_complex,
   cplus_primitive_type_bool,
+  cplus_primitive_type_decfloat,
+  cplus_primitive_type_decdouble,
+  cplus_primitive_type_declong,
   nr_cplus_primitive_types
 };
 
@@ -676,13 +500,18 @@ cplus_language_arch_info (struct gdbarch *gdbarch,
     = builtin->builtin_double_complex;
   lai->primitive_type_vector [cplus_primitive_type_bool]
     = builtin->builtin_bool;
+  lai->primitive_type_vector [cplus_primitive_type_decfloat]
+    = builtin->builtin_decfloat;
+  lai->primitive_type_vector [cplus_primitive_type_decdouble]
+    = builtin->builtin_decdouble;
+  lai->primitive_type_vector [cplus_primitive_type_declong]
+    = builtin->builtin_declong;
 }
 
 const struct language_defn cplus_language_defn =
 {
   "c++",			/* Language name */
   language_cplus,
-  NULL,
   range_check_off,
   type_check_off,
   case_sensitive_on,
@@ -694,7 +523,6 @@ const struct language_defn cplus_language_defn =
   c_printchar,			/* Print a character constant */
   c_printstr,			/* Function to print string constant */
   c_emit_char,			/* Print a single char */
-  c_create_fundamental_type,	/* Create fundamental type in this language */
   c_print_type,			/* Print a type using appropriate syntax */
   c_val_print,			/* Print a value using appropriate syntax */
   c_value_print,		/* Print a top-level value */
@@ -707,10 +535,11 @@ const struct language_defn cplus_language_defn =
   c_op_print_tab,		/* expression operators for printing */
   1,				/* c-style arrays */
   0,				/* String lower bound */
-  NULL,
   default_word_break_characters,
+  default_make_symbol_completion_list,
   cplus_language_arch_info,
   default_print_array_index,
+  cp_pass_by_reference,
   LANG_MAGIC
 };
 
@@ -718,7 +547,6 @@ const struct language_defn asm_language_defn =
 {
   "asm",			/* Language name */
   language_asm,
-  NULL,
   range_check_off,
   type_check_off,
   case_sensitive_on,
@@ -730,7 +558,6 @@ const struct language_defn asm_language_defn =
   c_printchar,			/* Print a character constant */
   c_printstr,			/* Function to print string constant */
   c_emit_char,			/* Print a single char */
-  c_create_fundamental_type,	/* Create fundamental type in this language */
   c_print_type,			/* Print a type using appropriate syntax */
   c_val_print,			/* Print a value using appropriate syntax */
   c_value_print,		/* Print a top-level value */
@@ -743,10 +570,11 @@ const struct language_defn asm_language_defn =
   c_op_print_tab,		/* expression operators for printing */
   1,				/* c-style arrays */
   0,				/* String lower bound */
-  NULL,
   default_word_break_characters,
+  default_make_symbol_completion_list,
   c_language_arch_info, /* FIXME: la_language_arch_info.  */
   default_print_array_index,
+  default_pass_by_reference,
   LANG_MAGIC
 };
 
@@ -759,7 +587,6 @@ const struct language_defn minimal_language_defn =
 {
   "minimal",			/* Language name */
   language_minimal,
-  NULL,
   range_check_off,
   type_check_off,
   case_sensitive_on,
@@ -771,7 +598,6 @@ const struct language_defn minimal_language_defn =
   c_printchar,			/* Print a character constant */
   c_printstr,			/* Function to print string constant */
   c_emit_char,			/* Print a single char */
-  c_create_fundamental_type,	/* Create fundamental type in this language */
   c_print_type,			/* Print a type using appropriate syntax */
   c_val_print,			/* Print a value using appropriate syntax */
   c_value_print,		/* Print a top-level value */
@@ -784,10 +610,11 @@ const struct language_defn minimal_language_defn =
   c_op_print_tab,		/* expression operators for printing */
   1,				/* c-style arrays */
   0,				/* String lower bound */
-  NULL,
   default_word_break_characters,
+  default_make_symbol_completion_list,
   c_language_arch_info,
   default_print_array_index,
+  default_pass_by_reference,
   LANG_MAGIC
 };
 

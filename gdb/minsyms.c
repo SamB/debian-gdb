@@ -1,6 +1,6 @@
 /* GDB routines for manipulating the minimal symbol tables.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2007 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
    This file is part of GDB.
@@ -165,20 +165,19 @@ lookup_minimal_symbol (const char *name, const char *sfile,
   unsigned int hash = msymbol_hash (name) % MINIMAL_SYMBOL_HASH_SIZE;
   unsigned int dem_hash = msymbol_hash_iw (name) % MINIMAL_SYMBOL_HASH_SIZE;
 
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
   if (sfile != NULL)
     {
       char *p = strrchr (sfile, '/');
       if (p != NULL)
 	sfile = p + 1;
     }
-#endif
 
   for (objfile = object_files;
        objfile != NULL && found_symbol == NULL;
        objfile = objfile->next)
     {
-      if (objf == NULL || objf == objfile)
+      if (objf == NULL || objf == objfile
+	  || objf->separate_debug_objfile == objfile)
 	{
 	  /* Do two passes: the first over the ordinary hash table,
 	     and the second over the demangled hash table.  */
@@ -209,18 +208,9 @@ lookup_minimal_symbol (const char *name, const char *sfile,
                       case mst_file_text:
                       case mst_file_data:
                       case mst_file_bss:
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
                         if (sfile == NULL
 			    || strcmp (msymbol->filename, sfile) == 0)
                           found_file_symbol = msymbol;
-#else
-                        /* We have neither the ability nor the need to
-                           deal with the SFILE parameter.  If we find
-                           more than one symbol, just return the latest
-                           one (the user can't expect useful behavior in
-                           that case).  */
-                        found_file_symbol = msymbol;
-#endif
                         break;
 
                       case mst_solib_trampoline:
@@ -285,7 +275,8 @@ lookup_minimal_symbol_text (const char *name, struct objfile *objf)
        objfile != NULL && found_symbol == NULL;
        objfile = objfile->next)
     {
-      if (objf == NULL || objf == objfile)
+      if (objf == NULL || objf == objfile
+	  || objf->separate_debug_objfile == objfile)
 	{
 	  for (msymbol = objfile->msymbol_hash[hash];
 	       msymbol != NULL && found_symbol == NULL;
@@ -341,7 +332,8 @@ lookup_minimal_symbol_solib_trampoline (const char *name,
        objfile != NULL && found_symbol == NULL;
        objfile = objfile->next)
     {
-      if (objf == NULL || objf == objfile)
+      if (objf == NULL || objf == objfile
+	  || objf->separate_debug_objfile == objfile)
 	{
 	  for (msymbol = objfile->msymbol_hash[hash];
 	       msymbol != NULL && found_symbol == NULL;

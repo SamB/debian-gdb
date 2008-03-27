@@ -1,6 +1,6 @@
 /* Target-dependent code for NetBSD/sh.
 
-   Copyright (C) 2002, 2003, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Wasabi Systems, Inc.
 
@@ -67,14 +67,14 @@ shnbsd_supply_gregset (const struct regset *regset,
 		       struct regcache *regcache,
 		       int regnum, const void *gregs, size_t len)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   const gdb_byte *regs = gregs;
   int i;
 
   gdb_assert (len >= SHNBSD_SIZEOF_GREGS);
 
-  if (regnum == gdbarch_pc_regnum (current_gdbarch) || regnum == -1)
-    regcache_raw_supply (regcache,
-			 gdbarch_pc_regnum (current_gdbarch),
+  if (regnum == gdbarch_pc_regnum (gdbarch) || regnum == -1)
+    regcache_raw_supply (regcache, gdbarch_pc_regnum (gdbarch),
 			 regs + (0 * 4));
 
   if (regnum == SR_REGNUM || regnum == -1)
@@ -106,13 +106,14 @@ shnbsd_collect_gregset (const struct regset *regset,
 			const struct regcache *regcache,
 			int regnum, void *gregs, size_t len)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   gdb_byte *regs = gregs;
   int i;
 
   gdb_assert (len >= SHNBSD_SIZEOF_GREGS);
 
-  if (regnum == gdbarch_pc_regnum (current_gdbarch) || regnum == -1)
-    regcache_raw_collect (regcache, gdbarch_pc_regnum (current_gdbarch),
+  if (regnum == gdbarch_pc_regnum (gdbarch) || regnum == -1)
+    regcache_raw_collect (regcache, gdbarch_pc_regnum (gdbarch),
 			  regs + (0 * 4));
 
   if (regnum == SR_REGNUM || regnum == -1)

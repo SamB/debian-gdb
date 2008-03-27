@@ -3,7 +3,7 @@ This is the Debian GNU/Linux packaged version of the GNU debugger, GDB.
 Earlier versions of this package were assembled by David Engel
 <david@ods.com>, Stuart Lamble <lamble@yoyo.cc.monash.edu.au>, and others.
 
-GDB is Copyright (C) Free Software Foundation, Inc.
+GDB is Copyright (C) 2008 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by

@@ -1,5 +1,6 @@
 /* Helper routines for C++ support in GDB.
-   Copyright (C) 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
    Namespace support contributed by David Carlton.
@@ -114,10 +115,10 @@ extern void cp_check_possible_namespace_symbols (const char *name,
 
 struct type *cp_lookup_transparent_type (const char *name);
 
-/* Functions from cp-names.y.  */
+/* Functions from cp-name-parser.y.  */
 
 extern struct demangle_component *cp_demangled_name_to_comp
-  (const char *demangled_name, void **memory_p, const char **errmsg);
+  (const char *demangled_name, const char **errmsg);
 
 extern char *cp_comp_to_string (struct demangle_component *result,
 				int estimated_len);

@@ -1,7 +1,7 @@
 /* Intel 386 target-dependent stuff.
 
    Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -152,9 +152,9 @@ i386_fpc_regnum_p (int regnum)
 /* Return the name of register REGNUM.  */
 
 const char *
-i386_register_name (int regnum)
+i386_register_name (struct gdbarch *gdbarch, int regnum)
 {
-  if (i386_mmx_regnum_p (current_gdbarch, regnum))
+  if (i386_mmx_regnum_p (gdbarch, regnum))
     return i386_mmx_names[regnum - I387_MM0_REGNUM];
 
   if (regnum >= 0 && regnum < i386_num_register_names)
@@ -167,7 +167,7 @@ i386_register_name (int regnum)
    number used by GDB.  */
 
 static int
-i386_dbx_reg_to_regnum (int reg)
+i386_dbx_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 {
   /* This implements what GCC calls the "default" register map
      (dbx_register_map[]).  */
@@ -199,15 +199,14 @@ i386_dbx_reg_to_regnum (int reg)
     }
 
   /* This will hopefully provoke a warning.  */
-  return gdbarch_num_regs (current_gdbarch)
-	 + gdbarch_num_pseudo_regs (current_gdbarch);
+  return gdbarch_num_regs (gdbarch) + gdbarch_num_pseudo_regs (gdbarch);
 }
 
 /* Convert SVR4 register number REG to the appropriate register number
    used by GDB.  */
 
 static int
-i386_svr4_reg_to_regnum (int reg)
+i386_svr4_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 {
   /* This implements the GCC register map that tries to be compatible
      with the SVR4 C compiler for DWARF (svr4_dbx_register_map[]).  */
@@ -227,7 +226,7 @@ i386_svr4_reg_to_regnum (int reg)
   else if (reg >= 21 && reg <= 36)
     {
       /* The SSE and MMX registers have the same numbers as with dbx.  */
-      return i386_dbx_reg_to_regnum (reg);
+      return i386_dbx_reg_to_regnum (gdbarch, reg);
     }
 
   switch (reg)
@@ -244,8 +243,7 @@ i386_svr4_reg_to_regnum (int reg)
     }
 
   /* This will hopefully provoke a warning.  */
-  return gdbarch_num_regs (current_gdbarch)
-	 + gdbarch_num_pseudo_regs (current_gdbarch);
+  return gdbarch_num_regs (gdbarch) + gdbarch_num_pseudo_regs (gdbarch);
 }
 
 #undef I387_ST0_REGNUM
@@ -278,7 +276,7 @@ static const char *disassembly_flavor = att_flavor;
    This function is 64-bit safe.  */
 
 static const gdb_byte *
-i386_breakpoint_from_pc (CORE_ADDR *pc, int *len)
+i386_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pc, int *len)
 {
   static gdb_byte break_insn[] = { 0xcc }; /* int 3 */
 
@@ -634,6 +632,51 @@ struct i386_insn i386_frame_setup_skip_insns[] =
   { 0 }
 };
 
+
+/* Check whether PC points to a no-op instruction.  */
+static CORE_ADDR
+i386_skip_noop (CORE_ADDR pc)
+{
+  gdb_byte op;
+  int check = 1;
+
+  read_memory_nobpt (pc, &op, 1);
+
+  while (check) 
+    {
+      check = 0;
+      /* Ignore `nop' instruction.  */
+      if (op == 0x90) 
+	{
+	  pc += 1;
+	  read_memory_nobpt (pc, &op, 1);
+	  check = 1;
+	}
+      /* Ignore no-op instruction `mov %edi, %edi'.
+	 Microsoft system dlls often start with
+	 a `mov %edi,%edi' instruction.
+	 The 5 bytes before the function start are
+	 filled with `nop' instructions.
+	 This pattern can be used for hot-patching:
+	 The `mov %edi, %edi' instruction can be replaced by a
+	 near jump to the location of the 5 `nop' instructions
+	 which can be replaced by a 32-bit jump to anywhere
+	 in the 32-bit address space.  */
+
+      else if (op == 0x8b)
+	{
+	  read_memory_nobpt (pc + 1, &op, 1);
+	  if (op == 0xff)
+	    {
+	      pc += 2;
+	      read_memory_nobpt (pc, &op, 1);
+	      check = 1;
+	    }
+	}
+    }
+  return pc; 
+}
+
 /* Check whether PC points at a code that sets up a new stack frame.
    If so, it updates CACHE and returns the address of the first
    instruction after the sequence that sets up the frame or LIMIT,
@@ -819,6 +862,7 @@ static CORE_ADDR
 i386_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
 		       struct i386_frame_cache *cache)
 {
+  pc = i386_skip_noop (pc);
   pc = i386_follow_jump (pc);
   pc = i386_analyze_struct_return (pc, current_pc, cache);
   pc = i386_skip_probe (pc);
@@ -830,7 +874,7 @@ i386_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
 /* Return PC of first real instruction.  */
 
 static CORE_ADDR
-i386_skip_prologue (CORE_ADDR start_pc)
+i386_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR start_pc)
 {
   static gdb_byte pic_pat[6] =
   {
@@ -912,7 +956,7 @@ i386_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   gdb_byte buf[8];
 
-  frame_unwind_register (next_frame, gdbarch_pc_regnum (current_gdbarch), buf);
+  frame_unwind_register (next_frame, gdbarch_pc_regnum (gdbarch), buf);
   return extract_typed_address (buf, builtin_type_void_func_ptr);
 }
 
@@ -1098,7 +1142,7 @@ i386_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	{
 	  /* Read the value in from memory.  */
 	  read_memory (*addrp, valuep,
-		       register_size (current_gdbarch, regnum));
+		       register_size (get_frame_arch (next_frame), regnum));
 	}
       return;
     }
@@ -1131,7 +1175,7 @@ static struct i386_frame_cache *
 i386_sigtramp_frame_cache (struct frame_info *next_frame, void **this_cache)
 {
   struct i386_frame_cache *cache;
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (next_frame));
   CORE_ADDR addr;
   gdb_byte buf[4];
 
@@ -1278,7 +1322,7 @@ i386_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
 
   /* Don't use I386_ESP_REGNUM here, since this function is also used
      for AMD64.  */
-  get_frame_register (frame, gdbarch_sp_regnum (current_gdbarch), buf);
+  get_frame_register (frame, gdbarch_sp_regnum (get_frame_arch (frame)), buf);
   sp = extract_typed_address (buf, builtin_type_void_data_ptr);
   if (target_read_memory (sp + len, buf, len))
     return 0;
@@ -1384,8 +1428,8 @@ i386_extract_return_value (struct gdbarch *gdbarch, struct type *type,
     }
   else
     {
-      int low_size = register_size (current_gdbarch, LOW_RETURN_REGNUM);
-      int high_size = register_size (current_gdbarch, HIGH_RETURN_REGNUM);
+      int low_size = register_size (gdbarch, LOW_RETURN_REGNUM);
+      int high_size = register_size (gdbarch, HIGH_RETURN_REGNUM);
 
       if (len <= low_size)
 	{
@@ -1456,8 +1500,8 @@ i386_store_return_value (struct gdbarch *gdbarch, struct type *type,
     }
   else
     {
-      int low_size = register_size (current_gdbarch, LOW_RETURN_REGNUM);
-      int high_size = register_size (current_gdbarch, HIGH_RETURN_REGNUM);
+      int low_size = register_size (gdbarch, LOW_RETURN_REGNUM);
+      int high_size = register_size (gdbarch, HIGH_RETURN_REGNUM);
 
       if (len <= low_size)
 	regcache_raw_write_part (regcache, LOW_RETURN_REGNUM, 0, len, valbuf);
@@ -1535,10 +1579,12 @@ i386_return_value (struct gdbarch *gdbarch, struct type *type,
 {
   enum type_code code = TYPE_CODE (type);
 
-  if ((code == TYPE_CODE_STRUCT
-       || code == TYPE_CODE_UNION
-       || code == TYPE_CODE_ARRAY)
-      && !i386_reg_struct_return_p (gdbarch, type))
+  if (((code == TYPE_CODE_STRUCT
+	|| code == TYPE_CODE_UNION
+	|| code == TYPE_CODE_ARRAY)
+       && !i386_reg_struct_return_p (gdbarch, type))
+      /* 128-bit decimal float uses the struct return convention.  */
+      || (code == TYPE_CODE_DECFLOAT && TYPE_LENGTH (type) == 16))
     {
       /* The System V ABI says that:
 
@@ -1750,7 +1796,7 @@ i386_register_type (struct gdbarch *gdbarch, int regnum)
     return i386_sse_type (gdbarch);
 
 #define I387_ST0_REGNUM I386_ST0_REGNUM
-#define I387_NUM_XMM_REGS (gdbarch_tdep (current_gdbarch)->num_xmm_regs)
+#define I387_NUM_XMM_REGS (gdbarch_tdep (gdbarch)->num_xmm_regs)
 
   if (regnum == I387_MXCSR_REGNUM)
     return i386_mxcsr_type;
@@ -1857,7 +1903,7 @@ i386_next_regnum (int regnum)
    needs any special handling.  */
 
 static int
-i386_convert_register_p (int regnum, struct type *type)
+i386_convert_register_p (struct gdbarch *gdbarch, int regnum, struct type *type)
 {
   int len = TYPE_LENGTH (type);
 
@@ -1880,7 +1926,7 @@ i386_convert_register_p (int regnum, struct type *type)
 	return 1;
     }
 
-  return i386_fp_regnum_p (regnum);
+  return i387_convert_register_p (gdbarch, regnum, type);
 }
 
 /* Read a value of type TYPE from register REGNUM in frame FRAME, and
@@ -1908,7 +1954,7 @@ i386_register_to_value (struct frame_info *frame, int regnum,
   while (len > 0)
     {
       gdb_assert (regnum != -1);
-      gdb_assert (register_size (current_gdbarch, regnum) == 4);
+      gdb_assert (register_size (get_frame_arch (frame), regnum) == 4);
 
       get_frame_register (frame, regnum, to);
       regnum = i386_next_regnum (regnum);
@@ -1939,7 +1985,7 @@ i386_value_to_register (struct frame_info *frame, int regnum,
   while (len > 0)
     {
       gdb_assert (regnum != -1);
-      gdb_assert (register_size (current_gdbarch, regnum) == 4);
+      gdb_assert (register_size (get_frame_arch (frame), regnum) == 4);
 
       put_frame_register (frame, regnum, from);
       regnum = i386_next_regnum (regnum);
@@ -2065,32 +2111,6 @@ i386_regset_from_core_section (struct gdbarch *gdbarch,
 
   return NULL;
 }
-
-
-#ifdef STATIC_TRANSFORM_NAME
-/* SunPRO encodes the static variables.  This is not related to C++
-   mangling, it is done for C too.  */
-
-char *
-sunpro_static_transform_name (char *name)
-{
-  char *p;
-  if (IS_STATIC_TRANSFORM_NAME (name))
-    {
-      /* For file-local statics there will be a period, a bunch of
-         junk (the contents of which match a string given in the
-         N_OPT), a period and the name.  For function-local statics
-         there will be a bunch of junk (which seems to change the
-         second character from 'A' to 'B'), a period, the name of the
-         function, and the name.  So just skip everything before the
-         last period.  */
-      p = strrchr (name, '.');
-      if (p != NULL)
-	name = p + 1;
-    }
-  return name;
-}
-#endif /* STATIC_TRANSFORM_NAME */
 
 
 /* Stuff for WIN32 PE style DLL's but is pretty generic really.  */

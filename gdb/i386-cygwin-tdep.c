@@ -1,6 +1,6 @@
 /* Target-dependent code for Cygwin running on i386's, for GDB.
 
-   Copyright (C) 2003, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -26,6 +26,8 @@
 #include "gdb_obstack.h"
 #include "xml-support.h"
 #include "gdbcore.h"
+#include "solib.h"
+#include "solib-target.h"
 
 /* Core file support.  */
 
@@ -231,6 +233,8 @@ i386_cygwin_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->gregset_num_regs = ARRAY_SIZE (i386_win32_gregset_reg_offset);
   tdep->sizeof_gregset = I386_WIN32_SIZEOF_GREGSET;
 
+  set_solib_ops (gdbarch, &solib_target_so_ops);
+
   /* Core file support.  */
   set_gdbarch_regset_from_core_section
     (gdbarch, i386_win32_regset_from_core_section);
@@ -248,9 +252,15 @@ i386_cygwin_osabi_sniffer (bfd *abfd)
   if (strcmp (target_name, "pei-i386") == 0)
     return GDB_OSABI_CYGWIN;
 
-  /* Cygwin uses elf core dumps.  */
+  /* Cygwin uses elf core dumps.  Do not claim all ELF executables,
+     check whether there is a .reg section of proper size.  */
   if (strcmp (target_name, "elf32-i386") == 0)
-    return GDB_OSABI_CYGWIN;
+    {
+      asection *section = bfd_get_section_by_name (abfd, ".reg");
+      if (section
+	  && bfd_section_size (abfd, section) == I386_WIN32_SIZEOF_GREGSET)
+	return GDB_OSABI_CYGWIN;
+    }
 
   return GDB_OSABI_UNKNOWN;
 }

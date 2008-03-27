@@ -1,4 +1,4 @@
-# Copyright (C) 2007 Free Software Foundation, Inc.
+# Copyright (C) 2007, 2008 Free Software Foundation, Inc.
 
 # This file is part of GDB.
 
@@ -25,27 +25,47 @@
 # affected XML files is changed, and the results should be kept in the
 # GDB repository.
 
-WHICH = arm-with-iwmmxt mips-linux mips64-linux
+# It can also update the C files in the features directory from their
+# XML master copies.  This relies on a GDB linked with expat and
+# configured for the correct architecture, so the files are again kept
+# in the GDB repository.  To generate C files:
+#   make GDB=/path/to/gdb XMLTOC="xml files" cfiles
+
+WHICH = arm-with-iwmmxt mips-linux mips64-linux \
+	rs6000/powerpc-32 rs6000/powerpc-e500 rs6000/powerpc-64
 
 # Record which registers should be sent to GDB by default after stop.
 arm-with-iwmmxt-expedite = r11,sp,pc
 mips-linux-expedite = r29,pc
 mips64-linux-expedite = r29,pc
+rs6000/powerpc-32-expedite = r1,pc
+rs6000/powerpc-e500-expedite = r1,pc
+rs6000/powerpc-64-expedite = r1,pc
 
 XSLTPROC = xsltproc
 outdir = ../regformats
 OUTPUTS = $(patsubst %,$(outdir)/%.dat,$(WHICH))
 
+XMLTOC =
+CFILES = $(patsubst %.xml,%.c,$(XMLTOC))
+GDB = false
+
 all: $(OUTPUTS)
 
 $(outdir)/%.dat: %.xml number-regs.xsl sort-regs.xsl gdbserver-regs.xsl
 	echo "# DO NOT EDIT: generated from $<" > $(outdir)/$*.tmp
-	echo "name:`echo $* | sed 's/-/_/g'`" >> $(outdir)/$*.tmp
+	echo "name:`echo $(notdir $*) | sed 's/-/_/g'`" >> $(outdir)/$*.tmp
 	echo "expedite:$($*-expedite)" >> $(outdir)/$*.tmp
-	$(XSLTPROC) --xinclude number-regs.xsl $< | \
+	$(XSLTPROC) --path "$(PWD)" --xinclude number-regs.xsl $< | \
 	  $(XSLTPROC) sort-regs.xsl - | \
 	  $(XSLTPROC) gdbserver-regs.xsl - >> $(outdir)/$*.tmp
 	sh ../../move-if-change $(outdir)/$*.tmp $(outdir)/$*.dat
+
+cfiles: $(CFILES)
+%.c: %.xml
+	$(GDB) -nx -q -batch \
+	  -ex "set tdesc filename $<" -ex 'maint print c-tdesc' > $@.tmp
+	sh ../../move-if-change $@.tmp $@
 
 # Other dependencies.
 $(outdir)/arm-with-iwmmxt.dat: arm-core.xml xscale-iwmmxt.xml

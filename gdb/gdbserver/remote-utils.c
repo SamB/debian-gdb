@@ -1,6 +1,7 @@
 /* Remote utility routines for the remote server for GDB.
    Copyright (C) 1986, 1989, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -186,15 +187,15 @@ remote_open (char *name)
 #ifdef USE_WIN32API
       static int winsock_initialized;
 #endif
-      char *port_str;
       int port;
       struct sockaddr_in sockaddr;
       socklen_t tmp;
       int tmp_desc;
+      char *port_end;
 
-      port_str = strchr (name, ':');
-
-      port = atoi (port_str + 1);
+      port = strtoul (port_str + 1, &port_end, 10);
+      if (port_str[1] == '\0' || *port_end != '\0')
+	fatal ("Bad port argument: %s", name);
 
 #ifdef USE_WIN32API
       if (!winsock_initialized)
@@ -275,7 +276,6 @@ remote_open (char *name)
   fcntl (remote_desc, F_SETOWN, getpid ());
 #endif
 #endif
-  disable_async_io ();
 }
 
 void
@@ -575,7 +575,7 @@ putpkt_binary (char *buf, int cnt)
 	}
 
       /* Check for an input interrupt while we're here.  */
-      if (buf3[0] == '\003')
+      if (buf3[0] == '\003' && current_inferior != NULL)
 	(*the_target->request_interrupt) ();
     }
   while (buf3[0] != '+');
@@ -617,7 +617,7 @@ input_interrupt (int unused)
 
       cc = read (remote_desc, &c, 1);
 
-      if (cc != 1 || c != '\003')
+      if (cc != 1 || c != '\003' || current_inferior == NULL)
 	{
 	  fprintf (stderr, "input_interrupt, count = %d c = %d ('%c')\n",
 		   cc, c, c);
@@ -645,22 +645,12 @@ check_remote_input_interrupt_request (void)
    accept Control-C from the client, and must be disabled when talking to
    the client.  */
 
-void
-block_async_io (void)
-{
-#ifndef USE_WIN32API
-  sigset_t sigio_set;
-  sigemptyset (&sigio_set);
-  sigaddset (&sigio_set, SIGIO);
-  sigprocmask (SIG_BLOCK, &sigio_set, NULL);
-#endif
-}
-
-void
+static void
 unblock_async_io (void)
 {
 #ifndef USE_WIN32API
   sigset_t sigio_set;
+
   sigemptyset (&sigio_set);
   sigaddset (&sigio_set, SIGIO);
   sigprocmask (SIG_UNBLOCK, &sigio_set, NULL);
@@ -696,6 +686,17 @@ disable_async_io (void)
   async_io_enabled = 0;
 }
 
+void
+initialize_async_io (void)
+{
+  /* Make sure that async I/O starts disabled.  */
+  async_io_enabled = 1;
+  disable_async_io ();
+
+  /* Make sure the signal is unblocked.  */
+  unblock_async_io ();
+}
+
 /* Returns next char from remote GDB.  -1 if error.  */
 
 static int
@@ -722,7 +723,7 @@ readchar (void)
 
   bufp = buf;
   bufcnt--;
-  return *bufp++ & 0x7f;
+  return *bufp++;
 }
 
 /* Read a packet from the remote machine, with error checking,

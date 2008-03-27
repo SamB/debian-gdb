@@ -1,7 +1,7 @@
 /* Print values for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -33,6 +33,7 @@
 #include "floatformat.h"
 #include "doublest.h"
 #include "exceptions.h"
+#include "dfp.h"
 
 #include <errno.h>
 
@@ -503,6 +504,18 @@ print_floating (const gdb_byte *valaddr, struct type *type,
        doubles.  */
     fprintf_filtered (stream, "%.17g", (double) doub);
 #endif
+}
+
+void
+print_decimal_floating (const gdb_byte *valaddr, struct type *type,
+			struct ui_file *stream)
+{
+  char decstr[MAX_DECIMAL_STRING];
+  unsigned len = TYPE_LENGTH (type);
+
+  decimal_to_string (valaddr, len, decstr);
+  fputs_filtered (decstr, stream);
+  return;
 }
 
 void
@@ -1277,13 +1290,13 @@ val_print_string (CORE_ADDR addr, int len, int width, struct ui_file *stream)
       if (errcode == EIO)
 	{
 	  fprintf_filtered (stream, " <Address ");
-	  deprecated_print_address_numeric (addr, 1, stream);
+	  fputs_filtered (paddress (addr), stream);
 	  fprintf_filtered (stream, " out of bounds>");
 	}
       else
 	{
 	  fprintf_filtered (stream, " <Error reading address ");
-	  deprecated_print_address_numeric (addr, 1, stream);
+	  fputs_filtered (paddress (addr), stream);
 	  fprintf_filtered (stream, ": %s>", safe_strerror (errcode));
 	}
     }

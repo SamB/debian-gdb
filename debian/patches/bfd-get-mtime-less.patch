@@ -1,3 +1,5 @@
+Applied upstream after GDB 6.8.
+
 ---
  gdb/corefile.c |    3 +--
  gdb/exec.c     |    4 ++++

@@ -1,6 +1,6 @@
 /* Handle shared libraries for GDB, the GNU Debugger.
 
-   Copyright (C) 2000, 2004, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -37,6 +37,9 @@ struct link_map_offsets
     /* Offset of r_debug.r_map.  */
     int r_map_offset;
 
+    /* Offset of r_debug.r_brk.  */
+    int r_brk_offset;
+
     /* Offset of r_debug.r_ldsomap.  */
     int r_ldsomap_offset;
 
@@ -71,11 +74,6 @@ extern void set_solib_svr4_fetch_link_map_offsets
 /* This function is called by thread_db.c.  Return the address of the
    link map for the given objfile.  */
 extern CORE_ADDR svr4_fetch_objfile_link_map (struct objfile *objfile);
-
-/* legacy_svr4_fetch_link_map_offsets_hook is a pointer to a function
-   which is used to fetch link map offsets.  It will only be set
-   by solib-legacy.c, if at all.  */
-extern struct link_map_offsets *(*legacy_svr4_fetch_link_map_offsets_hook) (void);
 
 /* Fetch (and possibly build) an appropriate `struct link_map_offsets'
    for ILP32 and LP64 SVR4 systems.  */

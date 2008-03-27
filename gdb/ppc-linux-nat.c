@@ -1,7 +1,7 @@
 /* PPC GNU/Linux native support.
 
    Copyright (C) 1988, 1989, 1991, 1992, 1994, 1996, 2000, 2001, 2002, 2003,
-   2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -142,8 +142,6 @@ struct gdb_evrregset_t
    error.  */
 int have_ptrace_getvrregs = 1;
 
-static CORE_ADDR last_stopped_data_address = 0;
-
 /* Non-zero if our kernel may support the PTRACE_GETEVRREGS and
    PTRACE_SETEVRREGS requests, for reading and writing the SPE
    registers.  Zero if we've tried one of them and gotten an
@@ -164,10 +162,10 @@ PT_NIP, PT_MSR, PT_CCR, PT_LNK, PT_CTR, PT_XER, PT_MQ */
 /* *INDENT_ON * */
 
 static int
-ppc_register_u_addr (int regno)
+ppc_register_u_addr (struct gdbarch *gdbarch, int regno)
 {
   int u_addr = -1;
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   /* NOTE: cagney/2003-11-25: This is the word size used by the ptrace
      interface, and not the wordsize of the program's ABI.  */
   int wordsize = sizeof (long);
@@ -186,7 +184,7 @@ ppc_register_u_addr (int regno)
     u_addr = (PT_FPR0 * wordsize) + ((regno - tdep->ppc_fp0_regnum) * 8);
 
   /* UISA special purpose registers: 1 slot each */
-  if (regno == gdbarch_pc_regnum (current_gdbarch))
+  if (regno == gdbarch_pc_regnum (gdbarch))
     u_addr = PT_NIP * wordsize;
   if (regno == tdep->ppc_lr_regnum)
     u_addr = PT_LNK * wordsize;
@@ -229,8 +227,9 @@ fetch_altivec_register (struct regcache *regcache, int tid, int regno)
   int ret;
   int offset = 0;
   gdb_vrregset_t regs;
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
-  int vrregsize = register_size (current_gdbarch, tdep->ppc_vr0_regnum);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int vrregsize = register_size (gdbarch, tdep->ppc_vr0_regnum);
 
   ret = ptrace (PTRACE_GETVRREGS, tid, 0, &regs);
   if (ret < 0)
@@ -248,7 +247,7 @@ fetch_altivec_register (struct regcache *regcache, int tid, int regno)
      vector.  VRSAVE is at the end of the array in a 4 bytes slot, so
      there is no need to define an offset for it.  */
   if (regno == (tdep->ppc_vrsave_regnum - 1))
-    offset = vrregsize - register_size (current_gdbarch, tdep->ppc_vrsave_regnum);
+    offset = vrregsize - register_size (gdbarch, tdep->ppc_vrsave_regnum);
   
   regcache_raw_supply (regcache, regno,
 		       regs + (regno - tdep->ppc_vr0_regnum) * vrregsize + offset);
@@ -291,15 +290,16 @@ get_spe_registers (int tid, struct gdb_evrregset_t *evrregset)
 static void
 fetch_spe_register (struct regcache *regcache, int tid, int regno)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   struct gdb_evrregset_t evrregs;
 
   gdb_assert (sizeof (evrregs.evr[0])
-              == register_size (current_gdbarch, tdep->ppc_ev0_upper_regnum));
+              == register_size (gdbarch, tdep->ppc_ev0_upper_regnum));
   gdb_assert (sizeof (evrregs.acc)
-              == register_size (current_gdbarch, tdep->ppc_acc_regnum));
+              == register_size (gdbarch, tdep->ppc_acc_regnum));
   gdb_assert (sizeof (evrregs.spefscr)
-              == register_size (current_gdbarch, tdep->ppc_spefscr_regnum));
+              == register_size (gdbarch, tdep->ppc_spefscr_regnum));
 
   get_spe_registers (tid, &evrregs);
 
@@ -329,14 +329,15 @@ fetch_spe_register (struct regcache *regcache, int tid, int regno)
 static void
 fetch_register (struct regcache *regcache, int tid, int regno)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   /* This isn't really an address.  But ptrace thinks of it as one.  */
-  CORE_ADDR regaddr = ppc_register_u_addr (regno);
+  CORE_ADDR regaddr = ppc_register_u_addr (gdbarch, regno);
   int bytes_transferred;
   unsigned int offset;         /* Offset of registers within the u area. */
   char buf[MAX_REGISTER_SIZE];
 
-  if (altivec_register_p (regno))
+  if (altivec_register_p (gdbarch, regno))
     {
       /* If this is the first time through, or if it is not the first
          time through, and we have comfirmed that there is kernel
@@ -351,7 +352,7 @@ fetch_register (struct regcache *regcache, int tid, int regno)
         AltiVec registers, fall through and return zeroes, because
         regaddr will be -1 in this case.  */
     }
-  else if (spe_register_p (regno))
+  else if (spe_register_p (gdbarch, regno))
     {
       fetch_spe_register (regcache, tid, regno);
       return;
@@ -359,7 +360,7 @@ fetch_register (struct regcache *regcache, int tid, int regno)
 
   if (regaddr == -1)
     {
-      memset (buf, '\0', register_size (current_gdbarch, regno));   /* Supply zeroes */
+      memset (buf, '\0', register_size (gdbarch, regno));   /* Supply zeroes */
       regcache_raw_supply (regcache, regno, buf);
       return;
     }
@@ -368,7 +369,7 @@ fetch_register (struct regcache *regcache, int tid, int regno)
      32-bit platform, 64-bit floating-point registers will require two
      transfers.  */
   for (bytes_transferred = 0;
-       bytes_transferred < register_size (current_gdbarch, regno);
+       bytes_transferred < register_size (gdbarch, regno);
        bytes_transferred += sizeof (long))
     {
       errno = 0;
@@ -379,7 +380,7 @@ fetch_register (struct regcache *regcache, int tid, int regno)
 	{
           char message[128];
 	  sprintf (message, "reading register %s (#%d)", 
-		   gdbarch_register_name (current_gdbarch, regno), regno);
+		   gdbarch_register_name (gdbarch, regno), regno);
 	  perror_with_name (message);
 	}
     }
@@ -387,34 +388,34 @@ fetch_register (struct regcache *regcache, int tid, int regno)
   /* Now supply the register.  Keep in mind that the regcache's idea
      of the register's size may not be a multiple of sizeof
      (long).  */
-  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_LITTLE)
+  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_LITTLE)
     {
       /* Little-endian values are always found at the left end of the
          bytes transferred.  */
       regcache_raw_supply (regcache, regno, buf);
     }
-  else if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+  else if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
     {
       /* Big-endian values are found at the right end of the bytes
          transferred.  */
-      size_t padding = (bytes_transferred
-                        - register_size (current_gdbarch, regno));
+      size_t padding = (bytes_transferred - register_size (gdbarch, regno));
       regcache_raw_supply (regcache, regno, buf + padding);
     }
   else 
     internal_error (__FILE__, __LINE__,
                     _("fetch_register: unexpected byte order: %d"),
-                    gdbarch_byte_order (current_gdbarch));
+                    gdbarch_byte_order (gdbarch));
 }
 
 static void
 supply_vrregset (struct regcache *regcache, gdb_vrregset_t *vrregsetp)
 {
   int i;
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int num_of_vrregs = tdep->ppc_vrsave_regnum - tdep->ppc_vr0_regnum + 1;
-  int vrregsize = register_size (current_gdbarch, tdep->ppc_vr0_regnum);
-  int offset = vrregsize - register_size (current_gdbarch, tdep->ppc_vrsave_regnum);
+  int vrregsize = register_size (gdbarch, tdep->ppc_vr0_regnum);
+  int offset = vrregsize - register_size (gdbarch, tdep->ppc_vrsave_regnum);
 
   for (i = 0; i < num_of_vrregs; i++)
     {
@@ -454,14 +455,15 @@ static void
 fetch_ppc_registers (struct regcache *regcache, int tid)
 {
   int i;
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   for (i = 0; i < ppc_num_gprs; i++)
     fetch_register (regcache, tid, tdep->ppc_gp0_regnum + i);
   if (tdep->ppc_fp0_regnum >= 0)
     for (i = 0; i < ppc_num_fprs; i++)
       fetch_register (regcache, tid, tdep->ppc_fp0_regnum + i);
-  fetch_register (regcache, tid, gdbarch_pc_regnum (current_gdbarch));
+  fetch_register (regcache, tid, gdbarch_pc_regnum (gdbarch));
   if (tdep->ppc_ps_regnum != -1)
     fetch_register (regcache, tid, tdep->ppc_ps_regnum);
   if (tdep->ppc_cr_regnum != -1)
@@ -509,8 +511,9 @@ store_altivec_register (const struct regcache *regcache, int tid, int regno)
   int ret;
   int offset = 0;
   gdb_vrregset_t regs;
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
-  int vrregsize = register_size (current_gdbarch, tdep->ppc_vr0_regnum);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int vrregsize = register_size (gdbarch, tdep->ppc_vr0_regnum);
 
   ret = ptrace (PTRACE_GETVRREGS, tid, 0, &regs);
   if (ret < 0)
@@ -526,7 +529,7 @@ store_altivec_register (const struct regcache *regcache, int tid, int regno)
   /* VSCR is fetched as a 16 bytes quantity, but it is really 4 bytes
      long on the hardware.  */
   if (regno == (tdep->ppc_vrsave_regnum - 1))
-    offset = vrregsize - register_size (current_gdbarch, tdep->ppc_vrsave_regnum);
+    offset = vrregsize - register_size (gdbarch, tdep->ppc_vrsave_regnum);
 
   regcache_raw_collect (regcache, regno,
 			regs + (regno - tdep->ppc_vr0_regnum) * vrregsize + offset);
@@ -571,15 +574,16 @@ set_spe_registers (int tid, struct gdb_evrregset_t *evrregset)
 static void
 store_spe_register (const struct regcache *regcache, int tid, int regno)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   struct gdb_evrregset_t evrregs;
 
   gdb_assert (sizeof (evrregs.evr[0])
-              == register_size (current_gdbarch, tdep->ppc_ev0_upper_regnum));
+              == register_size (gdbarch, tdep->ppc_ev0_upper_regnum));
   gdb_assert (sizeof (evrregs.acc)
-              == register_size (current_gdbarch, tdep->ppc_acc_regnum));
+              == register_size (gdbarch, tdep->ppc_acc_regnum));
   gdb_assert (sizeof (evrregs.spefscr)
-              == register_size (current_gdbarch, tdep->ppc_spefscr_regnum));
+              == register_size (gdbarch, tdep->ppc_spefscr_regnum));
 
   if (regno == -1)
     /* Since we're going to write out every register, the code below
@@ -625,19 +629,20 @@ store_spe_register (const struct regcache *regcache, int tid, int regno)
 static void
 store_register (const struct regcache *regcache, int tid, int regno)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   /* This isn't really an address.  But ptrace thinks of it as one.  */
-  CORE_ADDR regaddr = ppc_register_u_addr (regno);
+  CORE_ADDR regaddr = ppc_register_u_addr (gdbarch, regno);
   int i;
   size_t bytes_to_transfer;
   char buf[MAX_REGISTER_SIZE];
 
-  if (altivec_register_p (regno))
+  if (altivec_register_p (gdbarch, regno))
     {
       store_altivec_register (regcache, tid, regno);
       return;
     }
-  else if (spe_register_p (regno))
+  else if (spe_register_p (gdbarch, regno))
     {
       store_spe_register (regcache, tid, regno);
       return;
@@ -650,18 +655,16 @@ store_register (const struct regcache *regcache, int tid, int regno)
      idea of the register's size may not be a multiple of sizeof
      (long).  */
   memset (buf, 0, sizeof buf);
-  bytes_to_transfer = align_up (register_size (current_gdbarch, regno),
-                                sizeof (long));
-  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_LITTLE)
+  bytes_to_transfer = align_up (register_size (gdbarch, regno), sizeof (long));
+  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_LITTLE)
     {
       /* Little-endian values always sit at the left end of the buffer.  */
       regcache_raw_collect (regcache, regno, buf);
     }
-  else if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+  else if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
     {
       /* Big-endian values sit at the right end of the buffer.  */
-      size_t padding = (bytes_to_transfer
-                        - register_size (current_gdbarch, regno));
+      size_t padding = (bytes_to_transfer - register_size (gdbarch, regno));
       regcache_raw_collect (regcache, regno, buf + padding);
     }
 
@@ -683,7 +686,7 @@ store_register (const struct regcache *regcache, int tid, int regno)
 	{
           char message[128];
 	  sprintf (message, "writing register %s (#%d)", 
-		   gdbarch_register_name (current_gdbarch, regno), regno);
+		   gdbarch_register_name (gdbarch, regno), regno);
 	  perror_with_name (message);
 	}
     }
@@ -693,10 +696,11 @@ static void
 fill_vrregset (const struct regcache *regcache, gdb_vrregset_t *vrregsetp)
 {
   int i;
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int num_of_vrregs = tdep->ppc_vrsave_regnum - tdep->ppc_vr0_regnum + 1;
-  int vrregsize = register_size (current_gdbarch, tdep->ppc_vr0_regnum);
-  int offset = vrregsize - register_size (current_gdbarch, tdep->ppc_vrsave_regnum);
+  int vrregsize = register_size (gdbarch, tdep->ppc_vr0_regnum);
+  int offset = vrregsize - register_size (gdbarch, tdep->ppc_vrsave_regnum);
 
   for (i = 0; i < num_of_vrregs; i++)
     {
@@ -738,14 +742,15 @@ static void
 store_ppc_registers (const struct regcache *regcache, int tid)
 {
   int i;
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   
   for (i = 0; i < ppc_num_gprs; i++)
     store_register (regcache, tid, tdep->ppc_gp0_regnum + i);
   if (tdep->ppc_fp0_regnum >= 0)
     for (i = 0; i < ppc_num_fprs; i++)
       store_register (regcache, tid, tdep->ppc_fp0_regnum + i);
-  store_register (regcache, tid, gdbarch_pc_regnum (current_gdbarch));
+  store_register (regcache, tid, gdbarch_pc_regnum (gdbarch));
   if (tdep->ppc_ps_regnum != -1)
     store_register (regcache, tid, tdep->ppc_ps_regnum);
   if (tdep->ppc_cr_regnum != -1)
@@ -805,13 +810,16 @@ ppc_linux_region_ok_for_hw_watchpoint (CORE_ADDR addr, int len)
   return 1;
 }
 
+/* The cached DABR value, to install in new threads.  */
+static long saved_dabr_value;
+
 /* Set a watchpoint of type TYPE at address ADDR.  */
 static int
 ppc_linux_insert_watchpoint (CORE_ADDR addr, int len, int rw)
 {
-  int tid;
+  struct lwp_info *lp;
+  ptid_t ptid;
   long dabr_value;
-  ptid_t ptid = inferior_ptid;
 
   dabr_value = addr & ~7;
   switch (rw)
@@ -830,59 +838,55 @@ ppc_linux_insert_watchpoint (CORE_ADDR addr, int len, int rw)
       break;
     }
 
-  tid = TIDGET (ptid);
-  if (tid == 0)
-    tid = PIDGET (ptid);
+  saved_dabr_value = dabr_value;
 
-  return ptrace (PTRACE_SET_DEBUGREG, tid, 0, dabr_value);
+  ALL_LWPS (lp, ptid)
+    if (ptrace (PTRACE_SET_DEBUGREG, TIDGET (ptid), 0, saved_dabr_value) < 0)
+      return -1;
+
+  return 0;
 }
 
 static int
 ppc_linux_remove_watchpoint (CORE_ADDR addr, int len, int rw)
 {
-  int tid;
-  ptid_t ptid = inferior_ptid;
+  struct lwp_info *lp;
+  ptid_t ptid;
+  long dabr_value = 0;
 
-  tid = TIDGET (ptid);
-  if (tid == 0)
-    tid = PIDGET (ptid);
+  saved_dabr_value = 0;
+  ALL_LWPS (lp, ptid)
+    if (ptrace (PTRACE_SET_DEBUGREG, TIDGET (ptid), 0, saved_dabr_value) < 0)
+      return -1;
+  return 0;
+}
 
-  return ptrace (PTRACE_SET_DEBUGREG, tid, 0, 0);
+static void
+ppc_linux_new_thread (ptid_t ptid)
+{
+  ptrace (PTRACE_SET_DEBUGREG, TIDGET (ptid), 0, saved_dabr_value);
 }
 
 static int
 ppc_linux_stopped_data_address (struct target_ops *target, CORE_ADDR *addr_p)
 {
-  if (last_stopped_data_address)
-    {
-      *addr_p = last_stopped_data_address;
-      last_stopped_data_address = 0;
-      return 1;
-    }
-  return 0;
+  struct siginfo *siginfo_p;
+
+  siginfo_p = linux_nat_get_siginfo (inferior_ptid);
+
+  if (siginfo_p->si_signo != SIGTRAP
+      || (siginfo_p->si_code & 0xffff) != 0x0004 /* TRAP_HWBKPT */)
+    return 0;
+
+  *addr_p = (CORE_ADDR) (uintptr_t) siginfo_p->si_addr;
+  return 1;
 }
 
 static int
 ppc_linux_stopped_by_watchpoint (void)
 {
-  int tid;
-  struct siginfo siginfo;
-  ptid_t ptid = inferior_ptid;
-  CORE_ADDR *addr_p;
-
-  tid = TIDGET(ptid);
-  if (tid == 0)
-    tid = PIDGET (ptid);
-
-  errno = 0;
-  ptrace (PTRACE_GETSIGINFO, tid, (PTRACE_TYPE_ARG3) 0, &siginfo);
-
-  if (errno != 0 || siginfo.si_signo != SIGTRAP ||
-      (siginfo.si_code & 0xffff) != 0x0004)
-    return 0;
-
-  last_stopped_data_address = (uintptr_t) siginfo.si_addr;
-  return 1;
+  CORE_ADDR addr;
+  return ppc_linux_stopped_data_address (&current_target, &addr);
 }
 
 static void
@@ -945,6 +949,33 @@ fill_fpregset (const struct regcache *regcache,
 			fpregsetp, sizeof (*fpregsetp));
 }
 
+static const struct target_desc *
+ppc_linux_read_description (struct target_ops *ops)
+{
+  if (have_ptrace_getsetevrregs)
+    {
+      struct gdb_evrregset_t evrregset;
+      int tid = TIDGET (inferior_ptid);
+
+      if (tid == 0)
+	tid = PIDGET (inferior_ptid);
+
+      if (ptrace (PTRACE_GETEVRREGS, tid, 0, &evrregset) >= 0)
+        return tdesc_powerpc_e500;
+      else
+        {
+          /* EIO means that the PTRACE_GETEVRREGS request isn't supported.  */
+          if (errno == EIO)
+	    return NULL;
+	  else
+            /* Anything else needs to be reported.  */
+            perror_with_name (_("Unable to fetch SPE registers"));
+	}
+    }
+
+  return NULL;
+}
+
 void _initialize_ppc_linux_nat (void);
 
 void
@@ -967,6 +998,9 @@ _initialize_ppc_linux_nat (void)
   t->to_stopped_by_watchpoint = ppc_linux_stopped_by_watchpoint;
   t->to_stopped_data_address = ppc_linux_stopped_data_address;
 
+  t->to_read_description = ppc_linux_read_description;
+
   /* Register the target.  */
   linux_nat_add_target (t);
+  linux_nat_set_new_thread (t, ppc_linux_new_thread);
 }

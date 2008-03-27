@@ -1,6 +1,6 @@
 /* Intel 80386/80486-specific support for 32-bit ELF
    Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -642,17 +642,16 @@ struct elf_i386_obj_tdata
 #define elf_i386_local_tlsdesc_gotent(abfd) \
   (elf_i386_tdata (abfd)->local_tlsdesc_gotent)
 
+#define is_i386_elf(bfd)				\
+  (bfd_get_flavour (bfd) == bfd_target_elf_flavour	\
+   && elf_tdata (bfd) != NULL				\
+   && elf_object_id (bfd) == I386_ELF_TDATA)
+
 static bfd_boolean
 elf_i386_mkobject (bfd *abfd)
 {
-  if (abfd->tdata.any == NULL)
-    {
-      bfd_size_type amt = sizeof (struct elf_i386_obj_tdata);
-      abfd->tdata.any = bfd_zalloc (abfd, amt);
-      if (abfd->tdata.any == NULL)
-	return FALSE;
-    }
-  return bfd_elf_mkobject (abfd);
+  return bfd_elf_allocate_object (abfd, sizeof (struct elf_i386_obj_tdata),
+				  I386_ELF_TDATA);
 }
 
 /* i386 ELF linker hash table.  */
@@ -1171,7 +1170,7 @@ elf_i386_tls_transition (struct bfd_link_info *info, bfd *abfd,
 					  symtab_hdr, sym_hashes,
 					  from_type, rel, relend))
     {
-      const reloc_howto_type *from, *to;
+      reloc_howto_type *from, *to;
 
       from = elf_i386_rtype_to_howto (abfd, from_type);
       to = elf_i386_rtype_to_howto (abfd, to_type);
@@ -1210,8 +1209,10 @@ elf_i386_check_relocs (bfd *abfd,
   if (info->relocatable)
     return TRUE;
 
+  BFD_ASSERT (is_i386_elf (abfd));
+
   htab = elf_i386_hash_table (info);
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   sym_hashes = elf_sym_hashes (abfd);
 
   sreloc = NULL;
@@ -1544,9 +1545,7 @@ elf_i386_check_relocs (bfd *abfd,
 	  /* This relocation describes the C++ object vtable hierarchy.
 	     Reconstruct it for later use during GC.  */
 	case R_386_GNU_VTINHERIT:
-	  BFD_ASSERT (h != NULL);
-	  if (h != NULL
-	      && !bfd_elf_gc_record_vtinherit (abfd, sec, h, rel->r_offset))
+	  if (!bfd_elf_gc_record_vtinherit (abfd, sec, h, rel->r_offset))
 	    return FALSE;
 	  break;
 
@@ -1601,9 +1600,12 @@ elf_i386_gc_sweep_hook (bfd *abfd,
   bfd_signed_vma *local_got_refcounts;
   const Elf_Internal_Rela *rel, *relend;
 
+  if (info->relocatable)
+    return TRUE;
+
   elf_section_data (sec)->local_dynrel = NULL;
 
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   sym_hashes = elf_sym_hashes (abfd);
   local_got_refcounts = elf_local_got_refcounts (abfd);
 
@@ -2160,7 +2162,7 @@ elf_i386_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
       Elf_Internal_Shdr *symtab_hdr;
       asection *srel;
 
-      if (bfd_get_flavour (ibfd) != bfd_target_elf_flavour)
+      if (! is_i386_elf (ibfd))
 	continue;
 
       for (s = ibfd->sections; s != NULL; s = s->next)
@@ -2194,7 +2196,7 @@ elf_i386_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
       if (!local_got)
 	continue;
 
-      symtab_hdr = &elf_tdata (ibfd)->symtab_hdr;
+      symtab_hdr = &elf_symtab_hdr (ibfd);
       locsymcount = symtab_hdr->sh_info;
       end_local_got = local_got + locsymcount;
       local_tls_type = elf_i386_local_got_tls_type (ibfd);
@@ -2376,6 +2378,9 @@ elf_i386_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
 		return FALSE;
 	    }
 	}
+      if (htab->is_vxworks
+	  && !elf_vxworks_add_dynamic_entries (output_bfd, info))
+	return FALSE;
     }
 #undef add_dynamic_entry
 
@@ -2498,8 +2503,10 @@ elf_i386_relocate_section (bfd *output_bfd,
   Elf_Internal_Rela *rel;
   Elf_Internal_Rela *relend;
 
+  BFD_ASSERT (is_i386_elf (input_bfd));
+  
   htab = elf_i386_hash_table (info);
-  symtab_hdr = &elf_tdata (input_bfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (input_bfd);
   sym_hashes = elf_sym_hashes (input_bfd);
   local_got_offsets = elf_local_got_offsets (input_bfd);
   local_tlsdesc_gotents = elf_i386_local_tlsdesc_gotent (input_bfd);
@@ -3798,6 +3805,9 @@ elf_i386_finish_dynamic_sections (bfd *output_bfd,
 	  switch (dyn.d_tag)
 	    {
 	    default:
+	      if (htab->is_vxworks
+		  && elf_vxworks_finish_dynamic_entry (output_bfd, &dyn))
+		break;
 	      continue;
 
 	    case DT_PLTGOT:
@@ -3998,9 +4008,10 @@ elf_i386_hash_symbol (struct elf_link_hash_entry *h)
 #define bfd_elf32_bfd_is_local_label_name     elf_i386_is_local_label_name
 #define bfd_elf32_bfd_link_hash_table_create  elf_i386_link_hash_table_create
 #define bfd_elf32_bfd_reloc_type_lookup	      elf_i386_reloc_type_lookup
-#define bfd_elf32_bfd_reloc_name_lookup elf_i386_reloc_name_lookup
+#define bfd_elf32_bfd_reloc_name_lookup	      elf_i386_reloc_name_lookup
 
 #define elf_backend_adjust_dynamic_symbol     elf_i386_adjust_dynamic_symbol
+#define elf_backend_relocs_compatible	      _bfd_elf_relocs_compatible
 #define elf_backend_check_relocs	      elf_i386_check_relocs
 #define elf_backend_copy_indirect_symbol      elf_i386_copy_indirect_symbol
 #define elf_backend_create_dynamic_sections   elf_i386_create_dynamic_sections
@@ -4086,7 +4097,8 @@ elf_i386_vxworks_link_hash_table_create (bfd *abfd)
 }
 
 
-#undef	elf_backend_post_process_headers
+#undef elf_backend_relocs_compatible
+#undef elf_backend_post_process_headers
 #undef bfd_elf32_bfd_link_hash_table_create
 #define bfd_elf32_bfd_link_hash_table_create \
   elf_i386_vxworks_link_hash_table_create

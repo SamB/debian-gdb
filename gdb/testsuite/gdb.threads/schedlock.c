@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2002, 2003, 2004, 2007 Free Software Foundation, Inc.
+   Copyright 2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@
 
 void *thread_function(void *arg); /* Pointer to function executed by each thread */
 
-#define NUM 5
+#define NUM 1
 
 unsigned int args[NUM+1];
 
@@ -32,7 +32,7 @@ int main() {
     void *thread_result;
     long i;
 
-    for (i = 0; i < NUM; i++)
+    for (i = 1; i <= NUM; i++)
       {
 	args[i] = 1;
 	res = pthread_create(&threads[i],
@@ -42,8 +42,8 @@ int main() {
       }
 
     /* schedlock.exp: last thread start.  */
-    args[i] = 1;
-    thread_function ((void *) i);
+    args[0] = 1;
+    thread_function ((void *) 0);
 
     exit(EXIT_SUCCESS);
 }

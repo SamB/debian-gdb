@@ -1,8 +1,8 @@
 /* Definitions for values of C expressions, for GDB.
 
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
-   Free Software Foundation, Inc.
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
+   2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -62,8 +62,8 @@ extern int value_bitsize (struct value *);
 extern void set_value_bitsize (struct value *, int bit);
 
 /* Only used for bitfields; position of start of field.  For
-   BITS_BIG_ENDIAN=0 targets, it is the position of the LSB.  For
-   BITS_BIG_ENDIAN=1 targets, it is the position of the MSB.  */
+   gdbarch_bits_big_endian=0 targets, it is the position of the LSB.  For
+   gdbarch_bits_big_endian=1 targets, it is the position of the MSB.  */
 
 extern int value_bitpos (struct value *);
 extern void set_value_bitpos (struct value *, int bit);
@@ -280,6 +280,8 @@ extern void pack_long (gdb_byte *buf, struct type *type, LONGEST num);
 extern struct value *value_from_longest (struct type *type, LONGEST num);
 extern struct value *value_from_pointer (struct type *type, CORE_ADDR addr);
 extern struct value *value_from_double (struct type *type, DOUBLEST num);
+extern struct value *value_from_decfloat (struct type *type,
+					  const gdb_byte *decbytes);
 extern struct value *value_from_string (char *string);
 
 extern struct value *value_at (struct type *type, CORE_ADDR addr);
@@ -390,6 +392,8 @@ extern struct value *value_cast (struct type *type, struct value *arg2);
 
 extern struct value *value_zero (struct type *type, enum lval_type lv);
 
+extern struct value *value_one (struct type *type, enum lval_type lv);
+
 extern struct value *value_repeat (struct value *arg1, int count);
 
 extern struct value *value_subscript (struct value *array, struct value *idx);
@@ -402,7 +406,7 @@ extern struct value *value_in (struct value *element, struct value *set);
 extern int value_bit_index (struct type *type, const gdb_byte *addr,
 			    int index);
 
-extern int using_struct_return (struct type *value_type, int gcc_p);
+extern int using_struct_return (struct type *value_type);
 
 extern struct value *evaluate_expression (struct expression *exp);
 
@@ -433,6 +437,10 @@ extern void set_internalvar_component (struct internalvar *var,
 				       int offset,
 				       int bitpos, int bitsize,
 				       struct value *newvalue);
+
+extern struct internalvar *lookup_only_internalvar (char *name);
+
+extern struct internalvar *create_internalvar (char *name);
 
 extern struct internalvar *lookup_internalvar (char *name);
 
@@ -488,6 +496,9 @@ extern void print_longest (struct ui_file *stream, int format,
 extern void print_floating (const gdb_byte *valaddr, struct type *type,
 			    struct ui_file *stream);
 
+extern void print_decimal_floating (const gdb_byte *valaddr, struct type *type,
+				    struct ui_file *stream);
+
 extern int value_print (struct value *val, struct ui_file *stream, int format,
 			enum val_prettyprint pretty);
 
@@ -536,9 +547,6 @@ extern struct value *value_slice (struct value *, int, int);
 
 extern struct value *value_literal_complex (struct value *, struct value *,
 					    struct type *);
-
-extern void find_rt_vbase_offset (struct type *, struct type *,
-				  const gdb_byte *, int, int *, int *);
 
 extern struct value *find_function_in_inferior (const char *);
 

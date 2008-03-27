@@ -1,6 +1,6 @@
 /* Native-dependent code for Alpha BSD's.
 
-   Copyright (C) 2000, 2001, 2002, 2004, 2005, 2006, 2007
+   Copyright (C) 2000, 2001, 2002, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -99,7 +99,7 @@ alphabsd_fetch_inferior_registers (struct regcache *regcache, int regno)
 	return;
     }
 
-  if (regno == -1 || regno >= gdbarch_fp0_regnum (current_gdbarch))
+  if (regno == -1 || regno >= gdbarch_fp0_regnum (get_regcache_arch (regcache)))
     {
       struct fpreg fpregs;
 
@@ -134,7 +134,7 @@ alphabsd_store_inferior_registers (struct regcache *regcache, int regno)
 	return;
     }
 
-  if (regno == -1 || regno >= gdbarch_fp0_regnum (current_gdbarch))
+  if (regno == -1 || regno >= gdbarch_fp0_regnum (get_regcache_arch (regcache)))
     {
       struct fpreg fpregs;
 

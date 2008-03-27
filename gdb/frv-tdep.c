@@ -1,6 +1,7 @@
 /* Target-dependent code for the Fujitsu FR-V, for GDB, the GNU Debugger.
 
-   Copyright (C) 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -37,6 +38,7 @@
 #include "elf/frv.h"
 #include "osabi.h"
 #include "infcall.h"
+#include "solib.h"
 #include "frv-tdep.h"
 
 extern void _initialize_frv_tdep (void);
@@ -89,8 +91,6 @@ struct gdbarch_tdep
   /* Register names.  */
   char **register_names;
 };
-
-#define CURRENT_VARIANT (gdbarch_tdep (current_gdbarch))
 
 /* Return the FR-V ABI associated with GDBARCH.  */
 enum frv_abi
@@ -277,14 +277,14 @@ set_variant_scratch_registers (struct gdbarch_tdep *var)
 }
 
 static const char *
-frv_register_name (int reg)
+frv_register_name (struct gdbarch *gdbarch, int reg)
 {
   if (reg < 0)
     return "?toosmall?";
   if (reg >= frv_num_regs + frv_num_pseudo_regs)
     return "?toolarge?";
 
-  return CURRENT_VARIANT->register_names[reg];
+  return gdbarch_tdep (gdbarch)->register_names[reg];
 }
 
 
@@ -350,7 +350,7 @@ frv_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
 }
 
 static int
-frv_register_sim_regno (int reg)
+frv_register_sim_regno (struct gdbarch *gdbarch, int reg)
 {
   static const int spr_map[] =
     {
@@ -394,7 +394,7 @@ frv_register_sim_regno (int reg)
       H_SPR_FNER1,		/* fner1_regnum */
     };
 
-  gdb_assert (reg >= 0 && reg < gdbarch_num_regs (current_gdbarch));
+  gdb_assert (reg >= 0 && reg < gdbarch_num_regs (gdbarch));
 
   if (first_gpr_regnum <= reg && reg <= last_gpr_regnum)
     return reg - first_gpr_regnum + SIM_FRV_GR0_REGNUM;
@@ -417,7 +417,7 @@ frv_register_sim_regno (int reg)
 }
 
 static const unsigned char *
-frv_breakpoint_from_pc (CORE_ADDR *pcptr, int *lenp)
+frv_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr, int *lenp)
 {
   static unsigned char breakpoint[] = {0xc0, 0x70, 0x00, 0x01};
   *lenp = sizeof (breakpoint);
@@ -938,9 +938,9 @@ frv_analyze_prologue (CORE_ADDR pc, struct frame_info *next_frame,
          because instructions may save relative to the SP, but we need
          their addresses relative to the FP.  */
       if (fp_set)
-	  frame_unwind_unsigned_register (next_frame, fp_regnum, &this_base);
+	this_base = frame_unwind_register_unsigned (next_frame, fp_regnum);
       else
-	  frame_unwind_unsigned_register (next_frame, sp_regnum, &this_base);
+	this_base = frame_unwind_register_unsigned (next_frame, sp_regnum);
 
       for (i = 0; i < 64; i++)
 	if (gr_saved[i])
@@ -968,7 +968,7 @@ frv_analyze_prologue (CORE_ADDR pc, struct frame_info *next_frame,
 
 
 static CORE_ADDR
-frv_skip_prologue (CORE_ADDR pc)
+frv_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   CORE_ADDR func_addr, func_end, new_pc;
 
@@ -1247,14 +1247,41 @@ frv_store_return_value (struct type *type, struct regcache *regcache,
                     _("Don't know how to return a %d-byte value."), len);
 }
 
+enum return_value_convention
+frv_return_value (struct gdbarch *gdbarch, struct type *valtype,
+		  struct regcache *regcache, gdb_byte *readbuf,
+		  const gdb_byte *writebuf)
+{
+  int struct_return = TYPE_CODE (valtype) == TYPE_CODE_STRUCT
+		      || TYPE_CODE (valtype) == TYPE_CODE_UNION
+		      || TYPE_CODE (valtype) == TYPE_CODE_ARRAY;
+
+  if (writebuf != NULL)
+    {
+      gdb_assert (!struct_return);
+      frv_store_return_value (valtype, regcache, writebuf);
+    }
+
+  if (readbuf != NULL)
+    {
+      gdb_assert (!struct_return);
+      frv_extract_return_value (valtype, regcache, readbuf);
+    }
+
+  if (struct_return)
+    return RETURN_VALUE_STRUCT_CONVENTION;
+  else
+    return RETURN_VALUE_REGISTER_CONVENTION;
+}
+
 
 /* Hardware watchpoint / breakpoint support for the FR500
    and FR400.  */
 
 int
-frv_check_watch_resources (int type, int cnt, int ot)
+frv_check_watch_resources (struct gdbarch *gdbarch, int type, int cnt, int ot)
 {
-  struct gdbarch_tdep *var = CURRENT_VARIANT;
+  struct gdbarch_tdep *var = gdbarch_tdep (gdbarch);
 
   /* Watchpoints not supported on simulator.  */
   if (strcmp (target_shortname, "sim") == 0)
@@ -1488,10 +1515,7 @@ frv_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_adjust_breakpoint_address
     (gdbarch, frv_adjust_breakpoint_address);
 
-  set_gdbarch_deprecated_use_struct_convention (gdbarch, always_use_struct_convention);
-  set_gdbarch_extract_return_value (gdbarch, frv_extract_return_value);
-
-  set_gdbarch_store_return_value (gdbarch, frv_store_return_value);
+  set_gdbarch_return_value (gdbarch, frv_return_value);
 
   /* Frame stuff.  */
   set_gdbarch_unwind_pc (gdbarch, frv_unwind_pc);
@@ -1538,6 +1562,8 @@ frv_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   if (frv_abi (gdbarch) == FRV_ABI_FDPIC)
     set_gdbarch_convert_from_func_ptr_addr (gdbarch,
 					    frv_convert_from_func_ptr_addr);
+
+  set_solib_ops (gdbarch, &frv_so_ops);
 
   /* Hook in ABI-specific overrides, if they have been registered.  */
   gdbarch_init_osabi (info, gdbarch);

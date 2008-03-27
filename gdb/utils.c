@@ -1,7 +1,7 @@
 /* General utility routines for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -52,6 +52,7 @@
 #include "filenames.h"
 #include "symfile.h"
 #include "gdb_obstack.h"
+#include "gdbcore.h"
 #include "top.h"
 
 #include "inferior.h"		/* for signed_pointer_to_address */
@@ -96,7 +97,6 @@ static void set_width (void);
 
 static struct cleanup *cleanup_chain;	/* cleaned up after a failed command */
 static struct cleanup *final_cleanup_chain;	/* cleaned up when gdb exits */
-static struct cleanup *run_cleanup_chain;	/* cleaned up on each 'run' */
 static struct cleanup *exec_cleanup_chain;	/* cleaned up on each execution command */
 /* cleaned up on each error from within an execution command */
 static struct cleanup *exec_error_cleanup_chain;
@@ -210,12 +210,6 @@ make_final_cleanup (make_cleanup_ftype *function, void *arg)
 }
 
 struct cleanup *
-make_run_cleanup (make_cleanup_ftype *function, void *arg)
-{
-  return make_my_cleanup (&run_cleanup_chain, function, arg);
-}
-
-struct cleanup *
 make_exec_cleanup (make_cleanup_ftype *function, void *arg)
 {
   return make_my_cleanup (&exec_cleanup_chain, function, arg);
@@ -321,12 +315,6 @@ void
 do_final_cleanups (struct cleanup *old_chain)
 {
   do_my_cleanups (&final_cleanup_chain, old_chain);
-}
-
-void
-do_run_cleanups (struct cleanup *old_chain)
-{
-  do_my_cleanups (&run_cleanup_chain, old_chain);
 }
 
 void
@@ -2837,7 +2825,9 @@ core_addr_to_string_nz (const CORE_ADDR addr)
 CORE_ADDR
 string_to_core_addr (const char *my_string)
 {
+  int addr_bit = gdbarch_addr_bit (current_gdbarch);
   CORE_ADDR addr = 0;
+
   if (my_string[0] == '0' && tolower (my_string[1]) == 'x')
     {
       /* Assume that it is in hex.  */
@@ -2851,6 +2841,17 @@ string_to_core_addr (const char *my_string)
 	  else
 	    error (_("invalid hex \"%s\""), my_string);
 	}
+
+      /* Not very modular, but if the executable format expects
+         addresses to be sign-extended, then do so if the address was
+         specified with only 32 significant bits.  Really this should
+         be determined by the target architecture, not by the object
+         file.  */
+      if (i - 2 == addr_bit / 4
+	  && exec_bfd
+	  && bfd_get_sign_extend_vma (exec_bfd))
+	addr = (addr ^ ((CORE_ADDR) 1 << (addr_bit - 1)))
+	       - ((CORE_ADDR) 1 << (addr_bit - 1));
     }
   else
     {
@@ -2864,6 +2865,7 @@ string_to_core_addr (const char *my_string)
 	    error (_("invalid decimal \"%s\""), my_string);
 	}
     }
+
   return addr;
 }
 

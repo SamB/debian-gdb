@@ -1,6 +1,6 @@
 /* Motorola m68k target-dependent support for GNU/Linux.
 
-   Copyright (C) 1996, 1998, 2000, 2001, 2002, 2003, 2004, 2007
+   Copyright (C) 1996, 1998, 2000, 2001, 2002, 2003, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -213,8 +213,8 @@ static int target_is_uclinux;
 static void
 m68k_linux_inferior_created (struct target_ops *objfile, int from_tty)
 {
-  /* Record that we will need to re-evaluate whether we are running on
-     a uClinux or normal Linux target (see m68k_linux_get_sigtramp_info).  */
+  /* Record that we will need to re-evaluate whether we are running on a
+     uClinux or normal GNU/Linux target (see m68k_linux_get_sigtramp_info).  */
   target_is_uclinux = -1;
 }
 
@@ -227,7 +227,7 @@ m68k_linux_get_sigtramp_info (struct frame_info *next_frame)
 
   if (target_is_uclinux == -1)
     {
-      /* Determine whether we are running on a uClinux or normal Linux
+      /* Determine whether we are running on a uClinux or normal GNU/Linux
          target so we can use the correct sigcontext layouts.  */
     
       CORE_ADDR dummy;
@@ -260,7 +260,7 @@ m68k_linux_sigtramp_frame_cache (struct frame_info *next_frame,
 {
   struct frame_id this_id;
   struct trad_frame_cache *cache;
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (next_frame));
   struct m68k_linux_sigtramp_info info;
   char buf[4];
   int i;

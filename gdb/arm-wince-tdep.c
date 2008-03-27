@@ -1,7 +1,7 @@
 /* Target-dependent code for Windows CE running on ARM processors,
    for GDB.
 
-   Copyright (C) 2007 Free Software Foundation, Inc.
+   Copyright (C) 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,6 +22,8 @@
 #include "osabi.h"
 #include "gdbcore.h"
 #include "target.h"
+#include "solib.h"
+#include "solib-target.h"
 
 #include "gdb_string.h"
 
@@ -92,6 +94,7 @@ arm_wince_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_char_signed (gdbarch, 1);
 
   /* Shared library handling.  */
+  set_solib_ops (gdbarch, &solib_target_so_ops);
   set_gdbarch_skip_trampoline_code (gdbarch, arm_pe_skip_trampoline_code);
 
   /* Single stepping.  */

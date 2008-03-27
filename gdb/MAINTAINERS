@@ -115,7 +115,7 @@ alphabetical order.  Their affiliations are provided for reference only -
 their membership on the Steering Committee is individual and not through
 their affiliation, and they act on behalf of the GNU project.
 
-	Jim Blandy (CodeSourcery)
+	Jim Blandy (Mozilla)
 	Andrew Cagney (Red Hat)
 	Robert Dewar (AdaCore, NYU)
 	Klee Dienes (Apple)
@@ -158,14 +158,14 @@ future, if there are, a reference to the list will be included here.
 
 The current global maintainers are (in alphabetical order):
 
-Jim Blandy			jimb@codesourcery.com
+Jim Blandy			jimb@mozilla.com
 Joel Brobecker			brobecker@adacore.com
 Kevin Buettner			kevinb@redhat.com
 Andrew Cagney			cagney@gnu.org
 Daniel Jacobowitz		dan@debian.org
 Mark Kettenis           	kettenis@gnu.org
 Stan Shebs			shebs@mozilla.com
-Michael Snyder			Michael.Snyder@access-company.com
+Michael Snyder			msnyder@specifix.com
 Ulrich Weigand			Ulrich.Weigand@de.ibm.com
 Elena Zannoni			ezannoni@redhat.com
 Eli Zaretskii			eliz@gnu.org
@@ -290,7 +290,7 @@ the native maintainer when resolving ABI issues.
 
 	mn10300		--target=mn10300-elf broken
 			(sim/ dies with make -j)
-			Michael Snyder		Michael.Snyder@access-company.com
+			Michael Snyder		msnyder@specifix.com
 
 	ms1		--target=ms1-elf ,-Werror
 			Kevin Buettner		kevinb@redhat.com
@@ -361,20 +361,23 @@ FreeBSD native & host	Mark Kettenis		kettenis@gnu.org
 
 Core: Generic components used by all of GDB
 
-tracing			Michael Snyder		Michael.Snyder@access-company.com
-threads			Michael Snyder		Michael.Snyder@access-company.com
+tracing			Michael Snyder		msnyder@specifix.com
+threads			Michael Snyder		msnyder@specifix.com
 			Mark Kettenis		kettenis@gnu.org
 language support
+  Ada			Joel Brobecker		brobecker@adacore.com
+			Paul Hilfinger		hilfinger@gnat.com
   C++			Daniel Jacobowitz	dan@debian.org
   Objective C support   Adam Fedor		fedor@gnu.org
 shared libs		Kevin Buettner		kevinb@redhat.com
+MI interface		Vladimir Prus		vladimir@codesourcery.com
 
 documentation		Eli Zaretskii		eliz@gnu.org
   (including NEWS)
 testsuite
   gdbtk (gdb.gdbtk)     Keith Seitz             keiths@redhat.com
-  threads (gdb.threads) Michael Snyder          Michael.Snyder@access-company.com
-  trace (gdb.trace)     Michael Snyder          Michael.Snyder@access-company.com
+  threads (gdb.threads) Michael Snyder		msnyder@specifix.com
+  trace (gdb.trace)     Michael Snyder		msnyder@specifix.com
 
 
 UI: External (user) interfaces.
@@ -451,6 +454,7 @@ David Anderson					davea@sgi.com
 John David Anglin				dave.anglin@nrc-cnrc.gc.ca
 Shrinivas Atre					shrinivasa@kpitcummins.com
 Scott Bambrough					scottb@netwinder.org
+Thiago Jung Bauermann				bauerman@br.ibm.com
 Jan Beulich					jbeulich@novell.com
 Jim Blandy					jimb@codesourcery.com
 Philip Blundell					philb@gnu.org
@@ -473,12 +477,14 @@ Ludovic Courtès					ludo@gnu.org
 DJ Delorie					dj@redhat.com
 Philippe De Muyter				phdm@macqel.be
 Dhananjay Deshpande				dhananjayd@kpitcummins.com
+Markus Deuling					deuling@de.ibm.com
 Klee Dienes					kdienes@apple.com
 Gabriel Dos Reis                                gdr@integrable-solutions.net
 Richard Earnshaw				rearnsha@arm.com
 Steve Ellcey					sje@cup.hp.com
 Frank Ch. Eigler				fche@redhat.com
 Ben Elliston					bje@gnu.org
+Doug Evans					dje@google.com
 Adam Fedor					fedor@gnu.org
 Brian Ford					ford@vss.fsi.com
 Orjan Friberg					orjanf@axis.com
@@ -498,6 +504,7 @@ Matt Hiller					hiller@redhat.com
 Kazu Hirata					kazu@cs.umass.edu
 Jeff Holcomb					jeffh@redhat.com
 Don Howard					dhoward@redhat.com
+Nick Hudson					nick.hudson@dsl.pipex.com
 Martin Hunt					hunt@redhat.com
 Jim Ingham					jingham@apple.com
 Baurzhan Ismagulov				ibr@radix50.net
@@ -513,8 +520,9 @@ Jonathan Larmour				jlarmour@redhat.co.uk
 Jeff Law					law@redhat.com
 David Lecomber					david@streamline-computing.com
 Robert Lipe					rjl@sco.com
-H.J. Lu						hjl@lucon.org
+H.J. Lu						hjl.tools@gmail.com
 Michal Ludvig                                   mludvig@suse.cz
+Luis Machado					luisgpm@br.ibm.com
 Glen McCready					gkm@redhat.com
 Greg McGary					greg@mcgary.org
 Roland McGrath					roland@redhat.com
@@ -552,6 +560,7 @@ Richard Sandiford				richard@codesourcery.com
 Peter Schauer					Peter.Schauer@mytum.de
 Andreas Schwab					schwab@suse.de
 Keith Seitz					keiths@redhat.com
+Carlos Eduardo Seo				cseo@linux.vnet.ibm.com
 Stan Shebs					shebs@mozilla.com
 Mark Shinwell					shinwell@codesourcery.com
 Aidan Skinner					aidan@velvet.net
@@ -559,7 +568,7 @@ Jiri Smid					smid@suse.cz
 David Smith					dsmith@redhat.com
 Stephen P. Smith				ischis2@cox.net
 Jackie Smith Cashion				jsmith@redhat.com
-Michael Snyder					Michael.Snyder@access-company.com
+Michael Snyder					msnyder@specifix.com
 Petr Sorfa					petrs@caldera.com
 Andrew Stubbs					andrew.stubbs@st.com
 Ian Lance Taylor				ian@airs.com
@@ -575,7 +584,7 @@ Kris Warkentin					kewarken@qnx.com
 Ulrich Weigand					uweigand@de.ibm.com
 Nathan Williams					nathanw@wasabisystems.com
 Bob Wilson					bob.wilson@acm.org
-Jim Wilson					wilson@specifixinc.com
+Jim Wilson					wilson@specifix.com
 Elena Zannoni					ezannoni@redhat.com
 Eli Zaretskii					eliz@gnu.org
 Wu Zhou						woodzltc@cn.ibm.com

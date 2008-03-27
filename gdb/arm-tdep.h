@@ -1,5 +1,5 @@
 /* Common target dependent code for GDB on ARM systems.
-   Copyright (C) 2002, 2003, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -29,6 +29,7 @@ enum gdb_regnum {
   ARM_A1_REGNUM = 0,		/* first integer-like argument */
   ARM_A4_REGNUM = 3,		/* last integer-like argument */
   ARM_AP_REGNUM = 11,
+  ARM_IP_REGNUM = 12,
   ARM_SP_REGNUM = 13,		/* Contains address of top of stack */
   ARM_LR_REGNUM = 14,		/* address to return to from a function call */
   ARM_PC_REGNUM = 15,		/* Contains program counter */
@@ -175,12 +176,8 @@ struct gdbarch_tdep
 };
 
 
-
-#ifndef LOWEST_PC
-#define LOWEST_PC (gdbarch_tdep (current_gdbarch)->lowest_pc)
-#endif
-
 CORE_ADDR arm_skip_stub (struct frame_info *, CORE_ADDR);
+CORE_ADDR arm_get_next_pc (struct frame_info *, CORE_ADDR);
 int arm_software_single_step (struct frame_info *);
 
 /* Functions exported from armbsd-tdep.h.  */

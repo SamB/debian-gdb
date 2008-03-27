@@ -1,7 +1,7 @@
 /* Multi-process/thread control for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1987, 1988, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2007 Free Software Foundation, Inc.
+   2000, 2001, 2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Lynx Real-Time Systems, Inc.  Los Gatos, CA.
 
@@ -59,7 +59,6 @@ static int thread_alive (struct thread_info *);
 static void info_threads_command (char *, int);
 static void thread_apply_command (char *, int);
 static void restore_current_thread (ptid_t);
-static void switch_to_thread (ptid_t ptid);
 static void prune_threads (void);
 static struct cleanup *make_cleanup_restore_current_thread (ptid_t,
                                                             struct frame_id);
@@ -85,9 +84,11 @@ static void
 free_thread (struct thread_info *tp)
 {
   /* NOTE: this will take care of any left-over step_resume breakpoints,
-     but not any user-specified thread-specific breakpoints. */
+     but not any user-specified thread-specific breakpoints.  We can not
+     delete the breakpoint straight-off, because the inferior might not
+     be stopped at the moment.  */
   if (tp->step_resume_breakpoint)
-    delete_breakpoint (tp->step_resume_breakpoint);
+    tp->step_resume_breakpoint->disposition = disp_del_at_next_stop;
 
   /* FIXME: do I ever need to call the back-end to give it a
      chance at this private data before deleting the thread?  */
@@ -115,11 +116,8 @@ init_thread_list (void)
   thread_list = NULL;
 }
 
-/* add_thread now returns a pointer to the new thread_info, 
-   so that back_ends can initialize their private data.  */
-
 struct thread_info *
-add_thread (ptid_t ptid)
+add_thread_silent (ptid_t ptid)
 {
   struct thread_info *tp;
 
@@ -130,6 +128,17 @@ add_thread (ptid_t ptid)
   tp->next = thread_list;
   thread_list = tp;
   return tp;
+}
+
+struct thread_info *
+add_thread (ptid_t ptid)
+{
+  struct thread_info *result = add_thread_silent (ptid);
+
+  if (print_thread_events)
+    printf_unfiltered (_("[New %s]\n"), target_pid_to_str (ptid));
+  
+  return result;
 }
 
 void
@@ -299,7 +308,7 @@ load_infrun_state (ptid_t ptid,
 		   CORE_ADDR *step_range_end,
 		   struct frame_id *step_frame_id,
 		   int *handling_longjmp,
-		   int *another_trap,
+		   int *stepping_over_breakpoint,
 		   int *stepping_through_solib_after_catch,
 		   bpstat *stepping_through_solib_catchpoints,
 		   int *current_line,
@@ -320,7 +329,7 @@ load_infrun_state (ptid_t ptid,
   *step_range_end = tp->step_range_end;
   *step_frame_id = tp->step_frame_id;
   *handling_longjmp = tp->handling_longjmp;
-  *another_trap = tp->another_trap;
+  *stepping_over_breakpoint = tp->stepping_over_breakpoint;
   *stepping_through_solib_after_catch =
     tp->stepping_through_solib_after_catch;
   *stepping_through_solib_catchpoints =
@@ -340,7 +349,7 @@ save_infrun_state (ptid_t ptid,
 		   CORE_ADDR step_range_end,
 		   const struct frame_id *step_frame_id,
 		   int handling_longjmp,
-		   int another_trap,
+		   int stepping_over_breakpoint,
 		   int stepping_through_solib_after_catch,
 		   bpstat stepping_through_solib_catchpoints,
 		   int current_line,
@@ -361,7 +370,7 @@ save_infrun_state (ptid_t ptid,
   tp->step_range_end = step_range_end;
   tp->step_frame_id = (*step_frame_id);
   tp->handling_longjmp = handling_longjmp;
-  tp->another_trap = another_trap;
+  tp->stepping_over_breakpoint = stepping_over_breakpoint;
   tp->stepping_through_solib_after_catch = stepping_through_solib_after_catch;
   tp->stepping_through_solib_catchpoints = stepping_through_solib_catchpoints;
   tp->current_line = current_line;
@@ -452,7 +461,7 @@ info_threads_command (char *arg, int from_tty)
 
 /* Switch from one thread to another. */
 
-static void
+void
 switch_to_thread (ptid_t ptid)
 {
   if (ptid_equal (ptid, inferior_ptid))
@@ -674,6 +683,17 @@ thread_command (char *tidstr, int from_tty)
   gdb_thread_select (uiout, tidstr, NULL);
 }
 
+/* Print notices when new threads are attached and detached.  */
+int print_thread_events = 1;
+static void
+show_print_thread_events (struct ui_file *file, int from_tty,
+                          struct cmd_list_element *c, const char *value)
+{
+  fprintf_filtered (file, _("\
+Printing of thread events is %s.\n"),
+                    value);
+}
+
 static int
 do_captured_thread_select (struct ui_out *uiout, void *tidstr)
 {
@@ -736,4 +756,12 @@ The new thread ID must be currently known."),
 
   if (!xdb_commands)
     add_com_alias ("t", "thread", class_run, 1);
+
+  add_setshow_boolean_cmd ("thread-events", no_class,
+         &print_thread_events, _("\
+Set printing of thread events (e.g., thread start and exit)."), _("\
+Show printing of thread events (e.g., thread start and exit)."), NULL,
+         NULL,
+         show_print_thread_events,
+         &setprintlist, &showprintlist);
 }

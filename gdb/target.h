@@ -1,7 +1,7 @@
 /* Interface between GDB and target environments, including files and processes
 
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.  Written by John Gilmore.
@@ -399,11 +399,8 @@ struct target_ops
     char *(*to_extra_thread_info) (struct thread_info *);
     void (*to_stop) (void);
     void (*to_rcmd) (char *command, struct ui_file *output);
-    struct symtab_and_line *(*to_enable_exception_callback) (enum
-							     exception_event_kind,
-							     int);
-    struct exception_event_record *(*to_get_current_exception_event) (void);
     char *(*to_pid_to_exec_file) (int pid);
+    void (*to_log_command) (const char *);
     enum strata to_stratum;
     int to_has_all_memory;
     int to_has_memory;
@@ -885,7 +882,7 @@ int target_follow_fork (int follow_child);
 /* Query for new threads and add them to the thread list.  */
 
 #define target_find_new_threads() \
-     (*current_target.to_find_new_threads) (); \
+     (*current_target.to_find_new_threads) ()
 
 /* Make target stop in a continuable fashion.  (For instance, under
    Unix, this should act like SIGSTOP).  This function is normally
@@ -900,21 +897,6 @@ int target_follow_fork (int follow_child);
 #define target_rcmd(command, outbuf) \
      (*current_target.to_rcmd) (command, outbuf)
 
-
-/* Get the symbol information for a breakpointable routine called when
-   an exception event occurs.
-   Intended mainly for C++, and for those
-   platforms/implementations where such a callback mechanism is available,
-   e.g. HP-UX with ANSI C++ (aCC).  Some compilers (e.g. g++) support
-   different mechanisms for debugging exceptions.  */
-
-#define target_enable_exception_callback(kind, enable) \
-     (*current_target.to_enable_exception_callback) (kind, enable)
-
-/* Get the current exception event kind -- throw or catch, etc.  */
-
-#define target_get_current_exception_event() \
-     (*current_target.to_get_current_exception_event) ()
 
 /* Does the target include all of memory, or only part of it?  This
    determines whether we look up the target chain for other parts of
@@ -1008,11 +990,6 @@ extern char *normal_pid_to_str (ptid_t ptid);
 
 #define target_extra_thread_info(TP) \
      (current_target.to_extra_thread_info (TP))
-
-#ifndef target_pid_or_tid_to_str
-#define target_pid_or_tid_to_str(ID) \
-     target_pid_to_str (ID)
-#endif
 
 /* Attempts to find the pathname of the executable file
    that was run to create a specified process.
@@ -1130,6 +1107,14 @@ extern int target_stopped_data_address_p (struct target_ops *);
 
 extern const struct target_desc *target_read_description (struct target_ops *);
 
+/* Command logging facility.  */
+
+#define target_log_command(p)						\
+  do									\
+    if (current_target.to_log_command)					\
+      (*current_target.to_log_command) (p);				\
+  while (0)
+
 /* Routines for maintenance of the target structures...
 
    add_target:   Add a target to the list of all possible targets.
@@ -1192,9 +1177,9 @@ extern int memory_remove_breakpoint (struct bp_target_info *);
 
 extern int memory_insert_breakpoint (struct bp_target_info *);
 
-extern int default_memory_remove_breakpoint (struct bp_target_info *);
+extern int default_memory_remove_breakpoint (struct gdbarch *, struct bp_target_info *);
 
-extern int default_memory_insert_breakpoint (struct bp_target_info *);
+extern int default_memory_insert_breakpoint (struct gdbarch *, struct bp_target_info *);
 
 
 /* From target.c */

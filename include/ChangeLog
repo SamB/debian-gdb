@@ -1,3 +1,45 @@
+2008-02-15  Alan Modra  <amodra@bigpond.net.au>
+
+	* bfdlink.h (struct bfd_link_hash_table): Delete creator field.
+	(struct bfd_link_info): Add output_bfd.
+
+2008-02-11  Bob Wilson  <bob.wilson@acm.org>
+
+	* xtensa-config.h (XCHAL_HAVE_THREADPTR): Redefine to zero.
+	(XCHAL_NUM_AREGS, XCHAL_MAX_INSTRUCTION_SIZE): New.
+	
+2008-01-26  David Daney  <ddaney@avtrex.com>
+
+	* demangle.h (demangle_component_type):  Add
+	DEMANGLE_COMPONENT_JAVA_RESOURCE,
+	DEMANGLE_COMPONENT_COMPOUND_NAME, and
+	DEMANGLE_COMPONENT_CHARACTER as new enum values.
+	(demangle_component): Add struct s_character to union u.
+
+2008-01-23  Eric B. Weddington  <eric.weddington@atmel.com>
+
+	* opcode/avr.h (AVR_ISA_RF401): Add new opcode set for at86rf401.
+
+2008-01-03  Eric B. Weddington  <eric.weddington@atmel.com>
+
+	* opcode/avr.h (AVR_ISA_USB162): Add new opcode set.
+	(AVR_ISA_AVR3): Likewise.
+
+2007-11-17  Thiemo Seufer  <ths@mips.com>
+
+	* elf/mips.h (Tag_GNU_MIPS_ABI_FP): Mention -mips32r2 -mfp64 variant
+	in comment.
+
+2007-11-07  Joseph Myers  <joseph@codesourcery.com>
+	    Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* floatformat.h (struct floatformat): Add split_half field.
+	(floatformat_ibm_long_double): New.
+
+2007-11-05  Danny Smith  <dannysmith@users.sourceforge.net>
+
+	* coff/pe.h (COFF_ENCODE_ALIGNMENT) Define.
+
 2007-09-06  Tom Tromey  <tromey@redhat.com>
 
 	* libiberty.h (pex_free): Document process killing.

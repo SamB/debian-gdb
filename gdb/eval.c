@@ -1,7 +1,7 @@
 /* Evaluate expressions for GDB.
 
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2006, 2007
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -456,6 +456,11 @@ evaluate_subexp_standard (struct type *expect_type,
       return value_from_double (exp->elts[pc + 1].type,
 				exp->elts[pc + 2].doubleconst);
 
+    case OP_DECFLOAT:
+      (*pos) += 3;
+      return value_from_decfloat (exp->elts[pc + 1].type,
+				  exp->elts[pc + 2].decfloatconst);
+
     case OP_VAR_VALUE:
       (*pos) += 3;
       if (noside == EVAL_SKIP)
@@ -507,7 +512,15 @@ evaluate_subexp_standard (struct type *expect_type,
 					  name, strlen (name));
 	if (regno == -1)
 	  error (_("Register $%s not available."), name);
-	if (noside == EVAL_AVOID_SIDE_EFFECTS)
+
+        /* In EVAL_AVOID_SIDE_EFFECTS mode, we only need to return
+           a value with the appropriate register type.  Unfortunately,
+           we don't have easy access to the type of user registers.
+           So for these registers, we fetch the register value regardless
+           of the evaluation mode.  */
+	if (noside == EVAL_AVOID_SIDE_EFFECTS
+	    && regno < gdbarch_num_regs (current_gdbarch)
+	       + gdbarch_num_pseudo_regs (current_gdbarch))
 	  val = value_zero (register_type (current_gdbarch, regno), not_lval);
 	else
 	  val = value_of_register (regno, get_selected_frame (NULL));
@@ -681,7 +694,7 @@ evaluate_subexp_standard (struct type *expect_type,
 	      for (; range_low <= range_high; range_low++)
 		{
 		  int bit_index = (unsigned) range_low % TARGET_CHAR_BIT;
-		  if (BITS_BIG_ENDIAN)
+		  if (gdbarch_bits_big_endian (current_gdbarch))
 		    bit_index = TARGET_CHAR_BIT - 1 - bit_index;
 		  valaddr[(unsigned) range_low / TARGET_CHAR_BIT]
 		    |= 1 << bit_index;
@@ -760,7 +773,6 @@ evaluate_subexp_standard (struct type *expect_type,
 
 	CORE_ADDR selector = 0;
 
-	int using_gcc = 0;
 	int struct_return = 0;
 	int sub_no_side = 0;
 
@@ -912,9 +924,6 @@ evaluate_subexp_standard (struct type *expect_type,
 
 	    b = block_for_pc (funaddr);
 
-	    /* If compiled without -g, assume GCC 2.  */
-	    using_gcc = (b == NULL ? 2 : BLOCK_GCC_COMPILED (b));
-
 	    CHECK_TYPEDEF (value_type);
 	  
 	    if ((value_type == NULL) 
@@ -924,11 +933,11 @@ evaluate_subexp_standard (struct type *expect_type,
 		  value_type = expect_type;
 	      }
 
-	    struct_return = using_struct_return (value_type, using_gcc);
+	    struct_return = using_struct_return (value_type);
 	  }
 	else if (expect_type != NULL)
 	  {
-	    struct_return = using_struct_return (check_typedef (expect_type), using_gcc);
+	    struct_return = using_struct_return (check_typedef (expect_type));
 	  }
 	
 	/* Found a function symbol.  Now we will substitute its
@@ -1495,6 +1504,7 @@ evaluate_subexp_standard (struct type *expect_type,
     case BINOP_EXP:
     case BINOP_MUL:
     case BINOP_DIV:
+    case BINOP_INTDIV:
     case BINOP_REM:
     case BINOP_MOD:
     case BINOP_LSH:
@@ -1508,11 +1518,30 @@ evaluate_subexp_standard (struct type *expect_type,
 	goto nosideret;
       if (binop_user_defined_p (op, arg1, arg2))
 	return value_x_binop (arg1, arg2, op, OP_NULL, noside);
-      else if (noside == EVAL_AVOID_SIDE_EFFECTS
-	       && (op == BINOP_DIV || op == BINOP_REM || op == BINOP_MOD))
-	return value_zero (value_type (arg1), not_lval);
       else
-	return value_binop (arg1, arg2, op);
+	{
+	  /* If EVAL_AVOID_SIDE_EFFECTS and we're dividing by zero,
+	     fudge arg2 to avoid division-by-zero, the caller is
+	     (theoretically) only looking for the type of the result.  */
+	  if (noside == EVAL_AVOID_SIDE_EFFECTS
+	      /* ??? Do we really want to test for BINOP_MOD here?
+		 The implementation of value_binop gives it a well-defined
+		 value.  */
+	      && (op == BINOP_DIV
+		  || op == BINOP_INTDIV
+		  || op == BINOP_REM
+		  || op == BINOP_MOD)
+	      && value_logical_not (arg2))
+	    {
+	      struct value *v_one, *retval;
+
+	      v_one = value_one (value_type (arg2), not_lval);
+	      retval = value_binop (arg1, v_one, op);
+	      return retval;
+	    }
+	  else
+	    return value_binop (arg1, arg2, op);
+	}
 
     case BINOP_RANGE:
       arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
@@ -2149,11 +2178,13 @@ evaluate_subexp_for_address (struct expression *exp, int *pos,
 	  return
 	    value_zero (type, not_lval);
 	}
-      else
+      else if (symbol_read_needs_frame (var))
 	return
 	  locate_var_value
 	  (var,
 	   block_innermost_frame (exp->elts[pc + 1].block));
+      else
+	return locate_var_value (var, NULL);
 
     case OP_SCOPE:
       tem = longest_to_int (exp->elts[pc + 2].longconst);

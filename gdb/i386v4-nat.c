@@ -1,7 +1,7 @@
 /* Native-dependent code for Unix SVR4 running on i386's.
 
    Copyright (C) 1988, 1989, 1991, 1992, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2004, 2007 Free Software Foundation, Inc.
+   2002, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -137,7 +137,7 @@ fill_gregset (const struct regcache *regcache,
 void
 supply_fpregset (struct regcache *regcache, const fpregset_t *fpregsetp)
 {
-  if (gdbarch_fp0_regnum (current_gdbarch) == 0)
+  if (gdbarch_fp0_regnum (get_regcache_arch (regcache)) == 0)
     return;
 
   i387_supply_fsave (regcache, -1, fpregsetp);
@@ -151,7 +151,7 @@ void
 fill_fpregset (const struct regcache *regcache,
 	       fpregset_t *fpregsetp, int regno)
 {
-  if (gdbarch_fp0_regnum (current_gdbarch) == 0)
+  if (gdbarch_fp0_regnum (get_regcache_arch (regcache)) == 0)
     return;
 
   i387_collect_fsave (regcache, regno, fpregsetp);

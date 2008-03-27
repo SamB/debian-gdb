@@ -1,4 +1,4 @@
-#   Copyright 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+#   Copyright 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -71,7 +71,7 @@ gdb_test_multiple "break pendfunc1" "set pending breakpoint" {
 }
 
 gdb_test "info break" \
-    "Num Type\[ \]+Disp Enb Address\[ \]+What.*
+    "Num     Type\[ \]+Disp Enb Address\[ \]+What.*
 \[0-9\]+\[\t \]+breakpoint     keep y.*PENDING.*pendfunc1.*" \
 "single pending breakpoint info"
 
@@ -86,7 +86,7 @@ gdb_test "break main" \
     "breakpoint function"
 
 gdb_test "info break" \
-    "Num Type\[ \]+Disp Enb Address\[ \]+What.*
+    "Num     Type\[ \]+Disp Enb Address\[ \]+What.*
 \[0-9\]+\[\t \]+breakpoint     keep y.*PENDING.*pendfunc1.*
 \[0-9\]+\[\t \]+breakpoint     keep y.* in main at .*$srcfile:$mainline" \
 "pending plus real breakpoint info"
@@ -108,7 +108,7 @@ gdb_test_multiple "break pendfunc2" "Don't set pending breakpoint" {
 gdb_test "condition 1 k == 1" ""
 
 gdb_test "info break" \
-    "Num Type\[ \]+Disp Enb Address\[ \]+What.*
+    "Num     Type\[ \]+Disp Enb Address\[ \]+What.*
 \[0-9\]+\[\t \]+breakpoint     keep y.*PENDING.*pendfunc1.*
 \[\t \]+stop only if k == 1.*
 \[0-9\]+\[\t \]+breakpoint     keep y.* in main at .*$srcfile:$mainline" \
@@ -121,7 +121,7 @@ gdb_test "info break" \
 gdb_test "disable 1" ""
 
 gdb_test "info break" \
-    "Num Type\[ \]+Disp Enb Address\[ \]+What.*
+    "Num     Type\[ \]+Disp Enb Address\[ \]+What.*
 \[0-9\]+\[\t \]+breakpoint     keep n.*PENDING.*pendfunc1.*
 \[\t \]+stop only if k == 1.*
 \[0-9\]+\[\t \]+breakpoint     keep y.* in main at .*$srcfile:$mainline" \
@@ -134,7 +134,7 @@ gdb_test "commands 1\nprint k\nend" "" \
         "Set commands for pending breakpoint"
 
 gdb_test "info break" \
-    "Num Type\[ \]+Disp Enb Address\[ \]+What.*
+    "Num     Type\[ \]+Disp Enb Address\[ \]+What.*
 \[0-9\]+\[\t \]+breakpoint     keep n.*PENDING.*pendfunc1.*
 \[\t \]+stop only if k == 1.*
 \[\t \]+print k.*
@@ -154,7 +154,7 @@ gdb_test_multiple "break pendshr.c:$bp2_loc if x > 3" "Set pending breakpoint 2"
 }
 
 gdb_test "info break" \
-    "Num Type\[ \]+Disp Enb Address\[ \]+What.*
+    "Num     Type\[ \]+Disp Enb Address\[ \]+What.*
 \[0-9\]+\[\t \]+breakpoint     keep n.*PENDING.*pendfunc1.*
 \[\t \]+stop only if k == 1.*
 \[\t \]+print k.*
@@ -179,7 +179,7 @@ gdb_test {ignore $bpnum 2} "Will ignore next 2 crossings of breakpoint .*" \
     "set ignore count on pending breakpoint 3"
 
 gdb_test "info break" \
-    "Num Type\[ \]+Disp Enb Address\[ \]+What.*
+    "Num     Type\[ \]+Disp Enb Address\[ \]+What.*
 \[0-9\]+\[\t \]+breakpoint     keep n.*PENDING.*pendfunc1.*
 \[\t \]+stop only if k == 1.*
 \[\t \]+print k.*
@@ -194,9 +194,7 @@ gdb_test "info break" \
 
 gdb_run_cmd
 gdb_test "" \
-"Breakpoint.*at.*
-Pending breakpoint \"pendshr.c:$bp2_loc if x > 3\" resolved.*
-Breakpoint.*, main.*$mainline.*" \
+".*Breakpoint.*, main.*$mainline.*" \
 "running to main"
 
 #
@@ -204,8 +202,7 @@ Breakpoint.*, main.*$mainline.*" \
 #
 
 gdb_test "enable 1" \
-"Breakpoint.*at.*
-Pending breakpoint \"pendfunc1.* resolved.*" \
+"" \
 "re-enabling pending breakpoint that can resolve instantly"
 
 #
@@ -256,7 +253,7 @@ gdb_test_multiple "break imaginary" "set imaginary pending breakpoint" {
 rerun_to_main
 
 gdb_test "info break" \
-    "Num Type\[ \]+Disp Enb Address\[ \]+What.*
+    "Num     Type\[ \]+Disp Enb Address\[ \]+What.*
 \[0-9\]+\[\t \]+breakpoint     keep y.* in main at .*$srcfile:$mainline.*
 \[0-9\]+\[\t \]+breakpoint     keep y.*PENDING.*imaginary.*" \
 "verify pending breakpoint after restart"

@@ -1,6 +1,6 @@
 /* TUI display source/assembly window.
 
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2006, 2007
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
@@ -449,7 +449,7 @@ tui_update_breakpoint_info (struct tui_win_info *win,
                 mode |= TUI_BP_ENABLED;
               if (bp->hit_count)
                 mode |= TUI_BP_HIT;
-              if (bp->cond)
+              if (bp->loc->cond)
                 mode |= TUI_BP_CONDITIONAL;
               if (bp->type == bp_hardware_breakpoint)
                 mode |= TUI_BP_HARDWARE;

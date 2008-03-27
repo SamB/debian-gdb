@@ -1,6 +1,6 @@
 /* Target-dependent header for the MIPS architecture, for GDB, the GNU Debugger.
 
-   Copyright (C) 2002, 2003, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -101,5 +101,10 @@ extern int mips_pc_is_mips16 (bfd_vma memaddr);
 
 /* Return the currently configured (or set) saved register size. */
 extern unsigned int mips_abi_regsize (struct gdbarch *gdbarch);
+
+/* Target descriptions which only indicate the size of general
+   registers.  */
+extern struct target_desc *mips_tdesc_gp32;
+extern struct target_desc *mips_tdesc_gp64;
 
 #endif /* MIPS_TDEP_H */

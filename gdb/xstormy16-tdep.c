@@ -1,6 +1,6 @@
 /* Target-dependent code for the Sanyo Xstormy16a (LC590000) processor.
 
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2007
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -104,7 +104,7 @@ enum
    Returns the name of the standard Xstormy16 register N.  */
 
 static const char *
-xstormy16_register_name (int regnum)
+xstormy16_register_name (struct gdbarch *gdbarch, int regnum)
 {
   static char *register_names[] = {
     "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
@@ -404,7 +404,7 @@ xstormy16_analyze_prologue (CORE_ADDR start_addr, CORE_ADDR end_addr,
    stepped into a function call.  */
 
 static CORE_ADDR
-xstormy16_skip_prologue (CORE_ADDR pc)
+xstormy16_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   CORE_ADDR func_addr = 0, func_end = 0;
   char *func_name;
@@ -490,7 +490,8 @@ xstormy16_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 }
 
 const static unsigned char *
-xstormy16_breakpoint_from_pc (CORE_ADDR *pcptr, int *lenptr)
+xstormy16_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
+			      int *lenptr)
 {
   static unsigned char breakpoint[] = { 0x06, 0x0 };
   *lenptr = sizeof (breakpoint);
@@ -705,7 +706,7 @@ xstormy16_frame_prev_register (struct frame_info *next_frame,
         {
           /* Read the value in from memory.  */
           read_memory (*addrp, valuep,
-                       register_size (current_gdbarch, regnum));
+                       register_size (get_frame_arch (next_frame), regnum));
         }
       return;
     }
