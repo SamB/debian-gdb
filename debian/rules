@@ -141,6 +141,7 @@ endif
 	touch $@
 
 clean::
+	rm -f check-stamp build64-stamp
 	rm -rf objdir $(BUILDDIR64)
 
 	if test -f gdb/version.in.backup; then \
@@ -155,8 +156,6 @@ clean::
 	# updates the copy in the source directory.
 	find bfd -name bfd.info\* | xargs --no-run-if-empty touch
 
-	rm -f check-stamp build64-stamp
-
 binary-post-install/gdb$(TS) ::
 	if [ -x debian/tmp/usr/bin/run ]; then				\
 		mv debian/tmp/usr/bin/run					\
@@ -170,8 +169,11 @@ ifeq ($(run_tests),yes)
 		debian/gdb$(TS)/usr/share/doc/gdb/check.log
 endif
 
+ifneq ($(DEB_CROSS),yes)
+	# Gcore is only useful for native GDB.
 	$(INSTALL) -m 755 -o root -g root \
 		gdb/gdb_gcore.sh debian/gdb$(TS)/usr/bin/$(TP)gcore
+endif
 
 ifeq ($(build64),yes)
 	install -d debian/gdb64/usr/bin
@@ -187,11 +189,14 @@ endif
 	# not the real manuals.
 	rm -rf debian/tmp/usr/share/info
 
+ifneq ($(DEB_CROSS),yes)
+	# libgdb-dev is only required for native GDB.
 	install -d debian/tmp/usr/lib
 	install -m 644 $(DEB_BUILDDIR)/gdb/libgdb.a debian/tmp/usr/lib/
 	if test -e $(DEB_BUILDDIR)/sim/*/libsim.a; then \
 	  install -m 644 $(DEB_BUILDDIR)/sim/*/libsim.a debian/tmp/usr/lib/; \
 	fi
+endif
 
 debian/control:: debian/control.in $(CROSS_FORCE)
 	cat debian/control.in \
@@ -199,11 +204,18 @@ debian/control:: debian/control.in $(CROSS_FORCE)
 		| sed "s/@gnu@/`type-handling any gnu`/g" \
 		| sed "s/@TS@/$(TS)/g" \
 		> debian/control
+ifeq ($(DEB_CROSS),yes)
+	sed -i "/Package: gdb64/,\$$ d" debian/control
+	cp debian/gdb.install debian/gdb$(TS).install
+endif
 
 DEB_INSTALL_DOCS_gdb$(TS) = gdb/NEWS gdb/README gdb/doc/refcard.tex \
 		objdir/gdb/doc/refcard.dvi objdir/gdb/doc/refcard.ps
 DEB_INSTALL_CHANGELOGS_gdb$(TS) = gdb/ChangeLog
 DEB_INSTALL_MANPAGES_gdb$(TS) = gdb/gdb.1
+ifneq ($(DEB_CROSS),yes)
+DEB_INSTALL_MANPAGES_gdb$(TS) += debian/gcore.1
+endif
 
 DEB_INSTALL_DOCS_libgdb-dev = gdb/NEWS gdb/README
 DEB_INSTALL_CHANGELOGS_libgdb-dev = gdb/ChangeLog

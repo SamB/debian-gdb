@@ -1,3 +1,14 @@
+gdb (6.8-2) unstable; urgency=low
+
+  * Make removal of stamp files the first action of the clean target
+    (from Justin Pryzby).
+  * Correct array access in ia64 port to fix build failure.
+  * Fix GDB_TARGET support (reported by Fathi BOUDRA).
+  * Update gcj build dependencies (Closes: #477863, #479111).
+  * Add a man page for gcore, from Nicolas Bonifas (Closes: #479066).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Fri, 02 May 2008 18:28:37 -0400
+
 gdb (6.8-1) unstable; urgency=low
 
   * New upstream release.
