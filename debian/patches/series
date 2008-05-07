@@ -9,3 +9,5 @@ man-page-args.patch
 bfd-get-mtime-less.patch
 gdb-rbreak-quoting.patch
 ia64-array-bound.patch
+cp-support-uninit.patch
+m68k-nat-build-fix.patch

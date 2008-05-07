@@ -9,8 +9,6 @@ Package: gdb
 Architecture: any
 Section: devel
 Depends: ${shlibs:Depends}
-Conflicts: gdb-arm
-Replaces: gdb-arm, insight (<< 6.1+cvs.2004.04.07-1)
 Suggests: gdb-doc
 Description: The GNU Debugger
  GDB is a source-level debugger, capable of breaking programs at

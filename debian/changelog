@@ -1,3 +1,11 @@
+gdb (6.8-3) unstable; urgency=low
+
+  * Initialize some uninitialized variables (Closes: #479561).
+  * Drop gdb-arm and insight conflict/replace.
+  * Fix build on m68k.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Wed, 07 May 2008 08:40:02 -0400
+
 gdb (6.8-2) unstable; urgency=low
 
   * Make removal of stamp files the first action of the clean target
