@@ -147,12 +147,6 @@ add_symbol_to_list (struct symbol *symbol, struct pending **listhead)
     }
 
   (*listhead)->symbol[(*listhead)->nsyms++] = symbol;
-
-  /* Check to see if we might need to look for a mention of anonymous
-     namespaces.  */
-  
-  if (SYMBOL_LANGUAGE (symbol) == language_cplus)
-    cp_scan_for_anonymous_namespaces (symbol);
 }
 
 /* Find a symbol named NAME on a LIST.  NAME need not be
@@ -168,7 +162,7 @@ find_symbol_in_list (struct pending *list, char *name, int length)
     {
       for (j = list->nsyms; --j >= 0;)
 	{
-	  pp = DEPRECATED_SYMBOL_NAME (list->symbol[j]);
+	  pp = SYMBOL_LINKAGE_NAME (list->symbol[j]);
 	  if (*pp == *name && strncmp (pp, name, length) == 0 &&
 	      pp[length] == '\0')
 	    {
@@ -283,34 +277,8 @@ finish_block (struct symbol *symbol, struct pending **listhead,
 	  struct symbol *sym;
 	  ALL_BLOCK_SYMBOLS (block, iter, sym)
 	    {
-	      switch (SYMBOL_CLASS (sym))
-		{
-		case LOC_ARG:
-		case LOC_REF_ARG:
-		case LOC_REGPARM:
-		case LOC_REGPARM_ADDR:
-		case LOC_BASEREG_ARG:
-		case LOC_LOCAL_ARG:
-		case LOC_COMPUTED_ARG:
-		  nparams++;
-		  break;
-		case LOC_UNDEF:
-		case LOC_CONST:
-		case LOC_STATIC:
-		case LOC_INDIRECT:
-		case LOC_REGISTER:
-		case LOC_LOCAL:
-		case LOC_TYPEDEF:
-		case LOC_LABEL:
-		case LOC_BLOCK:
-		case LOC_CONST_BYTES:
-		case LOC_BASEREG:
-		case LOC_UNRESOLVED:
-		case LOC_OPTIMIZED_OUT:
-		case LOC_COMPUTED:
-		default:
-		  break;
-		}
+	      if (SYMBOL_IS_ARGUMENT (sym))
+		nparams++;
 	    }
 	  if (nparams > 0)
 	    {
@@ -324,44 +292,14 @@ finish_block (struct symbol *symbol, struct pending **listhead,
 		  if (iparams == nparams)
 		    break;
 
-		  switch (SYMBOL_CLASS (sym))
+		  if (SYMBOL_IS_ARGUMENT (sym))
 		    {
-		    case LOC_ARG:
-		    case LOC_REF_ARG:
-		    case LOC_REGPARM:
-		    case LOC_REGPARM_ADDR:
-		    case LOC_BASEREG_ARG:
-		    case LOC_LOCAL_ARG:
-		    case LOC_COMPUTED_ARG:
 		      TYPE_FIELD_TYPE (ftype, iparams) = SYMBOL_TYPE (sym);
 		      TYPE_FIELD_ARTIFICIAL (ftype, iparams) = 0;
 		      iparams++;
-		      break;
-		    case LOC_UNDEF:
-		    case LOC_CONST:
-		    case LOC_STATIC:
-		    case LOC_INDIRECT:
-		    case LOC_REGISTER:
-		    case LOC_LOCAL:
-		    case LOC_TYPEDEF:
-		    case LOC_LABEL:
-		    case LOC_BLOCK:
-		    case LOC_CONST_BYTES:
-		    case LOC_BASEREG:
-		    case LOC_UNRESOLVED:
-		    case LOC_OPTIMIZED_OUT:
-		    case LOC_COMPUTED:
-		    default:
-		      break;
 		    }
 		}
 	    }
-	}
-
-      /* If we're in the C++ case, set the block's scope.  */
-      if (SYMBOL_LANGUAGE (symbol) == language_cplus)
-	{
-	  cp_set_block_scope (symbol, block, &objfile->objfile_obstack);
 	}
     }
   else
@@ -597,7 +535,7 @@ start_subfile (char *name, char *dirname)
 	  && !IS_ABSOLUTE_PATH (subfile->name)
 	  && subfile->dirname != NULL)
 	subfile_name = concat (subfile->dirname, SLASH_STRING,
-			       subfile->name, NULL);
+			       subfile->name, (char *) NULL);
       else
 	subfile_name = subfile->name;
 
@@ -889,6 +827,81 @@ start_symtab (char *name, char *dirname, CORE_ADDR start_addr)
   start_subfile (name, dirname);
 }
 
+/* Subroutine of end_symtab to simplify it.
+   Look for a subfile that matches the main source file's basename.
+   If there is only one, and if the main source file doesn't have any
+   symbol or line number information, then copy this file's symtab and
+   line_vector to the main source file's subfile and discard the other subfile.
+   This can happen because of a compiler bug or from the user playing games
+   with #line or from things like a distributed build system that manipulates
+   the debug info.  */
+
+static void
+watch_main_source_file_lossage (void)
+{
+  struct subfile *mainsub, *subfile;
+
+  /* Find the main source file.
+     This loop could be eliminated if start_symtab saved it for us.  */
+  mainsub = NULL;
+  for (subfile = subfiles; subfile; subfile = subfile->next)
+    {
+      /* The main subfile is guaranteed to be the last one.  */
+      if (subfile->next == NULL)
+	mainsub = subfile;
+    }
+
+  /* If the main source file doesn't have any line number or symbol info,
+     look for an alias in another subfile.
+     We have to watch for mainsub == NULL here.  It's a quirk of end_symtab,
+     it can return NULL so there may not be a main subfile.  */
+
+  if (mainsub
+      && mainsub->line_vector == NULL
+      && mainsub->symtab == NULL)
+    {
+      const char *mainbase = lbasename (mainsub->name);
+      int nr_matches = 0;
+      struct subfile *prevsub;
+      struct subfile *mainsub_alias = NULL;
+      struct subfile *prev_mainsub_alias = NULL;
+
+      prevsub = NULL;
+      for (subfile = subfiles;
+	   /* Stop before we get to the last one.  */
+	   subfile->next;
+	   subfile = subfile->next)
+	{
+	  if (strcmp (lbasename (subfile->name), mainbase) == 0)
+	    {
+	      ++nr_matches;
+	      mainsub_alias = subfile;
+	      prev_mainsub_alias = prevsub;
+	    }
+	  prevsub = subfile;
+	}
+
+      if (nr_matches == 1)
+	{
+	  gdb_assert (mainsub_alias != NULL && mainsub_alias != mainsub);
+
+	  /* Found a match for the main source file.
+	     Copy its line_vector and symtab to the main subfile
+	     and then discard it.  */
+
+	  mainsub->line_vector = mainsub_alias->line_vector;
+	  mainsub->line_vector_length = mainsub_alias->line_vector_length;
+	  mainsub->symtab = mainsub_alias->symtab;
+
+	  if (prev_mainsub_alias == NULL)
+	    subfiles = mainsub_alias->next;
+	  else
+	    prev_mainsub_alias->next = mainsub_alias->next;
+	  xfree (mainsub_alias);
+	}
+    }
+}
+
 /* Finish the symbol definitions for one main source file, close off
    all the lexical contexts for that file (creating struct block's for
    them), then make the struct symtab for that file and put it in the
@@ -1009,6 +1022,11 @@ end_symtab (CORE_ADDR end_addr, struct objfile *objfile, int section)
   /* Read the line table if it has to be read separately.  */
   if (objfile->sf->sym_read_linetable != NULL)
     objfile->sf->sym_read_linetable ();
+
+  /* Handle the case where the debug info specifies a different path
+     for the main source file.  It can cause us to lose track of its
+     line number information.  */
+  watch_main_source_file_lossage ();
 
   /* Now create the symtab objects proper, one for each subfile.  */
   /* (The main file is the last one on the chain.)  */

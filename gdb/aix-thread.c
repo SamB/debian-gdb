@@ -365,7 +365,7 @@ pdc_read_regs (pthdb_user_t user,
     {
       if (!ptrace32 (PTT_READ_FPRS, tid, (void *) fprs, 0, NULL))
 	memset (fprs, 0, sizeof (fprs));
-      	  memcpy (context->fpr, fprs, sizeof(fprs));
+      memcpy (context->fpr, fprs, sizeof(fprs));
     }
 
   /* Special-purpose registers.  */
@@ -938,19 +938,19 @@ new_objfile (struct objfile *objfile)
 /* Attach to process specified by ARGS.  */
 
 static void
-aix_thread_attach (char *args, int from_tty)
+aix_thread_attach (struct target_ops *ops, char *args, int from_tty)
 {
-  base_target.to_attach (args, from_tty);
+  base_target.to_attach (&base_target, args, from_tty);
   pd_activate (1);
 }
 
 /* Detach from the process attached to by aix_thread_attach().  */
 
 static void
-aix_thread_detach (char *args, int from_tty)
+aix_thread_detach (struct target_ops *ops, char *args, int from_tty)
 {
   pd_disable ();
-  base_target.to_detach (args, from_tty);
+  base_target.to_detach (&base_target, args, from_tty);
 }
 
 /* Tell the inferior process to continue running thread PID if != -1
@@ -1010,11 +1010,16 @@ aix_thread_wait (ptid_t ptid, struct target_waitstatus *status)
     return pid_to_ptid (-1);
 
   /* Check whether libpthdebug might be ready to be initialized.  */
-  if (!pd_active && status->kind == TARGET_WAITKIND_STOPPED &&
-      status->value.sig == TARGET_SIGNAL_TRAP
-      && read_pc_pid (ptid)
-	 - gdbarch_decr_pc_after_break (current_gdbarch) == pd_brk_addr)
-    return pd_activate (0);
+  if (!pd_active && status->kind == TARGET_WAITKIND_STOPPED
+      && status->value.sig == TARGET_SIGNAL_TRAP)
+    {
+      struct regcache *regcache = get_thread_regcache (ptid);
+      struct gdbarch *gdbarch = get_regcache_arch (regcache);
+
+      if (regcache_read_pc (regcache)
+	  - gdbarch_decr_pc_after_break (gdbarch) == pd_brk_addr)
+	return pd_activate (0);
+    }
 
   return pd_update (0);
 }
@@ -1662,10 +1667,10 @@ aix_thread_kill (void)
 /* Clean up after the inferior exits.  */
 
 static void
-aix_thread_mourn_inferior (void)
+aix_thread_mourn_inferior (struct target_ops *ops)
 {
   pd_deactivate ();
-  base_target.to_mourn_inferior ();
+  base_target.to_mourn_inferior (&base_target);
 }
 
 /* Return whether thread PID is still valid.  */

@@ -53,10 +53,12 @@ contained_in (const struct block *a, const struct block *b)
 
 
 /* Return the symbol for the function which contains a specified
-   lexical block, described by a struct block BL.  */
+   lexical block, described by a struct block BL.  The return value
+   will not be an inlined function; the containing function will be
+   returned instead.  */
 
 struct symbol *
-block_function (const struct block *bl)
+block_linkage_function (const struct block *bl)
 {
   while (BLOCK_FUNCTION (bl) == 0 && BLOCK_SUPERBLOCK (bl) != 0)
     bl = BLOCK_SUPERBLOCK (bl);
@@ -70,7 +72,7 @@ block_function (const struct block *bl)
    don't pass this information back to the caller.  */
 
 struct blockvector *
-blockvector_for_pc_sect (CORE_ADDR pc, struct bfd_section *section,
+blockvector_for_pc_sect (CORE_ADDR pc, struct obj_section *section,
 			 struct block **pblock, struct symtab *symtab)
 {
   struct block *b;
@@ -151,7 +153,7 @@ blockvector_for_pc (CORE_ADDR pc, struct block **pblock)
    in the specified section, or 0 if there is none.  */
 
 struct block *
-block_for_pc_sect (CORE_ADDR pc, struct bfd_section *section)
+block_for_pc_sect (CORE_ADDR pc, struct obj_section *section)
 {
   struct blockvector *bl;
   struct block *b;

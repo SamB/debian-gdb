@@ -45,6 +45,8 @@
 #include "cli/cli-setshow.h"
 #include "cli/cli-cmds.h"
 
+#include "python/python.h"
+
 #ifdef TUI
 #include "tui/tui.h"		/* For tui_active et.al.   */
 #endif
@@ -178,6 +180,7 @@ struct cmd_list_element *showchecklist;
 
 /* Command tracing state.  */
 
+static int source_python = 0;
 int source_verbose = 0;
 int trace_commands = 0;
 
@@ -437,6 +440,7 @@ source_script (char *file, int from_tty)
   struct cleanup *old_cleanups;
   char *full_pathname = NULL;
   int fd;
+  int is_python;
 
   if (file == NULL || *file == 0)
     {
@@ -450,6 +454,7 @@ source_script (char *file, int from_tty)
      files.  Put the full location in 'full_pathname'.  */
   fd = openp (source_path, OPF_TRY_CWD_FIRST,
 	      file, O_RDONLY, 0, &full_pathname);
+  make_cleanup (xfree, full_pathname);
 
   /* Use the full path name, if it is found.  */
   if (full_pathname != NULL && fd != -1)
@@ -462,11 +467,22 @@ source_script (char *file, int from_tty)
       if (from_tty)
 	perror_with_name (file);
       else
-	return;
+	{
+	  do_cleanups (old_cleanups);
+	  return;
+	}
     }
 
+  is_python = source_python;
+  if (strlen (file) > 3 && !strcmp (&file[strlen (file) - 3], ".py"))
+    is_python = 1;
+
   stream = fdopen (fd, FOPEN_RT);
-  script_from_file (stream, file);
+
+  if (is_python)
+    source_python_script (stream, file);
+  else
+    script_from_file (stream, file);
 
   do_cleanups (old_cleanups);
 }
@@ -480,15 +496,30 @@ source_verbose_cleanup (void *old_value)
   xfree (old_value);
 }
 
+/* A helper for source_command.  Look for an argument in *ARGS.
+   Update *ARGS by stripping leading whitespace.  If an argument is
+   found, return it (a character).  Otherwise, return 0.  */
+static int
+find_argument (char **args)
+{
+  int result = 0;
+  while (isspace ((*args)[0]))
+    ++*args;
+  if ((*args)[0] == '-' && isalpha ((*args)[1]))
+    {
+      result = (*args)[1];
+      *args += 3;
+    }
+  return result;
+}
+
 static void
 source_command (char *args, int from_tty)
 {
   struct cleanup *old_cleanups;
-  char *file = args;
-  int *old_source_verbose = xmalloc (sizeof(int));
 
-  *old_source_verbose = source_verbose;
-  old_cleanups = make_cleanup (source_verbose_cleanup, old_source_verbose);
+  old_cleanups = make_cleanup_restore_integer (&source_verbose);
+  make_cleanup_restore_integer (&source_python);
 
   /* -v causes the source command to run in verbose mode.
      We still have to be able to handle filenames with spaces in a
@@ -496,23 +527,28 @@ source_command (char *args, int from_tty)
 
   if (args)
     {
-      /* Make sure leading white space does not break the comparisons.  */
-      while (isspace(args[0]))
-	args++;
-
-      /* Is -v the first thing in the string?  */
-      if (args[0] == '-' && args[1] == 'v' && isspace (args[2]))
+      while (1)
 	{
-	  source_verbose = 1;
-
-	  /* Trim -v and whitespace from the filename.  */
-	  file = &args[3];
-	  while (isspace (file[0]))
-	    file++;
+	  int arg = find_argument (&args);
+	  if (!arg)
+	    break;
+	  switch (arg)
+	    {
+	    case 'v':
+	      source_verbose = 1;
+	      break;
+	    case 'p':
+	      source_python = 1;
+	      break;
+	    default:
+	      error (_("unrecognized option -%c"), arg);
+	    }
 	}
     }
 
-  source_script (file, from_tty);
+  source_script (args, from_tty);
+
+  do_cleanups (old_cleanups);
 }
 
 
@@ -615,12 +651,10 @@ edit_command (char *arg, int from_tty)
   struct symtab_and_line sal;
   struct symbol *sym;
   char *arg1;
-  int cmdlen, log10;
-  unsigned m;
   char *editor;
   char *p, *fn;
 
-  /* Pull in the current default source line if necessary */
+  /* Pull in the current default source line if necessary.  */
   if (arg == 0)
     {
       set_default_source_symtab_and_line ();
@@ -638,17 +672,22 @@ edit_command (char *arg, int from_tty)
   else
     {
 
-      /* Now should only be one argument -- decode it in SAL */
+      /* Now should only be one argument -- decode it in SAL.  */
 
       arg1 = arg;
       sals = decode_line_1 (&arg1, 0, 0, 0, 0, 0);
 
-      if (! sals.nelts) return;  /*  C++  */
-      if (sals.nelts > 1) {
-        ambiguous_line_spec (&sals);
-        xfree (sals.sals);
-        return;
-      }
+      if (! sals.nelts)
+	{
+	  /*  C++  */
+	  return;
+	}
+      if (sals.nelts > 1)
+	{
+	  ambiguous_line_spec (&sals);
+	  xfree (sals.sals);
+	  return;
+	}
 
       sal = sals.sals[0];
       xfree (sals.sals);
@@ -656,7 +695,7 @@ edit_command (char *arg, int from_tty)
       if (*arg1)
         error (_("Junk at end of line specification."));
 
-      /* if line was specified by address,
+      /* If line was specified by address,
          first print exactly which line, and which file.
          In this case, sal.symtab == 0 means address is outside
          of all known source files, not that user failed to give a filename.  */
@@ -668,18 +707,12 @@ edit_command (char *arg, int from_tty)
 		   hex_string ((unsigned long) sal.pc));
           sym = find_pc_function (sal.pc);
           if (sym)
-	    {
-	      deprecated_print_address_numeric (sal.pc, 1, gdb_stdout);
-	      printf_filtered (" is in ");
-	      fputs_filtered (SYMBOL_PRINT_NAME (sym), gdb_stdout);
-	      printf_filtered (" (%s:%d).\n", sal.symtab->filename, sal.line);
-	    }
+	    printf_filtered ("%s is in %s (%s:%d).\n", paddress (sal.pc),
+			     SYMBOL_PRINT_NAME (sym), sal.symtab->filename,
+			     sal.line);
           else
-	    {
-	      deprecated_print_address_numeric (sal.pc, 1, gdb_stdout);
-	      printf_filtered (" is at %s:%d.\n",
-			       sal.symtab->filename, sal.line);
-	    }
+	    printf_filtered ("%s is at %s:%d.\n", paddress (sal.pc),
+			     sal.symtab->filename, sal.line);
         }
 
       /* If what was given does not imply a symtab, it must be an undebuggable
@@ -691,10 +724,6 @@ edit_command (char *arg, int from_tty)
 
   if ((editor = (char *) getenv ("EDITOR")) == NULL)
       editor = "/bin/ex";
-
-  /* Approximate base-10 log of line to 1 unit for digit count */
-  for(log10=32, m=0x80000000; !(sal.line & m) && log10>0; log10--, m=m>>1);
-  log10 = 1 + (int)((log10 + (0 == ((m-1) & sal.line)))/3.32192809);
 
   /* If we don't already know the full absolute file name of the
      source file, find it now.  */
@@ -710,8 +739,8 @@ edit_command (char *arg, int from_tty)
   /* Quote the file name, in case it has whitespace or other special
      characters.  */
   p = xstrprintf ("%s +%d \"%s\"", editor, sal.line, fn);
-  shell_escape(p, from_tty);
-  xfree(p);
+  shell_escape (p, from_tty);
+  xfree (p);
 }
 
 static void
@@ -838,18 +867,12 @@ list_command (char *arg, int from_tty)
 	       hex_string ((unsigned long) sal.pc));
       sym = find_pc_function (sal.pc);
       if (sym)
-	{
-	  deprecated_print_address_numeric (sal.pc, 1, gdb_stdout);
-	  printf_filtered (" is in ");
-	  fputs_filtered (SYMBOL_PRINT_NAME (sym), gdb_stdout);
-	  printf_filtered (" (%s:%d).\n", sal.symtab->filename, sal.line);
-	}
+	printf_filtered ("%s is in %s (%s:%d).\n",
+			 paddress (sal.pc), SYMBOL_PRINT_NAME (sym),
+			 sal.symtab->filename, sal.line);
       else
-	{
-	  deprecated_print_address_numeric (sal.pc, 1, gdb_stdout);
-	  printf_filtered (" is at %s:%d.\n",
-			   sal.symtab->filename, sal.line);
-	}
+	printf_filtered ("%s is at %s:%d.\n", paddress (sal.pc),
+			 sal.symtab->filename, sal.line);
     }
 
   /* If line was not specified by just a line number,
@@ -892,12 +915,75 @@ list_command (char *arg, int from_tty)
 			0);
 }
 
-/* Dump a specified section of assembly code.  With no command line
-   arguments, this command will dump the assembly code for the
-   function surrounding the pc value in the selected frame.  With one
-   argument, it will dump the assembly code surrounding that pc value.
-   Two arguments are interpeted as bounds within which to dump
-   assembly.  */
+/* Subroutine of disassemble_command to simplify it.
+   Perform the disassembly.
+   NAME is the name of the function if known, or NULL.
+   [LOW,HIGH) are the range of addresses to disassemble.
+   MIXED is non-zero to print source with the assembler.  */
+
+static void
+print_disassembly (const char *name, CORE_ADDR low, CORE_ADDR high, int mixed)
+{
+#if defined(TUI)
+  if (!tui_is_window_visible (DISASSEM_WIN))
+#endif
+    {
+      printf_filtered ("Dump of assembler code ");
+      if (name != NULL)
+        printf_filtered ("for function %s:\n", name);
+      else
+        printf_filtered ("from %s to %s:\n", paddress (low), paddress (high));
+
+      /* Dump the specified range.  */
+      gdb_disassembly (uiout, 0, 0, mixed, -1, low, high);
+
+      printf_filtered ("End of assembler dump.\n");
+      gdb_flush (gdb_stdout);
+    }
+#if defined(TUI)
+  else
+    {
+      tui_show_assembly (low);
+    }
+#endif
+}
+
+/* Subroutine of disassemble_command to simplify it.
+   Print a disassembly of the current function.
+   MIXED is non-zero to print source with the assembler.  */
+
+static void
+disassemble_current_function (int mixed)
+{
+  CORE_ADDR low, high, pc;
+  char *name;
+
+  pc = get_frame_pc (get_selected_frame (_("No frame selected.")));
+  if (find_pc_partial_function (pc, &name, &low, &high) == 0)
+    error (_("No function contains program counter for selected frame."));
+#if defined(TUI)
+  /* NOTE: cagney/2003-02-13 The `tui_active' was previously
+     `tui_version'.  */
+  if (tui_active)
+    /* FIXME: cagney/2004-02-07: This should be an observer.  */
+    low = tui_get_low_disassembly_address (low, pc);
+#endif
+  low += gdbarch_deprecated_function_start_offset (current_gdbarch);
+
+  print_disassembly (name, low, high, mixed);
+}
+
+/* Dump a specified section of assembly code.
+
+   Usage:
+     disassemble [/m]
+       - dump the assembly code for the function of the current pc
+     disassemble [/m] addr
+       - dump the assembly code for the function at ADDR
+     disassemble [/m] low high
+       - dump the assembly code in the range [LOW,HIGH)
+
+   A /m modifier will include source code with the assembly.  */
 
 static void
 disassemble_command (char *arg, int from_tty)
@@ -906,26 +992,44 @@ disassemble_command (char *arg, int from_tty)
   char *name;
   CORE_ADDR pc, pc_masked;
   char *space_index;
-#if 0
-  asection *section;
-#endif
+  int mixed_source_and_assembly;
 
   name = NULL;
-  if (!arg)
+  mixed_source_and_assembly = 0;
+
+  if (arg && *arg == '/')
     {
-      pc = get_frame_pc (get_selected_frame (_("No frame selected.")));
-      if (find_pc_partial_function (pc, &name, &low, &high) == 0)
-	error (_("No function contains program counter for selected frame."));
-#if defined(TUI)
-      /* NOTE: cagney/2003-02-13 The `tui_active' was previously
-	 `tui_version'.  */
-      if (tui_active)
-	/* FIXME: cagney/2004-02-07: This should be an observer.  */
-	low = tui_get_low_disassembly_address (low, pc);
-#endif
-      low += gdbarch_deprecated_function_start_offset (current_gdbarch);
+      ++arg;
+
+      if (*arg == '\0')
+	error (_("Missing modifier."));
+
+      while (*arg && ! isspace (*arg))
+	{
+	  switch (*arg++)
+	    {
+	    case 'm':
+	      mixed_source_and_assembly = 1;
+	      break;
+	    default:
+	      error (_("Invalid disassembly modifier."));
+	    }
+	}
+
+      while (isspace (*arg))
+	++arg;
     }
-  else if (!(space_index = (char *) strchr (arg, ' ')))
+
+  if (! arg || ! *arg)
+    {
+      disassemble_current_function (mixed_source_and_assembly);
+      return;
+    }
+
+  /* FIXME: 'twould be nice to allow spaces in the expression for the first
+     arg.  Allow comma separater too?  */
+
+  if (!(space_index = (char *) strchr (arg, ' ')))
     {
       /* One argument.  */
       pc = parse_and_eval_address (arg);
@@ -948,36 +1052,7 @@ disassemble_command (char *arg, int from_tty)
       high = parse_and_eval_address (space_index + 1);
     }
 
-#if defined(TUI)
-  if (!tui_is_window_visible (DISASSEM_WIN))
-#endif
-    {
-      printf_filtered ("Dump of assembler code ");
-      if (name != NULL)
-	{
-	  printf_filtered ("for function %s:\n", name);
-	}
-      else
-	{
-	  printf_filtered ("from ");
-	  deprecated_print_address_numeric (low, 1, gdb_stdout);
-	  printf_filtered (" to ");
-	  deprecated_print_address_numeric (high, 1, gdb_stdout);
-	  printf_filtered (":\n");
-	}
-
-      /* Dump the specified range.  */
-      gdb_disassembly (uiout, 0, 0, 0, -1, low, high);
-
-      printf_filtered ("End of assembler dump.\n");
-      gdb_flush (gdb_stdout);
-    }
-#if defined(TUI)
-  else
-    {
-      tui_show_assembly (low);
-    }
-#endif
+  print_disassembly (name, low, high, mixed_source_and_assembly);
 }
 
 static void
@@ -1202,8 +1277,10 @@ The commands below can be used to select other frames by number or address."),
 
   /* Define general commands. */
 
-  add_com ("pwd", class_files, pwd_command, _("\
+  c = add_com ("pwd", class_files, pwd_command, _("\
 Print working directory.  This is used for your program as well."));
+  set_cmd_no_selected_thread_ok (c);
+
   c = add_cmd ("cd", class_files, cd_command, _("\
 Set working directory to DIR for debugger and program being debugged.\n\
 The change does not take effect for the program being debugged\n\
@@ -1233,6 +1310,8 @@ Commands defined in this way may have up to ten arguments."));
 Read commands from a file named FILE.\n\
 Optional -v switch (before the filename) causes each command in\n\
 FILE to be echoed as it is executed.\n\
+Optional -p switch (before the filename) causes FILE to be evaluated\n\
+as Python code.\n\
 Note that the file \"%s\" is read automatically in this way\n\
 when GDB is started."), gdbinit);
   c = add_cmd ("source", class_support, source_command,
@@ -1243,6 +1322,7 @@ when GDB is started."), gdbinit);
   c = add_com ("help", class_support, help_command,
 	       _("Print list of commands."));
   set_cmd_completer (c, command_completer);
+  set_cmd_no_selected_thread_ok (c);
   add_com_alias ("q", "quit", class_support, 1);
   add_com_alias ("h", "help", class_support, 1);
 
@@ -1268,17 +1348,19 @@ Without an argument, history expansion is enabled."),
 			   show_history_expansion_p,
 			   &sethistlist, &showhistlist);
 
-  add_prefix_cmd ("info", class_info, info_command, _("\
+  c = add_prefix_cmd ("info", class_info, info_command, _("\
 Generic command for showing things about the program being debugged."),
-		  &infolist, "info ", 0, &cmdlist);
+		      &infolist, "info ", 0, &cmdlist);
+  set_cmd_no_selected_thread_ok (c);
   add_com_alias ("i", "info", class_info, 1);
 
   add_com ("complete", class_obscure, complete_command,
 	   _("List the completions for the rest of the line as a command."));
 
-  add_prefix_cmd ("show", class_info, show_command,
-		  _("Generic command for showing things about the debugger."),
-		  &showlist, "show ", 0, &cmdlist);
+  c = add_prefix_cmd ("show", class_info, show_command, _("\
+Generic command for showing things about the debugger."),
+		      &showlist, "show ", 0, &cmdlist);
+  set_cmd_no_selected_thread_ok (c);
   /* Another way to get at the same thing.  */
   add_info ("set", show_command, _("Show all GDB settings."));
 
@@ -1383,6 +1465,7 @@ With two args if one is empty it stands for ten lines away from the other arg.")
   c = add_com ("disassemble", class_vars, disassemble_command, _("\
 Disassemble a specified section of memory.\n\
 Default is the function surrounding the pc of the selected frame.\n\
+With a /m modifier, source lines are included (if available).\n\
 With a single argument, the function surrounding that address is dumped.\n\
 Two arguments are taken as a range of memory to dump."));
   set_cmd_completer (c, location_completer);

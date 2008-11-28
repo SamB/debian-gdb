@@ -149,7 +149,7 @@ print_range (struct type *type, struct ui_file *stream)
     case TYPE_CODE_ENUM:
       break;
     default:
-      target_type = builtin_type_int;
+      target_type = builtin_type_int32;
       break;
     }
 
@@ -197,11 +197,11 @@ print_range_bound (struct type *type, char *bounds, int *n,
          the upper bound of the 0 .. -1 range types to be printed as
          a very large unsigned number instead of -1.
          To workaround this stabs deficiency, we replace the TYPE by
-         builtin_type_long when we detect that the bound is negative,
+         builtin_type_int32 when we detect that the bound is negative,
          and the type is a TYPE_CODE_INT.  The bound is negative when
          'm' is the last character of the number scanned in BOUNDS.  */
       if (bounds[*n - 1] == 'm' && TYPE_CODE (type) == TYPE_CODE_INT)
-	type = builtin_type_long;
+	type = builtin_type_int32;
       ada_print_scalar (type, B, stream);
       if (bounds[*n] == '_')
 	*n += 2;
@@ -258,7 +258,7 @@ print_range_type_named (char *name, struct ui_file *stream)
   char *subtype_info;
 
   if (raw_type == NULL)
-    base_type = builtin_type_int;
+    base_type = builtin_type_int32;
   else if (TYPE_CODE (raw_type) == TYPE_CODE_RANGE)
     base_type = TYPE_TARGET_TYPE (raw_type);
   else
@@ -585,7 +585,7 @@ print_record_field_types (struct type *type, struct type *outer_type,
   flds = 0;
   len = TYPE_NFIELDS (type);
 
-  if (len == 0 && (TYPE_FLAGS (type) & TYPE_FLAG_STUB) != 0)
+  if (len == 0 && TYPE_STUB (type))
     return -1;
 
   for (i = 0; i < len; i += 1)
@@ -812,6 +812,9 @@ ada_print_type (struct type *type0, char *varstring, struct ui_file *stream,
 	break;
       case TYPE_CODE_ARRAY:
 	print_array_type (type, stream, show, level);
+	break;
+      case TYPE_CODE_BOOL:
+	fprintf_filtered (stream, "(false, true)");
 	break;
       case TYPE_CODE_INT:
 	if (ada_is_fixed_point_type (type))

@@ -8,27 +8,27 @@ submitted.
  gdb/valops.c     |    4 +++-
  2 files changed, 4 insertions(+), 2 deletions(-)
 
-Index: gdb-6.7.1/gdb/valops.c
+Index: gdb-6.8.50.20081120.python/gdb/valops.c
 ===================================================================
---- gdb-6.7.1.orig/gdb/valops.c	2007-12-03 09:37:24.000000000 -0500
-+++ gdb-6.7.1/gdb/valops.c	2007-12-03 09:37:26.000000000 -0500
-@@ -2352,8 +2352,10 @@ check_field_in (struct type *type, const
+--- gdb-6.8.50.20081120.python.orig/gdb/valops.c	2008-11-25 16:16:41.000000000 -0500
++++ gdb-6.8.50.20081120.python/gdb/valops.c	2008-11-26 17:14:38.000000000 -0500
+@@ -2472,8 +2472,10 @@ check_field (struct type *type, const ch
  	return 1;
      }
  
 +  /* Check each baseclass.  Call check_typedef, which will follow typedefs
 +     and do opaque/stub type resolution.  */
    for (i = TYPE_N_BASECLASSES (type) - 1; i >= 0; i--)
--    if (check_field_in (TYPE_BASECLASS (type, i), name))
-+    if (check_field_in (check_typedef (TYPE_BASECLASS (type, i)), name))
+-    if (check_field (TYPE_BASECLASS (type, i), name))
++    if (check_field (check_typedef (TYPE_BASECLASS (type, i)), name))
        return 1;
  
    return 0;
-Index: gdb-6.7.1/gdb/dwarf2read.c
+Index: gdb-6.8.50.20081120.python/gdb/dwarf2read.c
 ===================================================================
---- gdb-6.7.1.orig/gdb/dwarf2read.c	2007-12-03 09:37:24.000000000 -0500
-+++ gdb-6.7.1/gdb/dwarf2read.c	2007-12-03 09:37:26.000000000 -0500
-@@ -2144,8 +2144,8 @@ guess_structure_name (struct partial_die
+--- gdb-6.8.50.20081120.python.orig/gdb/dwarf2read.c	2008-11-25 16:16:41.000000000 -0500
++++ gdb-6.8.50.20081120.python/gdb/dwarf2read.c	2008-11-26 17:14:06.000000000 -0500
+@@ -2273,8 +2273,8 @@ guess_structure_name (struct partial_die
  				    strlen (actual_class_name),
  				    &cu->comp_unit_obstack);
  		  xfree (actual_class_name);

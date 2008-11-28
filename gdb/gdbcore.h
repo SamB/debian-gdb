@@ -39,18 +39,6 @@ extern char *get_exec_file (int err);
 
 extern int have_core_file_p (void);
 
-/* Read "memory data" from whatever target or inferior we have.
-   Returns zero if successful, errno value if not.  EIO is used for
-   address out of bounds.  If breakpoints are inserted, returns shadow
-   contents, not the breakpoints themselves.  From breakpoint.c.  */
-
-/* NOTE: cagney/2004-06-10: Code reading from a live inferior can use
-   the get_frame_memory methods, code reading from an exec can use the
-   target methods.  */
-
-extern int read_memory_nobpt (CORE_ADDR memaddr, gdb_byte *myaddr,
-			      unsigned len);
-
 /* Report a memory error with error().  */
 
 extern void memory_error (int status, CORE_ADDR memaddr);
@@ -115,6 +103,9 @@ extern void specify_exec_file_hook (void (*hook) (char *filename));
 
 extern bfd *core_bfd;
 extern bfd *exec_bfd;
+
+/* The mtime when we last opened exec_bfd.  */
+extern long exec_bfd_mtime;
 
 /* Whether to open exec and core files read-only or read-write.  */
 

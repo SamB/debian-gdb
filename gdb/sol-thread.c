@@ -253,7 +253,7 @@ td_state_string (td_thr_state_e statecode)
 
 /* Convert a POSIX or Solaris thread ID into a LWP ID.  If THREAD_ID
    doesn't exist, that's an error.  If it's an inactive thread, return
-   DEFAULT_LPW.
+   DEFAULT_LWP.
 
    NOTE: This function probably shouldn't call error().  */
 
@@ -348,23 +348,23 @@ sol_thread_open (char *arg, int from_tty)
    for the trace-trap that results from attaching.  */
 
 static void
-sol_thread_attach (char *args, int from_tty)
+sol_thread_attach (struct target_ops *ops, char *args, int from_tty)
 {
-  procfs_ops.to_attach (args, from_tty);
+  sol_thread_active = 0;
+  procfs_ops.to_attach (&procfs_ops, args, from_tty);
 
   /* Must get symbols from shared libraries before libthread_db can run!  */
   solib_add (NULL, from_tty, (struct target_ops *) 0, auto_solib_add);
 
   if (sol_thread_active)
     {
+      ptid_t ptid;
       printf_filtered ("sol-thread active.\n");
       main_ph.ptid = inferior_ptid; /* Save for xfer_memory.  */
       push_target (&sol_thread_ops);
-      inferior_ptid = lwp_to_thread (inferior_ptid);
-      if (PIDGET (inferior_ptid) == -1)
-	inferior_ptid = main_ph.ptid;
-      else
-	add_thread (inferior_ptid);
+      ptid = lwp_to_thread (inferior_ptid);
+      if (PIDGET (ptid) != -1)
+	thread_change_ptid (inferior_ptid, ptid);
     }
 
   /* FIXME: Might want to iterate over all the threads and register
@@ -379,11 +379,12 @@ sol_thread_attach (char *args, int from_tty)
    program was started via the normal ptrace (PTRACE_TRACEME).  */
 
 static void
-sol_thread_detach (char *args, int from_tty)
+sol_thread_detach (struct target_ops *ops, char *args, int from_tty)
 {
+  sol_thread_active = 0;
   inferior_ptid = pid_to_ptid (PIDGET (main_ph.ptid));
   unpush_target (&sol_thread_ops);
-  procfs_ops.to_detach (args, from_tty);
+  procfs_ops.to_detach (&procfs_ops, args, from_tty);
 }
 
 /* Resume execution of process PTID.  If STEP is nozero, then just
@@ -419,7 +420,7 @@ sol_thread_resume (ptid_t ptid, int step, enum target_signal signo)
   do_cleanups (old_chain);
 }
 
-/* Wait for any threads to stop.  We may have to convert PIID from a
+/* Wait for any threads to stop.  We may have to convert PTID from a
    thread ID to an LWP ID, and vice versa on the way out.  */
 
 static ptid_t
@@ -460,7 +461,8 @@ sol_thread_wait (ptid_t ptid, struct target_waitstatus *ourstatus)
       /* See if we have a new thread.  */
       if (is_thread (rtnval)
 	  && !ptid_equal (rtnval, save_ptid)
-	  && !in_thread_list (rtnval))
+	  && (!in_thread_list (rtnval)
+	      || is_exited (rtnval)))
 	add_thread (rtnval);
     }
 
@@ -751,24 +753,24 @@ sol_thread_notice_signals (ptid_t ptid)
 /* Fork an inferior process, and start debugging it with /proc.  */
 
 static void
-sol_thread_create_inferior (char *exec_file, char *allargs, char **env,
-			    int from_tty)
+sol_thread_create_inferior (struct target_ops *ops, char *exec_file,
+			    char *allargs, char **env, int from_tty)
 {
-  procfs_ops.to_create_inferior (exec_file, allargs, env, from_tty);
+  sol_thread_active = 0;
+  procfs_ops.to_create_inferior (&procfs_ops, exec_file, allargs, env, from_tty);
 
   if (sol_thread_active && !ptid_equal (inferior_ptid, null_ptid))
     {
+      ptid_t ptid;
+
       /* Save for xfer_memory.  */
       main_ph.ptid = inferior_ptid;
 
       push_target (&sol_thread_ops);
 
-      inferior_ptid = lwp_to_thread (inferior_ptid);
-      if (PIDGET (inferior_ptid) == -1)
-	inferior_ptid = main_ph.ptid;
-
-      if (!in_thread_list (inferior_ptid))
-	add_thread (inferior_ptid);
+      ptid = lwp_to_thread (inferior_ptid);
+      if (PIDGET (ptid) != -1)
+	thread_change_ptid (inferior_ptid, ptid);
     }
 }
 
@@ -820,10 +822,11 @@ sol_thread_new_objfile (struct objfile *objfile)
 /* Clean up after the inferior dies.  */
 
 static void
-sol_thread_mourn_inferior (void)
+sol_thread_mourn_inferior (struct target_ops *ops)
 {
+  sol_thread_active = 0;
   unpush_target (&sol_thread_ops);
-  procfs_ops.to_mourn_inferior ();
+  procfs_ops.to_mourn_inferior (&procfs_ops);
 }
 
 /* Mark our target-struct as eligible for stray "run" and "attach"
@@ -881,9 +884,9 @@ sol_thread_alive (ptid_t ptid)
 }
 
 static void
-sol_thread_stop (void)
+sol_thread_stop (ptid_t ptid)
 {
-  procfs_ops.to_stop ();
+  procfs_ops.to_stop (ptid);
 }
 
 /* These routines implement the lower half of the thread_db interface,
@@ -1366,7 +1369,7 @@ sol_find_new_threads_callback (const td_thrhandle_t *th, void *ignored)
     return -1;
 
   ptid = BUILD_THREAD (ti.ti_tid, PIDGET (inferior_ptid));
-  if (!in_thread_list (ptid))
+  if (!in_thread_list (ptid) || is_exited (ptid))
     add_thread (ptid);
 
   return 0;
@@ -1408,10 +1411,10 @@ sol_core_close (int quitting)
 }
 
 static void
-sol_core_detach (char *args, int from_tty)
+sol_core_detach (struct target_ops *ops, char *args, int from_tty)
 {
   unpush_target (&core_ops);
-  orig_core_ops.to_detach (args, from_tty);
+  orig_core_ops.to_detach (&orig_core_ops, args, from_tty);
 }
 
 static void
@@ -1469,7 +1472,7 @@ info_cb (const td_thrhandle_t *th, void *s)
 	  msym = lookup_minimal_symbol_by_pc (ti.ti_startfunc);
 	  if (msym)
 	    printf_filtered ("   startfunc: %s\n",
-			     DEPRECATED_SYMBOL_NAME (msym));
+			     SYMBOL_PRINT_NAME (msym));
 	  else
 	    printf_filtered ("   startfunc: 0x%s\n", paddr (ti.ti_startfunc));
 	}
@@ -1481,7 +1484,7 @@ info_cb (const td_thrhandle_t *th, void *s)
 	  msym = lookup_minimal_symbol_by_pc (ti.ti_pc);
 	  if (msym)
 	    printf_filtered (" - Sleep func: %s\n",
-			     DEPRECATED_SYMBOL_NAME (msym));
+			     SYMBOL_PRINT_NAME (msym));
 	  else
 	    printf_filtered (" - Sleep func: 0x%s\n", paddr (ti.ti_startfunc));
 	}
@@ -1660,6 +1663,10 @@ _initialize_sol_thread (void)
   add_cmd ("sol-threads", class_maintenance, info_solthreads,
 	   _("Show info on Solaris user threads."), &maintenanceinfolist);
 
+  /* FIXME: This code takes errant advantage of the order in which
+     initialization routines are run.  _initialize_corelow must run before
+     this one otherwise orig_core_ops will still contain zeros and the work
+     of init_sol_core_ops will be undone.  */
   memcpy (&orig_core_ops, &core_ops, sizeof (struct target_ops));
   memcpy (&core_ops, &sol_core_ops, sizeof (struct target_ops));
   add_target (&core_ops);

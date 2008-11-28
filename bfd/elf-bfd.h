@@ -24,8 +24,8 @@
 #define _LIBELF_H_ 1
 
 #include "elf/common.h"
-#include "elf/internal.h"
 #include "elf/external.h"
+#include "elf/internal.h"
 #include "bfdlink.h"
 
 /* The number of entries in a section is its size divided by the size
@@ -993,6 +993,11 @@ struct elf_backend_data
     (struct elf_link_hash_entry *, const Elf_Internal_Sym *, bfd_boolean,
      bfd_boolean);
 
+  /* This function, if defined, will return a string containing the
+     name of a target-specific dynamic tag.  */
+  char *(*elf_backend_get_target_dtag)
+    (bfd_vma);
+
   /* Decide whether an undefined symbol is special and can be ignored.
      This is the case for OPTIONAL symbols on IRIX.  */
   bfd_boolean (*elf_backend_ignore_undef_symbol)
@@ -1007,7 +1012,7 @@ struct elf_backend_data
   /* Count relocations.  Not called for relocatable links
      or if all relocs are being preserved in the output.  */
   unsigned int (*elf_backend_count_relocs)
-    (asection *, Elf_Internal_Rela *);
+    (struct bfd_link_info *, asection *);
 
   /* This function, if defined, is called when an NT_PRSTATUS note is found
      in a core file.  */
@@ -1183,6 +1188,9 @@ struct elf_backend_data
      and the backend wants RELA relocations for a particular
      section.  */
   unsigned default_use_rela_p : 1;
+
+  /* True if PLT and copy relocations should be RELA by default.  */
+  unsigned rela_plts_and_copies_p : 1;
 
   /* Set if RELA relocations for a relocatable link can be handled by
      generic code.  Backends that set this flag need do nothing in the
@@ -1403,12 +1411,14 @@ enum elf_object_id
   ARM_ELF_TDATA,
   HPPA_ELF_TDATA,
   I386_ELF_TDATA,
+  MIPS_ELF_TDATA,
   PPC32_ELF_TDATA,
   PPC64_ELF_TDATA,
   S390_ELF_TDATA,
   SH_ELF_TDATA,
   SPARC_ELF_TDATA,
   X86_64_ELF_TDATA,
+  XTENSA_ELF_TDATA,
   GENERIC_ELF_TDATA
 };
 
@@ -1631,7 +1641,7 @@ extern void _bfd_elf_swap_versym_in
 extern void _bfd_elf_swap_versym_out
   (bfd *, const Elf_Internal_Versym *, Elf_External_Versym *);
 
-extern int _bfd_elf_section_from_bfd_section
+extern unsigned int _bfd_elf_section_from_bfd_section
   (bfd *, asection *);
 extern char *bfd_elf_string_from_elf_section
   (bfd *, unsigned, unsigned);
@@ -2136,8 +2146,12 @@ extern char *elfcore_write_prxfpreg
   (bfd *, char *, int *, const void *, int);
 extern char *elfcore_write_ppc_vmx
   (bfd *, char *, int *, const void *, int);
+extern char *elfcore_write_ppc_vsx
+  (bfd *, char *, int *, const void *, int);
 extern char *elfcore_write_lwpstatus
   (bfd *, char *, int *, long, int, const void *);
+extern char *elfcore_write_register_note
+  (bfd *, char *, int *, const char *, const void *, int);
 
 extern bfd *_bfd_elf32_bfd_from_remote_memory
   (bfd *templ, bfd_vma ehdr_vma, bfd_vma *loadbasep,

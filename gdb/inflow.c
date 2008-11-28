@@ -98,6 +98,24 @@ static const char *inferior_thisrun_terminal;
 
 int terminal_is_ours;
 
+#ifdef PROCESS_GROUP_TYPE
+static PROCESS_GROUP_TYPE
+gdb_getpgrp (void)
+{
+  int process_group = -1;
+#ifdef HAVE_TERMIOS
+  process_group = tcgetpgrp (0);
+#endif
+#ifdef HAVE_TERMIO
+  process_group = getpgrp ();
+#endif
+#ifdef HAVE_SGTTY
+  ioctl (0, TIOCGPGRP, &process_group);
+#endif
+  return process_group;
+}
+#endif
+
 enum
   {
     yes, no, have_not_checked
@@ -132,14 +150,8 @@ gdb_has_a_terminal (void)
 	  if (our_ttystate != NULL)
 	    {
 	      gdb_has_a_terminal_flag = yes;
-#ifdef HAVE_TERMIOS
-	      our_process_group = tcgetpgrp (0);
-#endif
-#ifdef HAVE_TERMIO
-	      our_process_group = getpgrp ();
-#endif
-#ifdef HAVE_SGTTY
-	      ioctl (0, TIOCGPGRP, &our_process_group);
+#ifdef PROCESS_GROUP_TYPE
+	      our_process_group = gdb_getpgrp ();
 #endif
 	    }
 	}
@@ -265,15 +277,16 @@ terminal_inferior (void)
 
       if (job_control)
 	{
+	  struct inferior *inf = current_inferior ();
 #ifdef HAVE_TERMIOS
 	  result = tcsetpgrp (0, inferior_process_group);
-	  if (!attach_flag)
+	  if (!inf->attach_flag)
 	    OOPSY ("tcsetpgrp");
 #endif
 
 #ifdef HAVE_SGTTY
 	  result = ioctl (0, TIOCSPGRP, &inferior_process_group);
-	  if (!attach_flag)
+	  if (!inf->attach_flag)
 	    OOPSY ("TIOCSPGRP");
 #endif
 	}
@@ -322,6 +335,8 @@ terminal_ours_1 (int output_only)
 
   if (!terminal_is_ours)
     {
+      struct inferior *inf = current_inferior ();
+
 #ifdef SIGTTOU
       /* Ignore this signal since it will happen when we try to set the
          pgrp.  */
@@ -339,14 +354,13 @@ terminal_ours_1 (int output_only)
       if (inferior_ttystate)
 	xfree (inferior_ttystate);
       inferior_ttystate = serial_get_tty_state (stdin_serial);
-#ifdef HAVE_TERMIOS
-      inferior_process_group = tcgetpgrp (0);
-#endif
-#ifdef HAVE_TERMIO
-      inferior_process_group = getpgrp ();
-#endif
-#ifdef HAVE_SGTTY
-      ioctl (0, TIOCGPGRP, &inferior_process_group);
+
+#ifdef PROCESS_GROUP_TYPE
+      if (!inf->attach_flag)
+	/* If setpgrp failed in terminal_inferior, this would give us
+	   our process group instead of the inferior's.  See
+	   terminal_inferior for details.  */
+	inferior_process_group = gdb_getpgrp ();
 #endif
 
       /* Here we used to set ICANON in our ttystate, but I believe this
@@ -557,6 +571,16 @@ new_tty (void)
       close (2);
       dup (tty);
     }
+
+#ifdef TIOCSCTTY
+  /* Make tty our new controlling terminal.  */
+  if (ioctl (tty, TIOCSCTTY, 0) == -1)
+    /* Mention GDB in warning because it will appear in the inferior's
+       terminal instead of GDB's.  */
+    warning ("GDB: Failed to set controlling terminal: %s",
+	     safe_strerror (errno));
+#endif
+
   if (tty > 2)
     close (tty);
 #endif /* !go32 && !win32 */
@@ -577,14 +601,19 @@ kill_command (char *arg, int from_tty)
     error (_("Not confirmed."));
   target_kill ();
 
-  init_thread_list ();		/* Destroy thread info */
-
-  /* Killing off the inferior can leave us with a core file.  If so,
-     print the state we are left in.  */
-  if (target_has_stack)
+  /* If the current target interface claims there's still execution,
+     then don't mess with threads of other processes.  */
+  if (!target_has_execution)
     {
-      printf_filtered (_("In %s,\n"), target_longname);
-      print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC);
+      init_thread_list ();		/* Destroy thread info */
+
+      /* Killing off the inferior can leave us with a core file.  If
+	 so, print the state we are left in.  */
+      if (target_has_stack)
+	{
+	  printf_filtered (_("In %s,\n"), target_longname);
+	  print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC);
+	}
     }
   bfd_cache_close_all ();
 }
@@ -605,7 +634,8 @@ static void (*osig) ();
 void
 set_sigint_trap (void)
 {
-  if (attach_flag || inferior_thisrun_terminal)
+  struct inferior *inf = current_inferior ();
+  if (inf->attach_flag || inferior_thisrun_terminal)
     {
       osig = (void (*)()) signal (SIGINT, pass_signal);
     }
@@ -614,7 +644,8 @@ set_sigint_trap (void)
 void
 clear_sigint_trap (void)
 {
-  if (attach_flag || inferior_thisrun_terminal)
+  struct inferior *inf = current_inferior ();
+  if (inf->attach_flag || inferior_thisrun_terminal)
     {
       signal (SIGINT, osig);
     }
@@ -682,6 +713,33 @@ clear_sigio_trap (void)
 }
 #endif /* No SIGIO.  */
 
+
+/* Create a new session if the inferior will run in a different tty.
+   A session is UNIX's way of grouping processes that share a controlling
+   terminal, so a new one is needed if the inferior terminal will be
+   different from GDB's.
+
+   Returns the session id of the new session, 0 if no session was created
+   or -1 if an error occurred.  */
+pid_t
+create_tty_session (void)
+{
+#ifdef HAVE_SETSID
+  pid_t ret;
+
+  if (!job_control || inferior_thisrun_terminal == 0)
+    return 0;
+
+  ret = setsid ();
+  if (ret == -1)
+    warning ("Failed to create new terminal session: setsid: %s",
+	     safe_strerror (errno));
+
+  return ret;
+#else
+  return 0;
+#endif /* HAVE_SETSID */
+}
 
 /* This is here because this is where we figure out whether we (probably)
    have job control.  Just using job_control only does part of it because

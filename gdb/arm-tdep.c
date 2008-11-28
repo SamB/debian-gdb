@@ -51,6 +51,7 @@
 #include "elf/arm.h"
 
 #include "gdb_assert.h"
+#include "vec.h"
 
 static int arm_debug;
 
@@ -62,11 +63,39 @@ static int arm_debug;
    MSYMBOL_IS_SPECIAL   Tests the "special" bit in a minimal symbol.  */
 
 #define MSYMBOL_SET_SPECIAL(msym)					\
-	MSYMBOL_INFO (msym) = (char *) (((long) MSYMBOL_INFO (msym))	\
-					| 0x80000000)
+	MSYMBOL_TARGET_FLAG_1 (msym) = 1
 
 #define MSYMBOL_IS_SPECIAL(msym)				\
-	(((long) MSYMBOL_INFO (msym) & 0x80000000) != 0)
+	MSYMBOL_TARGET_FLAG_1 (msym)
+
+/* Macros for swapping shorts and ints. In the unlikely case that anybody else needs these,
+   move to a general header. (A better solution might be to define memory read routines that
+   know whether they are reading code or data.)  */
+
+#define SWAP_SHORT(x) \
+  ((((x) & 0xff00) >> 8) | (((x) & 0x00ff) << 8));
+
+#define SWAP_INT(x) \
+  (  ((x & 0xff000000) >> 24) \
+   | ((x & 0x00ff0000) >> 8)  \
+   | ((x & 0x0000ff00) << 8)  \
+   | ((x & 0x000000ff) << 24))
+
+/* Per-objfile data used for mapping symbols.  */
+static const struct objfile_data *arm_objfile_data_key;
+
+struct arm_mapping_symbol
+{
+  bfd_vma value;
+  char type;
+};
+typedef struct arm_mapping_symbol arm_mapping_symbol_s;
+DEF_VEC_O(arm_mapping_symbol_s);
+
+struct arm_per_objfile
+{
+  VEC(arm_mapping_symbol_s) **section_maps;
+};
 
 /* The list of available "set arm ..." and "show arm ..." commands.  */
 static struct cmd_list_element *setarmcmdlist = NULL;
@@ -100,6 +129,17 @@ static const char *arm_abi_strings[] =
 /* A variable that can be configured by the user.  */
 static enum arm_abi_kind arm_abi_global = ARM_ABI_AUTO;
 static const char *arm_abi_string = "auto";
+
+/* The execution mode to assume.  */
+static const char *arm_mode_strings[] =
+  {
+    "auto",
+    "arm",
+    "thumb"
+  };
+
+static const char *arm_fallback_mode_string = "auto";
+static const char *arm_force_mode_string = "auto";
 
 /* Number of different reg name sets (options).  */
 static int num_disassembly_options;
@@ -211,33 +251,118 @@ struct arm_prologue_cache
 
 int arm_apcs_32 = 1;
 
+/* Determine if FRAME is executing in Thumb mode.  */
+
+static int
+arm_frame_is_thumb (struct frame_info *frame)
+{
+  CORE_ADDR cpsr;
+
+  /* Every ARM frame unwinder can unwind the T bit of the CPSR, either
+     directly (from a signal frame or dummy frame) or by interpreting
+     the saved LR (from a prologue or DWARF frame).  So consult it and
+     trust the unwinders.  */
+  cpsr = get_frame_register_unsigned (frame, ARM_PS_REGNUM);
+
+  return (cpsr & CPSR_T) != 0;
+}
+
+/* Callback for VEC_lower_bound.  */
+
+static inline int
+arm_compare_mapping_symbols (const struct arm_mapping_symbol *lhs,
+			     const struct arm_mapping_symbol *rhs)
+{
+  return lhs->value < rhs->value;
+}
+
 /* Determine if the program counter specified in MEMADDR is in a Thumb
-   function.  */
+   function.  This function should be called for addresses unrelated to
+   any executing frame; otherwise, prefer arm_frame_is_thumb.  */
 
 static int
 arm_pc_is_thumb (CORE_ADDR memaddr)
 {
+  struct obj_section *sec;
   struct minimal_symbol *sym;
 
   /* If bit 0 of the address is set, assume this is a Thumb address.  */
   if (IS_THUMB_ADDR (memaddr))
     return 1;
 
+  /* If the user wants to override the symbol table, let him.  */
+  if (strcmp (arm_force_mode_string, "arm") == 0)
+    return 0;
+  if (strcmp (arm_force_mode_string, "thumb") == 0)
+    return 1;
+
+  /* If there are mapping symbols, consult them.  */
+  sec = find_pc_section (memaddr);
+  if (sec != NULL)
+    {
+      struct arm_per_objfile *data;
+      VEC(arm_mapping_symbol_s) *map;
+      struct arm_mapping_symbol map_key = { memaddr - obj_section_addr (sec),
+					    0 };
+      unsigned int idx;
+
+      data = objfile_data (sec->objfile, arm_objfile_data_key);
+      if (data != NULL)
+	{
+	  map = data->section_maps[sec->the_bfd_section->index];
+	  if (!VEC_empty (arm_mapping_symbol_s, map))
+	    {
+	      struct arm_mapping_symbol *map_sym;
+
+	      idx = VEC_lower_bound (arm_mapping_symbol_s, map, &map_key,
+				     arm_compare_mapping_symbols);
+
+	      /* VEC_lower_bound finds the earliest ordered insertion
+		 point.  If the following symbol starts at this exact
+		 address, we use that; otherwise, the preceding
+		 mapping symbol covers this address.  */
+	      if (idx < VEC_length (arm_mapping_symbol_s, map))
+		{
+		  map_sym = VEC_index (arm_mapping_symbol_s, map, idx);
+		  if (map_sym->value == map_key.value)
+		    return map_sym->type == 't';
+		}
+
+	      if (idx > 0)
+		{
+		  map_sym = VEC_index (arm_mapping_symbol_s, map, idx - 1);
+		  return map_sym->type == 't';
+		}
+	    }
+	}
+    }
+
   /* Thumb functions have a "special" bit set in minimal symbols.  */
   sym = lookup_minimal_symbol_by_pc (memaddr);
   if (sym)
-    {
-      return (MSYMBOL_IS_SPECIAL (sym));
-    }
-  else
-    {
-      return 0;
-    }
+    return (MSYMBOL_IS_SPECIAL (sym));
+
+  /* If the user wants to override the fallback mode, let them.  */
+  if (strcmp (arm_fallback_mode_string, "arm") == 0)
+    return 0;
+  if (strcmp (arm_fallback_mode_string, "thumb") == 0)
+    return 1;
+
+  /* If we couldn't find any symbol, but we're talking to a running
+     target, then trust the current value of $cpsr.  This lets
+     "display/i $pc" always show the correct mode (though if there is
+     a symbol table we will not reach here, so it still may not be
+     displayed in the mode it will be executed).  */
+  if (target_has_registers)
+    return arm_frame_is_thumb (get_current_frame ());
+
+  /* Otherwise we're out of luck; we assume ARM.  */
+  return 0;
 }
 
 /* Remove useless bits from addresses in a running program.  */
 static CORE_ADDR
-arm_addr_bits_remove (CORE_ADDR val)
+arm_addr_bits_remove (struct gdbarch *gdbarch, CORE_ADDR val)
 {
   if (arm_apcs_32)
     return UNMAKE_THUMB_ADDR (val);
@@ -248,7 +373,7 @@ arm_addr_bits_remove (CORE_ADDR val)
 /* When reading symbols, we need to zap the low bit of the address,
    which may be set to 1 for Thumb functions.  */
 static CORE_ADDR
-arm_smash_text_address (CORE_ADDR val)
+arm_smash_text_address (struct gdbarch *gdbarch, CORE_ADDR val)
 {
   return val & ~1;
 }
@@ -273,19 +398,14 @@ thumb_analyze_prologue (struct gdbarch *gdbarch,
   stack = make_pv_area (ARM_SP_REGNUM);
   back_to = make_cleanup_free_pv_area (stack);
 
-  /* The call instruction saved PC in LR, and the current PC is not
-     interesting.  Due to this file's conventions, we want the value
-     of LR at this function's entry, not at the call site, so we do
-     not record the save of the PC - when the ARM prologue analyzer
-     has also been converted to the pv mechanism, we could record the
-     save here and remove the hack in prev_register.  */
-  regs[ARM_PC_REGNUM] = pv_unknown ();
-
   while (start < limit)
     {
       unsigned short insn;
 
       insn = read_memory_unsigned_integer (start, 2);
+
+      if (gdbarch_byte_order_for_code (gdbarch) != gdbarch_byte_order (gdbarch))
+	insn = SWAP_SHORT (insn);
 
       if ((insn & 0xfe00) == 0xb400)		/* push { rlist } */
 	{
@@ -415,45 +535,45 @@ arm_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   unsigned long inst;
   CORE_ADDR skip_pc;
-  CORE_ADDR func_addr, func_end = 0;
-  char *func_name;
+  CORE_ADDR func_addr, limit_pc;
   struct symtab_and_line sal;
 
   /* If we're in a dummy frame, don't even try to skip the prologue.  */
   if (deprecated_pc_in_call_dummy (pc))
     return pc;
 
-  /* See what the symbol table says.  */
-
-  if (find_pc_partial_function (pc, &func_name, &func_addr, &func_end))
+  /* See if we can determine the end of the prologue via the symbol table.
+     If so, then return either PC, or the PC after the prologue, whichever
+     is greater.  */
+  if (find_pc_partial_function (pc, NULL, &func_addr, NULL))
     {
-      struct symbol *sym;
-
-      /* Found a function.  */
-      sym = lookup_symbol (func_name, NULL, VAR_DOMAIN, NULL, NULL);
-      if (sym && SYMBOL_LANGUAGE (sym) != language_asm)
-        {
-	  /* Don't use this trick for assembly source files.  */
-	  sal = find_pc_line (func_addr, 0);
-	  if ((sal.line != 0) && (sal.end < func_end))
-	    return sal.end;
-        }
+      CORE_ADDR post_prologue_pc = skip_prologue_using_sal (func_addr);
+      if (post_prologue_pc != 0)
+	return max (pc, post_prologue_pc);
     }
 
-  /* Can't find the prologue end in the symbol table, try it the hard way
-     by disassembling the instructions.  */
+  /* Can't determine prologue from the symbol table, need to examine
+     instructions.  */
 
+  /* Find an upper limit on the function prologue using the debug
+     information.  If the debug information could not be used to provide
+     that bound, then use an arbitrary large number as the upper bound.  */
   /* Like arm_scan_prologue, stop no later than pc + 64. */
-  if (func_end == 0 || func_end > pc + 64)
-    func_end = pc + 64;
+  limit_pc = skip_prologue_using_sal (pc);
+  if (limit_pc == 0)
+    limit_pc = pc + 64;          /* Magic.  */
+
 
   /* Check if this is Thumb code.  */
   if (arm_pc_is_thumb (pc))
-    return thumb_analyze_prologue (gdbarch, pc, func_end, NULL);
+    return thumb_analyze_prologue (gdbarch, pc, limit_pc, NULL);
 
-  for (skip_pc = pc; skip_pc < func_end; skip_pc += 4)
+  for (skip_pc = pc; skip_pc < limit_pc; skip_pc += 4)
     {
       inst = read_memory_unsigned_integer (skip_pc, 4);
+
+      if (gdbarch_byte_order_for_code (gdbarch) != gdbarch_byte_order (gdbarch))
+	inst = SWAP_INT (inst);
 
       /* "mov ip, sp" is no longer a required part of the prologue.  */
       if (inst == 0xe1a0c00d)			/* mov ip, sp */
@@ -535,22 +655,14 @@ arm_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 
 static void
 thumb_scan_prologue (struct gdbarch *gdbarch, CORE_ADDR prev_pc,
-		     struct arm_prologue_cache *cache)
+		     CORE_ADDR block_addr, struct arm_prologue_cache *cache)
 {
   CORE_ADDR prologue_start;
   CORE_ADDR prologue_end;
   CORE_ADDR current_pc;
-  /* Which register has been copied to register n?  */
-  int saved_reg[16];
-  /* findmask:
-     bit 0 - push { rlist }
-     bit 1 - mov r7, sp  OR  add r7, sp, #imm  (setting of r7)
-     bit 2 - sub sp, #simm  OR  add sp, #simm  (adjusting of sp)
-  */
-  int findmask = 0;
-  int i;
 
-  if (find_pc_partial_function (prev_pc, NULL, &prologue_start, &prologue_end))
+  if (find_pc_partial_function (block_addr, NULL, &prologue_start,
+				&prologue_end))
     {
       struct symtab_and_line sal = find_pc_line (prologue_start, 0);
 
@@ -637,13 +749,14 @@ thumb_scan_prologue (struct gdbarch *gdbarch, CORE_ADDR prev_pc,
  */
 
 static void
-arm_scan_prologue (struct frame_info *next_frame,
+arm_scan_prologue (struct frame_info *this_frame,
 		   struct arm_prologue_cache *cache)
 {
-  struct gdbarch *gdbarch = get_frame_arch (next_frame);
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
   int regno;
   CORE_ADDR prologue_start, prologue_end, current_pc;
-  CORE_ADDR prev_pc = frame_pc_unwind (next_frame);
+  CORE_ADDR prev_pc = get_frame_pc (this_frame);
+  CORE_ADDR block_addr = get_frame_address_in_block (this_frame);
   pv_t regs[ARM_FPS_REGNUM];
   struct pv_area *stack;
   struct cleanup *back_to;
@@ -654,15 +767,16 @@ arm_scan_prologue (struct frame_info *next_frame,
   cache->framesize = 0;
 
   /* Check for Thumb prologue.  */
-  if (arm_pc_is_thumb (prev_pc))
+  if (arm_frame_is_thumb (this_frame))
     {
-      thumb_scan_prologue (gdbarch, prev_pc, cache);
+      thumb_scan_prologue (gdbarch, prev_pc, block_addr, cache);
       return;
     }
 
   /* Find the function prologue.  If we can't find the function in
      the symbol table, peek in the stack frame to find the PC.  */
-  if (find_pc_partial_function (prev_pc, NULL, &prologue_start, &prologue_end))
+  if (find_pc_partial_function (block_addr, NULL, &prologue_start,
+				&prologue_end))
     {
       /* One way to find the end of the prologue (which works well
          for unoptimized code) is to do the following:
@@ -711,7 +825,7 @@ arm_scan_prologue (struct frame_info *next_frame,
       CORE_ADDR frame_loc;
       LONGEST return_value;
 
-      frame_loc = frame_unwind_register_unsigned (next_frame, ARM_FP_REGNUM);
+      frame_loc = get_frame_register_unsigned (this_frame, ARM_FP_REGNUM);
       if (!safe_read_memory_integer (frame_loc, 4, &return_value))
         return;
       else
@@ -751,13 +865,14 @@ arm_scan_prologue (struct frame_info *next_frame,
   stack = make_pv_area (ARM_SP_REGNUM);
   back_to = make_cleanup_free_pv_area (stack);
 
-  regs[ARM_PC_REGNUM] = pv_unknown ();
-
   for (current_pc = prologue_start;
        current_pc < prologue_end;
        current_pc += 4)
     {
       unsigned int insn = read_memory_unsigned_integer (current_pc, 4);
+
+      if (gdbarch_byte_order_for_code (gdbarch) != gdbarch_byte_order (gdbarch))
+	insn = SWAP_INT (insn);
 
       if (insn == 0xe1a0c00d)		/* mov ip, sp */
 	{
@@ -916,18 +1031,18 @@ arm_scan_prologue (struct frame_info *next_frame,
 }
 
 static struct arm_prologue_cache *
-arm_make_prologue_cache (struct frame_info *next_frame)
+arm_make_prologue_cache (struct frame_info *this_frame)
 {
   int reg;
   struct arm_prologue_cache *cache;
   CORE_ADDR unwound_fp;
 
   cache = FRAME_OBSTACK_ZALLOC (struct arm_prologue_cache);
-  cache->saved_regs = trad_frame_alloc_saved_regs (next_frame);
+  cache->saved_regs = trad_frame_alloc_saved_regs (this_frame);
 
-  arm_scan_prologue (next_frame, cache);
+  arm_scan_prologue (this_frame, cache);
 
-  unwound_fp = frame_unwind_register_unsigned (next_frame, cache->framereg);
+  unwound_fp = get_frame_register_unsigned (this_frame, cache->framereg);
   if (unwound_fp == 0)
     return cache;
 
@@ -935,7 +1050,7 @@ arm_make_prologue_cache (struct frame_info *next_frame)
 
   /* Calculate actual addresses of saved registers using offsets
      determined by arm_scan_prologue.  */
-  for (reg = 0; reg < gdbarch_num_regs (get_frame_arch (next_frame)); reg++)
+  for (reg = 0; reg < gdbarch_num_regs (get_frame_arch (this_frame)); reg++)
     if (trad_frame_addr_p (cache->saved_regs, reg))
       cache->saved_regs[reg].addr += cache->prev_sp;
 
@@ -946,93 +1061,108 @@ arm_make_prologue_cache (struct frame_info *next_frame)
    and the caller's SP when we were called.  */
 
 static void
-arm_prologue_this_id (struct frame_info *next_frame,
+arm_prologue_this_id (struct frame_info *this_frame,
 		      void **this_cache,
 		      struct frame_id *this_id)
 {
   struct arm_prologue_cache *cache;
   struct frame_id id;
-  CORE_ADDR func;
+  CORE_ADDR pc, func;
 
   if (*this_cache == NULL)
-    *this_cache = arm_make_prologue_cache (next_frame);
+    *this_cache = arm_make_prologue_cache (this_frame);
   cache = *this_cache;
 
-  func = frame_func_unwind (next_frame, NORMAL_FRAME);
-
-  /* This is meant to halt the backtrace at "_start".  Make sure we
-     don't halt it at a generic dummy frame. */
-  if (func <= gdbarch_tdep (get_frame_arch (next_frame))->lowest_pc)
+  /* This is meant to halt the backtrace at "_start".  */
+  pc = get_frame_pc (this_frame);
+  if (pc <= gdbarch_tdep (get_frame_arch (this_frame))->lowest_pc)
     return;
 
   /* If we've hit a wall, stop.  */
   if (cache->prev_sp == 0)
     return;
 
+  func = get_frame_func (this_frame);
   id = frame_id_build (cache->prev_sp, func);
   *this_id = id;
 }
 
-static void
-arm_prologue_prev_register (struct frame_info *next_frame,
+static struct value *
+arm_prologue_prev_register (struct frame_info *this_frame,
 			    void **this_cache,
-			    int prev_regnum,
-			    int *optimized,
-			    enum lval_type *lvalp,
-			    CORE_ADDR *addrp,
-			    int *realnump,
-			    gdb_byte *valuep)
+			    int prev_regnum)
 {
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
   struct arm_prologue_cache *cache;
 
   if (*this_cache == NULL)
-    *this_cache = arm_make_prologue_cache (next_frame);
+    *this_cache = arm_make_prologue_cache (this_frame);
   cache = *this_cache;
 
   /* If we are asked to unwind the PC, then we need to return the LR
-     instead.  The saved value of PC points into this frame's
-     prologue, not the next frame's resume location.  */
+     instead.  The prologue may save PC, but it will point into this
+     frame's prologue, not the next frame's resume location.  Also
+     strip the saved T bit.  A valid LR may have the low bit set, but
+     a valid PC never does.  */
   if (prev_regnum == ARM_PC_REGNUM)
-    prev_regnum = ARM_LR_REGNUM;
-
-  /* SP is generally not saved to the stack, but this frame is
-     identified by NEXT_FRAME's stack pointer at the time of the call.
-     The value was already reconstructed into PREV_SP.  */
-  if (prev_regnum == ARM_SP_REGNUM)
     {
-      *lvalp = not_lval;
-      if (valuep)
-	store_unsigned_integer (valuep, 4, cache->prev_sp);
-      return;
+      CORE_ADDR lr;
+
+      lr = frame_unwind_register_unsigned (this_frame, ARM_LR_REGNUM);
+      return frame_unwind_got_constant (this_frame, prev_regnum,
+					arm_addr_bits_remove (gdbarch, lr));
     }
 
-  trad_frame_get_prev_register (next_frame, cache->saved_regs, prev_regnum,
-				optimized, lvalp, addrp, realnump, valuep);
+  /* SP is generally not saved to the stack, but this frame is
+     identified by the next frame's stack pointer at the time of the call.
+     The value was already reconstructed into PREV_SP.  */
+  if (prev_regnum == ARM_SP_REGNUM)
+    return frame_unwind_got_constant (this_frame, prev_regnum, cache->prev_sp);
+
+  /* The CPSR may have been changed by the call instruction and by the
+     called function.  The only bit we can reconstruct is the T bit,
+     by checking the low bit of LR as of the call.  This is a reliable
+     indicator of Thumb-ness except for some ARM v4T pre-interworking
+     Thumb code, which could get away with a clear low bit as long as
+     the called function did not use bx.  Guess that all other
+     bits are unchanged; the condition flags are presumably lost,
+     but the processor status is likely valid.  */
+  if (prev_regnum == ARM_PS_REGNUM)
+    {
+      CORE_ADDR lr, cpsr;
+
+      cpsr = get_frame_register_unsigned (this_frame, prev_regnum);
+      lr = frame_unwind_register_unsigned (this_frame, ARM_LR_REGNUM);
+      if (IS_THUMB_ADDR (lr))
+	cpsr |= CPSR_T;
+      else
+	cpsr &= ~CPSR_T;
+      return frame_unwind_got_constant (this_frame, prev_regnum, cpsr);
+    }
+
+  return trad_frame_get_prev_register (this_frame, cache->saved_regs,
+				       prev_regnum);
 }
 
 struct frame_unwind arm_prologue_unwind = {
   NORMAL_FRAME,
   arm_prologue_this_id,
-  arm_prologue_prev_register
+  arm_prologue_prev_register,
+  NULL,
+  default_frame_sniffer
 };
 
-static const struct frame_unwind *
-arm_prologue_unwind_sniffer (struct frame_info *next_frame)
-{
-  return &arm_prologue_unwind;
-}
-
 static struct arm_prologue_cache *
-arm_make_stub_cache (struct frame_info *next_frame)
+arm_make_stub_cache (struct frame_info *this_frame)
 {
   int reg;
   struct arm_prologue_cache *cache;
   CORE_ADDR unwound_fp;
 
   cache = FRAME_OBSTACK_ZALLOC (struct arm_prologue_cache);
-  cache->saved_regs = trad_frame_alloc_saved_regs (next_frame);
+  cache->saved_regs = trad_frame_alloc_saved_regs (this_frame);
 
-  cache->prev_sp = frame_unwind_register_unsigned (next_frame, ARM_SP_REGNUM);
+  cache->prev_sp = get_frame_register_unsigned (this_frame, ARM_SP_REGNUM);
 
   return cache;
 }
@@ -1040,47 +1170,50 @@ arm_make_stub_cache (struct frame_info *next_frame)
 /* Our frame ID for a stub frame is the current SP and LR.  */
 
 static void
-arm_stub_this_id (struct frame_info *next_frame,
+arm_stub_this_id (struct frame_info *this_frame,
 		  void **this_cache,
 		  struct frame_id *this_id)
 {
   struct arm_prologue_cache *cache;
 
   if (*this_cache == NULL)
-    *this_cache = arm_make_stub_cache (next_frame);
+    *this_cache = arm_make_stub_cache (this_frame);
   cache = *this_cache;
 
-  *this_id = frame_id_build (cache->prev_sp,
-			     frame_pc_unwind (next_frame));
+  *this_id = frame_id_build (cache->prev_sp, get_frame_pc (this_frame));
+}
+
+static int
+arm_stub_unwind_sniffer (const struct frame_unwind *self,
+			 struct frame_info *this_frame,
+			 void **this_prologue_cache)
+{
+  CORE_ADDR addr_in_block;
+  char dummy[4];
+
+  addr_in_block = get_frame_address_in_block (this_frame);
+  if (in_plt_section (addr_in_block, NULL)
+      || target_read_memory (get_frame_pc (this_frame), dummy, 4) != 0)
+    return 1;
+
+  return 0;
 }
 
 struct frame_unwind arm_stub_unwind = {
   NORMAL_FRAME,
   arm_stub_this_id,
-  arm_prologue_prev_register
+  arm_prologue_prev_register,
+  NULL,
+  arm_stub_unwind_sniffer
 };
 
-static const struct frame_unwind *
-arm_stub_unwind_sniffer (struct frame_info *next_frame)
-{
-  CORE_ADDR addr_in_block;
-  char dummy[4];
-
-  addr_in_block = frame_unwind_address_in_block (next_frame, NORMAL_FRAME);
-  if (in_plt_section (addr_in_block, NULL)
-      || target_read_memory (frame_pc_unwind (next_frame), dummy, 4) != 0)
-    return &arm_stub_unwind;
-
-  return NULL;
-}
-
 static CORE_ADDR
-arm_normal_frame_base (struct frame_info *next_frame, void **this_cache)
+arm_normal_frame_base (struct frame_info *this_frame, void **this_cache)
 {
   struct arm_prologue_cache *cache;
 
   if (*this_cache == NULL)
-    *this_cache = arm_make_prologue_cache (next_frame);
+    *this_cache = arm_make_prologue_cache (this_frame);
   cache = *this_cache;
 
   return cache->prev_sp - cache->framesize;
@@ -1093,17 +1226,17 @@ struct frame_base arm_normal_base = {
   arm_normal_frame_base
 };
 
-/* Assuming NEXT_FRAME->prev is a dummy, return the frame ID of that
+/* Assuming THIS_FRAME is a dummy, return the frame ID of that
    dummy frame.  The frame ID's base needs to match the TOS value
    saved by save_dummy_frame_tos() and returned from
    arm_push_dummy_call, and the PC needs to match the dummy frame's
    breakpoint.  */
 
 static struct frame_id
-arm_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
+arm_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
 {
-  return frame_id_build (frame_unwind_register_unsigned (next_frame, ARM_SP_REGNUM),
-			 frame_pc_unwind (next_frame));
+  return frame_id_build (get_frame_register_unsigned (this_frame, ARM_SP_REGNUM),
+			 get_frame_pc (this_frame));
 }
 
 /* Given THIS_FRAME, find the previous frame's resume PC (which will
@@ -1115,13 +1248,65 @@ arm_unwind_pc (struct gdbarch *gdbarch, struct frame_info *this_frame)
 {
   CORE_ADDR pc;
   pc = frame_unwind_register_unsigned (this_frame, ARM_PC_REGNUM);
-  return arm_addr_bits_remove (pc);
+  return arm_addr_bits_remove (gdbarch, pc);
 }
 
 static CORE_ADDR
 arm_unwind_sp (struct gdbarch *gdbarch, struct frame_info *this_frame)
 {
   return frame_unwind_register_unsigned (this_frame, ARM_SP_REGNUM);
+}
+
+static struct value *
+arm_dwarf2_prev_register (struct frame_info *this_frame, void **this_cache,
+			  int regnum)
+{
+  struct gdbarch * gdbarch = get_frame_arch (this_frame);
+  CORE_ADDR lr, cpsr;
+
+  switch (regnum)
+    {
+    case ARM_PC_REGNUM:
+      /* The PC is normally copied from the return column, which
+	 describes saves of LR.  However, that version may have an
+	 extra bit set to indicate Thumb state.  The bit is not
+	 part of the PC.  */
+      lr = frame_unwind_register_unsigned (this_frame, ARM_LR_REGNUM);
+      return frame_unwind_got_constant (this_frame, regnum,
+					arm_addr_bits_remove (gdbarch, lr));
+
+    case ARM_PS_REGNUM:
+      /* Reconstruct the T bit; see arm_prologue_prev_register for details.  */
+      cpsr = get_frame_register_unsigned (this_frame, regnum);
+      lr = frame_unwind_register_unsigned (this_frame, ARM_LR_REGNUM);
+      if (IS_THUMB_ADDR (lr))
+	cpsr |= CPSR_T;
+      else
+	cpsr &= ~CPSR_T;
+      return frame_unwind_got_constant (this_frame, regnum, cpsr);
+
+    default:
+      internal_error (__FILE__, __LINE__,
+		      _("Unexpected register %d"), regnum);
+    }
+}
+
+static void
+arm_dwarf2_frame_init_reg (struct gdbarch *gdbarch, int regnum,
+			   struct dwarf2_frame_state_reg *reg,
+			   struct frame_info *this_frame)
+{
+  switch (regnum)
+    {
+    case ARM_PC_REGNUM:
+    case ARM_PS_REGNUM:
+      reg->how = DWARF2_FRAME_REG_FN;
+      reg->loc.fn = arm_dwarf2_prev_register;
+      break;
+    case ARM_SP_REGNUM:
+      reg->how = DWARF2_FRAME_REG_CFA;
+      break;
+    }
 }
 
 /* When arguments must be pushed onto the stack, they go on in reverse
@@ -1416,9 +1601,9 @@ arm_register_type (struct gdbarch *gdbarch, int regnum)
   if (regnum >= ARM_F0_REGNUM && regnum < ARM_F0_REGNUM + NUM_FREGS)
     return builtin_type_arm_ext;
   else if (regnum == ARM_SP_REGNUM)
-    return builtin_type_void_data_ptr;
+    return builtin_type (gdbarch)->builtin_data_ptr;
   else if (regnum == ARM_PC_REGNUM)
-    return builtin_type_void_func_ptr;
+    return builtin_type (gdbarch)->builtin_func_ptr;
   else if (regnum >= ARRAY_SIZE (arm_register_names))
     /* These registers are only supported on targets which supply
        an XML description.  */
@@ -1648,6 +1833,9 @@ thumb_get_next_pc (struct frame_info *frame, CORE_ADDR pc)
   CORE_ADDR nextpc = pc + 2;		/* default is next instruction */
   unsigned long offset;
 
+  if (gdbarch_byte_order_for_code (gdbarch) != gdbarch_byte_order (gdbarch))
+    inst1 = SWAP_SHORT (inst1);
+
   if ((inst1 & 0xff00) == 0xbd00)	/* pop {rlist, pc} */
     {
       CORE_ADDR sp;
@@ -1675,6 +1863,8 @@ thumb_get_next_pc (struct frame_info *frame, CORE_ADDR pc)
   else if ((inst1 & 0xf800) == 0xf000)	/* long branch with link, and blx */
     {
       unsigned short inst2 = read_memory_unsigned_integer (pc + 2, 2);
+      if (gdbarch_byte_order_for_code (gdbarch) != gdbarch_byte_order (gdbarch))
+	inst2 = SWAP_SHORT (inst2);
       offset = (sbits (inst1, 0, 10) << 12) + (bits (inst2, 0, 10) << 1);
       nextpc = pc_val + offset;
       /* For BLX make sure to clear the low bits.  */
@@ -1705,11 +1895,15 @@ arm_get_next_pc (struct frame_info *frame, CORE_ADDR pc)
   unsigned long status;
   CORE_ADDR nextpc;
 
-  if (arm_pc_is_thumb (pc))
+  if (arm_frame_is_thumb (frame))
     return thumb_get_next_pc (frame, pc);
 
   pc_val = (unsigned long) pc;
   this_instr = read_memory_unsigned_integer (pc, 4);
+
+  if (gdbarch_byte_order_for_code (gdbarch) != gdbarch_byte_order (gdbarch))
+    this_instr = SWAP_INT (this_instr);
+
   status = get_frame_register_unsigned (frame, ARM_PS_REGNUM);
   nextpc = (CORE_ADDR) (pc_val + 4);	/* Default case */
 
@@ -2373,9 +2567,9 @@ arm_store_return_value (struct type *type, struct regcache *regs,
 /* Handle function return values.  */
 
 static enum return_value_convention
-arm_return_value (struct gdbarch *gdbarch, struct type *valtype,
-		  struct regcache *regcache, gdb_byte *readbuf,
-		  const gdb_byte *writebuf)
+arm_return_value (struct gdbarch *gdbarch, struct type *func_type,
+		  struct type *valtype, struct regcache *regcache,
+		  gdb_byte *readbuf, const gdb_byte *writebuf)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
@@ -2508,7 +2702,7 @@ arm_update_current_architecture (void)
   struct gdbarch_info info;
 
   /* If the current architecture is not ARM, we have nothing to do.  */
-  if (gdbarch_bfd_arch_info (current_gdbarch)->arch != bfd_arch_arm)
+  if (gdbarch_bfd_arch_info (target_gdbarch)->arch != bfd_arch_arm)
     return;
 
   /* Update the architecture.  */
@@ -2542,10 +2736,10 @@ static void
 show_fp_model (struct ui_file *file, int from_tty,
 	       struct cmd_list_element *c, const char *value)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (target_gdbarch);
 
   if (arm_fp_model == ARM_FLOAT_AUTO
-      && gdbarch_bfd_arch_info (current_gdbarch)->arch == bfd_arch_arm)
+      && gdbarch_bfd_arch_info (target_gdbarch)->arch == bfd_arch_arm)
     fprintf_filtered (file, _("\
 The current ARM floating point model is \"auto\" (currently \"%s\").\n"),
 		      fp_model_strings[tdep->fp_model]);
@@ -2579,16 +2773,38 @@ static void
 arm_show_abi (struct ui_file *file, int from_tty,
 	     struct cmd_list_element *c, const char *value)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (target_gdbarch);
 
   if (arm_abi_global == ARM_ABI_AUTO
-      && gdbarch_bfd_arch_info (current_gdbarch)->arch == bfd_arch_arm)
+      && gdbarch_bfd_arch_info (target_gdbarch)->arch == bfd_arch_arm)
     fprintf_filtered (file, _("\
 The current ARM ABI is \"auto\" (currently \"%s\").\n"),
 		      arm_abi_strings[tdep->arm_abi]);
   else
     fprintf_filtered (file, _("The current ARM ABI is \"%s\".\n"),
 		      arm_abi_string);
+}
+
+static void
+arm_show_fallback_mode (struct ui_file *file, int from_tty,
+			struct cmd_list_element *c, const char *value)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (target_gdbarch);
+
+  fprintf_filtered (file, _("\
+The current execution mode assumed (when symbols are unavailable) is \"%s\".\n"),
+		    arm_fallback_mode_string);
+}
+
+static void
+arm_show_force_mode (struct ui_file *file, int from_tty,
+		     struct cmd_list_element *c, const char *value)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (target_gdbarch);
+
+  fprintf_filtered (file, _("\
+The current execution mode assumed (even when symbols are available) is \"%s\".\n"),
+		    arm_force_mode_string);
 }
 
 /* If the user changes the register disassembly style used for info
@@ -2668,6 +2884,65 @@ arm_coff_make_msymbol_special(int val, struct minimal_symbol *msym)
 }
 
 static void
+arm_objfile_data_cleanup (struct objfile *objfile, void *arg)
+{
+  struct arm_per_objfile *data = arg;
+  unsigned int i;
+
+  for (i = 0; i < objfile->obfd->section_count; i++)
+    VEC_free (arm_mapping_symbol_s, data->section_maps[i]);
+}
+
+static void
+arm_record_special_symbol (struct gdbarch *gdbarch, struct objfile *objfile,
+			   asymbol *sym)
+{
+  const char *name = bfd_asymbol_name (sym);
+  struct arm_per_objfile *data;
+  VEC(arm_mapping_symbol_s) **map_p;
+  struct arm_mapping_symbol new_map_sym;
+
+  gdb_assert (name[0] == '$');
+  if (name[1] != 'a' && name[1] != 't' && name[1] != 'd')
+    return;
+
+  data = objfile_data (objfile, arm_objfile_data_key);
+  if (data == NULL)
+    {
+      data = OBSTACK_ZALLOC (&objfile->objfile_obstack,
+			     struct arm_per_objfile);
+      set_objfile_data (objfile, arm_objfile_data_key, data);
+      data->section_maps = OBSTACK_CALLOC (&objfile->objfile_obstack,
+					   objfile->obfd->section_count,
+					   VEC(arm_mapping_symbol_s) *);
+    }
+  map_p = &data->section_maps[bfd_get_section (sym)->index];
+
+  new_map_sym.value = sym->value;
+  new_map_sym.type = name[1];
+
+  /* Assume that most mapping symbols appear in order of increasing
+     value.  If they were randomly distributed, it would be faster to
+     always push here and then sort at first use.  */
+  if (!VEC_empty (arm_mapping_symbol_s, *map_p))
+    {
+      struct arm_mapping_symbol *prev_map_sym;
+
+      prev_map_sym = VEC_last (arm_mapping_symbol_s, *map_p);
+      if (prev_map_sym->value >= sym->value)
+	{
+	  unsigned int idx;
+	  idx = VEC_lower_bound (arm_mapping_symbol_s, *map_p, &new_map_sym,
+				 arm_compare_mapping_symbols);
+	  VEC_safe_insert (arm_mapping_symbol_s, *map_p, idx, &new_map_sym);
+	  return;
+	}
+    }
+
+  VEC_safe_push (arm_mapping_symbol_s, *map_p, &new_map_sym);
+}
+
+static void
 arm_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
   regcache_cooked_write_unsigned (regcache, ARM_PC_REGNUM, pc);
@@ -2678,10 +2953,10 @@ arm_write_pc (struct regcache *regcache, CORE_ADDR pc)
       ULONGEST val;
       regcache_cooked_read_unsigned (regcache, ARM_PS_REGNUM, &val);
       if (arm_pc_is_thumb (pc))
-	regcache_cooked_write_unsigned (regcache, ARM_PS_REGNUM, val | 0x20);
+	regcache_cooked_write_unsigned (regcache, ARM_PS_REGNUM, val | CPSR_T);
       else
 	regcache_cooked_write_unsigned (regcache, ARM_PS_REGNUM,
-					val & ~(ULONGEST) 0x20);
+					val & ~(ULONGEST) CPSR_T);
     }
 }
 
@@ -2905,6 +3180,10 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 		  break;
 		}
 	    }
+
+	  if (e_flags & EF_ARM_BE8)
+	    info.byte_order_for_code = BFD_ENDIAN_LITTLE;
+
 	  break;
 
 	default:
@@ -2947,7 +3226,7 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   tdep->have_fpa_registers = have_fpa_registers;
 
   /* Breakpoints.  */
-  switch (info.byte_order)
+  switch (info.byte_order_for_code)
     {
     case BFD_ENDIAN_BIG:
       tdep->arm_breakpoint = arm_default_arm_be_breakpoint;
@@ -2987,7 +3266,7 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_write_pc (gdbarch, arm_write_pc);
 
   /* Frame handling.  */
-  set_gdbarch_unwind_dummy_id (gdbarch, arm_unwind_dummy_id);
+  set_gdbarch_dummy_id (gdbarch, arm_dummy_id);
   set_gdbarch_unwind_pc (gdbarch, arm_unwind_pc);
   set_gdbarch_unwind_sp (gdbarch, arm_unwind_sp);
 
@@ -3022,7 +3301,6 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     set_gdbarch_print_float_info (gdbarch, arm_print_float_info);
 
   /* Internal <-> external register number maps.  */
-  set_gdbarch_dwarf_reg_to_regnum (gdbarch, arm_dwarf_reg_to_regnum);
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, arm_dwarf_reg_to_regnum);
   set_gdbarch_register_sim_regno (gdbarch, arm_register_sim_regno);
 
@@ -3038,6 +3316,7 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_elf_make_msymbol_special (gdbarch, arm_elf_make_msymbol_special);
   set_gdbarch_coff_make_msymbol_special (gdbarch,
 					 arm_coff_make_msymbol_special);
+  set_gdbarch_record_special_symbol (gdbarch, arm_record_special_symbol);
 
   /* Virtual tables.  */
   set_gdbarch_vbit_in_delta (gdbarch, 1);
@@ -3045,10 +3324,12 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   /* Hook in the ABI-specific overrides, if they have been registered.  */
   gdbarch_init_osabi (info, gdbarch);
 
+  dwarf2_frame_set_init_reg (gdbarch, arm_dwarf2_frame_init_reg);
+
   /* Add some default predicates.  */
-  frame_unwind_append_sniffer (gdbarch, arm_stub_unwind_sniffer);
-  frame_unwind_append_sniffer (gdbarch, dwarf2_frame_sniffer);
-  frame_unwind_append_sniffer (gdbarch, arm_prologue_unwind_sniffer);
+  frame_unwind_append_unwinder (gdbarch, &arm_stub_unwind);
+  dwarf2_append_unwinders (gdbarch);
+  frame_unwind_append_unwinder (gdbarch, &arm_prologue_unwind);
 
   /* Now we have tuned the configuration, set a few final things,
      based on what the OS ABI has told us.  */
@@ -3124,6 +3405,9 @@ _initialize_arm_tdep (void)
   size_t rest = sizeof (regdesc);
 
   gdbarch_register (bfd_arch_arm, arm_gdbarch_init, arm_dump_tdep);
+
+  arm_objfile_data_key
+    = register_objfile_data_with_cleanup (arm_objfile_data_cleanup);
 
   /* Register an ELF OS ABI sniffer for ARM binaries.  */
   gdbarch_register_osabi_sniffer (bfd_arch_arm,
@@ -3210,6 +3494,21 @@ vfp - VFP co-processor."),
 			_("Set the ABI."),
 			_("Show the ABI."),
 			NULL, arm_set_abi, arm_show_abi,
+			&setarmcmdlist, &showarmcmdlist);
+
+  /* Add two commands to allow the user to force the assumed
+     execution mode.  */
+  add_setshow_enum_cmd ("fallback-mode", class_support,
+			arm_mode_strings, &arm_fallback_mode_string,
+			_("Set the mode assumed when symbols are unavailable."),
+			_("Show the mode assumed when symbols are unavailable."),
+			NULL, NULL, arm_show_fallback_mode,
+			&setarmcmdlist, &showarmcmdlist);
+  add_setshow_enum_cmd ("force-mode", class_support,
+			arm_mode_strings, &arm_force_mode_string,
+			_("Set the mode assumed even when symbols are available."),
+			_("Show the mode assumed even when symbols are available."),
+			NULL, NULL, arm_show_force_mode,
 			&setarmcmdlist, &showarmcmdlist);
 
   /* Debugging flag.  */

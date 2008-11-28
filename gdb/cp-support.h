@@ -64,6 +64,8 @@ extern unsigned int cp_entire_prefix_len (const char *name);
 
 extern char *cp_func_name (const char *full_name);
 
+extern char *cp_remove_params (const char *demangled_name);
+
 extern struct symbol **make_symbol_overload_list (const char *,
 						  const char *);
 
@@ -71,10 +73,6 @@ extern struct type *cp_lookup_rtti_type (const char *name,
 					 struct block *block);
 
 /* Functions/variables from cp-namespace.c.  */
-
-extern unsigned char processing_has_namespace_info;
-
-extern const char *processing_current_prefix;
 
 extern int cp_is_anonymous (const char *namespace);
 
@@ -89,22 +87,22 @@ extern void cp_finalize_namespace (struct block *static_block,
 
 extern void cp_set_block_scope (const struct symbol *symbol,
 				struct block *block,
-				struct obstack *obstack);
+				struct obstack *obstack,
+				const char *processing_current_prefix,
+				int processing_has_namespace_info);
 
 extern void cp_scan_for_anonymous_namespaces (const struct symbol *symbol);
 
 extern struct symbol *cp_lookup_symbol_nonlocal (const char *name,
 						 const char *linkage_name,
 						 const struct block *block,
-						 const domain_enum domain,
-						 struct symtab **symtab);
+						 const domain_enum domain);
 
 extern struct symbol *cp_lookup_symbol_namespace (const char *namespace,
 						  const char *name,
 						  const char *linkage_name,
 						  const struct block *block,
-						  const domain_enum domain,
-						  struct symtab **symtab);
+						  const domain_enum domain);
 
 extern struct type *cp_lookup_nested_type (struct type *parent_type,
 					   const char *nested_name,
@@ -126,11 +124,5 @@ extern char *cp_comp_to_string (struct demangle_component *result,
 /* The list of "maint cplus" commands.  */
 
 extern struct cmd_list_element *maint_cplus_cmd_list;
-
-/* Pointer to member function.  Depends on compiler implementation.  */
-
-#define METHOD_PTR_IS_VIRTUAL(ADDR)  ((ADDR) & 0x80000000)
-#define METHOD_PTR_FROM_VOFFSET(OFFSET) (0x80000000 + (OFFSET))
-#define METHOD_PTR_TO_VOFFSET(ADDR) (~0x80000000 & (ADDR))
 
 #endif /* CP_SUPPORT_H */

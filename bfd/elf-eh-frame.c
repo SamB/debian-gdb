@@ -549,6 +549,16 @@ _bfd_elf_parse_eh_frame (bfd *abfd, struct bfd_link_info *info,
 	     < (bfd_size_type) ((buf) - ehbuf)))	\
     cookie->rel++
 
+#define REQUIRE_CLEARED_RELOCS(buf)			\
+  while (cookie->rel < cookie->relend			\
+	 && (cookie->rel->r_offset			\
+	     < (bfd_size_type) ((buf) - ehbuf)))	\
+    {							\
+      REQUIRE (cookie->rel->r_info == 0);		\
+      REQUIRE (cookie->rel->r_addend == 0);		\
+      cookie->rel++;					\
+    }
+
 #define GET_RELOC(buf)					\
   ((cookie->rel < cookie->relend			\
     && (cookie->rel->r_offset				\
@@ -766,9 +776,14 @@ _bfd_elf_parse_eh_frame (bfd *abfd, struct bfd_link_info *info,
 
 	  /* Chain together the FDEs for each section.  */
 	  rsec = _bfd_elf_gc_mark_rsec (info, sec, gc_mark_hook, cookie);
-	  REQUIRE (rsec && rsec->owner == abfd);
-	  this_inf->u.fde.next_for_section = elf_fde_list (rsec);
-	  elf_fde_list (rsec) = this_inf;
+	  /* RSEC will be NULL if FDE was cleared out as it was belonging to
+	     a discarded SHT_GROUP.  */
+	  if (rsec)
+	    {
+	      REQUIRE (rsec->owner == abfd);
+	      this_inf->u.fde.next_for_section = elf_fde_list (rsec);
+	      elf_fde_list (rsec) = this_inf;
+	    }
 
 	  /* Skip the initial location and address range.  */
 	  start = buf;
@@ -801,7 +816,17 @@ _bfd_elf_parse_eh_frame (bfd *abfd, struct bfd_link_info *info,
 	  insns = buf;
 
 	  buf = last_fde + 4 + hdr_length;
-	  SKIP_RELOCS (buf);
+
+	  /* Cleared FDE?  The instructions will not be cleared but verify all
+	     the relocation entries for them are cleared.  */
+	  if (rsec == NULL)
+	    {
+	      REQUIRE_CLEARED_RELOCS (buf);
+	    }
+	  else
+	    {
+	      SKIP_RELOCS (buf);
+	    }
 	}
 
       /* Try to interpret the CFA instructions and find the first
@@ -1077,7 +1102,11 @@ _bfd_elf_discard_section_eh_frame
 
   hdr_info = &elf_hash_table (info)->eh_info;
   for (ent = sec_info->entry; ent < sec_info->entry + sec_info->count; ++ent)
-    if (!ent->cie)
+    if (ent->size == 4)
+      /* There should only be one zero terminator, on the last input
+	 file supplying .eh_frame (crtend.o).  Remove any others.  */
+      ent->removed = sec->map_head.s != NULL;
+    else if (!ent->cie)
       {
 	cookie->rel = cookie->rels + ent->reloc_index;
 	BFD_ASSERT (cookie->rel < cookie->relend
@@ -1441,7 +1470,7 @@ _bfd_elf_write_section_eh_frame (bfd *abfd,
 
 			val = read_value (abfd, buf, per_width,
 					  get_DW_EH_PE_signed (per_encoding));
-			val += ent->offset - ent->new_offset;
+			val += (bfd_vma) ent->offset - ent->new_offset;
 			val -= extra_string + extra_data;
 			write_value (abfd, buf, val, per_width);
 			action &= ~4;
@@ -1500,7 +1529,7 @@ _bfd_elf_write_section_eh_frame (bfd *abfd,
 		  }
 		  break;
 		case DW_EH_PE_pcrel:
-		  value += ent->offset - ent->new_offset;
+		  value += (bfd_vma) ent->offset - ent->new_offset;
 		  address += (sec->output_section->vma
 			      + sec->output_offset
 			      + ent->offset + 8);
@@ -1534,7 +1563,7 @@ _bfd_elf_write_section_eh_frame (bfd *abfd,
 	      if (value)
 		{
 		  if ((ent->lsda_encoding & 0xf0) == DW_EH_PE_pcrel)
-		    value += ent->offset - ent->new_offset;
+		    value += (bfd_vma) ent->offset - ent->new_offset;
 		  else if (cie->u.cie.make_lsda_relative)
 		    value -= (sec->output_section->vma
 			      + sec->output_offset
@@ -1573,7 +1602,7 @@ _bfd_elf_write_section_eh_frame (bfd *abfd,
 		    continue;
 
 		  if ((ent->fde_encoding & 0xf0) == DW_EH_PE_pcrel)
-		    value += ent->offset + 8 - new_offset;
+		    value += (bfd_vma) ent->offset + 8 - new_offset;
 		  if (ent->make_relative)
 		    value -= (sec->output_section->vma
 			      + sec->output_offset

@@ -55,6 +55,8 @@ Boston, MA 02110-1301, USA.  */
 #include "cp-support.h"
 #include "dfp.h"
 
+#define parse_type builtin_type (parse_gdbarch)
+
 /* Remap normal yacc parser interface names (yyparse, yylex, yyerror, etc),
    as well as gratuitiously global symbol names, so we can have multiple
    yacc generated parsers in gdb.  Note that these are only the variables
@@ -63,7 +65,7 @@ Boston, MA 02110-1301, USA.  */
    generators need to be fixed instead of adding those names to this list. */
 
 #define	yymaxdepth c_maxdepth
-#define	yyparse	c_parse
+#define	yyparse	c_parse_internal
 #define	yylex	c_lex
 #define	yyerror	c_error
 #define	yylval	c_lval
@@ -180,8 +182,9 @@ static int parse_number (char *, int, int, YYSTYPE *);
 
 %token <sval> STRING
 %token <ssym> NAME /* BLOCKNAME defined below to give it higher precedence. */
+%token <voidval> COMPLETE
 %token <tsym> TYPENAME
-%type <sval> name
+%type <sval> name string_exp
 %type <ssym> name_not_typename
 %type <tsym> typename
 
@@ -301,6 +304,23 @@ exp	:	exp ARROW name
 			  write_exp_elt_opcode (STRUCTOP_PTR); }
 	;
 
+exp	:	exp ARROW name COMPLETE
+			{ mark_struct_expression ();
+			  write_exp_elt_opcode (STRUCTOP_PTR);
+			  write_exp_string ($3);
+			  write_exp_elt_opcode (STRUCTOP_PTR); }
+	;
+
+exp	:	exp ARROW COMPLETE
+			{ struct stoken s;
+			  mark_struct_expression ();
+			  write_exp_elt_opcode (STRUCTOP_PTR);
+			  s.ptr = "";
+			  s.length = 0;
+			  write_exp_string (s);
+			  write_exp_elt_opcode (STRUCTOP_PTR); }
+	;
+
 exp	:	exp ARROW qualified_name
 			{ /* exp->type::name becomes exp->*(&type::name) */
 			  /* Note: this doesn't work if name is a
@@ -316,6 +336,23 @@ exp	:	exp ARROW '*' exp
 exp	:	exp '.' name
 			{ write_exp_elt_opcode (STRUCTOP_STRUCT);
 			  write_exp_string ($3);
+			  write_exp_elt_opcode (STRUCTOP_STRUCT); }
+	;
+
+exp	:	exp '.' name COMPLETE
+			{ mark_struct_expression ();
+			  write_exp_elt_opcode (STRUCTOP_STRUCT);
+			  write_exp_string ($3);
+			  write_exp_elt_opcode (STRUCTOP_STRUCT); }
+	;
+
+exp	:	exp '.' COMPLETE
+			{ struct stoken s;
+			  mark_struct_expression ();
+			  write_exp_elt_opcode (STRUCTOP_STRUCT);
+			  s.ptr = "";
+			  s.length = 0;
+			  write_exp_string (s);
 			  write_exp_elt_opcode (STRUCTOP_STRUCT); }
 	;
 
@@ -519,13 +556,40 @@ exp	:	VARIABLE
 
 exp	:	SIZEOF '(' type ')'	%prec UNARY
 			{ write_exp_elt_opcode (OP_LONG);
-			  write_exp_elt_type (builtin_type (current_gdbarch)->builtin_int);
+			  write_exp_elt_type (parse_type->builtin_int);
 			  CHECK_TYPEDEF ($3);
 			  write_exp_elt_longcst ((LONGEST) TYPE_LENGTH ($3));
 			  write_exp_elt_opcode (OP_LONG); }
 	;
 
-exp	:	STRING
+string_exp:
+		STRING
+			{
+			  /* We copy the string here, and not in the
+			     lexer, to guarantee that we do not leak a
+			     string.  Note that we follow the
+			     NUL-termination convention of the
+			     lexer.  */
+			  $$.length = $1.length;
+			  $$.ptr = malloc ($1.length + 1);
+			  memcpy ($$.ptr, $1.ptr, $1.length + 1);
+			}
+
+	|	string_exp STRING
+			{
+			  /* Note that we NUL-terminate here, but just
+			     for convenience.  */
+			  struct stoken t;
+			  t.length = $1.length + $2.length;
+			  t.ptr = malloc (t.length + 1);
+			  memcpy (t.ptr, $1.ptr, $1.length);
+			  memcpy (t.ptr + $1.length, $2.ptr, $2.length + 1);
+			  free ($1.ptr);
+			  $$ = t;
+			}
+		;
+
+exp	:	string_exp
 			{ /* C strings are converted into array constants with
 			     an explicit null byte added at the end.  Thus
 			     the array upper bound is the string length.
@@ -535,31 +599,33 @@ exp	:	STRING
 			  while (count-- > 0)
 			    {
 			      write_exp_elt_opcode (OP_LONG);
-			      write_exp_elt_type (builtin_type (current_gdbarch)->builtin_char);
+			      write_exp_elt_type (parse_type->builtin_char);
 			      write_exp_elt_longcst ((LONGEST)(*sp++));
 			      write_exp_elt_opcode (OP_LONG);
 			    }
 			  write_exp_elt_opcode (OP_LONG);
-			  write_exp_elt_type (builtin_type (current_gdbarch)->builtin_char);
+			  write_exp_elt_type (parse_type->builtin_char);
 			  write_exp_elt_longcst ((LONGEST)'\0');
 			  write_exp_elt_opcode (OP_LONG);
 			  write_exp_elt_opcode (OP_ARRAY);
 			  write_exp_elt_longcst ((LONGEST) 0);
 			  write_exp_elt_longcst ((LONGEST) ($1.length));
-			  write_exp_elt_opcode (OP_ARRAY); }
+			  write_exp_elt_opcode (OP_ARRAY);
+			  free ($1.ptr);
+			}
 	;
 
 /* C++.  */
 exp     :       TRUEKEYWORD    
                         { write_exp_elt_opcode (OP_LONG);
-                          write_exp_elt_type (builtin_type (current_gdbarch)->builtin_bool);
+                          write_exp_elt_type (parse_type->builtin_bool);
                           write_exp_elt_longcst ((LONGEST) 1);
                           write_exp_elt_opcode (OP_LONG); }
 	;
 
 exp     :       FALSEKEYWORD   
                         { write_exp_elt_opcode (OP_LONG);
-                          write_exp_elt_type (builtin_type (current_gdbarch)->builtin_bool);
+                          write_exp_elt_type (parse_type->builtin_bool);
                           write_exp_elt_longcst ((LONGEST) 0);
                           write_exp_elt_opcode (OP_LONG); }
 	;
@@ -583,8 +649,7 @@ block	:	BLOCKNAME
 block	:	block COLONCOLON name
 			{ struct symbol *tem
 			    = lookup_symbol (copy_name ($3), $1,
-					     VAR_DOMAIN, (int *) NULL,
-					     (struct symtab **) NULL);
+					     VAR_DOMAIN, (int *) NULL);
 			  if (!tem || SYMBOL_CLASS (tem) != LOC_BLOCK)
 			    error ("No function \"%s\" in specified context.",
 				   copy_name ($3));
@@ -594,8 +659,7 @@ block	:	block COLONCOLON name
 variable:	block COLONCOLON name
 			{ struct symbol *sym;
 			  sym = lookup_symbol (copy_name ($3), $1,
-					       VAR_DOMAIN, (int *) NULL,
-					       (struct symtab **) NULL);
+					       VAR_DOMAIN, (int *) NULL);
 			  if (sym == 0)
 			    error ("No symbol \"%s\" in specified context.",
 				   copy_name ($3));
@@ -655,8 +719,7 @@ variable:	qualified_name
 
 			  sym =
 			    lookup_symbol (name, (const struct block *) NULL,
-					   VAR_DOMAIN, (int *) NULL,
-					   (struct symtab **) NULL);
+					   VAR_DOMAIN, (int *) NULL);
 			  if (sym)
 			    {
 			      write_exp_elt_opcode (OP_VAR_VALUE);
@@ -668,16 +731,11 @@ variable:	qualified_name
 
 			  msymbol = lookup_minimal_symbol (name, NULL, NULL);
 			  if (msymbol != NULL)
-			    {
-			      write_exp_msymbol (msymbol,
-						 lookup_function_type (builtin_type (current_gdbarch)->builtin_int),
-						 builtin_type (current_gdbarch)->builtin_int);
-			    }
+			    write_exp_msymbol (msymbol);
+			  else if (!have_full_symbols () && !have_partial_symbols ())
+			    error ("No symbol table is loaded.  Use the \"file\" command.");
 			  else
-			    if (!have_full_symbols () && !have_partial_symbols ())
-			      error ("No symbol table is loaded.  Use the \"file\" command.");
-			    else
-			      error ("No symbol \"%s\" in current context.", name);
+			    error ("No symbol \"%s\" in current context.", name);
 			}
 	;
 
@@ -724,11 +782,7 @@ variable:	name_not_typename
 			      msymbol =
 				lookup_minimal_symbol (arg, NULL, NULL);
 			      if (msymbol != NULL)
-				{
-				  write_exp_msymbol (msymbol,
-						     lookup_function_type (builtin_type (current_gdbarch)->builtin_int),
-						     builtin_type (current_gdbarch)->builtin_int);
-				}
+				write_exp_msymbol (msymbol);
 			      else if (!have_full_symbols () && !have_partial_symbols ())
 				error ("No symbol table is loaded.  Use the \"file\" command.");
 			      else
@@ -818,61 +872,61 @@ typebase  /* Implements (approximately): (type-qualifier)* type-specifier */
 	:	TYPENAME
 			{ $$ = $1.type; }
 	|	INT_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_int; }
+			{ $$ = parse_type->builtin_int; }
 	|	LONG
-			{ $$ = builtin_type (current_gdbarch)->builtin_long; }
+			{ $$ = parse_type->builtin_long; }
 	|	SHORT
-			{ $$ = builtin_type (current_gdbarch)->builtin_short; }
+			{ $$ = parse_type->builtin_short; }
 	|	LONG INT_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_long; }
+			{ $$ = parse_type->builtin_long; }
 	|	LONG SIGNED_KEYWORD INT_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_long; }
+			{ $$ = parse_type->builtin_long; }
 	|	LONG SIGNED_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_long; }
+			{ $$ = parse_type->builtin_long; }
 	|	SIGNED_KEYWORD LONG INT_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_long; }
+			{ $$ = parse_type->builtin_long; }
 	|	UNSIGNED LONG INT_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_unsigned_long; }
+			{ $$ = parse_type->builtin_unsigned_long; }
 	|	LONG UNSIGNED INT_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_unsigned_long; }
+			{ $$ = parse_type->builtin_unsigned_long; }
 	|	LONG UNSIGNED
-			{ $$ = builtin_type (current_gdbarch)->builtin_unsigned_long; }
+			{ $$ = parse_type->builtin_unsigned_long; }
 	|	LONG LONG
-			{ $$ = builtin_type (current_gdbarch)->builtin_long_long; }
+			{ $$ = parse_type->builtin_long_long; }
 	|	LONG LONG INT_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_long_long; }
+			{ $$ = parse_type->builtin_long_long; }
 	|	LONG LONG SIGNED_KEYWORD INT_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_long_long; }
+			{ $$ = parse_type->builtin_long_long; }
 	|	LONG LONG SIGNED_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_long_long; }
+			{ $$ = parse_type->builtin_long_long; }
 	|	SIGNED_KEYWORD LONG LONG
-			{ $$ = builtin_type (current_gdbarch)->builtin_long_long; }
+			{ $$ = parse_type->builtin_long_long; }
 	|	SIGNED_KEYWORD LONG LONG INT_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_long_long; }
+			{ $$ = parse_type->builtin_long_long; }
 	|	UNSIGNED LONG LONG
-			{ $$ = builtin_type (current_gdbarch)->builtin_unsigned_long_long; }
+			{ $$ = parse_type->builtin_unsigned_long_long; }
 	|	UNSIGNED LONG LONG INT_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_unsigned_long_long; }
+			{ $$ = parse_type->builtin_unsigned_long_long; }
 	|	LONG LONG UNSIGNED
-			{ $$ = builtin_type (current_gdbarch)->builtin_unsigned_long_long; }
+			{ $$ = parse_type->builtin_unsigned_long_long; }
 	|	LONG LONG UNSIGNED INT_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_unsigned_long_long; }
+			{ $$ = parse_type->builtin_unsigned_long_long; }
 	|	SHORT INT_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_short; }
+			{ $$ = parse_type->builtin_short; }
 	|	SHORT SIGNED_KEYWORD INT_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_short; }
+			{ $$ = parse_type->builtin_short; }
 	|	SHORT SIGNED_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_short; }
+			{ $$ = parse_type->builtin_short; }
 	|	UNSIGNED SHORT INT_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_unsigned_short; }
+			{ $$ = parse_type->builtin_unsigned_short; }
 	|	SHORT UNSIGNED 
-			{ $$ = builtin_type (current_gdbarch)->builtin_unsigned_short; }
+			{ $$ = parse_type->builtin_unsigned_short; }
 	|	SHORT UNSIGNED INT_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_unsigned_short; }
+			{ $$ = parse_type->builtin_unsigned_short; }
 	|	DOUBLE_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_double; }
+			{ $$ = parse_type->builtin_double; }
 	|	LONG DOUBLE_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_long_double; }
+			{ $$ = parse_type->builtin_long_double; }
 	|	STRUCT name
 			{ $$ = lookup_struct (copy_name ($2),
 					      expression_context_block); }
@@ -888,11 +942,11 @@ typebase  /* Implements (approximately): (type-qualifier)* type-specifier */
 	|	UNSIGNED typename
 			{ $$ = lookup_unsigned_typename (TYPE_NAME($2.type)); }
 	|	UNSIGNED
-			{ $$ = builtin_type (current_gdbarch)->builtin_unsigned_int; }
+			{ $$ = parse_type->builtin_unsigned_int; }
 	|	SIGNED_KEYWORD typename
 			{ $$ = lookup_signed_typename (TYPE_NAME($2.type)); }
 	|	SIGNED_KEYWORD
-			{ $$ = builtin_type (current_gdbarch)->builtin_int; }
+			{ $$ = parse_type->builtin_int; }
                 /* It appears that this rule for templates is never
                    reduced; template recognition happens by lookahead
                    in the token processing code in yylex. */         
@@ -982,19 +1036,19 @@ typename:	TYPENAME
 		{
 		  $$.stoken.ptr = "int";
 		  $$.stoken.length = 3;
-		  $$.type = builtin_type (current_gdbarch)->builtin_int;
+		  $$.type = parse_type->builtin_int;
 		}
 	|	LONG
 		{
 		  $$.stoken.ptr = "long";
 		  $$.stoken.length = 4;
-		  $$.type = builtin_type (current_gdbarch)->builtin_long;
+		  $$.type = parse_type->builtin_long;
 		}
 	|	SHORT
 		{
 		  $$.stoken.ptr = "short";
 		  $$.stoken.length = 5;
-		  $$.type = builtin_type (current_gdbarch)->builtin_short;
+		  $$.type = parse_type->builtin_short;
 		}
 	;
 
@@ -1086,52 +1140,53 @@ parse_number (p, len, parsed_float, putithere)
   if (parsed_float)
     {
       /* It's a float since it contains a point or an exponent.  */
-      char *s = malloc (len);
-      int num = 0;	/* number of tokens scanned by scanf */
-      char saved_char = p[len];
-
-      p[len] = 0;	/* null-terminate the token */
+      char *s;
+      int num;	/* number of tokens scanned by scanf */
+      char saved_char;
 
       /* If it ends at "df", "dd" or "dl", take it as type of decimal floating
          point.  Return DECFLOAT.  */
 
-      if (p[len - 2] == 'd' && p[len - 1] == 'f')
+      if (len >= 2 && p[len - 2] == 'd' && p[len - 1] == 'f')
 	{
 	  p[len - 2] = '\0';
 	  putithere->typed_val_decfloat.type
-	    = builtin_type (current_gdbarch)->builtin_decfloat;
+	    = parse_type->builtin_decfloat;
 	  decimal_from_string (putithere->typed_val_decfloat.val, 4, p);
-	  p[len] = saved_char;
-	  return (DECFLOAT);
+	  p[len - 2] = 'd';
+	  return DECFLOAT;
 	}
 
-      if (p[len - 2] == 'd' && p[len - 1] == 'd')
+      if (len >= 2 && p[len - 2] == 'd' && p[len - 1] == 'd')
 	{
 	  p[len - 2] = '\0';
 	  putithere->typed_val_decfloat.type
-	    = builtin_type (current_gdbarch)->builtin_decdouble;
+	    = parse_type->builtin_decdouble;
 	  decimal_from_string (putithere->typed_val_decfloat.val, 8, p);
-	  p[len] = saved_char;
-	  return (DECFLOAT);
+	  p[len - 2] = 'd';
+	  return DECFLOAT;
 	}
 
-      if (p[len - 2] == 'd' && p[len - 1] == 'l')
+      if (len >= 2 && p[len - 2] == 'd' && p[len - 1] == 'l')
 	{
 	  p[len - 2] = '\0';
 	  putithere->typed_val_decfloat.type
-	    = builtin_type (current_gdbarch)->builtin_declong;
+	    = parse_type->builtin_declong;
 	  decimal_from_string (putithere->typed_val_decfloat.val, 16, p);
-	  p[len] = saved_char;
-	  return (DECFLOAT);
+	  p[len - 2] = 'd';
+	  return DECFLOAT;
 	}
 
+      s = malloc (len);
+      saved_char = p[len];
+      p[len] = 0;	/* null-terminate the token */
       num = sscanf (p, "%" DOUBLEST_SCAN_FORMAT "%s",
 		    &putithere->typed_val_float.dval, s);
       p[len] = saved_char;	/* restore the input stream */
 
       if (num == 1)
 	putithere->typed_val_float.type = 
-	  builtin_type (current_gdbarch)->builtin_double;
+	  parse_type->builtin_double;
 
       if (num == 2 )
 	{
@@ -1139,10 +1194,10 @@ parse_number (p, len, parsed_float, putithere)
 	     double.  */
 	  if (!strcasecmp (s, "f"))
 	    putithere->typed_val_float.type = 
-	      builtin_type (current_gdbarch)->builtin_float;
+	      parse_type->builtin_float;
 	  else if (!strcasecmp (s, "l"))
 	    putithere->typed_val_float.type = 
-	      builtin_type (current_gdbarch)->builtin_long_double;
+	      parse_type->builtin_long_double;
 	  else
 	    {
 	      free (s);
@@ -1253,9 +1308,9 @@ parse_number (p, len, parsed_float, putithere)
 
   un = (ULONGEST)n >> 2;
   if (long_p == 0
-      && (un >> (gdbarch_int_bit (current_gdbarch) - 2)) == 0)
+      && (un >> (gdbarch_int_bit (parse_gdbarch) - 2)) == 0)
     {
-      high_bit = ((ULONGEST)1) << (gdbarch_int_bit (current_gdbarch) - 1);
+      high_bit = ((ULONGEST)1) << (gdbarch_int_bit (parse_gdbarch) - 1);
 
       /* A large decimal (not hex or octal) constant (between INT_MAX
 	 and UINT_MAX) is a long or unsigned long, according to ANSI,
@@ -1263,28 +1318,28 @@ parse_number (p, len, parsed_float, putithere)
 	 int.  This probably should be fixed.  GCC gives a warning on
 	 such constants.  */
 
-      unsigned_type = builtin_type (current_gdbarch)->builtin_unsigned_int;
-      signed_type = builtin_type (current_gdbarch)->builtin_int;
+      unsigned_type = parse_type->builtin_unsigned_int;
+      signed_type = parse_type->builtin_int;
     }
   else if (long_p <= 1
-	   && (un >> (gdbarch_long_bit (current_gdbarch) - 2)) == 0)
+	   && (un >> (gdbarch_long_bit (parse_gdbarch) - 2)) == 0)
     {
-      high_bit = ((ULONGEST)1) << (gdbarch_long_bit (current_gdbarch) - 1);
-      unsigned_type = builtin_type (current_gdbarch)->builtin_unsigned_long;
-      signed_type = builtin_type (current_gdbarch)->builtin_long;
+      high_bit = ((ULONGEST)1) << (gdbarch_long_bit (parse_gdbarch) - 1);
+      unsigned_type = parse_type->builtin_unsigned_long;
+      signed_type = parse_type->builtin_long;
     }
   else
     {
       int shift;
       if (sizeof (ULONGEST) * HOST_CHAR_BIT 
-	  < gdbarch_long_long_bit (current_gdbarch))
+	  < gdbarch_long_long_bit (parse_gdbarch))
 	/* A long long does not fit in a LONGEST.  */
 	shift = (sizeof (ULONGEST) * HOST_CHAR_BIT - 1);
       else
-	shift = (gdbarch_long_long_bit (current_gdbarch) - 1);
+	shift = (gdbarch_long_long_bit (parse_gdbarch) - 1);
       high_bit = (ULONGEST) 1 << shift;
-      unsigned_type = builtin_type (current_gdbarch)->builtin_unsigned_long_long;
-      signed_type = builtin_type (current_gdbarch)->builtin_long_long;
+      unsigned_type = parse_type->builtin_unsigned_long_long;
+      signed_type = parse_type->builtin_long_long;
     }
 
    putithere->typed_val_int.val = n;
@@ -1341,6 +1396,16 @@ static const struct token tokentab2[] =
     {">=", GEQ, BINOP_END}
   };
 
+/* This is set if a NAME token appeared at the very end of the input
+   string, with no whitespace separating the name from the EOF.  This
+   is used only when parsing to do field name completion.  */
+static int saw_name_at_eof;
+
+/* This is set if the previously-returned token was a structure
+   operator -- either '.' or ARROW.  This is used only when parsing to
+   do field name completion.  */
+static int last_was_structop;
+
 /* Read one token, getting characters through lexptr.  */
 
 static int
@@ -1356,7 +1421,10 @@ yylex ()
   static int tempbufsize;
   char * token_string = NULL;
   int class_prefix = 0;
-   
+  int saw_structop = last_was_structop;
+
+  last_was_structop = 0;
+
  retry:
 
   /* Check if this is a macro invocation that we need to expand.  */
@@ -1388,6 +1456,8 @@ yylex ()
       {
 	lexptr += 2;
 	yylval.opcode = tokentab2[i].opcode;
+	if (in_parse_field && tokentab2[i].token == ARROW)
+	  last_was_structop = 1;
 	return tokentab2[i].token;
       }
 
@@ -1396,6 +1466,8 @@ yylex ()
     case 0:
       /* If we were just scanning the result of a macro expansion,
          then we need to resume scanning the original text.
+	 If we're parsing for field name completion, and the previous
+	 token allows such completion, return a COMPLETE token.
          Otherwise, we were already scanning the original text, and
          we're really done.  */
       if (scanning_macro_expansion ())
@@ -1403,6 +1475,13 @@ yylex ()
           finished_macro_expansion ();
           goto retry;
         }
+      else if (saw_name_at_eof)
+	{
+	  saw_name_at_eof = 0;
+	  return COMPLETE;
+	}
+      else if (saw_structop)
+	return COMPLETE;
       else
         return 0;
 
@@ -1433,7 +1512,7 @@ yylex ()
         }
 
       yylval.typed_val_int.val = c;
-      yylval.typed_val_int.type = builtin_type (current_gdbarch)->builtin_char;
+      yylval.typed_val_int.type = parse_type->builtin_char;
 
       c = *lexptr++;
       if (c != '\'')
@@ -1475,7 +1554,11 @@ yylex ()
     case '.':
       /* Might be a floating point number.  */
       if (lexptr[1] < '0' || lexptr[1] > '9')
-	goto symbol;		/* Nope, must be a symbol. */
+	{
+	  if (in_parse_field)
+	    last_was_structop = 1;
+	  goto symbol;		/* Nope, must be a symbol. */
+	}
       /* FALL THRU into number case.  */
 
     case '0':
@@ -1681,7 +1764,7 @@ yylex ()
     case 8:
       if (strncmp (tokstart, "unsigned", 8) == 0)
 	return UNSIGNED;
-      if (current_language->la_language == language_cplus
+      if (parse_language->la_language == language_cplus
 	  && strncmp (tokstart, "template", 8) == 0)
 	return TEMPLATE;
       if (strncmp (tokstart, "volatile", 8) == 0)
@@ -1698,7 +1781,7 @@ yylex ()
 	return DOUBLE_KEYWORD;
       break;
     case 5:
-      if (current_language->la_language == language_cplus)
+      if (parse_language->la_language == language_cplus)
         {
           if (strncmp (tokstart, "false", 5) == 0)
             return FALSEKEYWORD;
@@ -1717,7 +1800,7 @@ yylex ()
 	return ENUM;
       if (strncmp (tokstart, "long", 4) == 0)
 	return LONG;
-      if (current_language->la_language == language_cplus)
+      if (parse_language->la_language == language_cplus)
           {
             if (strncmp (tokstart, "true", 4) == 0)
               return TRUEKEYWORD;
@@ -1753,9 +1836,8 @@ yylex ()
 
     sym = lookup_symbol (tmp, expression_context_block,
 			 VAR_DOMAIN,
-			 current_language->la_language == language_cplus
-			 ? &is_a_field_of_this : (int *) NULL,
-			 (struct symtab **) NULL);
+			 parse_language->la_language == language_cplus
+			 ? &is_a_field_of_this : (int *) NULL);
     /* Call lookup_symtab, not lookup_partial_symtab, in case there are
        no psymtabs (coff, xcoff, or some future change to blow away the
        psymtabs once once symbols are read).  */
@@ -1787,8 +1869,8 @@ yylex ()
 	  return TYPENAME;
         }
     yylval.tsym.type
-      = language_lookup_primitive_type_by_name (current_language,
-						current_gdbarch, tmp);
+      = language_lookup_primitive_type_by_name (parse_language,
+						parse_gdbarch, tmp);
     if (yylval.tsym.type != NULL)
       return TYPENAME;
 
@@ -1812,8 +1894,18 @@ yylex ()
     /* Any other kind of symbol */
     yylval.ssym.sym = sym;
     yylval.ssym.is_a_field_of_this = is_a_field_of_this;
+    if (in_parse_field && *lexptr == '\0')
+      saw_name_at_eof = 1;
     return NAME;
   }
+}
+
+int
+c_parse (void)
+{
+  last_was_structop = 0;
+  saw_name_at_eof = 0;
+  return yyparse ();
 }
 
 void

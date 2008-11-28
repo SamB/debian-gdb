@@ -14,10 +14,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-   Please email any bugs, comments, and/or additions to this file to:
-   bug-gdb@prep.ai.mit.edu  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* Support program for testing gdb's ability to call functions
    in the inferior, pass appropriate arguments to those functions,
@@ -490,6 +487,14 @@ int a, b;
   return ((*func_arg1)(a, b));
 }
 
+struct struct_with_fnptr
+{
+  int (*func) PARAMS((int));
+};
+
+struct struct_with_fnptr function_struct = { doubleit };
+
+struct struct_with_fnptr *function_struct_ptr = &function_struct;
 
 /* Gotta have a main to be able to generate a linked, runnable
    executable, and also provide a useful place to set a breakpoint. */

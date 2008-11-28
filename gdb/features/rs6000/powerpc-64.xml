@@ -13,5 +13,4 @@
   <architecture>powerpc:common64</architecture>
   <xi:include href="power64-core.xml"/>
   <xi:include href="power-fpu.xml"/>
-  <xi:include href="power-altivec.xml"/>
 </target>

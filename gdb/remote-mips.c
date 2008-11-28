@@ -84,7 +84,7 @@ static void lsi_open (char *name, int from_tty);
 
 static void mips_close (int quitting);
 
-static void mips_detach (char *args, int from_tty);
+static void mips_detach (struct target_ops *ops, char *args, int from_tty);
 
 static void mips_resume (ptid_t ptid, int step,
                          enum target_signal siggnal);
@@ -92,7 +92,7 @@ static void mips_resume (ptid_t ptid, int step,
 static ptid_t mips_wait (ptid_t ptid,
                                struct target_waitstatus *status);
 
-static int mips_map_regno (int regno);
+static int mips_map_regno (struct gdbarch *, int);
 
 static void mips_fetch_registers (struct regcache *regcache, int regno);
 
@@ -1490,8 +1490,7 @@ device is attached to the target board (e.g., /dev/ttya).\n"
 
   /* Parse the serial port name, the optional TFTP name, and the
      optional local TFTP name.  */
-  if ((argv = buildargv (name)) == NULL)
-    nomem (0);
+  argv = gdb_buildargv (name);
   make_cleanup_freeargv (argv);
 
   serial_port_name = xstrdup (argv[0]);
@@ -1593,10 +1592,10 @@ static void
 mips_open (char *name, int from_tty)
 {
   const char *monitor_prompt = NULL;
-  if (gdbarch_bfd_arch_info (current_gdbarch) != NULL
-      && gdbarch_bfd_arch_info (current_gdbarch)->arch == bfd_arch_mips)
+  if (gdbarch_bfd_arch_info (target_gdbarch) != NULL
+      && gdbarch_bfd_arch_info (target_gdbarch)->arch == bfd_arch_mips)
     {
-    switch (gdbarch_bfd_arch_info (current_gdbarch)->mach)
+    switch (gdbarch_bfd_arch_info (target_gdbarch)->mach)
       {
       case bfd_mach_mips4100:
       case bfd_mach_mips4300:
@@ -1653,7 +1652,7 @@ mips_close (int quitting)
 /* Detach from the remote board.  */
 
 static void
-mips_detach (char *args, int from_tty)
+mips_detach (struct target_ops *ops, char *args, int from_tty)
 {
   if (args)
     error ("Argument given to \"detach\" when remotely debugging.");
@@ -1875,24 +1874,24 @@ mips_wait (ptid_t ptid, struct target_waitstatus *status)
 #define REGNO_OFFSET 96
 
 static int
-mips_map_regno (int regno)
+mips_map_regno (struct gdbarch *gdbarch, int regno)
 {
   if (regno < 32)
     return regno;
-  if (regno >= mips_regnum (current_gdbarch)->fp0
-      && regno < mips_regnum (current_gdbarch)->fp0 + 32)
-    return regno - mips_regnum (current_gdbarch)->fp0 + 32;
-  else if (regno == mips_regnum (current_gdbarch)->pc)
+  if (regno >= mips_regnum (gdbarch)->fp0
+      && regno < mips_regnum (gdbarch)->fp0 + 32)
+    return regno - mips_regnum (gdbarch)->fp0 + 32;
+  else if (regno == mips_regnum (gdbarch)->pc)
     return REGNO_OFFSET + 0;
-  else if (regno == mips_regnum (current_gdbarch)->cause)
+  else if (regno == mips_regnum (gdbarch)->cause)
     return REGNO_OFFSET + 1;
-  else if (regno == mips_regnum (current_gdbarch)->hi)
+  else if (regno == mips_regnum (gdbarch)->hi)
     return REGNO_OFFSET + 2;
-  else if (regno == mips_regnum (current_gdbarch)->lo)
+  else if (regno == mips_regnum (gdbarch)->lo)
     return REGNO_OFFSET + 3;
-  else if (regno == mips_regnum (current_gdbarch)->fp_control_status)
+  else if (regno == mips_regnum (gdbarch)->fp_control_status)
     return REGNO_OFFSET + 4;
-  else if (regno == mips_regnum (current_gdbarch)->fp_implementation_revision)
+  else if (regno == mips_regnum (gdbarch)->fp_implementation_revision)
     return REGNO_OFFSET + 5;
   else
     /* FIXME: Is there a way to get the status register?  */
@@ -1924,7 +1923,7 @@ mips_fetch_registers (struct regcache *regcache, int regno)
     {
       /* If PMON doesn't support this register, don't waste serial
          bandwidth trying to read it.  */
-      int pmon_reg = mips_map_regno (regno);
+      int pmon_reg = mips_map_regno (gdbarch, regno);
       if (regno != 0 && pmon_reg == 0)
 	val = 0;
       else
@@ -1979,7 +1978,7 @@ mips_store_registers (struct regcache *regcache, int regno)
     }
 
   regcache_cooked_read_unsigned (regcache, regno, &val);
-  mips_request ('R', mips_map_regno (regno), val,
+  mips_request ('R', mips_map_regno (gdbarch, regno), val,
 		&err, mips_receive_wait, NULL);
   if (err)
     mips_error ("Can't write register %d: %s", regno, safe_strerror (errno));
@@ -2417,7 +2416,7 @@ mips_common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
   int rpid, rerrflg, rresponse, rlen;
   int nfields;
 
-  addr = gdbarch_addr_bits_remove (current_gdbarch, addr);
+  addr = gdbarch_addr_bits_remove (target_gdbarch, addr);
 
   if (mips_monitor == MON_LSI)
     {
@@ -2620,7 +2619,7 @@ send_srec (char *srec, int len, CORE_ADDR addr)
 	case 0x6:		/* ACK */
 	  return;
 	case 0x15:		/* NACK */
-	  fprintf_unfiltered (gdb_stderr, "Download got a NACK at byte %s!  Retrying.\n", paddr_u (addr));
+	  fprintf_unfiltered (gdb_stderr, "Download got a NACK at byte 0x%s!  Retrying.\n", paddr_nz (addr));
 	  continue;
 	default:
 	  error ("Download got unexpected ack char: 0x%x, retrying.\n", ch);
@@ -3281,8 +3280,10 @@ mips_load (char *file, int from_tty)
       /* Work around problem where PMON monitor updates the PC after a load
          to a different value than GDB thinks it has. The following ensures
          that the write_pc() WILL update the PC value: */
-      regcache_set_valid_p (get_current_regcache (),
-			    gdbarch_pc_regnum (current_gdbarch), 0);
+      struct regcache *regcache = get_current_regcache ();
+      regcache_set_valid_p (regcache,
+			    gdbarch_pc_regnum (get_regcache_arch (regcache)),
+					       0);
     }
   if (exec_bfd)
     write_pc (bfd_get_start_address (exec_bfd));

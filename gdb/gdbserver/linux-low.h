@@ -42,6 +42,9 @@ extern struct regset_info target_regsets[];
 
 struct linux_target_ops
 {
+  /* Architecture-specific setup.  */
+  void (*arch_setup) (void);
+
   int num_regs;
   int *regmap;
   int (*cannot_fetch_register) (int);
@@ -66,13 +69,10 @@ struct linux_target_ops
   int (*stopped_by_watchpoint) (void);
   CORE_ADDR (*stopped_data_address) (void);
 
-  /* Whether to left-pad registers for PEEKUSR/POKEUSR if they are smaller
-     than an xfer unit.  */
-  int left_pad_xfer;
-
-  /* What string to report to GDB when it asks for the architecture,
-     or NULL not to answer.  */
-  const char *arch_string;
+  /* Hooks to reformat register data for PEEKUSR/POKEUSR (in particular
+     for registers smaller than an xfer unit).  */
+  void (*collect_ptrace_register) (int regno, char *buf);
+  void (*supply_ptrace_register) (int regno, const char *buf);
 };
 
 extern struct linux_target_ops the_low_target;

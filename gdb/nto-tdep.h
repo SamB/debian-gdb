@@ -61,7 +61,7 @@ struct nto_target_ops
    and stuff it into the last argument.  If regno is -1, calculate the
    size of the entire regset.  Returns length of data, -1 if unknown
    regset, 0 if unknown register.  */
-  int (*register_area) (int, int, unsigned *);
+  int (*register_area) (struct gdbarch *, int, int, unsigned *);
 
 /* Build the Neutrino register set info into the data buffer.  
    Return -1 if unknown regset, 0 otherwise.  */
@@ -144,8 +144,8 @@ void nto_init_solib_absolute_prefix (void);
 
 void nto_set_target(struct nto_target_ops *);
 
-char **nto_parse_redirection (char *start_argv[], char **in,
-			      char **out, char **err);
+char **nto_parse_redirection (char *start_argv[], const char **in,
+			      const char **out, const char **err);
 
 int proc_iterate_over_mappings (int (*func) (int, CORE_ADDR));
 

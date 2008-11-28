@@ -1,4 +1,34 @@
-2008-03-14  Nick Hudson  <nick.hudson@dsl.pipex.com>
+2008-11-18  Joel Sherrill <joel.sherrill@oarcorp.com>
+
+	* configure: Regenerated.
+	* configure.ac: Add test for System V shared memory and semaphore.
+	* debug.c, debug.h: Add trace support for new devices.
+	* hw_sem.c, hw_shm.c: New files.
+	* Makefile.in: Add hw_sem.c and hw_shm.c.
+
+2008-07-11  Hans-Peter Nilsson  <hp@axis.com>
+
+	* configure.ac: Add test for libz and zlib.h.
+	* Makefile.in (LIBS): Set from @LIBS@.
+	* configure: Regenerate.
+	* config.in: Ditto.
+
+2008-06-06  Vladimir Prus  <vladimir@codesourcery.com>
+            Daniel Jacobowitz  <dan@codesourcery.com>
+            Joseph Myers  <joseph@codesourcery.com>
+
+	* configure.ac: Use ACX_PKGVERSION and ACX_BUGURL.
+	* configure, config.in: Regenerated.
+	* Makefile.in (LIB_OBJ): Add version.o.
+	(version.c, version.o): New rules.
+	* psim.c (psim_usage): Add help parameter.  Print the bug URL.
+	Exit with code 0 for help.
+	(psim_options): Update calls to psim_usage.  Handle --help and
+	--version.
+	* psim.h (psim_usage): Update prototype.
+	* main.c (main): Update psim_usage call.
+
+2008-03-14  Nick Hudson  <nick.hudson@dsl.pipex.com
 
         * configure.ac: Pass ../../intl to ZW_GNU_GETTEXT_SISTER_DIR.
         * configure: Regenerate.

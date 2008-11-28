@@ -108,7 +108,7 @@ elf_symfile_segments (bfd *abfd)
       for (j = 0; j < num_segments; j++)
 	if (segments[j]->p_memsz > 0
 	    && vma >= segments[j]->p_vaddr
-	    && vma < segments[j]->p_vaddr + segments[j]->p_memsz)
+	    && (vma - segments[j]->p_vaddr) < segments[j]->p_memsz)
 	  {
 	    data->segment_info[i] = j + 1;
 	    break;
@@ -166,11 +166,13 @@ record_minimal_symbol (char *name, CORE_ADDR address,
 		       enum minimal_symbol_type ms_type,
 		       asection *bfd_section, struct objfile *objfile)
 {
+  struct gdbarch *gdbarch = get_objfile_arch (objfile);
+
   if (ms_type == mst_text || ms_type == mst_file_text)
-    address = gdbarch_smash_text_address (current_gdbarch, address);
+    address = gdbarch_smash_text_address (gdbarch, address);
 
   return prim_record_minimal_symbol_and_info
-    (name, address, ms_type, NULL, bfd_section->index, bfd_section, objfile);
+    (name, address, ms_type, bfd_section->index, bfd_section, objfile);
 }
 
 /*
@@ -206,6 +208,7 @@ static void
 elf_symtab_read (struct objfile *objfile, int type,
 		 long number_of_symbols, asymbol **symbol_table)
 {
+  struct gdbarch *gdbarch = get_objfile_arch (objfile);
   long storage_needed;
   asymbol *sym;
   long i;
@@ -237,7 +240,11 @@ elf_symtab_read (struct objfile *objfile, int type,
 	 symbols which do not correspond to objects in the symbol table,
 	 but have some other target-specific meaning.  */
       if (bfd_is_target_special_symbol (objfile->obfd, sym))
-	continue;
+	{
+	  if (gdbarch_record_special_symbol_p (gdbarch))
+	    gdbarch_record_special_symbol (gdbarch, objfile, sym);
+	  continue;
+	}
 
       offset = ANOFFSET (objfile->section_offsets, sym->section->index);
       if (type == ST_DYNAMIC
@@ -317,8 +324,10 @@ elf_symtab_read (struct objfile *objfile, int type,
 	     interested in will have a section. */
 	  /* Bfd symbols are section relative. */
 	  symaddr = sym->value + sym->section->vma;
-	  /* Relocate all non-absolute symbols by the section offset.  */
-	  if (sym->section != &bfd_abs_section)
+	  /* Relocate all non-absolute and non-TLS symbols by the
+	     section offset.  */
+	  if (sym->section != &bfd_abs_section
+	      && !(sym->section->flags & SEC_THREAD_LOCAL))
 	    {
 	      symaddr += offset;
 	    }
@@ -333,7 +342,7 @@ elf_symtab_read (struct objfile *objfile, int type,
 
 		 NOTE: uweigand-20071112: Synthetic symbols do not
 		 have an ELF-private part, so do not touch those.  */
-	      unsigned short shndx = type == ST_SYNTHETIC ? 0 : 
+	      unsigned int shndx = type == ST_SYNTHETIC ? 0 : 
 		((elf_symbol_type *) sym)->internal_elf_sym.st_shndx;
 
 	      switch (shndx)
@@ -513,7 +522,34 @@ elf_symtab_read (struct objfile *objfile, int type,
 	    }
 	  if (msym != NULL)
 	    msym->filename = filesymname;
-	  gdbarch_elf_make_msymbol_special (current_gdbarch, sym, msym);
+	  gdbarch_elf_make_msymbol_special (gdbarch, sym, msym);
+
+	  /* For @plt symbols, also record a trampoline to the
+	     destination symbol.  The @plt symbol will be used in
+	     disassembly, and the trampoline will be used when we are
+	     trying to find the target.  */
+	  if (msym && ms_type == mst_text && type == ST_SYNTHETIC)
+	    {
+	      int len = strlen (sym->name);
+
+	      if (len > 4 && strcmp (sym->name + len - 4, "@plt") == 0)
+		{
+		  char *base_name = alloca (len - 4 + 1);
+		  struct minimal_symbol *mtramp;
+
+		  memcpy (base_name, sym->name, len - 4);
+		  base_name[len - 4] = '\0';
+		  mtramp = record_minimal_symbol (base_name, symaddr,
+						  mst_solib_trampoline,
+						  sym->section, objfile);
+		  if (mtramp)
+		    {
+		      MSYMBOL_SIZE (mtramp) = MSYMBOL_SIZE (msym);
+		      mtramp->filename = filesymname;
+		      gdbarch_elf_make_msymbol_special (gdbarch, sym, mtramp);
+		    }
+		}
+	    }
 	}
     }
 }

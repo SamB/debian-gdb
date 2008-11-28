@@ -22,6 +22,7 @@
 
 #include "defs.h"
 #include "inferior.h"
+#include "gdbthread.h"
 #include "gdb_wait.h"
 #include "gdbcore.h"
 #include "command.h"
@@ -176,15 +177,16 @@ static void go32_fetch_registers (struct regcache *, int regno);
 static void store_register (const struct regcache *, int regno);
 static void go32_store_registers (struct regcache *, int regno);
 static void go32_prepare_to_store (struct regcache *);
-static int go32_xfer_memory (CORE_ADDR memaddr, char *myaddr, int len,
+static int go32_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len,
 			     int write,
 			     struct mem_attrib *attrib,
 			     struct target_ops *target);
 static void go32_files_info (struct target_ops *target);
-static void go32_stop (void);
+static void go32_stop (ptid_t);
 static void go32_kill_inferior (void);
-static void go32_create_inferior (char *exec_file, char *args, char **env, int from_tty);
-static void go32_mourn_inferior (void);
+static void go32_create_inferior (struct target_ops *ops, char *exec_file,
+				  char *args, char **env, int from_tty);
+static void go32_mourn_inferior (struct target_ops *ops);
 static int go32_can_run (void);
 
 static struct target_ops go32_ops;
@@ -305,7 +307,7 @@ go32_close (int quitting)
 }
 
 static void
-go32_attach (char *args, int from_tty)
+go32_attach (struct target_ops *ops, char *args, int from_tty)
 {
   error (_("\
 You cannot attach to a running program on this platform.\n\
@@ -313,7 +315,7 @@ Use the `run' command to run DJGPP programs."));
 }
 
 static void
-go32_detach (char *args, int from_tty)
+go32_detach (struct target_ops *ops, char *args, int from_tty)
 {
 }
 
@@ -465,10 +467,11 @@ go32_wait (ptid_t ptid, struct target_waitstatus *status)
 static void
 fetch_register (struct regcache *regcache, int regno)
 {
-  if (regno < gdbarch_fp0_regnum (get_regcache_arch (regcache)))
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  if (regno < gdbarch_fp0_regnum (gdbarch))
     regcache_raw_supply (regcache, regno,
 			 (char *) &a_tss + regno_mapping[regno].tss_ofs);
-  else if (i386_fp_regnum_p (regno) || i386_fpc_regnum_p (regno))
+  else if (i386_fp_regnum_p (gdbarch, regno) || i386_fpc_regnum_p (gdbarch, regno))
     i387_supply_fsave (regcache, regno, &npx);
   else
     internal_error (__FILE__, __LINE__,
@@ -493,10 +496,11 @@ go32_fetch_registers (struct regcache *regcache, int regno)
 static void
 store_register (const struct regcache *regcache, int regno)
 {
-  if (regno < gdbarch_fp0_regnum (get_regcache_arch (regcache)))
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  if (regno < gdbarch_fp0_regnum (gdbarch))
     regcache_raw_collect (regcache, regno,
 			  (char *) &a_tss + regno_mapping[regno].tss_ofs);
-  else if (i386_fp_regnum_p (regno) || i386_fpc_regnum_p (regno))
+  else if (i386_fp_regnum_p (gdbarch, regno) || i386_fpc_regnum_p (gdbarch, regno))
     i387_collect_fsave (regcache, regno, &npx);
   else
     internal_error (__FILE__, __LINE__,
@@ -524,7 +528,7 @@ go32_prepare_to_store (struct regcache *regcache)
 }
 
 static int
-go32_xfer_memory (CORE_ADDR memaddr, char *myaddr, int len, int write,
+go32_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
 		  struct mem_attrib *attrib, struct target_ops *target)
 {
   if (write)
@@ -560,11 +564,13 @@ go32_files_info (struct target_ops *target)
 }
 
 static void
-go32_stop (void)
+go32_stop (ptid_t ptid)
 {
   normal_stop ();
   cleanup_client ();
+  ptid = inferior_ptid;
   inferior_ptid = null_ptid;
+  delete_thread_silent (ptid);
   prog_has_started = 0;
 }
 
@@ -574,6 +580,8 @@ go32_kill_inferior (void)
   redir_cmdline_delete (&child_cmd);
   resume_signal = -1;
   resume_is_step = 0;
+  if (!ptid_equal (inferior_ptid, null_ptid))
+    delete_thread_silent (inferior_ptid);
   unpush_target (&go32_ops);
 }
 
@@ -593,7 +601,7 @@ go32_create_inferior (char *exec_file, char *args, char **env, int from_tty)
 
   if (prog_has_started)
     {
-      go32_stop ();
+      go32_stop (inferior_ptid);
       go32_kill_inferior ();
     }
   resume_signal = -1;
@@ -655,14 +663,19 @@ go32_create_inferior (char *exec_file, char *args, char **env, int from_tty)
 #endif
 
   inferior_ptid = pid_to_ptid (SOME_PID);
+  add_inferior_silent (SOME_PID);
+
   push_target (&go32_ops);
+
+  add_thread_silent (inferior_ptid);
+
   clear_proceed_status ();
   insert_breakpoints ();
   prog_has_started = 1;
 }
 
 static void
-go32_mourn_inferior (void)
+go32_mourn_inferior (struct target_ops *ops)
 {
   /* We need to make sure all the breakpoint enable bits in the DR7
      register are reset when the inferior exits.  Otherwise, if they
@@ -846,6 +859,20 @@ go32_terminal_ours (void)
   }
 }
 
+static int
+go32_thread_alive (ptid_t ptid)
+{
+  return 1;
+}
+
+static char *
+go32_pid_to_str (ptid_t ptid)
+{
+  static char buf[64];
+  xsnprintf (buf, sizeof buf, "Thread <main>");
+  return buf;
+}
+
 static void
 init_go32_ops (void)
 {
@@ -876,6 +903,8 @@ init_go32_ops (void)
   go32_ops.to_mourn_inferior = go32_mourn_inferior;
   go32_ops.to_can_run = go32_can_run;
   go32_ops.to_stop = go32_stop;
+  go32_ops.to_thread_alive = go32_thread_alive;
+  go32_ops.to_pid_to_str = go32_pid_to_str;
   go32_ops.to_stratum = process_stratum;
   go32_ops.to_has_all_memory = 1;
   go32_ops.to_has_memory = 1;
@@ -1261,30 +1290,30 @@ go32_sysinfo (char *arg, int from_tty)
 }
 
 struct seg_descr {
-  unsigned short limit0          __attribute__((packed));
-  unsigned short base0           __attribute__((packed));
-  unsigned char  base1           __attribute__((packed));
-  unsigned       stype:5         __attribute__((packed));
-  unsigned       dpl:2           __attribute__((packed));
-  unsigned       present:1       __attribute__((packed));
-  unsigned       limit1:4        __attribute__((packed));
-  unsigned       available:1     __attribute__((packed));
-  unsigned       dummy:1         __attribute__((packed));
-  unsigned       bit32:1         __attribute__((packed));
-  unsigned       page_granular:1 __attribute__((packed));
-  unsigned char  base2           __attribute__((packed));
-};
+  unsigned short limit0;
+  unsigned short base0;
+  unsigned char  base1;
+  unsigned       stype:5;
+  unsigned       dpl:2;
+  unsigned       present:1;
+  unsigned       limit1:4;
+  unsigned       available:1;
+  unsigned       dummy:1;
+  unsigned       bit32:1;
+  unsigned       page_granular:1;
+  unsigned char  base2;
+} __attribute__ ((packed));
 
 struct gate_descr {
-  unsigned short offset0         __attribute__((packed));
-  unsigned short selector        __attribute__((packed));
-  unsigned       param_count:5   __attribute__((packed));
-  unsigned       dummy:3         __attribute__((packed));
-  unsigned       stype:5         __attribute__((packed));
-  unsigned       dpl:2           __attribute__((packed));
-  unsigned       present:1       __attribute__((packed));
-  unsigned short offset1         __attribute__((packed));
-};
+  unsigned short offset0;
+  unsigned short selector;
+  unsigned       param_count:5;
+  unsigned       dummy:3;
+  unsigned       stype:5;
+  unsigned       dpl:2;
+  unsigned       present:1;
+  unsigned short offset1;
+} __attribute__ ((packed));
 
 /* Read LEN bytes starting at logical address ADDR, and put the result
    into DEST.  Return 1 if success, zero if not.  */

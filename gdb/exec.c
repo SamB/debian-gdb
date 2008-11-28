@@ -31,7 +31,7 @@
 #include "value.h"
 #include "exec.h"
 #include "observer.h"
-#include "arch-utils.c"
+#include "arch-utils.h"
 
 #include <fcntl.h>
 #include "readline/readline.h"
@@ -69,6 +69,7 @@ struct target_ops exec_ops;
 /* The Binary File Descriptor handle for the executable file.  */
 
 bfd *exec_bfd = NULL;
+long exec_bfd_mtime = 0;
 
 /* Whether to open exec and core files read-only or read-write.  */
 
@@ -136,6 +137,7 @@ exec_close (int quitting)
 		 name, bfd_errmsg (bfd_get_error ()));
       xfree (name);
       exec_bfd = NULL;
+      exec_bfd_mtime = 0;
     }
 
   if (exec_ops.to_sections)
@@ -215,8 +217,11 @@ exec_file_attach (char *filename, int from_tty)
 			    scratch_chan);
 
       if (!exec_bfd)
-	error (_("\"%s\": could not open as an executable file: %s"),
-	       scratch_pathname, bfd_errmsg (bfd_get_error ()));
+	{
+	  close (scratch_chan);
+	  error (_("\"%s\": could not open as an executable file: %s"),
+		 scratch_pathname, bfd_errmsg (bfd_get_error ()));
+	}
 
       /* At this point, scratch_pathname and exec_bfd->name both point to the
          same malloc'd string.  However exec_close() will attempt to free it
@@ -260,6 +265,8 @@ exec_file_attach (char *filename, int from_tty)
 		 scratch_pathname, bfd_errmsg (bfd_get_error ()));
 	}
 
+      exec_bfd_mtime = bfd_get_mtime (exec_bfd);
+
       validate_files ();
 
       set_gdbarch_from_file (exec_bfd);
@@ -271,7 +278,7 @@ exec_file_attach (char *filename, int from_tty)
 	(*deprecated_exec_file_display_hook) (filename);
     }
   bfd_cache_close_all ();
-  observer_notify_executable_changed (NULL);
+  observer_notify_executable_changed ();
 }
 
 /*  Process the first arg in ARGS as the new exec file.
@@ -298,10 +305,7 @@ exec_file_command (char *args, int from_tty)
       /* Scan through the args and pick up the first non option arg
          as the filename.  */
 
-      argv = buildargv (args);
-      if (argv == NULL)
-        nomem (0);
-
+      argv = gdb_buildargv (args);
       make_cleanup_freeargv (argv);
 
       for (; (*argv != NULL) && (**argv == '-'); argv++)
@@ -462,7 +466,7 @@ xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
   int res;
   struct section_table *p;
   CORE_ADDR nextsectaddr, memend;
-  asection *section = NULL;
+  struct obj_section *section = NULL;
 
   if (len <= 0)
     internal_error (__FILE__, __LINE__, _("failed internal consistency check"));
@@ -479,8 +483,9 @@ xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
 
   for (p = target->to_sections; p < target->to_sections_end; p++)
     {
-      if (overlay_debugging && section && 
-	  strcmp (section->name, p->the_bfd_section->name) != 0)
+      if (overlay_debugging && section
+	  && strcmp (section->the_bfd_section->name,
+		     p->the_bfd_section->name) != 0)
 	continue;		/* not the section we need */
       if (memaddr >= p->addr)
         {
@@ -539,10 +544,8 @@ print_section_info (struct target_ops *t, bfd *abfd)
   wrap_here ("        ");
   printf_filtered (_("file type %s.\n"), bfd_get_target (abfd));
   if (abfd == exec_bfd)
-    {
-      printf_filtered (_("\tEntry point: "));
-      fputs_filtered (paddress (bfd_get_start_address (abfd)), gdb_stdout);
-    }
+    printf_filtered (_("\tEntry point: %s\n"),
+                     paddress (bfd_get_start_address (abfd)));
   for (p = t->to_sections; p < t->to_sections_end; p++)
     {
       printf_filtered ("\t%s", hex_string_custom (p->addr, wid));
@@ -594,42 +597,6 @@ exec_files_info (struct target_ops *t)
     }
 }
 
-/* msnyder 5/21/99:
-   exec_set_section_offsets sets the offsets of all the sections
-   in the exec objfile.  */
-
-void
-exec_set_section_offsets (bfd_signed_vma text_off, bfd_signed_vma data_off,
-			  bfd_signed_vma bss_off)
-{
-  struct section_table *sect;
-
-  for (sect = exec_ops.to_sections;
-       sect < exec_ops.to_sections_end;
-       sect++)
-    {
-      flagword flags;
-
-      flags = bfd_get_section_flags (exec_bfd, sect->the_bfd_section);
-
-      if (flags & SEC_CODE)
-	{
-	  sect->addr += text_off;
-	  sect->endaddr += text_off;
-	}
-      else if (flags & (SEC_DATA | SEC_LOAD))
-	{
-	  sect->addr += data_off;
-	  sect->endaddr += data_off;
-	}
-      else if (flags & SEC_ALLOC)
-	{
-	  sect->addr += bss_off;
-	  sect->endaddr += bss_off;
-	}
-    }
-}
-
 static void
 set_section_command (char *args, int from_tty)
 {
@@ -670,9 +637,8 @@ set_section_command (char *args, int from_tty)
   error (_("Section %s not found"), secprint);
 }
 
-/* If we can find a section in FILENAME with BFD index INDEX, and the
-   user has not assigned an address to it yet (via "set section"), adjust it
-   to ADDRESS.  */
+/* If we can find a section in FILENAME with BFD index INDEX, adjust
+   it to ADDRESS.  */
 
 void
 exec_set_section_address (const char *filename, int index, CORE_ADDR address)
@@ -682,11 +648,10 @@ exec_set_section_address (const char *filename, int index, CORE_ADDR address)
   for (p = exec_ops.to_sections; p < exec_ops.to_sections_end; p++)
     {
       if (strcmp (filename, p->bfd->filename) == 0
-	  && index == p->the_bfd_section->index
-	  && p->addr == 0)
+	  && index == p->the_bfd_section->index)
 	{
+	  p->endaddr += address - p->addr;
 	  p->addr = address;
-	  p->endaddr += address;
 	}
     }
 }

@@ -74,7 +74,7 @@ core_file_command (char *filename, int from_tty)
     error (_("GDB can't read core files on this machine."));
 
   if (!filename)
-    (t->to_detach) (filename, from_tty);
+    (t->to_detach) (t, filename, from_tty);
   else
     (t->to_open) (filename, from_tty);
 }
@@ -160,11 +160,15 @@ reopen_exec_file (void)
   /* If the timestamp of the exec file has changed, reopen it. */
   filename = xstrdup (bfd_get_filename (exec_bfd));
   make_cleanup (xfree, filename);
-  mtime = bfd_get_mtime (exec_bfd);
   res = stat (filename, &st);
 
-  if (mtime && mtime != st.st_mtime)
+  if (exec_bfd_mtime && exec_bfd_mtime != st.st_mtime)
     exec_file_attach (filename, 0);
+  else
+    /* If we accessed the file since last opening it, close it now;
+       this stops GDB from holding the executable open after it
+       exits.  */
+    bfd_cache_close_all ();
 #endif
 }
 
@@ -346,10 +350,7 @@ void
 write_memory (CORE_ADDR memaddr, const bfd_byte *myaddr, int len)
 {
   int status;
-  gdb_byte *bytes = alloca (len);
-  
-  memcpy (bytes, myaddr, len);
-  status = target_write_memory (memaddr, bytes, len);
+  status = target_write_memory (memaddr, myaddr, len);
   if (status != 0)
     memory_error (status, memaddr);
 }
@@ -452,7 +453,7 @@ No arg means have no core file.  This command has been superseded by the\n\
 
   
   add_setshow_string_noescape_cmd ("gnutarget", class_files,
-				   &gnutarget_string, _("(\
+				   &gnutarget_string, _("\
 Set the current BFD target."), _("\
 Show the current BFD target."), _("\
 Use `set gnutarget auto' to specify automatic detection."),

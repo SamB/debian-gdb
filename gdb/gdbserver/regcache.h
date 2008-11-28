@@ -43,10 +43,6 @@ void registers_to_string (char *buf);
 
 void registers_from_string (char *buf);
 
-/* Return the size in bytes of a string-encoded register packet.  */
-
-int registers_length (void);
-
 /* Return a pointer to the description of register ``n''.  */
 
 struct reg *find_register_by_number (int n);
@@ -55,7 +51,10 @@ int register_size (int n);
 
 int find_regno (const char *name);
 
+/* The following two variables are set by auto-generated
+   code in the init_registers_... routines.  */
 extern const char **gdbserver_expedite_regs;
+extern const char *gdbserver_xmltarget;
 
 void supply_register (int n, const void *buf);
 

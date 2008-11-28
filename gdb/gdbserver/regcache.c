@@ -86,16 +86,13 @@ regcache_invalidate ()
   for_each_inferior (&all_threads, regcache_invalidate_one);
 }
 
-int
-registers_length (void)
-{
-  return 2 * register_bytes;
-}
-
 void *
 new_register_cache (void)
 {
   struct inferior_regcache_data *regcache;
+
+  if (register_bytes == 0)
+    return NULL; /* The architecture hasn't been initialized yet.  */
 
   regcache = malloc (sizeof (*regcache));
 
@@ -117,8 +114,20 @@ free_register_cache (void *regcache_p)
   struct inferior_regcache_data *regcache
     = (struct inferior_regcache_data *) regcache_p;
 
-  free (regcache->registers);
-  free (regcache);
+  if (regcache)
+    {
+      free (regcache->registers);
+      free (regcache);
+    }
+}
+
+static void
+realloc_register_cache (struct inferior_list_entry *thread_p)
+{
+  struct thread_info *thread = (struct thread_info *) thread_p;
+
+  free_register_cache (inferior_regcache_data (thread));
+  set_inferior_regcache_data (thread, new_register_cache ());
 }
 
 void
@@ -137,6 +146,13 @@ set_register_cache (struct reg *regs, int n)
     }
 
   register_bytes = offset / 8;
+
+  /* Make sure PBUFSIZ is large enough to hold a full register packet.  */
+  if (2 * register_bytes + 32 > PBUFSIZ)
+    fatal ("Register packet size exceeds PBUFSIZ.");
+
+  /* Re-allocate all pre-existing register caches.  */
+  for_each_inferior (&all_threads, realloc_register_cache);
 }
 
 void

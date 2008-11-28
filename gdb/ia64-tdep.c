@@ -309,7 +309,7 @@ ia64_register_type (struct gdbarch *arch, int reg)
   if (reg >= IA64_FR0_REGNUM && reg <= IA64_FR127_REGNUM)
     return builtin_type_ia64_ext;
   else
-    return builtin_type_long;
+    return builtin_type (arch)->builtin_long;
 }
 
 static int
@@ -343,7 +343,7 @@ const struct floatformat *floatformats_ia64_ext[2] =
    bit ``from''.  */
 
 static long long
-extract_bit_field (char *bundle, int from, int len)
+extract_bit_field (const char *bundle, int from, int len)
 {
   long long result = 0LL;
   int to = from + len;
@@ -547,9 +547,6 @@ fetch_instruction (CORE_ADDR addr, instruction_type *it, long long *instr)
    pattern was used by the simulator that I was using.)  So I ended up
    using the pattern seen below. */
 
-#if 0
-#define IA64_BREAKPOINT 0x00002000040LL
-#endif
 #define IA64_BREAKPOINT 0x00003333300LL
 
 static int
@@ -598,9 +595,15 @@ ia64_memory_remove_breakpoint (struct gdbarch *gdbarch,
   long long instr;
   int val;
   int template;
+  struct cleanup *cleanup;
 
   addr &= ~0x0f;
 
+  /* Disable the automatic memory restoration from breakpoints while
+     we read our instruction bundle.  Otherwise, the general restoration
+     mechanism kicks in and ends up corrupting our bundle, because it
+     is not aware of the concept of instruction bundles.  */
+  cleanup = make_show_memory_breakpoints_cleanup (1);
   val = target_read_memory (addr, bundle, BUNDLE_LEN);
 
   /* Check for L type instruction in 2nd slot, if present then
@@ -616,6 +619,7 @@ ia64_memory_remove_breakpoint (struct gdbarch *gdbarch,
   if (val == 0)
     target_write_memory (addr, bundle, BUNDLE_LEN);
 
+  do_cleanups (cleanup);
   return val;
 }
 
@@ -1054,7 +1058,9 @@ ia64_alloc_frame_cache (void)
 }
 
 static CORE_ADDR
-examine_prologue (CORE_ADDR pc, CORE_ADDR lim_pc, struct frame_info *next_frame, struct ia64_frame_cache *cache)
+examine_prologue (CORE_ADDR pc, CORE_ADDR lim_pc,
+                  struct frame_info *this_frame,
+                  struct ia64_frame_cache *cache)
 {
   CORE_ADDR next_pc;
   CORE_ADDR last_prologue_pc = pc;
@@ -1105,7 +1111,7 @@ examine_prologue (CORE_ADDR pc, CORE_ADDR lim_pc, struct frame_info *next_frame,
 	 we do not want to interpret the prologue and calculate the
 	 addresses of various registers such as the return address.  
 	 We will instead treat the frame as frameless. */
-      if (!next_frame ||
+      if (!this_frame ||
 	  (sof == (cache->cfm & 0x7f) &&
 	   sol == ((cache->cfm >> 7) & 0x7f)))
 	frameless = 0;
@@ -1223,9 +1229,9 @@ examine_prologue (CORE_ADDR pc, CORE_ADDR lim_pc, struct frame_info *next_frame,
 	      /* Hmm... whether or not this will work will depend on
 	         where the pc is.  If it's still early in the prologue
 		 this'll be wrong.  FIXME */
-	      if (next_frame)
+	      if (this_frame)
 		{
-		  frame_unwind_register (next_frame, sp_regnum, buf);
+		  get_frame_register (this_frame, sp_regnum, buf);
 		  saved_sp = extract_unsigned_integer (buf, 8);
 		}
 	      spill_addr  = saved_sp
@@ -1234,7 +1240,7 @@ examine_prologue (CORE_ADDR pc, CORE_ADDR lim_pc, struct frame_info *next_frame,
 	      spill_reg   = rN;
 	      last_prologue_pc = next_pc;
 	    }
-	  else if (qp == 0 && rM >= 32 && rM < 40 && !instores[rM] && 
+	  else if (qp == 0 && rM >= 32 && rM < 40 && !instores[rM-32] && 
 		   rN < 256 && imm == 0)
 	    {
 	      /* mov rN, rM where rM is an input register */
@@ -1425,10 +1431,11 @@ examine_prologue (CORE_ADDR pc, CORE_ADDR lim_pc, struct frame_info *next_frame,
       pc = next_pc;
     }
 
-  /* If not frameless and we aren't called by skip_prologue, then we need to calculate
-     registers for the previous frame which will be needed later.  */
+  /* If not frameless and we aren't called by skip_prologue, then we need
+     to calculate registers for the previous frame which will be needed
+     later.  */
 
-  if (!frameless && next_frame)
+  if (!frameless && this_frame)
     {
       /* Extract the size of the rotating portion of the stack
 	 frame and the register rename base from the current
@@ -1467,7 +1474,7 @@ examine_prologue (CORE_ADDR pc, CORE_ADDR lim_pc, struct frame_info *next_frame,
 	}
       else if (cfm_reg != 0)
 	{
-	  frame_unwind_register (next_frame, cfm_reg, buf);
+	  get_frame_register (this_frame, cfm_reg, buf);
 	  cfm = extract_unsigned_integer (buf, 8);
 	}
       cache->prev_cfm = cfm;
@@ -1479,8 +1486,9 @@ examine_prologue (CORE_ADDR pc, CORE_ADDR lim_pc, struct frame_info *next_frame,
 	  sol = (cfm >> 7) & 0x7f;
 	  rrb_gr = (cfm >> 18) & 0x7f;
 
-	  /* The previous bof only requires subtraction of the sol (size of locals)
-	     due to the overlap between output and input of subsequent frames.  */
+	  /* The previous bof only requires subtraction of the sol (size of
+             locals) due to the overlap between output and input of
+             subsequent frames.  */
 	  bof = rse_address_add (bof, -sol);
 	  
 	  for (i = 0, addr = bof;
@@ -1530,7 +1538,7 @@ ia64_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 /* Normal frames.  */
 
 static struct ia64_frame_cache *
-ia64_frame_cache (struct frame_info *next_frame, void **this_cache)
+ia64_frame_cache (struct frame_info *this_frame, void **this_cache)
 {
   struct ia64_frame_cache *cache;
   char buf[8];
@@ -1543,19 +1551,19 @@ ia64_frame_cache (struct frame_info *next_frame, void **this_cache)
   cache = ia64_alloc_frame_cache ();
   *this_cache = cache;
 
-  frame_unwind_register (next_frame, sp_regnum, buf);
+  get_frame_register (this_frame, sp_regnum, buf);
   cache->saved_sp = extract_unsigned_integer (buf, 8);
 
   /* We always want the bsp to point to the end of frame.
      This way, we can always get the beginning of frame (bof)
      by subtracting frame size.  */
-  frame_unwind_register (next_frame, IA64_BSP_REGNUM, buf);
+  get_frame_register (this_frame, IA64_BSP_REGNUM, buf);
   cache->bsp = extract_unsigned_integer (buf, 8);
   
-  frame_unwind_register (next_frame, IA64_PSR_REGNUM, buf);
+  get_frame_register (this_frame, IA64_PSR_REGNUM, buf);
   psr = extract_unsigned_integer (buf, 8);
 
-  frame_unwind_register (next_frame, IA64_CFM_REGNUM, buf);
+  get_frame_register (this_frame, IA64_CFM_REGNUM, buf);
   cfm = extract_unsigned_integer (buf, 8);
 
   cache->sof = (cfm & 0x7f);
@@ -1564,10 +1572,10 @@ ia64_frame_cache (struct frame_info *next_frame, void **this_cache)
 
   cache->cfm = cfm;
 
-  cache->pc = frame_func_unwind (next_frame, NORMAL_FRAME);
+  cache->pc = get_frame_func (this_frame);
 
   if (cache->pc != 0)
-    examine_prologue (cache->pc, frame_pc_unwind (next_frame), next_frame, cache);
+    examine_prologue (cache->pc, get_frame_pc (this_frame), this_frame, cache);
   
   cache->base = cache->saved_sp + cache->mem_stack_frame_size;
 
@@ -1575,11 +1583,11 @@ ia64_frame_cache (struct frame_info *next_frame, void **this_cache)
 }
 
 static void
-ia64_frame_this_id (struct frame_info *next_frame, void **this_cache,
+ia64_frame_this_id (struct frame_info *this_frame, void **this_cache,
 		    struct frame_id *this_id)
 {
   struct ia64_frame_cache *cache =
-    ia64_frame_cache (next_frame, this_cache);
+    ia64_frame_cache (this_frame, this_cache);
 
   /* If outermost frame, mark with null frame id.  */
   if (cache->base == 0)
@@ -1588,22 +1596,18 @@ ia64_frame_this_id (struct frame_info *next_frame, void **this_cache,
     (*this_id) = frame_id_build_special (cache->base, cache->pc, cache->bsp);
   if (gdbarch_debug >= 1)
     fprintf_unfiltered (gdb_stdlog,
-			"regular frame id: code 0x%s, stack 0x%s, special 0x%s, next_frame %p\n",
+			"regular frame id: code 0x%s, stack 0x%s, special 0x%s, this_frame %p\n",
 			paddr_nz (this_id->code_addr), 
 			paddr_nz (this_id->stack_addr), 
-			paddr_nz (cache->bsp), next_frame);
+			paddr_nz (cache->bsp), this_frame);
 }
 
-static void
-ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
-			  int regnum, int *optimizedp,
-			  enum lval_type *lvalp, CORE_ADDR *addrp,
-			  int *realnump, gdb_byte *valuep)
+static struct value *
+ia64_frame_prev_register (struct frame_info *this_frame, void **this_cache,
+			  int regnum)
 {
-  struct gdbarch *gdbarch = get_frame_arch (next_frame);
-  struct ia64_frame_cache *cache =
-    ia64_frame_cache (next_frame, this_cache);
-  char dummy_valp[MAX_REGISTER_SIZE];
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
+  struct ia64_frame_cache *cache = ia64_frame_cache (this_frame, this_cache);
   char buf[8];
 
   gdb_assert (regnum >= 0);
@@ -1611,86 +1615,63 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
   if (!target_has_registers)
     error (_("No registers."));
 
-  *optimizedp = 0;
-  *addrp = 0;
-  *lvalp = not_lval;
-  *realnump = -1;
-
-  /* Rather than check each time if valuep is non-null, supply a dummy buffer
-     when valuep is not supplied.  */
-  if (!valuep)
-    valuep = dummy_valp;
-  
-  memset (valuep, 0, register_size (gdbarch, regnum));
- 
   if (regnum == gdbarch_sp_regnum (gdbarch))
-    {
-      /* Handle SP values for all frames but the topmost. */
-      store_unsigned_integer (valuep, register_size (gdbarch, regnum),
-			      cache->base);
-    }
+    return frame_unwind_got_constant (this_frame, regnum, cache->base);
+
   else if (regnum == IA64_BSP_REGNUM)
     {
-      char cfm_valuep[MAX_REGISTER_SIZE];
-      int  cfm_optim;
-      int  cfm_realnum;
-      enum lval_type cfm_lval;
-      CORE_ADDR cfm_addr;
-      CORE_ADDR bsp, prev_cfm, prev_bsp;
+      struct value *val;
+      CORE_ADDR prev_cfm, bsp, prev_bsp;
 
-      /* We want to calculate the previous bsp as the end of the previous register stack frame.
-	 This corresponds to what the hardware bsp register will be if we pop the frame
-	 back which is why we might have been called.  We know the beginning of the current
-	 frame is cache->bsp - cache->sof.  This value in the previous frame points to
-	 the start of the output registers.  We can calculate the end of that frame by adding
-	 the size of output (sof (size of frame) - sol (size of locals)).  */
-      ia64_frame_prev_register (next_frame, this_cache, IA64_CFM_REGNUM,
-				&cfm_optim, &cfm_lval, &cfm_addr, &cfm_realnum, cfm_valuep);
-      prev_cfm = extract_unsigned_integer (cfm_valuep, 8);
-
+      /* We want to calculate the previous bsp as the end of the previous
+         register stack frame.  This corresponds to what the hardware bsp
+         register will be if we pop the frame back which is why we might
+         have been called.  We know the beginning of the current frame is
+         cache->bsp - cache->sof.  This value in the previous frame points
+         to the start of the output registers.  We can calculate the end of
+         that frame by adding the size of output:
+            (sof (size of frame) - sol (size of locals)).  */
+      val = ia64_frame_prev_register (this_frame, this_cache, IA64_CFM_REGNUM);
+      prev_cfm = extract_unsigned_integer (value_contents_all (val), 8);
       bsp = rse_address_add (cache->bsp, -(cache->sof));
-      prev_bsp = rse_address_add (bsp, (prev_cfm & 0x7f) - ((prev_cfm >> 7) & 0x7f));
+      prev_bsp =
+        rse_address_add (bsp, (prev_cfm & 0x7f) - ((prev_cfm >> 7) & 0x7f));
 
-      store_unsigned_integer (valuep, register_size (gdbarch, regnum), 
-			      prev_bsp);
+      return frame_unwind_got_constant (this_frame, regnum, prev_bsp);
     }
+
   else if (regnum == IA64_CFM_REGNUM)
     {
       CORE_ADDR addr = cache->saved_regs[IA64_CFM_REGNUM];
       
       if (addr != 0)
-	{
-	  *lvalp = lval_memory;
-	  *addrp = addr;
-	  read_memory (addr, valuep, register_size (gdbarch, regnum));
-	}
-      else if (cache->prev_cfm)
-	store_unsigned_integer (valuep, register_size (gdbarch, regnum), cache->prev_cfm);
-      else if (cache->frameless)
-	{
-	  CORE_ADDR cfm = 0;
-	  frame_unwind_register (next_frame, IA64_PFS_REGNUM, valuep);
-	}
+        return frame_unwind_got_memory (this_frame, regnum, addr);
+
+      if (cache->prev_cfm)
+        return frame_unwind_got_constant (this_frame, regnum, cache->prev_cfm);
+
+      if (cache->frameless)
+        return frame_unwind_got_register (this_frame, IA64_PFS_REGNUM,
+                                          IA64_PFS_REGNUM);
+      return frame_unwind_got_register (this_frame, regnum, 0);
     }
+
   else if (regnum == IA64_VFP_REGNUM)
     {
       /* If the function in question uses an automatic register (r32-r127)
          for the frame pointer, it'll be found by ia64_find_saved_register()
 	 above.  If the function lacks one of these frame pointers, we can
 	 still provide a value since we know the size of the frame.  */
-      CORE_ADDR vfp = cache->base;
-      store_unsigned_integer (valuep, register_size (gdbarch, IA64_VFP_REGNUM), vfp);
+      return frame_unwind_got_constant (this_frame, regnum, cache->base);
     }
+
   else if (VP0_REGNUM <= regnum && regnum <= VP63_REGNUM)
     {
-      char pr_valuep[MAX_REGISTER_SIZE];
-      int  pr_optim;
-      int  pr_realnum;
-      enum lval_type pr_lval;
-      CORE_ADDR pr_addr;
-      ULONGEST prN_val;
-      ia64_frame_prev_register (next_frame, this_cache, IA64_PR_REGNUM,
-				&pr_optim, &pr_lval, &pr_addr, &pr_realnum, pr_valuep);
+      struct value *pr_val;
+      ULONGEST prN;
+      
+      pr_val = ia64_frame_prev_register (this_frame, this_cache,
+                                         IA64_PR_REGNUM);
       if (VP16_REGNUM <= regnum && regnum <= VP63_REGNUM)
 	{
 	  /* Fetch predicate register rename base from current frame
@@ -1698,28 +1679,24 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	  int rrb_pr = (cache->cfm >> 32) & 0x3f;
 
 	  /* Adjust the register number to account for register rotation.  */
-	  regnum = VP16_REGNUM 
-	         + ((regnum - VP16_REGNUM) + rrb_pr) % 48;
+	  regnum = VP16_REGNUM + ((regnum - VP16_REGNUM) + rrb_pr) % 48;
 	}
-      prN_val = extract_bit_field ((unsigned char *) pr_valuep,
-                                   regnum - VP0_REGNUM, 1);
-      store_unsigned_integer (valuep, register_size (gdbarch, regnum), prN_val);
+      prN = extract_bit_field (value_contents_all (pr_val),
+                               regnum - VP0_REGNUM, 1);
+      return frame_unwind_got_constant (this_frame, regnum, prN);
     }
+
   else if (IA64_NAT0_REGNUM <= regnum && regnum <= IA64_NAT31_REGNUM)
     {
-      char unat_valuep[MAX_REGISTER_SIZE];
-      int  unat_optim;
-      int  unat_realnum;
-      enum lval_type unat_lval;
-      CORE_ADDR unat_addr;
-      ULONGEST unatN_val;
-      ia64_frame_prev_register (next_frame, this_cache, IA64_UNAT_REGNUM,
-				&unat_optim, &unat_lval, &unat_addr, &unat_realnum, unat_valuep);
-      unatN_val = extract_bit_field ((unsigned char *) unat_valuep,
-                                   regnum - IA64_NAT0_REGNUM, 1);
-      store_unsigned_integer (valuep, register_size (gdbarch, regnum), 
-                              unatN_val);
+      struct value *unat_val;
+      ULONGEST unatN;
+      unat_val = ia64_frame_prev_register (this_frame, this_cache,
+                                           IA64_UNAT_REGNUM);
+      unatN = extract_bit_field (value_contents_all (unat_val),
+                                 regnum - IA64_NAT0_REGNUM, 1);
+      return frame_unwind_got_constant (this_frame, regnum, unatN);
     }
+
   else if (IA64_NAT32_REGNUM <= regnum && regnum <= IA64_NAT127_REGNUM)
     {
       int natval = 0;
@@ -1727,8 +1704,8 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
          interested in.  */
       CORE_ADDR gr_addr;
 
-      gr_addr = cache->saved_regs[regnum - IA64_NAT0_REGNUM 
-				  + IA64_GR0_REGNUM];
+      gr_addr = cache->saved_regs[regnum - IA64_NAT0_REGNUM + IA64_GR0_REGNUM];
+
       if (gr_addr != 0)
 	{
 	  /* Compute address of nat collection bits.  */
@@ -1736,14 +1713,15 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	  CORE_ADDR bsp;
 	  CORE_ADDR nat_collection;
 	  int nat_bit;
+
 	  /* If our nat collection address is bigger than bsp, we have to get
 	     the nat collection from rnat.  Otherwise, we fetch the nat
 	     collection from the computed address.  */
-	  frame_unwind_register (next_frame, IA64_BSP_REGNUM, buf);
+	  get_frame_register (this_frame, IA64_BSP_REGNUM, buf);
 	  bsp = extract_unsigned_integer (buf, 8); 
 	  if (nat_addr >= bsp)
 	    {
-	      frame_unwind_register (next_frame, IA64_RNAT_REGNUM, buf);
+	      get_frame_register (this_frame, IA64_RNAT_REGNUM, buf);
 	      nat_collection = extract_unsigned_integer (buf, 8);
 	    }
 	  else
@@ -1752,114 +1730,109 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	  natval = (nat_collection >> nat_bit) & 1;
 	}
 
-      store_unsigned_integer (valuep, register_size (gdbarch, regnum), natval);
+      return frame_unwind_got_constant (this_frame, regnum, natval);
     }
+
   else if (regnum == IA64_IP_REGNUM)
     {
       CORE_ADDR pc = 0;
       CORE_ADDR addr = cache->saved_regs[IA64_VRAP_REGNUM];
 
       if (addr != 0)
-	{
-	  *lvalp = lval_memory;
-	  *addrp = addr;
-	  read_memory (addr, buf, register_size (gdbarch, IA64_IP_REGNUM));
-	  pc = extract_unsigned_integer (buf, 8);
-	}
+        {
+          read_memory (addr, buf, register_size (gdbarch, IA64_IP_REGNUM));
+          pc = extract_unsigned_integer (buf, 8);
+        }
       else if (cache->frameless)
 	{
-	  frame_unwind_register (next_frame, IA64_BR0_REGNUM, buf);
+	  get_frame_register (this_frame, IA64_BR0_REGNUM, buf);
 	  pc = extract_unsigned_integer (buf, 8);
 	}
       pc &= ~0xf;
-      store_unsigned_integer (valuep, 8, pc);
+      return frame_unwind_got_constant (this_frame, regnum, pc);
     }
+
   else if (regnum == IA64_PSR_REGNUM)
     {
-      /* We don't know how to get the complete previous PSR, but we need it for
-	 the slot information when we unwind the pc (pc is formed of IP register
-	 plus slot information from PSR).  To get the previous slot information, 
-	 we mask it off the return address.  */
+      /* We don't know how to get the complete previous PSR, but we need it
+         for the slot information when we unwind the pc (pc is formed of IP
+         register plus slot information from PSR).  To get the previous
+         slot information, we mask it off the return address.  */
       ULONGEST slot_num = 0;
-      CORE_ADDR pc= 0;
+      CORE_ADDR pc = 0;
       CORE_ADDR psr = 0;
       CORE_ADDR addr = cache->saved_regs[IA64_VRAP_REGNUM];
 
-      frame_unwind_register (next_frame, IA64_PSR_REGNUM, buf);
+      get_frame_register (this_frame, IA64_PSR_REGNUM, buf);
       psr = extract_unsigned_integer (buf, 8);
 
       if (addr != 0)
 	{
-	  *lvalp = lval_memory;
-	  *addrp = addr;
 	  read_memory (addr, buf, register_size (gdbarch, IA64_IP_REGNUM));
 	  pc = extract_unsigned_integer (buf, 8);
 	}
       else if (cache->frameless)
 	{
-	  CORE_ADDR pc;
-	  frame_unwind_register (next_frame, IA64_BR0_REGNUM, buf);
+	  get_frame_register (this_frame, IA64_BR0_REGNUM, buf);
 	  pc = extract_unsigned_integer (buf, 8);
 	}
       psr &= ~(3LL << 41);
       slot_num = pc & 0x3LL;
       psr |= (CORE_ADDR)slot_num << 41;
-      store_unsigned_integer (valuep, 8, psr);
+      return frame_unwind_got_constant (this_frame, regnum, psr);
     }
+
   else if (regnum == IA64_BR0_REGNUM)
     {
-      CORE_ADDR br0 = 0;
       CORE_ADDR addr = cache->saved_regs[IA64_BR0_REGNUM];
+
       if (addr != 0)
-	{
-	  *lvalp = lval_memory;
-	  *addrp = addr;
-	  read_memory (addr, buf, register_size (gdbarch, IA64_BR0_REGNUM));
-	  br0 = extract_unsigned_integer (buf, 8);
-	}
-      store_unsigned_integer (valuep, 8, br0);
+        return frame_unwind_got_memory (this_frame, regnum, addr);
+
+      return frame_unwind_got_constant (this_frame, regnum, 0);
     }
- else if ((regnum >= IA64_GR32_REGNUM && regnum <= IA64_GR127_REGNUM) ||
-	   (regnum >= V32_REGNUM && regnum <= V127_REGNUM))
+
+  else if ((regnum >= IA64_GR32_REGNUM && regnum <= IA64_GR127_REGNUM)
+           || (regnum >= V32_REGNUM && regnum <= V127_REGNUM))
     {
       CORE_ADDR addr = 0;
+
       if (regnum >= V32_REGNUM)
 	regnum = IA64_GR32_REGNUM + (regnum - V32_REGNUM);
       addr = cache->saved_regs[regnum];
       if (addr != 0)
-	{
-	  *lvalp = lval_memory;
-	  *addrp = addr;
-	  read_memory (addr, valuep, register_size (gdbarch, regnum));
-	}
-      else if (cache->frameless)
+        return frame_unwind_got_memory (this_frame, regnum, addr);
+
+      if (cache->frameless)
         {
-	  char r_valuep[MAX_REGISTER_SIZE];
-	  int  r_optim;
-	  int  r_realnum;
-	  enum lval_type r_lval;
-	  CORE_ADDR r_addr;
-	  CORE_ADDR prev_cfm, prev_bsp, prev_bof;
-	  CORE_ADDR addr = 0;
+          struct value *reg_val;
+          CORE_ADDR prev_cfm, prev_bsp, prev_bof;
+
+          /* FIXME: brobecker/2008-05-01: Doesn't this seem redundant
+             with the same code above?  */
 	  if (regnum >= V32_REGNUM)
 	    regnum = IA64_GR32_REGNUM + (regnum - V32_REGNUM);
-	  ia64_frame_prev_register (next_frame, this_cache, IA64_CFM_REGNUM,
-				    &r_optim, &r_lval, &r_addr, &r_realnum, r_valuep); 
-	  prev_cfm = extract_unsigned_integer (r_valuep, 8);
-	  ia64_frame_prev_register (next_frame, this_cache, IA64_BSP_REGNUM,
-				    &r_optim, &r_lval, &r_addr, &r_realnum, r_valuep);
-	  prev_bsp = extract_unsigned_integer (r_valuep, 8);
+          reg_val = ia64_frame_prev_register (this_frame, this_cache,
+                                              IA64_CFM_REGNUM);
+	  prev_cfm = extract_unsigned_integer (value_contents_all (reg_val),
+                                               8);
+	  reg_val = ia64_frame_prev_register (this_frame, this_cache,
+                                              IA64_BSP_REGNUM);
+	  prev_bsp = extract_unsigned_integer (value_contents_all (reg_val),
+                                               8);
 	  prev_bof = rse_address_add (prev_bsp, -(prev_cfm & 0x7f));
 
 	  addr = rse_address_add (prev_bof, (regnum - IA64_GR32_REGNUM));
-	  *lvalp = lval_memory;
-	  *addrp = addr;
-	  read_memory (addr, valuep, register_size (gdbarch, regnum));
+          return frame_unwind_got_memory (this_frame, regnum, addr);
         }
+      
+      return frame_unwind_got_constant (this_frame, regnum, 0);
     }
-  else
+
+  else /* All other registers.  */
     {
       CORE_ADDR addr = 0;
+
       if (IA64_FR32_REGNUM <= regnum && regnum <= IA64_FR127_REGNUM)
 	{
 	  /* Fetch floating point register rename base from current
@@ -1875,44 +1848,29 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
       /* If we have stored a memory address, access the register.  */
       addr = cache->saved_regs[regnum];
       if (addr != 0)
-	{
-	  *lvalp = lval_memory;
-	  *addrp = addr;
-	  read_memory (addr, valuep, register_size (gdbarch, regnum));
-	}
+        return frame_unwind_got_memory (this_frame, regnum, addr);
       /* Otherwise, punt and get the current value of the register.  */
       else 
-	frame_unwind_register (next_frame, regnum, valuep);
+        return frame_unwind_got_register (this_frame, regnum, regnum);
     }
-
-  if (gdbarch_debug >= 1)
-    fprintf_unfiltered (gdb_stdlog,
-			"regular prev register <%d> <%s> is 0x%s\n", regnum, 
-			(((unsigned) regnum <= IA64_NAT127_REGNUM)
-			 ? ia64_register_names[regnum] : "r??"), 
-			paddr_nz (extract_unsigned_integer (valuep, 8)));
 }
  
 static const struct frame_unwind ia64_frame_unwind =
 {
   NORMAL_FRAME,
   &ia64_frame_this_id,
-  &ia64_frame_prev_register
+  &ia64_frame_prev_register,
+  NULL,
+  default_frame_sniffer
 };
-
-static const struct frame_unwind *
-ia64_frame_sniffer (struct frame_info *next_frame)
-{
-  return &ia64_frame_unwind;
-}
 
 /* Signal trampolines.  */
 
 static void
-ia64_sigtramp_frame_init_saved_regs (struct frame_info *next_frame,
+ia64_sigtramp_frame_init_saved_regs (struct frame_info *this_frame,
 				     struct ia64_frame_cache *cache)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (next_frame));
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (this_frame));
 
   if (tdep->sigcontext_register_address)
     {
@@ -1951,7 +1909,7 @@ ia64_sigtramp_frame_init_saved_regs (struct frame_info *next_frame,
 }
 
 static struct ia64_frame_cache *
-ia64_sigtramp_frame_cache (struct frame_info *next_frame, void **this_cache)
+ia64_sigtramp_frame_cache (struct frame_info *this_frame, void **this_cache)
 {
   struct ia64_frame_cache *cache;
   CORE_ADDR addr;
@@ -1963,71 +1921,57 @@ ia64_sigtramp_frame_cache (struct frame_info *next_frame, void **this_cache)
 
   cache = ia64_alloc_frame_cache ();
 
-  frame_unwind_register (next_frame, sp_regnum, buf);
+  get_frame_register (this_frame, sp_regnum, buf);
   /* Note that frame size is hard-coded below.  We cannot calculate it
      via prologue examination.  */
   cache->base = extract_unsigned_integer (buf, 8) + 16;
 
-  frame_unwind_register (next_frame, IA64_BSP_REGNUM, buf);
+  get_frame_register (this_frame, IA64_BSP_REGNUM, buf);
   cache->bsp = extract_unsigned_integer (buf, 8);
 
-  frame_unwind_register (next_frame, IA64_CFM_REGNUM, buf);
+  get_frame_register (this_frame, IA64_CFM_REGNUM, buf);
   cache->cfm = extract_unsigned_integer (buf, 8);
   cache->sof = cache->cfm & 0x7f;
 
-  ia64_sigtramp_frame_init_saved_regs (next_frame, cache);
+  ia64_sigtramp_frame_init_saved_regs (this_frame, cache);
 
   *this_cache = cache;
   return cache;
 }
 
 static void
-ia64_sigtramp_frame_this_id (struct frame_info *next_frame,
-			       void **this_cache, struct frame_id *this_id)
+ia64_sigtramp_frame_this_id (struct frame_info *this_frame,
+			     void **this_cache, struct frame_id *this_id)
 {
   struct ia64_frame_cache *cache =
-    ia64_sigtramp_frame_cache (next_frame, this_cache);
+    ia64_sigtramp_frame_cache (this_frame, this_cache);
 
-  (*this_id) = frame_id_build_special (cache->base, frame_pc_unwind (next_frame), cache->bsp);
+  (*this_id) = frame_id_build_special (cache->base,
+                                       get_frame_pc (this_frame),
+                                       cache->bsp);
   if (gdbarch_debug >= 1)
     fprintf_unfiltered (gdb_stdlog,
-			"sigtramp frame id: code 0x%s, stack 0x%s, special 0x%s, next_frame %p\n",
+			"sigtramp frame id: code 0x%s, stack 0x%s, special 0x%s, this_frame %p\n",
 			paddr_nz (this_id->code_addr), 
 			paddr_nz (this_id->stack_addr), 
-			paddr_nz (cache->bsp), next_frame);
+			paddr_nz (cache->bsp), this_frame);
 }
 
-static void
-ia64_sigtramp_frame_prev_register (struct frame_info *next_frame,
-				   void **this_cache,
-				   int regnum, int *optimizedp,
-				   enum lval_type *lvalp, CORE_ADDR *addrp,
-				   int *realnump, gdb_byte *valuep)
+static struct value *
+ia64_sigtramp_frame_prev_register (struct frame_info *this_frame,
+				   void **this_cache, int regnum)
 {
-  char dummy_valp[MAX_REGISTER_SIZE];
   char buf[MAX_REGISTER_SIZE];
 
-  struct gdbarch *gdbarch = get_frame_arch (next_frame);
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
   struct ia64_frame_cache *cache =
-    ia64_sigtramp_frame_cache (next_frame, this_cache);
+    ia64_sigtramp_frame_cache (this_frame, this_cache);
 
   gdb_assert (regnum >= 0);
 
   if (!target_has_registers)
     error (_("No registers."));
 
-  *optimizedp = 0;
-  *addrp = 0;
-  *lvalp = not_lval;
-  *realnump = -1;
-
-  /* Rather than check each time if valuep is non-null, supply a dummy buffer
-     when valuep is not supplied.  */
-  if (!valuep)
-    valuep = dummy_valp;
-  
-  memset (valuep, 0, register_size (gdbarch, regnum));
- 
   if (regnum == IA64_IP_REGNUM)
     {
       CORE_ADDR pc = 0;
@@ -2035,81 +1979,70 @@ ia64_sigtramp_frame_prev_register (struct frame_info *next_frame,
 
       if (addr != 0)
 	{
-	  *lvalp = lval_memory;
-	  *addrp = addr;
 	  read_memory (addr, buf, register_size (gdbarch, IA64_IP_REGNUM));
 	  pc = extract_unsigned_integer (buf, 8);
 	}
       pc &= ~0xf;
-      store_unsigned_integer (valuep, 8, pc);
+      return frame_unwind_got_constant (this_frame, regnum, pc);
     }
- else if ((regnum >= IA64_GR32_REGNUM && regnum <= IA64_GR127_REGNUM) ||
-	   (regnum >= V32_REGNUM && regnum <= V127_REGNUM))
+
+  else if ((regnum >= IA64_GR32_REGNUM && regnum <= IA64_GR127_REGNUM)
+           || (regnum >= V32_REGNUM && regnum <= V127_REGNUM))
     {
       CORE_ADDR addr = 0;
+
       if (regnum >= V32_REGNUM)
 	regnum = IA64_GR32_REGNUM + (regnum - V32_REGNUM);
       addr = cache->saved_regs[regnum];
       if (addr != 0)
-	{
-	  *lvalp = lval_memory;
-	  *addrp = addr;
-	  read_memory (addr, valuep, register_size (gdbarch, regnum));
-	}
-    }
-  else
-    {
-      /* All other registers not listed above.  */
-      CORE_ADDR addr = cache->saved_regs[regnum];
-      if (addr != 0)
-	{
-	  *lvalp = lval_memory;
-	  *addrp = addr;
-	  read_memory (addr, valuep, register_size (gdbarch, regnum));
-	}
+        return frame_unwind_got_memory (this_frame, regnum, addr);
+
+      return frame_unwind_got_constant (this_frame, regnum, 0);
     }
 
-  if (gdbarch_debug >= 1)
-    fprintf_unfiltered (gdb_stdlog,
-			"sigtramp prev register <%s> is 0x%s\n",
-			(regnum < IA64_GR32_REGNUM
-			 || (regnum > IA64_GR127_REGNUM
-			     && regnum < LAST_PSEUDO_REGNUM))
-			 ? ia64_register_names[regnum]
-			 : (regnum < LAST_PSEUDO_REGNUM
-			    ? ia64_register_names[regnum-IA64_GR32_REGNUM+V32_REGNUM]
-			    : "OUT_OF_RANGE"),
-			paddr_nz (extract_unsigned_integer (valuep, 8)));
+  else  /* All other registers not listed above.  */
+    {
+      CORE_ADDR addr = cache->saved_regs[regnum];
+
+      if (addr != 0)
+        return frame_unwind_got_memory (this_frame, regnum, addr);
+
+      return frame_unwind_got_constant (this_frame, regnum, 0);
+    }
+}
+
+static int
+ia64_sigtramp_frame_sniffer (const struct frame_unwind *self,
+                             struct frame_info *this_frame,
+                             void **this_cache)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (this_frame));
+  if (tdep->pc_in_sigtramp)
+    {
+      CORE_ADDR pc = get_frame_pc (this_frame);
+
+      if (tdep->pc_in_sigtramp (pc))
+	return 1;
+    }
+
+  return 0;
 }
 
 static const struct frame_unwind ia64_sigtramp_frame_unwind =
 {
   SIGTRAMP_FRAME,
   ia64_sigtramp_frame_this_id,
-  ia64_sigtramp_frame_prev_register
+  ia64_sigtramp_frame_prev_register,
+  NULL,
+  ia64_sigtramp_frame_sniffer
 };
 
-static const struct frame_unwind *
-ia64_sigtramp_frame_sniffer (struct frame_info *next_frame)
-{
-  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (next_frame));
-  if (tdep->pc_in_sigtramp)
-    {
-      CORE_ADDR pc = frame_pc_unwind (next_frame);
-
-      if (tdep->pc_in_sigtramp (pc))
-	return &ia64_sigtramp_frame_unwind;
-    }
-
-  return NULL;
-}
 
 
 static CORE_ADDR
-ia64_frame_base_address (struct frame_info *next_frame, void **this_cache)
+ia64_frame_base_address (struct frame_info *this_frame, void **this_cache)
 {
-  struct ia64_frame_cache *cache =
-    ia64_frame_cache (next_frame, this_cache);
+  struct ia64_frame_cache *cache = ia64_frame_cache (this_frame, this_cache);
 
   return cache->base;
 }
@@ -2228,7 +2161,7 @@ ia64_access_reg (unw_addr_space_t as, unw_regnum_t uw_regnum, unw_word_t *val,
 {
   int regnum = ia64_uw2gdb_regnum (uw_regnum);
   unw_word_t bsp, sof, sol, cfm, psr, ip;
-  struct frame_info *next_frame = arg;
+  struct frame_info *this_frame = arg;
   long new_sof, old_sof;
   char buf[MAX_REGISTER_SIZE];
   
@@ -2240,9 +2173,9 @@ ia64_access_reg (unw_addr_space_t as, unw_regnum_t uw_regnum, unw_word_t *val,
       case UNW_REG_IP:
 	/* Libunwind expects to see the pc value which means the slot number
 	   from the psr must be merged with the ip word address.  */
-	frame_unwind_register (next_frame, IA64_IP_REGNUM, buf);
+	get_frame_register (this_frame, IA64_IP_REGNUM, buf);
 	ip = extract_unsigned_integer (buf, 8); 
-	frame_unwind_register (next_frame, IA64_PSR_REGNUM, buf);
+	get_frame_register (this_frame, IA64_PSR_REGNUM, buf);
 	psr = extract_unsigned_integer (buf, 8); 
 	*val = ip | ((psr >> 41) & 0x3);
 	break;
@@ -2251,9 +2184,9 @@ ia64_access_reg (unw_addr_space_t as, unw_regnum_t uw_regnum, unw_word_t *val,
 	/* Libunwind expects to see the beginning of the current register
 	   frame so we must account for the fact that ptrace() will return a value
 	   for bsp that points *after* the current register frame.  */
-	frame_unwind_register (next_frame, IA64_BSP_REGNUM, buf);
+	get_frame_register (this_frame, IA64_BSP_REGNUM, buf);
 	bsp = extract_unsigned_integer (buf, 8);
-	frame_unwind_register (next_frame, IA64_CFM_REGNUM, buf);
+	get_frame_register (this_frame, IA64_CFM_REGNUM, buf);
 	cfm = extract_unsigned_integer (buf, 8); 
 	sof = (cfm & 0x7f);
 	*val = ia64_rse_skip_regs (bsp, -sof);
@@ -2262,13 +2195,13 @@ ia64_access_reg (unw_addr_space_t as, unw_regnum_t uw_regnum, unw_word_t *val,
       case UNW_IA64_AR_BSPSTORE:
 	/* Libunwind wants bspstore to be after the current register frame.
 	   This is what ptrace() and gdb treats as the regular bsp value.  */
-	frame_unwind_register (next_frame, IA64_BSP_REGNUM, buf);
+	get_frame_register (this_frame, IA64_BSP_REGNUM, buf);
 	*val = extract_unsigned_integer (buf, 8);
 	break;
 
       default:
 	/* For all other registers, just unwind the value directly.  */
-	frame_unwind_register (next_frame, regnum, buf);
+	get_frame_register (this_frame, regnum, buf);
 	*val = extract_unsigned_integer (buf, 8); 
 	break;
     }
@@ -2288,12 +2221,12 @@ ia64_access_fpreg (unw_addr_space_t as, unw_regnum_t uw_regnum, unw_fpreg_t *val
 		   int write, void *arg)
 {
   int regnum = ia64_uw2gdb_regnum (uw_regnum);
-  struct frame_info *next_frame = arg;
+  struct frame_info *this_frame = arg;
   
   /* We never call any libunwind routines that need to write registers.  */
   gdb_assert (!write);
 
-  frame_unwind_register (next_frame, regnum, (char *) val);
+  get_frame_register (this_frame, regnum, (char *) val);
 
   return 0;
 }
@@ -2460,7 +2393,7 @@ get_kernel_table (unw_word_t ip, unw_dyn_info_t *di)
 			"segbase=0x%s, length=%s, gp=0x%s\n",
 			(char *) di->u.ti.name_ptr, 
 			paddr_nz (di->u.ti.segbase), 
-			paddr_u (di->u.ti.table_len), 
+			pulongest (di->u.ti.table_len), 
 			paddr_nz (di->gp));
   return 0;
 }
@@ -2569,7 +2502,7 @@ ia64_find_proc_info_x (unw_addr_space_t as, unw_word_t ip, unw_proc_info_t *pi,
 			    paddr_nz (di.u.ti.segbase), 
 			    paddr_nz (di.start_ip), paddr_nz (di.end_ip),
 			    paddr_nz (di.gp), 
-			    paddr_u (di.u.ti.table_len), 
+			    pulongest (di.u.ti.table_len), 
 			    paddr_nz ((CORE_ADDR)di.u.ti.table_data));
     }
   else
@@ -2586,7 +2519,7 @@ ia64_find_proc_info_x (unw_addr_space_t as, unw_word_t ip, unw_proc_info_t *pi,
 			    paddr_nz (di.u.rti.segbase), 
 			    paddr_nz (di.start_ip), paddr_nz (di.end_ip),
 			    paddr_nz (di.gp), 
-			    paddr_u (di.u.rti.table_len), 
+			    pulongest (di.u.rti.table_len), 
 			    paddr_nz (di.u.rti.table_data));
     }
 
@@ -2627,7 +2560,7 @@ ia64_get_dyn_info_list (unw_addr_space_t as,
       void *buf = NULL;
 
       text_sec = objfile->sections + SECT_OFF_TEXT (objfile);
-      ip = text_sec->addr;
+      ip = obj_section_addr (text_sec);
       ret = ia64_find_unwind_table (objfile, ip, &di, &buf);
       if (ret >= 0)
 	{
@@ -2655,18 +2588,15 @@ ia64_get_dyn_info_list (unw_addr_space_t as,
 /* Frame interface functions for libunwind.  */
 
 static void
-ia64_libunwind_frame_this_id (struct frame_info *next_frame, void **this_cache,
+ia64_libunwind_frame_this_id (struct frame_info *this_frame, void **this_cache,
 			      struct frame_id *this_id)
 {
+  struct frame_id id;
   char buf[8];
   CORE_ADDR bsp;
-  struct frame_id id;
-  CORE_ADDR prev_ip, addr;
-  int realnum, optimized;
-  enum lval_type lval;
 
 
-  libunwind_frame_this_id (next_frame, this_cache, &id);
+  libunwind_frame_this_id (this_frame, this_cache, &id);
   if (frame_id_eq (id, null_frame_id))
     {
       (*this_id) = null_frame_id;
@@ -2675,50 +2605,33 @@ ia64_libunwind_frame_this_id (struct frame_info *next_frame, void **this_cache,
 
   /* We must add the bsp as the special address for frame comparison 
      purposes.  */
-  frame_unwind_register (next_frame, IA64_BSP_REGNUM, buf);
+  get_frame_register (this_frame, IA64_BSP_REGNUM, buf);
   bsp = extract_unsigned_integer (buf, 8);
 
-  /* If the previous frame pc value is 0, then we are at the end of the stack
-     and don't want to unwind past this frame.  We return a null frame_id to
-     indicate this.  */
-  libunwind_frame_prev_register (next_frame, this_cache, IA64_IP_REGNUM, 
-		  		 &optimized, &lval, &addr, &realnum, buf);
-  prev_ip = extract_unsigned_integer (buf, 8);
-
-  if (prev_ip != 0)
-    (*this_id) = frame_id_build_special (id.stack_addr, id.code_addr, bsp);
-  else
-    (*this_id) = null_frame_id;
+  (*this_id) = frame_id_build_special (id.stack_addr, id.code_addr, bsp);
 
   if (gdbarch_debug >= 1)
     fprintf_unfiltered (gdb_stdlog,
-			"libunwind frame id: code 0x%s, stack 0x%s, special 0x%s, next_frame %p\n",
+			"libunwind frame id: code 0x%s, stack 0x%s, special 0x%s, this_frame %p\n",
 			paddr_nz (id.code_addr), paddr_nz (id.stack_addr), 
-			paddr_nz (bsp), next_frame);
+			paddr_nz (bsp), this_frame);
 }
 
-static void
-ia64_libunwind_frame_prev_register (struct frame_info *next_frame,
-				    void **this_cache,
-				    int regnum, int *optimizedp,
-				    enum lval_type *lvalp, CORE_ADDR *addrp,
-				    int *realnump, gdb_byte *valuep)
+static struct value *
+ia64_libunwind_frame_prev_register (struct frame_info *this_frame,
+				    void **this_cache, int regnum)
 {
   int reg = regnum;
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
+  struct value *val;
 
-  struct gdbarch *gdbarch = get_frame_arch (next_frame);
   if (VP0_REGNUM <= regnum && regnum <= VP63_REGNUM)
     reg = IA64_PR_REGNUM;
   else if (IA64_NAT0_REGNUM <= regnum && regnum <= IA64_NAT127_REGNUM)
     reg = IA64_UNAT_REGNUM;
 
   /* Let libunwind do most of the work.  */
-  libunwind_frame_prev_register (next_frame, this_cache, reg,
-				 optimizedp, lvalp, addrp, realnump, valuep);
-
-  /* No more to do if the value is not supposed to be supplied.  */
-  if (!valuep)
-    return;
+  val = libunwind_frame_prev_register (this_frame, this_cache, reg);
 
   if (VP0_REGNUM <= regnum && regnum <= VP63_REGNUM)
     {
@@ -2732,61 +2645,59 @@ ia64_libunwind_frame_prev_register (struct frame_info *next_frame,
 
 	  /* Fetch predicate register rename base from current frame
 	     marker for this frame.  */
-	  frame_unwind_register (next_frame, IA64_CFM_REGNUM, buf);
+	  get_frame_register (this_frame, IA64_CFM_REGNUM, buf);
 	  cfm = extract_unsigned_integer (buf, 8); 
 	  rrb_pr = (cfm >> 32) & 0x3f;
 	  
 	  /* Adjust the register number to account for register rotation.  */
-	  regnum = VP16_REGNUM 
-	    + ((regnum - VP16_REGNUM) + rrb_pr) % 48;
+	  regnum = VP16_REGNUM + ((regnum - VP16_REGNUM) + rrb_pr) % 48;
 	}
-      prN_val = extract_bit_field ((unsigned char *) valuep,
+      prN_val = extract_bit_field (value_contents_all (val),
 				   regnum - VP0_REGNUM, 1);
-      store_unsigned_integer (valuep, register_size (gdbarch, regnum), prN_val);
+      return frame_unwind_got_constant (this_frame, regnum, prN_val);
     }
+
   else if (IA64_NAT0_REGNUM <= regnum && regnum <= IA64_NAT127_REGNUM)
     {
       ULONGEST unatN_val;
 
-      unatN_val = extract_bit_field ((unsigned char *) valuep,
-                                   regnum - IA64_NAT0_REGNUM, 1);
-      store_unsigned_integer (valuep, register_size (gdbarch, regnum), 
-                              unatN_val);
+      unatN_val = extract_bit_field (value_contents_all (val),
+                                     regnum - IA64_NAT0_REGNUM, 1);
+      return frame_unwind_got_constant (this_frame, regnum, unatN_val);
     }
+
   else if (regnum == IA64_BSP_REGNUM)
     {
-      char cfm_valuep[MAX_REGISTER_SIZE];
-      int  cfm_optim;
-      int  cfm_realnum;
-      enum lval_type cfm_lval;
-      CORE_ADDR cfm_addr;
-      CORE_ADDR bsp, prev_cfm, prev_bsp;
+      struct value *cfm_val;
+      CORE_ADDR prev_bsp, prev_cfm;
 
-      /* We want to calculate the previous bsp as the end of the previous register stack frame.
-	 This corresponds to what the hardware bsp register will be if we pop the frame
-	 back which is why we might have been called.  We know that libunwind will pass us back
-	 the beginning of the current frame so we should just add sof to it. */
-      prev_bsp = extract_unsigned_integer (valuep, 8);
-      libunwind_frame_prev_register (next_frame, this_cache, IA64_CFM_REGNUM,
-				     &cfm_optim, &cfm_lval, &cfm_addr, &cfm_realnum, cfm_valuep);
-      prev_cfm = extract_unsigned_integer (cfm_valuep, 8);
+      /* We want to calculate the previous bsp as the end of the previous
+         register stack frame.  This corresponds to what the hardware bsp
+         register will be if we pop the frame back which is why we might
+         have been called.  We know that libunwind will pass us back the
+         beginning of the current frame so we should just add sof to it. */
+      prev_bsp = extract_unsigned_integer (value_contents_all (val), 8);
+      cfm_val = libunwind_frame_prev_register (this_frame, this_cache,
+                                               IA64_CFM_REGNUM);
+      prev_cfm = extract_unsigned_integer (value_contents_all (cfm_val), 8);
       prev_bsp = rse_address_add (prev_bsp, (prev_cfm & 0x7f));
 
-      store_unsigned_integer (valuep, register_size (gdbarch, regnum), 
-			      prev_bsp);
+      return frame_unwind_got_constant (this_frame, regnum, prev_bsp);
     }
+  else
+    return val;
+}
 
-  if (gdbarch_debug >= 1)
-    fprintf_unfiltered (gdb_stdlog,
-			"libunwind prev register <%s> is 0x%s\n",
-			(regnum < IA64_GR32_REGNUM
-			 || (regnum > IA64_GR127_REGNUM
-			     && regnum < LAST_PSEUDO_REGNUM))
-			 ? ia64_register_names[regnum]
-			 : (regnum < LAST_PSEUDO_REGNUM
-			    ? ia64_register_names[regnum-IA64_GR32_REGNUM+V32_REGNUM]
-			    : "OUT_OF_RANGE"),
-			paddr_nz (extract_unsigned_integer (valuep, 8)));
+static int
+ia64_libunwind_frame_sniffer (const struct frame_unwind *self,
+                              struct frame_info *this_frame,
+                              void **this_cache)
+{
+  if (libunwind_is_initialized ()
+      && libunwind_frame_sniffer (self, this_frame, this_cache))
+    return 1;
+
+  return 0;
 }
 
 static const struct frame_unwind ia64_libunwind_frame_unwind =
@@ -2795,22 +2706,13 @@ static const struct frame_unwind ia64_libunwind_frame_unwind =
   ia64_libunwind_frame_this_id,
   ia64_libunwind_frame_prev_register,
   NULL,
-  NULL,
-  NULL,
+  ia64_libunwind_frame_sniffer,
   libunwind_frame_dealloc_cache
 };
 
-static const struct frame_unwind *
-ia64_libunwind_frame_sniffer (struct frame_info *next_frame)
-{
-  if (libunwind_is_initialized () && libunwind_frame_sniffer (next_frame))
-    return &ia64_libunwind_frame_unwind;
-
-  return NULL;
-}
-
 static void
-ia64_libunwind_sigtramp_frame_this_id (struct frame_info *next_frame, void **this_cache,
+ia64_libunwind_sigtramp_frame_this_id (struct frame_info *this_frame,
+                                       void **this_cache,
 				       struct frame_id *this_id)
 {
   char buf[8];
@@ -2818,7 +2720,7 @@ ia64_libunwind_sigtramp_frame_this_id (struct frame_info *next_frame, void **thi
   struct frame_id id;
   CORE_ADDR prev_ip;
 
-  libunwind_frame_this_id (next_frame, this_cache, &id);
+  libunwind_frame_this_id (this_frame, this_cache, &id);
   if (frame_id_eq (id, null_frame_id))
     {
       (*this_id) = null_frame_id;
@@ -2827,7 +2729,7 @@ ia64_libunwind_sigtramp_frame_this_id (struct frame_info *next_frame, void **thi
 
   /* We must add the bsp as the special address for frame comparison 
      purposes.  */
-  frame_unwind_register (next_frame, IA64_BSP_REGNUM, buf);
+  get_frame_register (this_frame, IA64_BSP_REGNUM, buf);
   bsp = extract_unsigned_integer (buf, 8);
 
   /* For a sigtramp frame, we don't make the check for previous ip being 0.  */
@@ -2835,61 +2737,57 @@ ia64_libunwind_sigtramp_frame_this_id (struct frame_info *next_frame, void **thi
 
   if (gdbarch_debug >= 1)
     fprintf_unfiltered (gdb_stdlog,
-			"libunwind sigtramp frame id: code 0x%s, stack 0x%s, special 0x%s, next_frame %p\n",
+			"libunwind sigtramp frame id: code 0x%s, stack 0x%s, special 0x%s, this_frame %p\n",
 			paddr_nz (id.code_addr), paddr_nz (id.stack_addr), 
-			paddr_nz (bsp), next_frame);
+			paddr_nz (bsp), this_frame);
 }
 
-static void
-ia64_libunwind_sigtramp_frame_prev_register (struct frame_info *next_frame,
-					     void **this_cache,
-					     int regnum, int *optimizedp,
-					     enum lval_type *lvalp, CORE_ADDR *addrp,
-					     int *realnump, gdb_byte *valuep)
-
+static struct value *
+ia64_libunwind_sigtramp_frame_prev_register (struct frame_info *this_frame,
+					     void **this_cache, int regnum)
 {
-  gdb_byte buf[8];
-  CORE_ADDR prev_ip, addr;
-  int realnum, optimized;
-  enum lval_type lval;
-
+  struct value *prev_ip_val;
+  CORE_ADDR prev_ip;
 
   /* If the previous frame pc value is 0, then we want to use the SIGCONTEXT
      method of getting previous registers.  */
-  libunwind_frame_prev_register (next_frame, this_cache, IA64_IP_REGNUM, 
-		  		 &optimized, &lval, &addr, &realnum, buf);
-  prev_ip = extract_unsigned_integer (buf, 8);
+  prev_ip_val = libunwind_frame_prev_register (this_frame, this_cache,
+                                               IA64_IP_REGNUM);
+  prev_ip = extract_unsigned_integer (value_contents_all (prev_ip_val), 8);
 
   if (prev_ip == 0)
     {
       void *tmp_cache = NULL;
-      ia64_sigtramp_frame_prev_register (next_frame, &tmp_cache, regnum, optimizedp, lvalp,
-					 addrp, realnump, valuep);
+      return ia64_sigtramp_frame_prev_register (this_frame, &tmp_cache,
+                                                regnum);
     }
   else
-    ia64_libunwind_frame_prev_register (next_frame, this_cache, regnum, optimizedp, lvalp,
-					addrp, realnump, valuep);
+    return ia64_libunwind_frame_prev_register (this_frame, this_cache, regnum);
+}
+
+static int
+ia64_libunwind_sigtramp_frame_sniffer (const struct frame_unwind *self,
+                                       struct frame_info *this_frame,
+                                       void **this_cache)
+{
+  if (libunwind_is_initialized ())
+    {
+      if (libunwind_sigtramp_frame_sniffer (self, this_frame, this_cache))
+        return 1;
+      return 0;
+    }
+  else
+    return ia64_sigtramp_frame_sniffer (self, this_frame, this_cache);
 }
 
 static const struct frame_unwind ia64_libunwind_sigtramp_frame_unwind =
 {
   SIGTRAMP_FRAME,
   ia64_libunwind_sigtramp_frame_this_id,
-  ia64_libunwind_sigtramp_frame_prev_register
+  ia64_libunwind_sigtramp_frame_prev_register,
+  NULL,
+  ia64_libunwind_sigtramp_frame_sniffer
 };
-
-static const struct frame_unwind *
-ia64_libunwind_sigtramp_frame_sniffer (struct frame_info *next_frame)
-{
-  if (libunwind_is_initialized ())
-    {
-      if (libunwind_sigtramp_frame_sniffer (next_frame))
-        return &ia64_libunwind_sigtramp_frame_unwind;
-      return NULL;
-    }
-  else
-    return ia64_sigtramp_frame_sniffer (next_frame);
-}
 
 /* Set of libunwind callback acccessor functions.  */
 static unw_accessors_t ia64_unw_accessors =
@@ -3059,9 +2957,9 @@ ia64_store_return_value (struct type *type, struct regcache *regcache,
 }
   
 static enum return_value_convention
-ia64_return_value (struct gdbarch *gdbarch, struct type *valtype,
-		   struct regcache *regcache, gdb_byte *readbuf,
-		   const gdb_byte *writebuf)
+ia64_return_value (struct gdbarch *gdbarch, struct type *func_type,
+		   struct type *valtype, struct regcache *regcache,
+		   gdb_byte *readbuf, const gdb_byte *writebuf)
 {
   int struct_return = ia64_use_struct_convention (valtype);
 
@@ -3194,10 +3092,12 @@ ia64_find_global_pointer (CORE_ADDR faddr)
 
       if (osect < faddr_sect->objfile->sections_end)
 	{
-	  CORE_ADDR addr;
+	  CORE_ADDR addr, endaddr;
 
-	  addr = osect->addr;
-	  while (addr < osect->endaddr)
+	  addr = obj_section_addr (osect);
+	  endaddr = obj_section_endaddr (osect);
+
+	  while (addr < endaddr)
 	    {
 	      int status;
 	      LONGEST tag;
@@ -3255,10 +3155,12 @@ find_extant_func_descr (CORE_ADDR faddr)
 
       if (osect < faddr_sect->objfile->sections_end)
 	{
-	  CORE_ADDR addr;
+	  CORE_ADDR addr, endaddr;
 
-	  addr = osect->addr;
-	  while (addr < osect->endaddr)
+	  addr = obj_section_addr (osect);
+	  endaddr = obj_section_endaddr (osect);
+
+	  while (addr < endaddr)
 	    {
 	      int status;
 	      LONGEST faddr2;
@@ -3327,6 +3229,19 @@ ia64_convert_from_func_ptr_addr (struct gdbarch *gdbarch, CORE_ADDR addr,
   /* check if ADDR points to a function descriptor.  */
   if (s && strcmp (s->the_bfd_section->name, ".opd") == 0)
     return read_memory_unsigned_integer (addr, 8);
+
+  /* Normally, functions live inside a section that is executable.
+     So, if ADDR points to a non-executable section, then treat it
+     as a function descriptor and return the target address iff
+     the target address itself points to a section that is executable.  */
+  if (s && (s->the_bfd_section->flags & SEC_CODE) == 0)
+    {
+      CORE_ADDR pc = read_memory_unsigned_integer (addr, 8);
+      struct obj_section *pc_section = find_pc_section (pc);
+
+      if (pc_section && (pc_section->the_bfd_section->flags & SEC_CODE))
+        return pc;
+    }
 
   /* There are also descriptors embedded in vtables.  */
   if (s)
@@ -3508,24 +3423,24 @@ ia64_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 }
 
 static struct frame_id
-ia64_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
+ia64_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
 {
   char buf[8];
   CORE_ADDR sp, bsp;
 
-  frame_unwind_register (next_frame, sp_regnum, buf);
+  get_frame_register (this_frame, sp_regnum, buf);
   sp = extract_unsigned_integer (buf, 8);
 
-  frame_unwind_register (next_frame, IA64_BSP_REGNUM, buf);
+  get_frame_register (this_frame, IA64_BSP_REGNUM, buf);
   bsp = extract_unsigned_integer (buf, 8);
 
   if (gdbarch_debug >= 1)
     fprintf_unfiltered (gdb_stdlog,
 			"dummy frame id: code 0x%s, stack 0x%s, special 0x%s\n",
-			paddr_nz (frame_pc_unwind (next_frame)), 
+			paddr_nz (get_frame_pc (this_frame)),
 			paddr_nz (sp), paddr_nz (bsp));
 
-  return frame_id_build_special (sp, frame_pc_unwind (next_frame), bsp);
+  return frame_id_build_special (sp, get_frame_pc (this_frame), bsp);
 }
 
 static CORE_ADDR 
@@ -3615,17 +3530,19 @@ ia64_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   /* Settings for calling functions in the inferior.  */
   set_gdbarch_push_dummy_call (gdbarch, ia64_push_dummy_call);
   set_gdbarch_frame_align (gdbarch, ia64_frame_align);
-  set_gdbarch_unwind_dummy_id (gdbarch, ia64_unwind_dummy_id);
+  set_gdbarch_dummy_id (gdbarch, ia64_dummy_id);
 
   set_gdbarch_unwind_pc (gdbarch, ia64_unwind_pc);
 #ifdef HAVE_LIBUNWIND_IA64_H
-  frame_unwind_append_sniffer (gdbarch, ia64_libunwind_sigtramp_frame_sniffer);
-  frame_unwind_append_sniffer (gdbarch, ia64_libunwind_frame_sniffer);
+  frame_unwind_append_unwinder (gdbarch,
+                                &ia64_libunwind_sigtramp_frame_unwind);
+  frame_unwind_append_unwinder (gdbarch, &ia64_libunwind_frame_unwind);
+  frame_unwind_append_unwinder (gdbarch, &ia64_sigtramp_frame_unwind);
   libunwind_frame_set_descr (gdbarch, &ia64_libunwind_descr);
 #else
-  frame_unwind_append_sniffer (gdbarch, ia64_sigtramp_frame_sniffer);
+  frame_unwind_append_unwinder (gdbarch, &ia64_sigtramp_frame_unwind);
 #endif
-  frame_unwind_append_sniffer (gdbarch, ia64_frame_sniffer);
+  frame_unwind_append_unwinder (gdbarch, &ia64_frame_unwind);
   frame_base_set_default (gdbarch, &ia64_frame_base);
 
   /* Settings that should be unnecessary.  */

@@ -279,7 +279,7 @@ static void psymtab_to_symtab_1 (struct partial_symtab *, char *);
 
 static void add_block (struct block *, struct symtab *);
 
-static void add_symbol (struct symbol *, struct block *);
+static void add_symbol (struct symbol *, struct symtab *, struct block *);
 
 static int add_line (struct linetable *, int, CORE_ADDR, int);
 
@@ -559,6 +559,7 @@ static int
 parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 	      struct section_offsets *section_offsets, struct objfile *objfile)
 {
+  struct gdbarch *gdbarch = get_objfile_arch (objfile);
   const bfd_size_type external_sym_size = debug_swap->external_sym_size;
   void (*const swap_sym_in) (bfd *, void *, SYMR *) = debug_swap->swap_sym_in;
   char *name;
@@ -625,7 +626,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 	  /* It is a FORTRAN common block.  At least for SGI Fortran the
 	     address is not in the symbol; we need to fix it later in
 	     scan_file_globals.  */
-	  int bucket = hashname (DEPRECATED_SYMBOL_NAME (s));
+	  int bucket = hashname (SYMBOL_LINKAGE_NAME (s));
 	  SYMBOL_VALUE_CHAIN (s) = global_sym_chain[bucket];
 	  global_sym_chain[bucket] = s;
 	}
@@ -648,12 +649,12 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
     data:			/* Common code for symbols describing data */
       SYMBOL_DOMAIN (s) = VAR_DOMAIN;
       SYMBOL_CLASS (s) = class;
-      add_symbol (s, b);
+      add_symbol (s, top_stack->cur_st, b);
 
       /* Type could be missing if file is compiled without debugging info.  */
       if (SC_IS_UNDEF (sh->sc)
 	  || sh->sc == scNil || sh->index == indexNil)
-	SYMBOL_TYPE (s) = builtin_type (current_gdbarch)->nodebug_data_symbol;
+	SYMBOL_TYPE (s) = builtin_type (gdbarch)->nodebug_data_symbol;
       else
 	SYMBOL_TYPE (s) = parse_type (cur_fd, ax, sh->index, 0, bigend, name);
       /* Value of a data symbol is its memory address */
@@ -670,11 +671,12 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
       s = new_symbol (name);
 
       SYMBOL_DOMAIN (s) = VAR_DOMAIN;
+      SYMBOL_IS_ARGUMENT (s) = 1;
       switch (sh->sc)
 	{
 	case scRegister:
 	  /* Pass by value in register.  */
-	  SYMBOL_CLASS (s) = LOC_REGPARM;
+	  SYMBOL_CLASS (s) = LOC_REGISTER;
 	  svalue = gdbarch_ecoff_reg_to_regnum (current_gdbarch, svalue);
 	  break;
 	case scVar:
@@ -693,7 +695,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 	}
       SYMBOL_VALUE (s) = svalue;
       SYMBOL_TYPE (s) = parse_type (cur_fd, ax, sh->index, 0, bigend, name);
-      add_symbol (s, top_stack->cur_block);
+      add_symbol (s, top_stack->cur_st, top_stack->cur_block);
       break;
 
     case stLabel:		/* label, goes into current block */
@@ -702,7 +704,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
       SYMBOL_CLASS (s) = LOC_LABEL;	/* but not misused */
       SYMBOL_VALUE_ADDRESS (s) = (CORE_ADDR) sh->value;
       SYMBOL_TYPE (s) = mdebug_type_int;
-      add_symbol (s, top_stack->cur_block);
+      add_symbol (s, top_stack->cur_st, top_stack->cur_block);
       break;
 
     case stProc:		/* Procedure, usually goes into global block */
@@ -779,7 +781,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 	  else if (sh->value == top_stack->procadr)
 	    b = BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK);
 	}
-      add_symbol (s, b);
+      add_symbol (s, top_stack->cur_st, b);
 
       /* Make a type for the procedure itself */
       SYMBOL_TYPE (s) = lookup_function_type (t);
@@ -787,7 +789,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
       /* All functions in C++ have prototypes.  For C we don't have enough
          information in the debug info.  */
       if (SYMBOL_LANGUAGE (s) == language_cplus)
-	TYPE_FLAGS (SYMBOL_TYPE (s)) |= TYPE_FLAG_PROTOTYPED;
+	TYPE_PROTOTYPED (SYMBOL_TYPE (s)) = 1;
 
       /* Create and enter a new lexical context */
       b = new_block (FUNCTION_BLOCK);
@@ -1039,8 +1041,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 	       that too.  */
 	    if (TYPE_LENGTH (t) == TYPE_NFIELDS (t)
 		|| TYPE_LENGTH (t) == 0)
-	      TYPE_LENGTH (t) = 
-		gdbarch_int_bit (current_gdbarch) / HOST_CHAR_BIT;
+	      TYPE_LENGTH (t) = gdbarch_int_bit (gdbarch) / HOST_CHAR_BIT;
 	    for (ext_tsym = ext_sh + external_sym_size;
 		 ;
 		 ext_tsym += external_sym_size)
@@ -1053,33 +1054,32 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 		if (tsym.st != stMember)
 		  break;
 
-		FIELD_BITPOS (*f) = tsym.value;
+		SET_FIELD_BITPOS (*f, tsym.value);
 		FIELD_TYPE (*f) = t;
 		FIELD_NAME (*f) = debug_info->ss + cur_fdr->issBase + tsym.iss;
 		FIELD_BITSIZE (*f) = 0;
-		FIELD_STATIC_KIND (*f) = 0;
 
 		enum_sym = ((struct symbol *)
 			    obstack_alloc (&current_objfile->objfile_obstack,
 					   sizeof (struct symbol)));
 		memset (enum_sym, 0, sizeof (struct symbol));
-		DEPRECATED_SYMBOL_NAME (enum_sym) =
-		  obsavestring (f->name, strlen (f->name),
-				&current_objfile->objfile_obstack);
+		SYMBOL_SET_LINKAGE_NAME
+		  (enum_sym, obsavestring (f->name, strlen (f->name),
+					   &current_objfile->objfile_obstack));
 		SYMBOL_CLASS (enum_sym) = LOC_CONST;
 		SYMBOL_TYPE (enum_sym) = t;
 		SYMBOL_DOMAIN (enum_sym) = VAR_DOMAIN;
 		SYMBOL_VALUE (enum_sym) = tsym.value;
 		if (SYMBOL_VALUE (enum_sym) < 0)
 		  unsigned_enum = 0;
-		add_symbol (enum_sym, top_stack->cur_block);
+		add_symbol (enum_sym, top_stack->cur_st, top_stack->cur_block);
 
 		/* Skip the stMembers that we've handled. */
 		count++;
 		f++;
 	      }
 	    if (unsigned_enum)
-	      TYPE_FLAGS (t) |= TYPE_FLAG_UNSIGNED;
+	      TYPE_UNSIGNED (t) = 1;
 	  }
 	/* make this the current type */
 	top_stack->cur_type = t;
@@ -1093,7 +1093,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 	   do not create a symbol for it either.  */
 	if (TYPE_NFIELDS (t) == 0)
 	  {
-	    TYPE_FLAGS (t) |= TYPE_FLAG_STUB;
+	    TYPE_STUB (t) = 1;
 	    break;
 	  }
 
@@ -1102,7 +1102,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 	SYMBOL_CLASS (s) = LOC_TYPEDEF;
 	SYMBOL_VALUE (s) = 0;
 	SYMBOL_TYPE (s) = t;
-	add_symbol (s, top_stack->cur_block);
+	add_symbol (s, top_stack->cur_st, top_stack->cur_block);
 	break;
 
 	/* End of local variables shared by struct, union, enum, and
@@ -1164,7 +1164,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 	  SYMBOL_VALUE (s) = (long) e;
 	  e->numargs = top_stack->numargs;
 	  e->pdr.framereg = -1;
-	  add_symbol (s, top_stack->cur_block);
+	  add_symbol (s, top_stack->cur_st, top_stack->cur_block);
 
 	  /* f77 emits proc-level with address bounds==[0,0],
 	     So look for such child blocks, and patch them.  */
@@ -1201,18 +1201,11 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 		      if (iparams == nparams)
 			break;
 
-		      switch (SYMBOL_CLASS (sym))
+		      if (SYMBOL_IS_ARGUMENT (sym))
 			{
-			case LOC_ARG:
-			case LOC_REF_ARG:
-			case LOC_REGPARM:
-			case LOC_REGPARM_ADDR:
 			  TYPE_FIELD_TYPE (ftype, iparams) = SYMBOL_TYPE (sym);
 			  TYPE_FIELD_ARTIFICIAL (ftype, iparams) = 0;
 			  iparams++;
-			  break;
-			default:
-			  break;
 			}
 		    }
 		}
@@ -1247,11 +1240,10 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
     case stMember:		/* member of struct or union */
       f = &TYPE_FIELDS (top_stack->cur_type)[top_stack->cur_field++];
       FIELD_NAME (*f) = name;
-      FIELD_BITPOS (*f) = sh->value;
+      SET_FIELD_BITPOS (*f, sh->value);
       bitsize = 0;
       FIELD_TYPE (*f) = parse_type (cur_fd, ax, sh->index, &bitsize, bigend, name);
       FIELD_BITSIZE (*f) = bitsize;
-      FIELD_STATIC_KIND (*f) = 0;
       break;
 
     case stIndirect:		/* forward declaration on Irix5 */
@@ -1303,7 +1295,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
       SYMBOL_CLASS (s) = LOC_TYPEDEF;
       SYMBOL_BLOCK_VALUE (s) = top_stack->cur_block;
       SYMBOL_TYPE (s) = t;
-      add_symbol (s, top_stack->cur_block);
+      add_symbol (s, top_stack->cur_st, top_stack->cur_block);
 
       /* Incomplete definitions of structs should not get a name.  */
       if (TYPE_NAME (SYMBOL_TYPE (s)) == NULL
@@ -1334,7 +1326,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 	         for anything except pointers or functions.  */
 	    }
 	  else
-	    TYPE_NAME (SYMBOL_TYPE (s)) = DEPRECATED_SYMBOL_NAME (s);
+	    TYPE_NAME (SYMBOL_TYPE (s)) = SYMBOL_LINKAGE_NAME (s);
 	}
       break;
 
@@ -1783,12 +1775,9 @@ upgrade_type (int fd, struct type **tpp, int tq, union aux_ext *ax, int bigend,
          ignore the erroneous bitsize from the auxiliary entry safely.
          dbx seems to ignore it too.  */
 
-      /* TYPE_FLAG_TARGET_STUB now takes care of the zero TYPE_LENGTH
-         problem.  */
+      /* TYPE_TARGET_STUB now takes care of the zero TYPE_LENGTH problem.  */
       if (TYPE_LENGTH (*tpp) == 0)
-	{
-	  TYPE_FLAGS (t) |= TYPE_FLAG_TARGET_STUB;
-	}
+	TYPE_TARGET_STUB (t) = 1;
 
       *tpp = t;
       return 4 + off;
@@ -1825,6 +1814,7 @@ static void
 parse_procedure (PDR *pr, struct symtab *search_symtab,
 		 struct partial_symtab *pst)
 {
+  struct gdbarch *gdbarch = get_objfile_arch (pst->objfile);
   struct symbol *s, *i;
   struct block *b;
   struct mdebug_extra_func_info *e;
@@ -1879,7 +1869,7 @@ parse_procedure (PDR *pr, struct symtab *search_symtab,
          the same name exists, lookup_symbol will eventually read in the symtab
          for the global function and clobber cur_fdr.  */
       FDR *save_cur_fdr = cur_fdr;
-      s = lookup_symbol (sh_name, NULL, VAR_DOMAIN, 0, NULL);
+      s = lookup_symbol (sh_name, NULL, VAR_DOMAIN, 0);
       cur_fdr = save_cur_fdr;
 #else
       s = mylookup_symbol
@@ -1909,7 +1899,7 @@ parse_procedure (PDR *pr, struct symtab *search_symtab,
       SYMBOL_CLASS (s) = LOC_BLOCK;
       /* Donno its type, hope int is ok */
       SYMBOL_TYPE (s) = lookup_function_type (mdebug_type_int);
-      add_symbol (s, top_stack->cur_block);
+      add_symbol (s, top_stack->cur_st, top_stack->cur_block);
       /* Wont have symbols for this one */
       b = new_block (2);
       SYMBOL_BLOCK_VALUE (s) = b;
@@ -1962,7 +1952,7 @@ parse_procedure (PDR *pr, struct symtab *search_symtab,
   if (processing_gcc_compilation == 0
       && found_ecoff_debugging_info == 0
       && TYPE_CODE (TYPE_TARGET_TYPE (SYMBOL_TYPE (s))) == TYPE_CODE_VOID)
-    SYMBOL_TYPE (s) = builtin_type (current_gdbarch)->nodebug_text_symbol;
+    SYMBOL_TYPE (s) = builtin_type (gdbarch)->nodebug_text_symbol;
 }
 
 /* Parse the external symbol ES. Just call parse_symbol() after
@@ -2216,7 +2206,7 @@ record_minimal_symbol (const char *name, const CORE_ADDR address,
         bfd_section = NULL;
     }
 
-  prim_record_minimal_symbol_and_info (name, address, ms_type, NULL,
+  prim_record_minimal_symbol_and_info (name, address, ms_type,
                                        section, bfd_section, objfile);
 }
 
@@ -2226,6 +2216,7 @@ record_minimal_symbol (const char *name, const CORE_ADDR address,
 static void
 parse_partial_symbols (struct objfile *objfile)
 {
+  struct gdbarch *gdbarch = get_objfile_arch (objfile);
   const bfd_size_type external_sym_size = debug_swap->external_sym_size;
   const bfd_size_type external_rfd_size = debug_swap->external_rfd_size;
   const bfd_size_type external_ext_size = debug_swap->external_ext_size;
@@ -2849,8 +2840,7 @@ parse_partial_symbols (struct objfile *objfile)
 			 don't relocate it.  */
 
 		      if (sh.value == 0
-			  && gdbarch_sofun_address_maybe_missing
-			      (current_gdbarch))
+			  && gdbarch_sofun_address_maybe_missing (gdbarch))
 			{
 			  textlow_not_set = 1;
 			  valu = 0;
@@ -2999,9 +2989,9 @@ parse_partial_symbols (struct objfile *objfile)
 		      case 'S':
 			sh.value += ANOFFSET (objfile->section_offsets, SECT_OFF_DATA (objfile));
 
-			if (gdbarch_static_transform_name_p (current_gdbarch))
+			if (gdbarch_static_transform_name_p (gdbarch))
 			  namestring = gdbarch_static_transform_name
-					 (current_gdbarch, namestring);
+					 (gdbarch, namestring);
 
 			add_psymbol_to_list (namestring, p - namestring,
 					     VAR_DOMAIN, LOC_STATIC,
@@ -3230,8 +3220,7 @@ parse_partial_symbols (struct objfile *objfile)
 		       necessary if a module compiled without
 		       debugging info follows this module.  */
 		    if (pst
-			&& gdbarch_sofun_address_maybe_missing
-			     (current_gdbarch))
+			&& gdbarch_sofun_address_maybe_missing (gdbarch))
 		      {
 			pst = (struct partial_symtab *) 0;
 			includes_used = 0;
@@ -3346,7 +3335,7 @@ parse_partial_symbols (struct objfile *objfile)
 
 		case stStaticProc:
 		  prim_record_minimal_symbol_and_info (name, sh.value,
-						       mst_file_text, NULL,
+						       mst_file_text,
 						       SECT_OFF_TEXT (objfile), NULL,
 						       objfile);
 
@@ -3432,13 +3421,13 @@ parse_partial_symbols (struct objfile *objfile)
 		case stStatic:	/* Variable */
 		  if (SC_IS_DATA (sh.sc))
 		    prim_record_minimal_symbol_and_info (name, sh.value,
-							 mst_file_data, NULL,
+							 mst_file_data,
 							 SECT_OFF_DATA (objfile),
 							 NULL,
 							 objfile);
 		  else
 		    prim_record_minimal_symbol_and_info (name, sh.value,
-							 mst_file_bss, NULL,
+							 mst_file_bss,
 							 SECT_OFF_BSS (objfile),
 							 NULL,
 							 objfile);
@@ -4423,10 +4412,10 @@ mylookup_symbol (char *name, struct block *block,
   inc = name[0];
   ALL_BLOCK_SYMBOLS (block, iter, sym)
     {
-      if (DEPRECATED_SYMBOL_NAME (sym)[0] == inc
+      if (SYMBOL_LINKAGE_NAME (sym)[0] == inc
 	  && SYMBOL_DOMAIN (sym) == domain
 	  && SYMBOL_CLASS (sym) == class
-	  && strcmp (DEPRECATED_SYMBOL_NAME (sym), name) == 0)
+	  && strcmp (SYMBOL_LINKAGE_NAME (sym), name) == 0)
 	return sym;
     }
 
@@ -4440,8 +4429,9 @@ mylookup_symbol (char *name, struct block *block,
 /* Add a new symbol S to a block B.  */
 
 static void
-add_symbol (struct symbol *s, struct block *b)
+add_symbol (struct symbol *s, struct symtab *symtab, struct block *b)
 {
+  SYMBOL_SYMTAB (s) = symtab;
   dict_add_symbol (BLOCK_DICT (b), s);
 }
 

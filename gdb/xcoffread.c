@@ -834,7 +834,7 @@ enter_line_range (struct subfile *subfile, unsigned beginoffset, unsigned endoff
   namestr = (NAME); \
   if (namestr[0] == '.') ++namestr; \
   prim_record_minimal_symbol_and_info (namestr, (ADDR), (TYPE), \
-				       (char *)NULL, (SECTION), (asection *)NULL, (OBJFILE)); \
+				       (SECTION), (asection *)NULL, (OBJFILE)); \
   misc_func_recorded = 1;					\
 }
 
@@ -1427,7 +1427,7 @@ read_xcoff_symtab (struct partial_symtab *pst)
 
 
 #define	SYMNAME_ALLOC(NAME, ALLOCED)	\
-  (ALLOCED) ? (NAME) : obsavestring ((NAME), strlen (NAME), &objfile->objfile_obstack);
+  ((ALLOCED) ? (NAME) : obsavestring ((NAME), strlen (NAME), &objfile->objfile_obstack))
 
 
 /* process one xcoff symbol. */
@@ -1435,6 +1435,7 @@ read_xcoff_symtab (struct partial_symtab *pst)
 static struct symbol *
 process_xcoff_symbol (struct coff_symbol *cs, struct objfile *objfile)
 {
+  struct gdbarch *gdbarch = get_objfile_arch (objfile);
   struct symbol onesymbol;
   struct symbol *sym = &onesymbol;
   struct symbol *sym2 = NULL;
@@ -1473,8 +1474,8 @@ process_xcoff_symbol (struct coff_symbol *cs, struct objfile *objfile)
          will be patched with the type from its stab entry later on in
          patch_block_stabs (), unless the file was compiled without -g.  */
 
-      DEPRECATED_SYMBOL_NAME (sym) = SYMNAME_ALLOC (name, symname_alloced);
-      SYMBOL_TYPE (sym) = builtin_type (current_gdbarch)->nodebug_text_symbol;
+      SYMBOL_SET_LINKAGE_NAME (sym, SYMNAME_ALLOC (name, symname_alloced));
+      SYMBOL_TYPE (sym) = builtin_type (gdbarch)->nodebug_text_symbol;
 
       SYMBOL_CLASS (sym) = LOC_BLOCK;
       SYMBOL_DUP (sym, sym2);
@@ -1487,7 +1488,7 @@ process_xcoff_symbol (struct coff_symbol *cs, struct objfile *objfile)
   else
     {
       /* In case we can't figure out the type, provide default. */
-      SYMBOL_TYPE (sym) = builtin_type (current_gdbarch)->nodebug_data_symbol;
+      SYMBOL_TYPE (sym) = builtin_type (gdbarch)->nodebug_data_symbol;
 
       switch (cs->c_sclass)
 	{
@@ -2118,6 +2119,7 @@ function_outside_compilation_unit_complaint (const char *arg1)
 static void
 scan_xcoff_symtab (struct objfile *objfile)
 {
+  struct gdbarch *gdbarch = get_objfile_arch (objfile);
   CORE_ADDR toc_offset = 0;	/* toc offset value in data section. */
   char *filestring = NULL;
 
@@ -2283,7 +2285,7 @@ scan_xcoff_symtab (struct objfile *objfile)
 		      prim_record_minimal_symbol_and_info
 			(namestring, symbol.n_value,
 			 sclass == C_HIDEXT ? mst_file_data : mst_data,
-			 NULL, secnum_to_section (symbol.n_scnum, objfile),
+			 secnum_to_section (symbol.n_scnum, objfile),
 			 NULL, objfile);
 		    break;
 
@@ -2358,7 +2360,7 @@ scan_xcoff_symtab (struct objfile *objfile)
 		      prim_record_minimal_symbol_and_info
 			(namestring, symbol.n_value,
 			 sclass == C_HIDEXT ? mst_file_data : mst_data,
-			 NULL, secnum_to_section (symbol.n_scnum, objfile),
+			 secnum_to_section (symbol.n_scnum, objfile),
 			 NULL, objfile);
 		    break;
 		  }
@@ -2375,7 +2377,7 @@ scan_xcoff_symtab (struct objfile *objfile)
 		      prim_record_minimal_symbol_and_info
 			(namestring, symbol.n_value,
 			 sclass == C_HIDEXT ? mst_file_bss : mst_bss,
-			 NULL, secnum_to_section (symbol.n_scnum, objfile),
+			 secnum_to_section (symbol.n_scnum, objfile),
 			 NULL, objfile);
 		    break;
 		  }
@@ -2582,9 +2584,9 @@ scan_xcoff_symtab (struct objfile *objfile)
 	      case 'S':
 		symbol.n_value += ANOFFSET (objfile->section_offsets, SECT_OFF_DATA (objfile));
 
-		if (gdbarch_static_transform_name_p (current_gdbarch))
+		if (gdbarch_static_transform_name_p (gdbarch))
 		  namestring = gdbarch_static_transform_name
-				 (current_gdbarch, namestring);
+				 (gdbarch, namestring);
 
 		add_psymbol_to_list (namestring, p - namestring,
 				     VAR_DOMAIN, LOC_STATIC,
@@ -2753,6 +2755,14 @@ scan_xcoff_symtab (struct objfile *objfile)
 		    function_outside_compilation_unit_complaint (name);
 		    xfree (name);
 		  }
+
+		/* We need only the minimal symbols for these
+		   loader-generated definitions.   Keeping the global
+		   symbols leads to "in psymbols but not in symbols"
+		   errors. */
+		if (strncmp (namestring, "@FIX", 4) == 0)
+		  continue;
+
 		symbol.n_value += ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
 		add_psymbol_to_list (namestring, p - namestring,
 				     VAR_DOMAIN, LOC_BLOCK,

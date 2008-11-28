@@ -105,14 +105,14 @@ readline_line_completion_function (const char *text, int matches)
 /* This can be used for functions which don't want to complete on symbols
    but don't want to complete on anything else either.  */
 char **
-noop_completer (char *text, char *prefix)
+noop_completer (struct cmd_list_element *ignore, char *text, char *prefix)
 {
   return NULL;
 }
 
 /* Complete on filenames.  */
 char **
-filename_completer (char *text, char *word)
+filename_completer (struct cmd_list_element *ignore, char *text, char *word)
 {
   int subsequent_name;
   char **return_val;
@@ -195,7 +195,7 @@ filename_completer (char *text, char *word)
 
    This is intended to be used in commands that set breakpoints etc.  */
 char **
-location_completer (char *text, char *word)
+location_completer (struct cmd_list_element *ignore, char *text, char *word)
 {
   int n_syms = 0, n_files = 0;
   char ** fn_list = NULL;
@@ -338,13 +338,96 @@ location_completer (char *text, char *word)
   return list;
 }
 
-/* Complete on command names.  Used by "help".  */
-char **
-command_completer (char *text, char *word)
+/* Helper for expression_completer which recursively counts the number
+   of named fields in a structure or union type.  */
+static int
+count_struct_fields (struct type *type)
 {
-  return complete_on_cmdlist (cmdlist, text, word);
+  int i, result = 0;
+
+  CHECK_TYPEDEF (type);
+  for (i = 0; i < TYPE_NFIELDS (type); ++i)
+    {
+      if (i < TYPE_N_BASECLASSES (type))
+	result += count_struct_fields (TYPE_BASECLASS (type, i));
+      else if (TYPE_FIELD_NAME (type, i))
+	++result;
+    }
+  return result;
 }
 
+/* Helper for expression_completer which recursively adds field names
+   from TYPE, a struct or union type, to the array OUTPUT.  This
+   function assumes that OUTPUT is correctly-sized.  */
+static void
+add_struct_fields (struct type *type, int *nextp, char **output,
+		   char *fieldname, int namelen)
+{
+  int i;
+
+  CHECK_TYPEDEF (type);
+  for (i = 0; i < TYPE_NFIELDS (type); ++i)
+    {
+      if (i < TYPE_N_BASECLASSES (type))
+	add_struct_fields (TYPE_BASECLASS (type, i), nextp, output,
+			   fieldname, namelen);
+      else if (TYPE_FIELD_NAME (type, i)
+	       && ! strncmp (TYPE_FIELD_NAME (type, i), fieldname, namelen))
+	{
+	  output[*nextp] = xstrdup (TYPE_FIELD_NAME (type, i));
+	  ++*nextp;
+	}
+    }
+}
+
+/* Complete on expressions.  Often this means completing on symbol
+   names, but some language parsers also have support for completing
+   field names.  */
+char **
+expression_completer (struct cmd_list_element *ignore, char *text, char *word)
+{
+  struct type *type;
+  char *fieldname, *p;
+
+  /* Perform a tentative parse of the expression, to see whether a
+     field completion is required.  */
+  fieldname = NULL;
+  type = parse_field_expression (text, &fieldname);
+  if (fieldname && type)
+    {
+      for (;;)
+	{
+	  CHECK_TYPEDEF (type);
+	  if (TYPE_CODE (type) != TYPE_CODE_PTR
+	      && TYPE_CODE (type) != TYPE_CODE_REF)
+	    break;
+	  type = TYPE_TARGET_TYPE (type);
+	}
+
+      if (TYPE_CODE (type) == TYPE_CODE_UNION
+	  || TYPE_CODE (type) == TYPE_CODE_STRUCT)
+	{
+	  int alloc = count_struct_fields (type);
+	  int flen = strlen (fieldname);
+	  int out = 0;
+	  char **result = (char **) xmalloc ((alloc + 1) * sizeof (char *));
+
+	  add_struct_fields (type, &out, result, fieldname, flen);
+	  result[out] = NULL;
+	  return result;
+	}
+    }
+
+  /* Commands which complete on locations want to see the entire
+     argument.  */
+  for (p = word;
+       p > text && p[-1] != ' ' && p[-1] != '\t';
+       p--)
+    ;
+
+  /* Not ideal but it is what we used to do before... */
+  return location_completer (ignore, p, word);
+}
 
 /* Here are some useful test cases for completion.  FIXME: These should
    be put in the test suite.  They should be tested with both M-? and TAB.
@@ -376,10 +459,16 @@ command_completer (char *text, char *word)
 
    LINE_BUFFER is available to be looked at; it contains the entire text
    of the line.  POINT is the offset in that line of the cursor.  You
-   should pretend that the line ends at POINT.  */
+   should pretend that the line ends at POINT.
+   
+   FOR_HELP is true when completing a 'help' command.  In this case,
+   once sub-command completions are exhausted, we simply return NULL.
+   When FOR_HELP is false, we will call a sub-command's completion
+   function.  */
 
-char **
-complete_line (const char *text, char *line_buffer, int point)
+static char **
+complete_line_internal (const char *text, char *line_buffer, int point,
+			int for_help)
 {
   char **list = NULL;
   char *tmp_command, *p;
@@ -492,6 +581,8 @@ complete_line (const char *text, char *line_buffer, int point)
 		  rl_completer_word_break_characters =
 		    gdb_completer_command_word_break_characters;
 		}
+	      else if (for_help)
+		list = NULL;
 	      else if (c->enums)
 		{
 		  list = complete_on_enum (c->enums, p, word);
@@ -530,7 +621,7 @@ complete_line (const char *text, char *line_buffer, int point)
 			   p--)
 			;
 		    }
-		  list = (*c->completer) (p, word);
+		  list = (*c->completer) (c, p, word);
 		}
 	    }
 	  else
@@ -559,6 +650,8 @@ complete_line (const char *text, char *line_buffer, int point)
 		gdb_completer_command_word_break_characters;
 	    }
 	}
+      else if (for_help)
+	list = NULL;
       else
 	{
 	  /* There is non-whitespace beyond the command.  */
@@ -596,12 +689,27 @@ complete_line (const char *text, char *line_buffer, int point)
 		       p--)
 		    ;
 		}
-	      list = (*c->completer) (p, word);
+	      list = (*c->completer) (c, p, word);
 	    }
 	}
     }
 
   return list;
+}
+
+/* Like complete_line_internal, but always passes 0 for FOR_HELP.  */
+
+char **
+complete_line (const char *text, char *line_buffer, int point)
+{
+  return complete_line_internal (text, line_buffer, point, 0);
+}
+
+/* Complete on command names.  Used by "help".  */
+char **
+command_completer (struct cmd_list_element *ignore, char *text, char *word)
+{
+  return complete_line_internal (word, text, strlen (text), 1);
 }
 
 /* Generate completions one by one for the completer.  Each time we are

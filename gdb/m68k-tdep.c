@@ -120,7 +120,7 @@ m68k_register_type (struct gdbarch *gdbarch, int regnum)
 	}
 
       if (regnum == M68K_FPI_REGNUM)
-	return builtin_type_void_func_ptr;
+	return builtin_type (gdbarch)->builtin_func_ptr;
 
       if (regnum == M68K_FPC_REGNUM || regnum == M68K_FPS_REGNUM)
 	return builtin_type_int32;
@@ -132,10 +132,10 @@ m68k_register_type (struct gdbarch *gdbarch, int regnum)
     }
 
   if (regnum == gdbarch_pc_regnum (gdbarch))
-    return builtin_type_void_func_ptr;
+    return builtin_type (gdbarch)->builtin_func_ptr;
 
   if (regnum >= M68K_A0_REGNUM && regnum <= M68K_A0_REGNUM + 7)
-    return builtin_type_void_data_ptr;
+    return builtin_type (gdbarch)->builtin_data_ptr;
 
   if (regnum == M68K_PS_REGNUM)
     return m68k_ps_type;
@@ -372,9 +372,9 @@ m68k_reg_struct_return_p (struct gdbarch *gdbarch, struct type *type)
    from WRITEBUF into REGCACHE.  */
 
 static enum return_value_convention
-m68k_return_value (struct gdbarch *gdbarch, struct type *type,
-		   struct regcache *regcache, gdb_byte *readbuf,
-		   const gdb_byte *writebuf)
+m68k_return_value (struct gdbarch *gdbarch, struct type *func_type,
+		   struct type *type, struct regcache *regcache,
+		   gdb_byte *readbuf, const gdb_byte *writebuf)
 {
   enum type_code code = TYPE_CODE (type);
 
@@ -407,9 +407,9 @@ m68k_return_value (struct gdbarch *gdbarch, struct type *type,
 }
 
 static enum return_value_convention
-m68k_svr4_return_value (struct gdbarch *gdbarch, struct type *type,
-			struct regcache *regcache, gdb_byte *readbuf,
-			const gdb_byte *writebuf)
+m68k_svr4_return_value (struct gdbarch *gdbarch, struct type *func_type,
+			struct type *type, struct regcache *regcache,
+			gdb_byte *readbuf, const gdb_byte *writebuf)
 {
   enum type_code code = TYPE_CODE (type);
 
@@ -446,7 +446,7 @@ m68k_svr4_return_value (struct gdbarch *gdbarch, struct type *type,
   if (code == TYPE_CODE_STRUCT && TYPE_NFIELDS (type) == 1)
     {
       type = check_typedef (TYPE_FIELD_TYPE (type, 0));
-      return m68k_svr4_return_value (gdbarch, type, regcache,
+      return m68k_svr4_return_value (gdbarch, func_type, type, regcache,
 				     readbuf, writebuf);
     }
 
@@ -804,7 +804,7 @@ m68k_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
   if (op == P_LEA_PC_A5)
     {
       /* lea (%pc,N),%a5 */
-      return pc + 6;
+      return pc + 8;
     }
 
   return pc;
@@ -832,13 +832,13 @@ m68k_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
   gdb_byte buf[8];
 
   frame_unwind_register (next_frame, gdbarch_pc_regnum (gdbarch), buf);
-  return extract_typed_address (buf, builtin_type_void_func_ptr);
+  return extract_typed_address (buf, builtin_type (gdbarch)->builtin_func_ptr);
 }
 
 /* Normal frames.  */
 
 static struct m68k_frame_cache *
-m68k_frame_cache (struct frame_info *next_frame, void **this_cache)
+m68k_frame_cache (struct frame_info *this_frame, void **this_cache)
 {
   struct m68k_frame_cache *cache;
   gdb_byte buf[4];
@@ -859,7 +859,7 @@ m68k_frame_cache (struct frame_info *next_frame, void **this_cache)
      They (usually) share their frame pointer with the frame that was
      in progress when the signal occurred.  */
 
-  frame_unwind_register (next_frame, M68K_FP_REGNUM, buf);
+  get_frame_register (this_frame, M68K_FP_REGNUM, buf);
   cache->base = extract_unsigned_integer (buf, 4);
   if (cache->base == 0)
     return cache;
@@ -867,10 +867,10 @@ m68k_frame_cache (struct frame_info *next_frame, void **this_cache)
   /* For normal frames, %pc is stored at 4(%fp).  */
   cache->saved_regs[M68K_PC_REGNUM] = 4;
 
-  cache->pc = frame_func_unwind (next_frame, NORMAL_FRAME);
+  cache->pc = get_frame_func (this_frame);
   if (cache->pc != 0)
-    m68k_analyze_prologue (get_frame_arch (next_frame), cache->pc,
-			   frame_pc_unwind (next_frame), cache);
+    m68k_analyze_prologue (get_frame_arch (this_frame), cache->pc,
+			   get_frame_pc (this_frame), cache);
 
   if (cache->locals < 0)
     {
@@ -882,7 +882,7 @@ m68k_frame_cache (struct frame_info *next_frame, void **this_cache)
 	 frame by looking at the stack pointer.  For truly "frameless"
 	 functions this might work too.  */
 
-      frame_unwind_register (next_frame, M68K_SP_REGNUM, buf);
+      get_frame_register (this_frame, M68K_SP_REGNUM, buf);
       cache->base = extract_unsigned_integer (buf, 4) + cache->sp_offset;
     }
 
@@ -900,10 +900,10 @@ m68k_frame_cache (struct frame_info *next_frame, void **this_cache)
 }
 
 static void
-m68k_frame_this_id (struct frame_info *next_frame, void **this_cache,
+m68k_frame_this_id (struct frame_info *this_frame, void **this_cache,
 		    struct frame_id *this_id)
 {
-  struct m68k_frame_cache *cache = m68k_frame_cache (next_frame, this_cache);
+  struct m68k_frame_cache *cache = m68k_frame_cache (this_frame, this_cache);
 
   /* This marks the outermost frame.  */
   if (cache->base == 0)
@@ -913,70 +913,37 @@ m68k_frame_this_id (struct frame_info *next_frame, void **this_cache,
   *this_id = frame_id_build (cache->base + 8, cache->pc);
 }
 
-static void
-m68k_frame_prev_register (struct frame_info *next_frame, void **this_cache,
-			  int regnum, int *optimizedp,
-			  enum lval_type *lvalp, CORE_ADDR *addrp,
-			  int *realnump, gdb_byte *valuep)
+static struct value *
+m68k_frame_prev_register (struct frame_info *this_frame, void **this_cache,
+			  int regnum)
 {
-  struct m68k_frame_cache *cache = m68k_frame_cache (next_frame, this_cache);
+  struct m68k_frame_cache *cache = m68k_frame_cache (this_frame, this_cache);
 
   gdb_assert (regnum >= 0);
 
   if (regnum == M68K_SP_REGNUM && cache->saved_sp)
-    {
-      *optimizedp = 0;
-      *lvalp = not_lval;
-      *addrp = 0;
-      *realnump = -1;
-      if (valuep)
-	{
-	  /* Store the value.  */
-	  store_unsigned_integer (valuep, 4, cache->saved_sp);
-	}
-      return;
-    }
+    return frame_unwind_got_constant (this_frame, regnum, cache->saved_sp);
 
   if (regnum < M68K_NUM_REGS && cache->saved_regs[regnum] != -1)
-    {
-      *optimizedp = 0;
-      *lvalp = lval_memory;
-      *addrp = cache->saved_regs[regnum];
-      *realnump = -1;
-      if (valuep)
-	{
-	  /* Read the value in from memory.  */
-	  read_memory (*addrp, valuep,
-		       register_size (get_frame_arch (next_frame), regnum));
-	}
-      return;
-    }
+    return frame_unwind_got_memory (this_frame, regnum,
+				    cache->saved_regs[regnum]);
 
-  *optimizedp = 0;
-  *lvalp = lval_register;
-  *addrp = 0;
-  *realnump = regnum;
-  if (valuep)
-    frame_unwind_register (next_frame, (*realnump), valuep);
+  return frame_unwind_got_register (this_frame, regnum, regnum);
 }
 
 static const struct frame_unwind m68k_frame_unwind =
 {
   NORMAL_FRAME,
   m68k_frame_this_id,
-  m68k_frame_prev_register
+  m68k_frame_prev_register,
+  NULL,
+  default_frame_sniffer
 };
-
-static const struct frame_unwind *
-m68k_frame_sniffer (struct frame_info *next_frame)
-{
-  return &m68k_frame_unwind;
-}
 
 static CORE_ADDR
-m68k_frame_base_address (struct frame_info *next_frame, void **this_cache)
+m68k_frame_base_address (struct frame_info *this_frame, void **this_cache)
 {
-  struct m68k_frame_cache *cache = m68k_frame_cache (next_frame, this_cache);
+  struct m68k_frame_cache *cache = m68k_frame_cache (this_frame, this_cache);
 
   return cache->base;
 }
@@ -990,16 +957,14 @@ static const struct frame_base m68k_frame_base =
 };
 
 static struct frame_id
-m68k_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
+m68k_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
 {
-  gdb_byte buf[4];
   CORE_ADDR fp;
 
-  frame_unwind_register (next_frame, M68K_FP_REGNUM, buf);
-  fp = extract_unsigned_integer (buf, 4);
+  fp = get_frame_register_unsigned (this_frame, M68K_FP_REGNUM);
 
   /* See the end of m68k_push_dummy_call.  */
-  return frame_id_build (fp + 8, frame_pc_unwind (next_frame));
+  return frame_id_build (fp + 8, get_frame_pc (this_frame));
 }
 
 
@@ -1187,7 +1152,6 @@ m68k_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     set_gdbarch_decr_pc_after_break (gdbarch, 2);
 
   set_gdbarch_frame_args_skip (gdbarch, 8);
-  set_gdbarch_dwarf_reg_to_regnum (gdbarch, m68k_dwarf_reg_to_regnum);
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, m68k_dwarf_reg_to_regnum);
 
   set_gdbarch_register_type (gdbarch, m68k_register_type);
@@ -1238,11 +1202,11 @@ m68k_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   tdep->struct_return = reg_struct_return;
 
   /* Frame unwinder.  */
-  set_gdbarch_unwind_dummy_id (gdbarch, m68k_unwind_dummy_id);
+  set_gdbarch_dummy_id (gdbarch, m68k_dummy_id);
   set_gdbarch_unwind_pc (gdbarch, m68k_unwind_pc);
 
   /* Hook in the DWARF CFI frame unwinder.  */
-  frame_unwind_append_sniffer (gdbarch, dwarf2_frame_sniffer);
+  dwarf2_append_unwinders (gdbarch);
 
   frame_base_set_default (gdbarch, &m68k_frame_base);
 
@@ -1255,7 +1219,7 @@ m68k_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   if (tdep->jb_pc >= 0)
     set_gdbarch_get_longjmp_target (gdbarch, m68k_get_longjmp_target);
 
-  frame_unwind_append_sniffer (gdbarch, m68k_frame_sniffer);
+  frame_unwind_append_unwinder (gdbarch, &m68k_frame_unwind);
 
   if (tdesc_data)
     tdesc_use_registers (gdbarch, info.target_desc, tdesc_data);

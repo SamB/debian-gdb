@@ -1,3 +1,27 @@
+gdb (6.8.50.20081120.python-1) experimental; urgency=low
+
+  * Package archer-tromey-python branch for experimental.  Highlights since
+    GDB 6.8 (for more, see the NEWS file):
+    - Python scripting support.  This is experimental; the interfaces
+      are subject to change.  Some example scripts are packaged, including
+      STL pretty-printers for libstdc++.
+    - Improved preprocessor macro support.
+    - Non-stop debugging support (for 32-bit i386 only).  You can stop just
+      one thread of interest while the others continue to run.
+    - Improved tab completion, including C structure fields.
+    - Faster remote debugging.
+    - Compressed debug information support; the new "gold" linker can generate
+      compressed debug sections.
+    - New "find" command to search memory.
+  * Build depend on zlib1g-dev and python-dev.
+  * Removed bfd-get-mtime-less.patch, gdb-rbreak-quoting.patch,
+  ia64-array-bound.patch, cp-support-uninit.patch,
+  and m68k-nat-build-fix.patch, merged upstream.
+  * Build depend on procps for testsuite cleanup calls to "kill".
+  * Remove use of -p0 in series file (Closes: #484945).
+	
+ -- Daniel Jacobowitz <dan@debian.org>  Fri, 28 Nov 2008 14:28:47 -0500
+
 gdb (6.8-3) unstable; urgency=low
 
   * Initialize some uninitialized variables (Closes: #479561).

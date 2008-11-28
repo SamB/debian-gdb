@@ -62,6 +62,9 @@ struct lwp_info
      be the address of a hardware watchpoint.  */
   struct siginfo siginfo;
 
+  /* Non-zero if we expect a duplicated SIGINT.  */
+  int ignore_sigint;
+
   /* If WAITSTATUS->KIND != TARGET_WAITKIND_SPURIOUS, the waitstatus
      for this LWP's last event.  This may correspond to STATUS above,
      or to a local variable in lin_lwp_wait.  */
@@ -83,11 +86,18 @@ extern struct lwp_info *lwp_list;
        (LP) != NULL;							\
        (LP) = (LP)->next, (PTID) = (LP) ? (LP)->ptid : (PTID))
 
+#define GET_LWP(ptid)		ptid_get_lwp (ptid)
+#define GET_PID(ptid)		ptid_get_pid (ptid)
+#define is_lwp(ptid)		(GET_LWP (ptid) != 0)
+#define BUILD_LWP(lwp, pid)	ptid_build (pid, lwp, 0)
+
 /* Attempt to initialize libthread_db.  */
 void check_for_thread_db (void);
 
 /* Tell the thread_db layer what native target operations to use.  */
 void thread_db_init (struct target_ops *);
+
+int thread_db_attach_lwp (ptid_t ptid);
 
 /* Find process PID's pending signal set from /proc/pid/status.  */
 void linux_proc_pending_signals (int pid, sigset_t *pending, sigset_t *blocked, sigset_t *ignored);

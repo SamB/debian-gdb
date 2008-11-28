@@ -14,9 +14,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Please email any bugs, comments, and/or additions to this file to:
-# bug-gdb@prep.ai.mit.edu
-
 if $tracelevel then {
 	strace $tracelevel
 }
@@ -38,7 +35,8 @@ if [get_compiler_info ${binfile}] {
 # This test must be compiled with -O2 if using gcc.
 
 if { [test_compiler_info gcc-*-*] } then {
-    if  { [gdb_compile "${srcdir}/$subdir/${srcfile}" "${binfile}" executable {debug additional_flags=-O2}] != "" } {
+    if  { [gdb_compile "${srcdir}/$subdir/${srcfile}" "${binfile}" \
+	    executable {debug additional_flags=-O2 additional_flags=-fno-inline}] != "" } {
      untested mips_pro.exp
      return -1
     }

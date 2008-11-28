@@ -30,6 +30,7 @@
 #include "command.h"
 #include "gdbcmd.h"
 #include "gdb_string.h"
+#include "observer.h"
 
 /* Dummy frame.  This saves the processor state just prior to setting
    up the inferior function call.  Older targets save the registers
@@ -39,7 +40,7 @@ struct dummy_frame
 {
   struct dummy_frame *next;
   /* This frame's ID.  Must match the value returned by
-     gdbarch_unwind_dummy_id.  */
+     gdbarch_dummy_id.  */
   struct frame_id id;
   /* The caller's regcache.  */
   struct regcache *regcache;
@@ -87,31 +88,54 @@ void
 dummy_frame_push (struct regcache *caller_regcache,
 		  const struct frame_id *dummy_id)
 {
-  struct gdbarch *gdbarch = get_regcache_arch (caller_regcache);
   struct dummy_frame *dummy_frame;
-
-  /* Check to see if there are stale dummy frames, perhaps left over
-     from when a longjump took us out of a function that was called by
-     the debugger.  */
-  dummy_frame = dummy_frame_stack;
-  while (dummy_frame)
-    /* FIXME: cagney/2004-08-02: Should just test IDs.  */
-    if (frame_id_inner (gdbarch, dummy_frame->id, (*dummy_id)))
-      /* Stale -- destroy!  */
-      {
-	dummy_frame_stack = dummy_frame->next;
-	regcache_xfree (dummy_frame->regcache);
-	xfree (dummy_frame);
-	dummy_frame = dummy_frame_stack;
-      }
-    else
-      dummy_frame = dummy_frame->next;
 
   dummy_frame = XZALLOC (struct dummy_frame);
   dummy_frame->regcache = caller_regcache;
   dummy_frame->id = (*dummy_id);
   dummy_frame->next = dummy_frame_stack;
   dummy_frame_stack = dummy_frame;
+}
+
+/* Pop the dummy frame with ID dummy_id from the dummy-frame stack.  */
+
+void
+dummy_frame_pop (struct frame_id dummy_id)
+{
+  struct dummy_frame **dummy_ptr;
+
+  for (dummy_ptr = &dummy_frame_stack;
+       (*dummy_ptr) != NULL;
+       dummy_ptr = &(*dummy_ptr)->next)
+    {
+      struct dummy_frame *dummy = *dummy_ptr;
+      if (frame_id_eq (dummy->id, dummy_id))
+	{
+	  *dummy_ptr = dummy->next;
+	  regcache_xfree (dummy->regcache);
+	  xfree (dummy);
+	  break;
+	}
+    }
+}
+
+/* There may be stale dummy frames, perhaps left over from when a longjump took us
+   out of a function that was called by the debugger.  Clean them up at least once
+   whenever we start a new inferior.  */
+
+static void
+cleanup_dummy_frames (struct target_ops *target, int from_tty)
+{
+  struct dummy_frame *dummy, *next;
+
+  for (dummy = dummy_frame_stack; dummy; dummy = next)
+    {
+      next = dummy->next;
+      regcache_xfree (dummy->regcache);
+      xfree (dummy);
+    }
+
+  dummy_frame_stack = NULL;
 }
 
 /* Return the dummy frame cache, it contains both the ID, and a
@@ -124,7 +148,7 @@ struct dummy_frame_cache
 
 int
 dummy_frame_sniffer (const struct frame_unwind *self,
-		     struct frame_info *next_frame,
+		     struct frame_info *this_frame,
 		     void **this_prologue_cache)
 {
   struct dummy_frame *dummyframe;
@@ -141,12 +165,9 @@ dummy_frame_sniffer (const struct frame_unwind *self,
   /* Don't bother unles there is at least one dummy frame.  */
   if (dummy_frame_stack != NULL)
     {
-      /* Use an architecture specific method to extract the prev's
-	 dummy ID from the next frame.  Note that this method uses
-	 frame_register_unwind to obtain the register values needed to
-	 determine the dummy frame's ID.  */
-      this_id = gdbarch_unwind_dummy_id (get_frame_arch (next_frame), 
-					 next_frame);
+      /* Use an architecture specific method to extract this frame's
+	 dummy ID, assuming it is a dummy frame.  */
+      this_id = gdbarch_dummy_id (get_frame_arch (this_frame), this_frame);
 
       /* Use that ID to find the corresponding cache entry.  */
       for (dummyframe = dummy_frame_stack;
@@ -170,43 +191,37 @@ dummy_frame_sniffer (const struct frame_unwind *self,
 /* Given a call-dummy dummy-frame, return the registers.  Here the
    register value is taken from the local copy of the register buffer.  */
 
-static void
-dummy_frame_prev_register (struct frame_info *next_frame,
+static struct value *
+dummy_frame_prev_register (struct frame_info *this_frame,
 			   void **this_prologue_cache,
-			   int regnum, int *optimized,
-			   enum lval_type *lvalp, CORE_ADDR *addrp,
-			   int *realnum, gdb_byte *bufferp)
+			   int regnum)
 {
-  /* The dummy-frame sniffer always fills in the cache.  */
   struct dummy_frame_cache *cache = (*this_prologue_cache);
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
+  struct value *reg_val;
+
+  /* The dummy-frame sniffer always fills in the cache.  */
   gdb_assert (cache != NULL);
 
   /* Describe the register's location.  Generic dummy frames always
      have the register value in an ``expression''.  */
-  *optimized = 0;
-  *lvalp = not_lval;
-  *addrp = 0;
-  *realnum = -1;
+  reg_val = value_zero (register_type (gdbarch, regnum), not_lval);
 
-  /* If needed, find and return the value of the register.  */
-  if (bufferp != NULL)
-    {
-      /* Return the actual value.  */
-      /* Use the regcache_cooked_read() method so that it, on the fly,
-         constructs either a raw or pseudo register from the raw
-         register cache.  */
-      regcache_cooked_read (cache->prev_regcache, regnum, bufferp);
-    }
+  /* Use the regcache_cooked_read() method so that it, on the fly,
+     constructs either a raw or pseudo register from the raw
+     register cache.  */
+  regcache_cooked_read (cache->prev_regcache, regnum,
+			value_contents_writeable (reg_val));
+  return reg_val;
 }
 
-/* Assuming that THIS frame is a dummy (remember, the NEXT and not
-   THIS frame is passed in), return the ID of THIS frame.  That ID is
+/* Assuming that THIS frame is a dummy, return the ID of THIS frame.  That ID is
    determined by examining the NEXT frame's unwound registers using
-   the method unwind_dummy_id().  As a side effect, THIS dummy frame's
+   the method dummy_id().  As a side effect, THIS dummy frame's
    dummy cache is located and and saved in THIS_PROLOGUE_CACHE.  */
 
 static void
-dummy_frame_this_id (struct frame_info *next_frame,
+dummy_frame_this_id (struct frame_info *this_frame,
 		     void **this_prologue_cache,
 		     struct frame_id *this_id)
 {
@@ -250,11 +265,13 @@ maintenance_print_dummy_frames (char *args, int from_tty)
     fprint_dummy_frames (gdb_stdout);
   else
     {
+      struct cleanup *cleanups;
       struct ui_file *file = gdb_fopen (args, "w");
       if (file == NULL)
 	perror_with_name (_("maintenance print dummy-frames"));
+      cleanups = make_cleanup_ui_file_delete (file);
       fprint_dummy_frames (file);    
-      ui_file_delete (file);
+      do_cleanups (cleanups);
     }
 }
 
@@ -267,4 +284,5 @@ _initialize_dummy_frame (void)
 	   _("Print the contents of the internal dummy-frame stack."),
 	   &maintenanceprintlist);
 
+  observer_attach_inferior_created (cleanup_dummy_frames);
 }

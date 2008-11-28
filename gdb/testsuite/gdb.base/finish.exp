@@ -13,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Please email any bugs, comments, and/or additions to this file to:
-# bug-gdb@prep.ai.mit.edu
-
 # This file was written by Michael Snyder (msnyder@redhat.com)
 
 if $tracelevel then {
@@ -97,6 +94,21 @@ proc finish_void { } {
     }
 }
 
+# A function that tests that the given ABBREV is a working abbreviation
+# of the "finish" command.
+
+proc finish_abbreviation { abbrev } {
+
+    if { ! [ runto "int_func" ] } then {
+        fail "running to int_func"
+        return -1
+    }
+
+    gdb_test "$abbrev" \
+             "Value returned is .* = 1" \
+             "Testing the \"$abbrev\" abbreviation for \"finish\""
+}
+
 proc finish_tests { } {
     global gdb_prompt
 
@@ -113,6 +125,7 @@ proc finish_tests { } {
     finish_1 "long_long"
     finish_1 "float"
     finish_1 "double"
+    finish_abbreviation "fin"
 }
 
 # Start with a fresh gdb.

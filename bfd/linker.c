@@ -737,8 +737,8 @@ _bfd_generic_link_hash_table_free (struct bfd_link_hash_table *hash)
    the hash table pointing to different instances of the symbol
    structure.  */
 
-static bfd_boolean
-generic_link_read_symbols (bfd *abfd)
+bfd_boolean
+bfd_generic_link_read_symbols (bfd *abfd)
 {
   if (bfd_get_outsymbols (abfd) == NULL)
     {
@@ -834,7 +834,7 @@ generic_link_add_object_symbols (bfd *abfd,
   bfd_size_type symcount;
   struct bfd_symbol **outsyms;
 
-  if (! generic_link_read_symbols (abfd))
+  if (!bfd_generic_link_read_symbols (abfd))
     return FALSE;
   symcount = _bfd_generic_link_get_symcount (abfd);
   outsyms = _bfd_generic_link_get_symbols (abfd);
@@ -1164,7 +1164,7 @@ generic_link_check_archive_element (bfd *abfd,
 
   *pneeded = FALSE;
 
-  if (! generic_link_read_symbols (abfd))
+  if (!bfd_generic_link_read_symbols (abfd))
     return FALSE;
 
   pp = _bfd_generic_link_get_symbols (abfd);
@@ -2159,7 +2159,7 @@ _bfd_generic_link_output_symbols (bfd *output_bfd,
   asymbol **sym_ptr;
   asymbol **sym_end;
 
-  if (! generic_link_read_symbols (input_bfd))
+  if (!bfd_generic_link_read_symbols (input_bfd))
     return FALSE;
 
   /* Create a filename symbol if we are supposed to.  */
@@ -2752,7 +2752,7 @@ default_indirect_link_order (bfd *output_bfd,
 	 have retrieved them by this point, but we are being called by
 	 a specific linker, presumably because we are linking
 	 different types of object files together.  */
-      if (! generic_link_read_symbols (input_bfd))
+      if (!bfd_generic_link_read_symbols (input_bfd))
 	return FALSE;
 
       /* Since we have been called by a specific linker, rather than
@@ -2796,18 +2796,36 @@ default_indirect_link_order (bfd *output_bfd,
 	}
     }
 
-  /* Get and relocate the section contents.  */
-  sec_size = (input_section->rawsize > input_section->size
-	      ? input_section->rawsize
-	      : input_section->size);
-  contents = bfd_malloc (sec_size);
-  if (contents == NULL && sec_size != 0)
-    goto error_return;
-  new_contents = (bfd_get_relocated_section_contents
-		  (output_bfd, info, link_order, contents, info->relocatable,
-		   _bfd_generic_link_get_symbols (input_bfd)));
-  if (!new_contents)
-    goto error_return;
+  if ((output_section->flags & (SEC_GROUP | SEC_LINKER_CREATED)) == SEC_GROUP
+      && input_section->size != 0)
+    {
+      /* Group section contents are set by bfd_elf_set_group_contents.  */
+      if (!output_bfd->output_has_begun)
+	{
+	  /* FIXME: This hack ensures bfd_elf_set_group_contents is called.  */
+	  if (!bfd_set_section_contents (output_bfd, output_section, "", 0, 1))
+	    goto error_return;
+	}
+      new_contents = output_section->contents;
+      BFD_ASSERT (new_contents != NULL);
+      BFD_ASSERT (input_section->output_offset == 0);
+    }
+  else
+    {
+      /* Get and relocate the section contents.  */
+      sec_size = (input_section->rawsize > input_section->size
+		  ? input_section->rawsize
+		  : input_section->size);
+      contents = bfd_malloc (sec_size);
+      if (contents == NULL && sec_size != 0)
+	goto error_return;
+      new_contents = (bfd_get_relocated_section_contents
+		      (output_bfd, info, link_order, contents,
+		       info->relocatable,
+		       _bfd_generic_link_get_symbols (input_bfd)));
+      if (!new_contents)
+	goto error_return;
+    }
 
   /* Output the section contents.  */
   loc = input_section->output_offset * bfd_octets_per_byte (output_bfd);

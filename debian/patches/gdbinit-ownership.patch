@@ -2,15 +2,14 @@ This patch was not popular upstream; there was no fundamental objection, but
 several problems with the implementation.  It needs to be revisited.
 
 ---
- gdb/Makefile.in    |    2 +-
- gdb/cli/cli-cmds.c |   41 +++++++++++++++++++++++++++++++++++++----
+ gdb/cli/cli-cmds.c |   43 +++++++++++++++++++++++++++++++++++++++----
  gdb/main.c         |    4 ++--
- 3 files changed, 40 insertions(+), 7 deletions(-)
+ 2 files changed, 41 insertions(+), 6 deletions(-)
 
-Index: gdb-6.7.1/gdb/cli/cli-cmds.c
+Index: gdb-6.8.50.20081120.python/gdb/cli/cli-cmds.c
 ===================================================================
---- gdb-6.7.1.orig/gdb/cli/cli-cmds.c	2007-12-03 09:37:03.000000000 -0500
-+++ gdb-6.7.1/gdb/cli/cli-cmds.c	2007-12-03 09:37:44.000000000 -0500
+--- gdb-6.8.50.20081120.python.orig/gdb/cli/cli-cmds.c	2008-11-25 16:16:41.000000000 -0500
++++ gdb-6.8.50.20081120.python/gdb/cli/cli-cmds.c	2008-11-27 16:58:08.000000000 -0500
 @@ -36,6 +36,7 @@
  #include "objfiles.h"
  #include "source.h"
@@ -19,16 +18,7 @@ Index: gdb-6.7.1/gdb/cli/cli-cmds.c
  
  #include "ui-out.h"
  
-@@ -51,6 +52,8 @@
- 
- #include <fcntl.h>
- 
-+#include <fcntl.h>
-+
- /* Prototypes for local command functions */
- 
- static void complete_command (char *, int);
-@@ -430,6 +433,10 @@ cd_command (char *dir, int from_tty)
+@@ -433,6 +434,10 @@ cd_command (char *dir, int from_tty)
      pwd_command ((char *) 0, 1);
  }
  
@@ -39,8 +29,8 @@ Index: gdb-6.7.1/gdb/cli/cli-cmds.c
  void
  source_script (char *file, int from_tty)
  {
-@@ -439,9 +446,7 @@ source_script (char *file, int from_tty)
-   int fd;
+@@ -443,9 +448,7 @@ source_script (char *file, int from_tty)
+   int is_python;
  
    if (file == NULL || *file == 0)
 -    {
@@ -50,7 +40,7 @@ Index: gdb-6.7.1/gdb/cli/cli-cmds.c
  
    file = tilde_expand (file);
    old_cleanups = make_cleanup (xfree, file);
-@@ -459,13 +464,41 @@ source_script (char *file, int from_tty)
+@@ -464,7 +467,7 @@ source_script (char *file, int from_tty)
  
    if (fd == -1)
      {
@@ -58,17 +48,20 @@ Index: gdb-6.7.1/gdb/cli/cli-cmds.c
 +      if (from_tty > 0)
  	perror_with_name (file);
        else
- 	return;
-     }
+ 	{
+@@ -479,6 +482,38 @@ source_script (char *file, int from_tty)
  
    stream = fdopen (fd, FOPEN_RT);
-+
+ 
 +  if (stream == NULL)
 +    {
 +      if (from_tty)
 +	perror_with_name (file);
 +      else
-+	return;
++	{
++	  do_cleanups (old_cleanups);
++	  return;
++	}
 +    }
 +
 +#ifdef HAVE_GETUID
@@ -79,25 +72,27 @@ Index: gdb-6.7.1/gdb/cli/cli-cmds.c
 +	{
 +	  perror_with_name (file);
 +	  fclose (stream);
++	  do_cleanups (old_cleanups);
 +	  return;
 +	}
 +      if (statbuf.st_uid != getuid () || (statbuf.st_mode & S_IWOTH))
 +	{
 +	  warning ("not using untrusted file \"%s\"", file);
 +	  fclose (stream);
++	  do_cleanups (old_cleanups);
 +	  return;
 +	}
 +    }
 +#endif
 +
-   script_from_file (stream, file);
- 
-   do_cleanups (old_cleanups);
-Index: gdb-6.7.1/gdb/main.c
+   if (is_python)
+     source_python_script (stream, file);
+   else
+Index: gdb-6.8.50.20081120.python/gdb/main.c
 ===================================================================
---- gdb-6.7.1.orig/gdb/main.c	2007-12-03 09:37:03.000000000 -0500
-+++ gdb-6.7.1/gdb/main.c	2007-12-03 09:37:44.000000000 -0500
-@@ -688,7 +688,7 @@ extern int gdbtk_test (char *);
+--- gdb-6.8.50.20081120.python.orig/gdb/main.c	2008-11-25 16:16:41.000000000 -0500
++++ gdb-6.8.50.20081120.python/gdb/main.c	2008-11-27 16:54:37.000000000 -0500
+@@ -762,7 +762,7 @@ Excess command line arguments ignored. (
  
        if (!inhibit_gdbinit)
  	{
@@ -106,7 +101,7 @@ Index: gdb-6.7.1/gdb/main.c
  	}
  
        /* Do stats; no need to do them elsewhere since we'll only
-@@ -766,7 +766,7 @@ extern int gdbtk_test (char *);
+@@ -850,7 +850,7 @@ Can't attach to process and specify a co
        || memcmp ((char *) &homebuf, (char *) &cwdbuf, sizeof (struct stat)))
      if (!inhibit_gdbinit)
        {
@@ -115,16 +110,3 @@ Index: gdb-6.7.1/gdb/main.c
        }
  
    for (i = 0; i < ncmd; i++)
-Index: gdb-6.7.1/gdb/Makefile.in
-===================================================================
---- gdb-6.7.1.orig/gdb/Makefile.in	2007-12-03 09:37:37.000000000 -0500
-+++ gdb-6.7.1/gdb/Makefile.in	2007-12-03 09:37:44.000000000 -0500
-@@ -2882,7 +2882,7 @@ cli-cmds.o: $(srcdir)/cli/cli-cmds.c $(d
- 	$(expression_h) $(frame_h) $(value_h) $(language_h) $(filenames_h) \
- 	$(objfiles_h) $(source_h) $(disasm_h) $(ui_out_h) $(top_h) \
- 	$(cli_decode_h) $(cli_script_h) $(cli_setshow_h) $(cli_cmds_h) \
--	$(tui_h)
-+	$(tui_h) $(gdb_stat_h)
- 	$(CC) -c $(INTERNAL_CFLAGS) $(srcdir)/cli/cli-cmds.c
- cli-decode.o: $(srcdir)/cli/cli-decode.c $(defs_h) $(symtab_h) \
- 	$(gdb_regex_h) $(gdb_string_h) $(completer_h) $(ui_out_h) \

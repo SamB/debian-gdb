@@ -39,12 +39,14 @@ enum varobj_type
     USE_SELECTED_FRAME          /* Always reevaluate in selected frame */
   };
 
-/* Error return values for varobj_update function.  */
-enum varobj_update_error
+/* Enumerator describing if a variable object is in scope.  */
+enum varobj_scope_status
   {
-    NOT_IN_SCOPE = -1,          /* varobj not in scope, can not be updated.  */
-    TYPE_CHANGED = -2,          /* varobj type has changed.  */
-    INVALID = -3,               /* varobj is not valid anymore.  */
+    VAROBJ_IN_SCOPE = 0,        /* Varobj is scope, value available.  */
+    VAROBJ_NOT_IN_SCOPE = 1,    /* Varobj is not in scope, value not available, 
+				   but varobj can become in scope later.  */
+    VAROBJ_INVALID = 2,         /* Varobj no longer has any value, and never
+				   will.  */
   };
 
 /* String representations of gdb's format codes (defined in varobj.c) */
@@ -64,6 +66,21 @@ struct varobj;
 
 typedef struct varobj *varobj_p;
 DEF_VEC_P (varobj_p);
+
+typedef struct varobj_update_result_t
+{
+  struct varobj *varobj;
+  int type_changed;
+  int changed;
+  int children_changed;
+  enum varobj_scope_status status;
+  /* This variable is used internally by varobj_update to indicate if the
+     new value of varobj is already computed and installed, or has to
+     be yet installed.  Don't use this outside varobj.c */
+  int value_installed;  
+} varobj_update_result;
+
+DEF_VEC_O (varobj_update_result);
 
 /* API functions */
 
@@ -89,9 +106,19 @@ extern enum varobj_display_formats varobj_set_display_format (
 extern enum varobj_display_formats varobj_get_display_format (
 							struct varobj *var);
 
+extern int varobj_get_thread_id (struct varobj *var);
+
 extern void varobj_set_frozen (struct varobj *var, int frozen);
 
 extern int varobj_get_frozen (struct varobj *var);
+
+extern void varobj_get_child_range (struct varobj *var,
+				    VEC (varobj_p) *children,
+				    int *from, int *to);
+
+extern void varobj_set_child_range (struct varobj *var, int from, int to);
+
+extern char *varobj_get_display_hint (struct varobj *var);
 
 extern int varobj_get_num_children (struct varobj *var);
 
@@ -109,17 +136,31 @@ extern enum varobj_languages varobj_get_language (struct varobj *var);
 
 extern int varobj_get_attributes (struct varobj *var);
 
+extern char *varobj_get_formatted_value (struct varobj *var,
+					 enum varobj_display_formats format);
+
 extern char *varobj_get_value (struct varobj *var);
 
 extern int varobj_set_value (struct varobj *var, char *expression);
 
 extern int varobj_list (struct varobj ***rootlist);
 
-extern int varobj_update (struct varobj **varp, struct varobj ***changelist,
-			  int explicit);
+extern VEC(varobj_update_result) *varobj_update (struct varobj **varp, 
+						 int explicit);
 
 extern void varobj_invalidate (void);
 
 extern int varobj_editable_p (struct varobj *var);
+
+extern int varobj_floating_p (struct varobj *var);
+
+extern void 
+varobj_set_visualizer (struct varobj *var, const char *visualizer);
+
+extern void 
+varobj_clear_type_visualizers ();
+
+extern void 
+varobj_set_visualizer (struct varobj *var, const char *visualizer);
 
 #endif /* VAROBJ_H */

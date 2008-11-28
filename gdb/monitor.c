@@ -54,13 +54,14 @@
 #include "gdb_regex.h"
 #include "srec.h"
 #include "regcache.h"
+#include "gdbthread.h"
 
 static char *dev_name;
 static struct target_ops *targ_ops;
 
 static void monitor_interrupt_query (void);
 static void monitor_interrupt_twice (int);
-static void monitor_stop (void);
+static void monitor_stop (ptid_t);
 static void monitor_dump_regs (struct regcache *regcache);
 
 #if 0
@@ -104,6 +105,13 @@ static int dump_reg_flag;	/* Non-zero means do a dump_registers cmd when
 
 static int first_time = 0;	/* is this the first time we're executing after 
 				   gaving created the child proccess? */
+
+
+/* This is the ptid we use while we're connected to a monitor.  Its
+   value is arbitrary, as monitor targets don't have a notion of
+   processes or threads, but we need something non-null to place in
+   inferior_ptid.  */
+static ptid_t monitor_ptid;
 
 #define TARGET_BUF_SIZE 2048
 
@@ -758,7 +766,7 @@ monitor_open (char *args, struct monitor_ops *mon_ops, int from_tty)
 
   if (current_monitor->stop)
     {
-      monitor_stop ();
+      monitor_stop (inferior_ptid);
       if ((current_monitor->flags & MO_NO_ECHO_ON_OPEN) == 0)
 	{
 	  monitor_debug ("EXP Open echo\n");
@@ -804,7 +812,13 @@ monitor_open (char *args, struct monitor_ops *mon_ops, int from_tty)
 
   push_target (targ_ops);
 
-  inferior_ptid = pid_to_ptid (42000);	/* Make run command think we are busy... */
+  /* Start afresh.  */
+  init_thread_list ();
+
+  /* Make run command think we are busy...  */
+  inferior_ptid = monitor_ptid;
+  add_inferior_silent (ptid_get_pid (inferior_ptid));
+  add_thread_silent (inferior_ptid);
 
   /* Give monitor_wait something to read */
 
@@ -830,13 +844,16 @@ monitor_close (int quitting)
     }
 
   monitor_desc = NULL;
+
+  delete_thread_silent (monitor_ptid);
+  delete_inferior_silent (ptid_get_pid (monitor_ptid));
 }
 
 /* Terminate the open connection to the remote debugger.  Use this
    when you want to detach and do something else with your gdb.  */
 
 static void
-monitor_detach (char *args, int from_tty)
+monitor_detach (struct target_ops *ops, char *args, int from_tty)
 {
   pop_target ();		/* calls monitor_close to do the real work */
   if (from_tty)
@@ -968,7 +985,7 @@ monitor_interrupt (int signo)
   if (monitor_debug_p || remote_debug)
     fprintf_unfiltered (gdb_stdlog, "monitor_interrupt called\n");
 
-  target_stop ();
+  target_stop (inferior_ptid);
 }
 
 /* The user typed ^C twice.  */
@@ -1978,8 +1995,8 @@ monitor_kill (void)
 /* All we actually do is set the PC to the start address of exec_bfd.  */
 
 static void
-monitor_create_inferior (char *exec_file, char *args, char **env,
-			 int from_tty)
+monitor_create_inferior (struct target_ops *ops, char *exec_file,
+			 char *args, char **env, int from_tty)
 {
   if (args && (*args != '\000'))
     error (_("Args are not supported by the monitor."));
@@ -1995,10 +2012,11 @@ monitor_create_inferior (char *exec_file, char *args, char **env,
    instructions.  */
 
 static void
-monitor_mourn_inferior (void)
+monitor_mourn_inferior (struct target_ops *ops)
 {
   unpush_target (targ_ops);
   generic_mourn_inferior ();	/* Do all the proper things now */
+  delete_thread_silent (monitor_ptid);
 }
 
 /* Tell the monitor to add a breakpoint.  */
@@ -2008,7 +2026,6 @@ monitor_insert_breakpoint (struct bp_target_info *bp_tgt)
 {
   CORE_ADDR addr = bp_tgt->placed_address;
   int i;
-  const unsigned char *bp;
   int bplen;
 
   monitor_debug ("MON inst bkpt %s\n", paddr (addr));
@@ -2019,7 +2036,7 @@ monitor_insert_breakpoint (struct bp_target_info *bp_tgt)
     addr = gdbarch_addr_bits_remove (current_gdbarch, addr);
 
   /* Determine appropriate breakpoint size for this address.  */
-  bp = gdbarch_breakpoint_from_pc (current_gdbarch, &addr, &bplen);
+  gdbarch_breakpoint_from_pc (current_gdbarch, &addr, &bplen);
   bp_tgt->placed_address = addr;
   bp_tgt->placed_size = bplen;
 
@@ -2152,7 +2169,7 @@ monitor_load (char *file, int from_tty)
 }
 
 static void
-monitor_stop (void)
+monitor_stop (ptid_t ptid)
 {
   monitor_debug ("MON stop\n");
   if ((current_monitor->flags & MO_SEND_BREAK_ON_STOP) != 0)
@@ -2211,6 +2228,35 @@ monitor_get_dev_name (void)
   return dev_name;
 }
 
+/* Check to see if a thread is still alive.  */
+
+static int
+monitor_thread_alive (ptid_t ptid)
+{
+  if (ptid_equal (ptid, monitor_ptid))
+    /* The monitor's task is always alive.  */
+    return 1;
+
+  return 0;
+}
+
+/* Convert a thread ID to a string.  Returns the string in a static
+   buffer.  */
+
+static char *
+monitor_pid_to_str (ptid_t ptid)
+{
+  static char buf[64];
+
+  if (ptid_equal (monitor_ptid, ptid))
+    {
+      xsnprintf (buf, sizeof buf, "Thread <main>");
+      return buf;
+    }
+
+  return normal_pid_to_str (ptid);
+}
+
 static struct target_ops monitor_ops;
 
 static void
@@ -2234,6 +2280,8 @@ init_base_monitor_ops (void)
   monitor_ops.to_stop = monitor_stop;
   monitor_ops.to_rcmd = monitor_rcmd;
   monitor_ops.to_log_command = serial_log_command;
+  monitor_ops.to_thread_alive = monitor_thread_alive;
+  monitor_ops.to_pid_to_str = monitor_pid_to_str;
   monitor_ops.to_stratum = process_stratum;
   monitor_ops.to_has_all_memory = 1;
   monitor_ops.to_has_memory = 1;
@@ -2278,4 +2326,8 @@ is displayed."),
 			    NULL,
 			    NULL, /* FIXME: i18n: */
 			    &setdebuglist, &showdebuglist);
+
+  /* Yes, 42000 is arbitrary.  The only sense out of it, is that it
+     isn't 0.  */
+  monitor_ptid = ptid_build (42000, 0, 42000);
 }

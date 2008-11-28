@@ -44,6 +44,10 @@
 #include "gdb.h"
 #include "frame.h"
 #include "mi-main.h"
+#include "mi-common.h"
+#include "language.h"
+#include "valprint.h"
+#include "inferior.h"
 
 #include <ctype.h>
 #include <sys/time.h>
@@ -61,29 +65,6 @@ enum
     FROM_TTY = 0
   };
 
-/* Enumerations of the actions that may result from calling
-   captured_mi_execute_command.  */
-
-enum captured_mi_execute_command_actions
-  {
-    EXECUTE_COMMAND_DISPLAY_PROMPT,
-    EXECUTE_COMMAND_SUPRESS_PROMPT
-  };
-
-/* This structure is used to pass information from captured_mi_execute_command
-   to mi_execute_command.  */
-struct captured_mi_execute_command_args
-{
-  /* This return result of the MI command (output).  */
-  enum mi_cmd_result rc;
-
-  /* What action to perform when the call is finished (output).  */
-  enum captured_mi_execute_command_actions action;
-
-  /* The command context to be executed (input).  */
-  struct mi_parse *command;
-};
-
 int mi_debug_p;
 struct ui_file *raw_stdout;
 
@@ -93,23 +74,19 @@ static struct mi_timestamp *current_command_ts;
 
 static int do_timings = 0;
 
-/* The token of the last asynchronous command.  */
-static char *last_async_command;
-static char *previous_async_command;
-char *mi_error_message;
+char *current_token;
+int running_result_record_printed = 1;
 
 extern void _initialize_mi_main (void);
-static enum mi_cmd_result mi_cmd_execute (struct mi_parse *parse);
+static void mi_cmd_execute (struct mi_parse *parse);
 
 static void mi_execute_cli_command (const char *cmd, int args_p,
 				    const char *args);
-static enum mi_cmd_result mi_execute_async_cli_command (char *mi, char *args, int from_tty);
-
-static void mi_exec_async_cli_cmd_continuation (struct continuation_arg *arg);
-
+static void mi_execute_async_cli_command (char *cli_command, 
+							char **argv, int argc);
 static int register_changed_p (int regnum, struct regcache *,
 			       struct regcache *);
-static int get_register (int regnum, int format);
+static void get_register (int regnum, int format);
 
 /* Command implementations.  FIXME: Is this libgdb?  No.  This is the MI
    layer that calls libgdb.  Any operation used in the below should be
@@ -120,77 +97,62 @@ static void timestamp (struct mi_timestamp *tv);
 static void print_diff_now (struct mi_timestamp *start);
 static void print_diff (struct mi_timestamp *start, struct mi_timestamp *end);
 
-enum mi_cmd_result
+void
 mi_cmd_gdb_exit (char *command, char **argv, int argc)
 {
   /* We have to print everything right here because we never return.  */
-  if (last_async_command)
-    fputs_unfiltered (last_async_command, raw_stdout);
+  if (current_token)
+    fputs_unfiltered (current_token, raw_stdout);
   fputs_unfiltered ("^exit\n", raw_stdout);
   mi_out_put (uiout, raw_stdout);
   /* FIXME: The function called is not yet a formal libgdb function.  */
   quit_force (NULL, FROM_TTY);
-  return MI_CMD_DONE;
 }
 
-enum mi_cmd_result
-mi_cmd_exec_run (char *args, int from_tty)
+void
+mi_cmd_exec_next (char *command, char **argv, int argc)
 {
   /* FIXME: Should call a libgdb function, not a cli wrapper.  */
-  return mi_execute_async_cli_command ("run", args, from_tty);
+  mi_execute_async_cli_command ("next", argv, argc);
 }
 
-enum mi_cmd_result
-mi_cmd_exec_next (char *args, int from_tty)
+void
+mi_cmd_exec_next_instruction (char *command, char **argv, int argc)
 {
   /* FIXME: Should call a libgdb function, not a cli wrapper.  */
-  return mi_execute_async_cli_command ("next", args, from_tty);
+  mi_execute_async_cli_command ("nexti", argv, argc);
 }
 
-enum mi_cmd_result
-mi_cmd_exec_next_instruction (char *args, int from_tty)
+void
+mi_cmd_exec_step (char *command, char **argv, int argc)
 {
   /* FIXME: Should call a libgdb function, not a cli wrapper.  */
-  return mi_execute_async_cli_command ("nexti", args, from_tty);
+  mi_execute_async_cli_command ("step", argv, argc);
 }
 
-enum mi_cmd_result
-mi_cmd_exec_step (char *args, int from_tty)
+void
+mi_cmd_exec_step_instruction (char *command, char **argv, int argc)
 {
   /* FIXME: Should call a libgdb function, not a cli wrapper.  */
-  return mi_execute_async_cli_command ("step", args, from_tty);
+  mi_execute_async_cli_command ("stepi", argv, argc);
 }
 
-enum mi_cmd_result
-mi_cmd_exec_step_instruction (char *args, int from_tty)
+void
+mi_cmd_exec_finish (char *command, char **argv, int argc)
 {
   /* FIXME: Should call a libgdb function, not a cli wrapper.  */
-  return mi_execute_async_cli_command ("stepi", args, from_tty);
+  mi_execute_async_cli_command ("finish", argv, argc);
 }
 
-enum mi_cmd_result
-mi_cmd_exec_finish (char *args, int from_tty)
-{
-  /* FIXME: Should call a libgdb function, not a cli wrapper.  */
-  return mi_execute_async_cli_command ("finish", args, from_tty);
-}
-
-enum mi_cmd_result
-mi_cmd_exec_until (char *args, int from_tty)
-{
-  /* FIXME: Should call a libgdb function, not a cli wrapper.  */
-  return mi_execute_async_cli_command ("until", args, from_tty);
-}
-
-enum mi_cmd_result
-mi_cmd_exec_return (char *args, int from_tty)
+void
+mi_cmd_exec_return (char *command, char **argv, int argc)
 {
   /* This command doesn't really execute the target, it just pops the
      specified number of frames. */
-  if (*args)
+  if (argc)
     /* Call return_command with from_tty argument equal to 0 so as to
        avoid being queried.  */
-    return_command (args, 0);
+    return_command (*argv, 0);
   else
     /* Call return_command with from_tty argument equal to 0 so as to
        avoid being queried.  */
@@ -199,15 +161,63 @@ mi_cmd_exec_return (char *args, int from_tty)
   /* Because we have called return_command with from_tty = 0, we need
      to print the frame here.  */
   print_stack_frame (get_selected_frame (NULL), 1, LOC_AND_ADDRESS);
-
-  return MI_CMD_DONE;
 }
 
-enum mi_cmd_result
-mi_cmd_exec_continue (char *args, int from_tty)
+static int
+proceed_thread_callback (struct thread_info *thread, void *arg)
 {
-  /* FIXME: Should call a libgdb function, not a cli wrapper.  */
-  return mi_execute_async_cli_command ("continue", args, from_tty);
+  int pid = *(int *)arg;
+
+  if (!is_stopped (thread->ptid))
+    return 0;
+
+  if (PIDGET (thread->ptid) != pid)
+    return 0;
+
+  switch_to_thread (thread->ptid);
+  clear_proceed_status ();
+  proceed ((CORE_ADDR) -1, TARGET_SIGNAL_DEFAULT, 0);
+  return 0;
+}
+
+void
+mi_cmd_exec_continue (char *command, char **argv, int argc)
+{
+  if (argc == 0)
+    continue_1 (0);
+  else if (argc == 1 && strcmp (argv[0], "--all") == 0)
+    continue_1 (1);
+  else if (argc == 2 && strcmp (argv[0], "--thread-group") == 0)
+    {
+      struct cleanup *old_chain;
+      int pid;
+      if (argv[1] == NULL || argv[1] == '\0')
+	error ("Thread group id not specified");
+      pid = atoi (argv[1] + 1);
+      if (!in_inferior_list (pid))
+	error ("Invalid thread group id '%s'", argv[1]);
+
+      old_chain = make_cleanup_restore_current_thread ();
+      iterate_over_threads (proceed_thread_callback, &pid);
+      do_cleanups (old_chain);            
+    }
+  else
+    error ("Usage: -exec-continue [--all|--thread-group id]");
+}
+
+static int
+interrupt_thread_callback (struct thread_info *thread, void *arg)
+{
+  int pid = *(int *)arg;
+
+  if (!is_running (thread->ptid))
+    return 0;
+
+  if (PIDGET (thread->ptid) != pid)
+    return 0;
+
+  target_stop (thread->ptid);
+  return 0;
 }
 
 /* Interrupt the execution of the target.  Note how we must play around
@@ -215,68 +225,176 @@ mi_cmd_exec_continue (char *args, int from_tty)
    the result of the interrupt command, and the previous execution
    token when the target finally stops.  See comments in
    mi_cmd_execute.  */
-enum mi_cmd_result
-mi_cmd_exec_interrupt (char *args, int from_tty)
+void
+mi_cmd_exec_interrupt (char *command, char **argv, int argc)
 {
-  if (!target_executing)
+  if (argc == 0)
     {
-      mi_error_message = xstrprintf ("mi_cmd_exec_interrupt: Inferior not executing.");
-      return MI_CMD_ERROR;
+      if (!is_running (inferior_ptid))
+	error ("Current thread is not running.");
+
+      interrupt_target_1 (0);
     }
-  interrupt_target_command (args, from_tty);
-  if (last_async_command)
-    fputs_unfiltered (last_async_command, raw_stdout);
-  fputs_unfiltered ("^done", raw_stdout);
-  xfree (last_async_command);
-  if (previous_async_command)
-    last_async_command = xstrdup (previous_async_command);
-  xfree (previous_async_command);
-  previous_async_command = NULL;
-  mi_out_put (uiout, raw_stdout);
-  mi_out_rewind (uiout);
-  fputs_unfiltered ("\n", raw_stdout);
-  return MI_CMD_QUIET;
+  else if (argc == 1 && strcmp (argv[0], "--all") == 0)
+    {
+      if (!any_running ())
+	error ("Inferior not running.");
+      
+      interrupt_target_1 (1);
+    }
+  else if (argc == 2 && strcmp (argv[0], "--thread-group") == 0)
+    {
+      struct cleanup *old_chain;
+      int pid;
+      if (argv[1] == NULL || argv[1] == '\0')
+	error ("Thread group id not specified");
+      pid = atoi (argv[1] + 1);
+      if (!in_inferior_list (pid))
+	error ("Invalid thread group id '%s'", argv[1]);
+
+      old_chain = make_cleanup_restore_current_thread ();
+      iterate_over_threads (interrupt_thread_callback, &pid);
+      do_cleanups (old_chain);
+    }
+  else
+    error ("Usage: -exec-interrupt [--all|--thread-group id]");
 }
 
-enum mi_cmd_result
+static int
+find_thread_of_process (struct thread_info *ti, void *p)
+{
+  int pid = *(int *)p;
+  if (PIDGET (ti->ptid) == pid && !is_exited (ti->ptid))
+    return 1;
+
+  return 0;
+}
+
+void
+mi_cmd_target_detach (char *command, char **argv, int argc)
+{
+  if (argc != 0 && argc != 1)
+    error ("Usage: -target-detach [thread-group]");
+
+  if (argc == 1)
+    {
+      struct thread_info *tp;
+      char *end = argv[0];
+      int pid = strtol (argv[0], &end, 10);
+      if (*end != '\0')
+	error (_("Cannot parse thread group id '%s'"), argv[0]);
+
+      /* Pick any thread in the desired process.  Current
+	 target_detach deteches from the parent of inferior_ptid.  */
+      tp = iterate_over_threads (find_thread_of_process, &pid);
+      if (!tp)
+	error (_("Thread group is empty"));
+
+      switch_to_thread (tp->ptid);
+    }
+
+  detach_command (NULL, 0);
+}
+
+void
 mi_cmd_thread_select (char *command, char **argv, int argc)
 {
   enum gdb_rc rc;
+  char *mi_error_message;
 
   if (argc != 1)
-    {
-      mi_error_message = xstrprintf ("mi_cmd_thread_select: USAGE: threadnum.");
-      return MI_CMD_ERROR;
-    }
-  else
-    rc = gdb_thread_select (uiout, argv[0], &mi_error_message);
+    error ("mi_cmd_thread_select: USAGE: threadnum.");
+
+  rc = gdb_thread_select (uiout, argv[0], &mi_error_message);
 
   if (rc == GDB_RC_FAIL)
-    return MI_CMD_ERROR;
-  else
-    return MI_CMD_DONE;
+    {
+      make_cleanup (xfree, mi_error_message);
+      error ("%s", mi_error_message);
+    }
 }
 
-enum mi_cmd_result
+void
 mi_cmd_thread_list_ids (char *command, char **argv, int argc)
 {
   enum gdb_rc rc;
+  char *mi_error_message;
 
   if (argc != 0)
-    {
-      mi_error_message = xstrprintf ("mi_cmd_thread_list_ids: No arguments required.");
-      return MI_CMD_ERROR;
-    }
-  else
-    rc = gdb_list_thread_ids (uiout, &mi_error_message);
+    error ("mi_cmd_thread_list_ids: No arguments required.");
+
+  rc = gdb_list_thread_ids (uiout, &mi_error_message);
 
   if (rc == GDB_RC_FAIL)
-    return MI_CMD_ERROR;
-  else
-    return MI_CMD_DONE;
+    {
+      make_cleanup (xfree, mi_error_message);
+      error ("%s", mi_error_message);
+    }
 }
 
-enum mi_cmd_result
+void
+mi_cmd_thread_info (char *command, char **argv, int argc)
+{
+  int thread = -1;
+  
+  if (argc != 0 && argc != 1)
+    error ("Invalid MI command");
+
+  if (argc == 1)
+    thread = atoi (argv[0]);
+
+  print_thread_info (uiout, thread, -1);
+}
+
+static int
+print_one_inferior (struct inferior *inferior, void *arg)
+{
+  struct cleanup *back_to = make_cleanup_ui_out_tuple_begin_end (uiout, NULL);
+
+  ui_out_field_fmt (uiout, "id", "%d", inferior->pid);
+  ui_out_field_string (uiout, "type", "process");
+  ui_out_field_int (uiout, "pid", inferior->pid);
+  
+  do_cleanups (back_to);
+  return 0;
+}
+
+void
+mi_cmd_list_thread_groups (char *command, char **argv, int argc)
+{
+  struct cleanup *back_to;
+  int available = 0;
+  char *id = NULL;
+
+  if (argc > 0 && strcmp (argv[0], "--available") == 0)
+    {
+      ++argv;
+      --argc;
+      available = 1;
+    }
+
+  if (argc > 0)
+    id = argv[0];
+
+  back_to = make_cleanup (&null_cleanup, NULL);
+
+  if (id)
+    {
+      int pid = atoi (id);
+      if (!in_inferior_list (pid))
+	error ("Invalid thread group id '%s'", id);
+      print_thread_info (uiout, -1, pid);    
+    }
+  else
+    {
+      make_cleanup_ui_out_list_begin_end (uiout, "groups");
+      iterate_over_inferiors (print_one_inferior, NULL);
+    }
+  
+  do_cleanups (back_to);
+}
+
+void
 mi_cmd_data_list_register_names (char *command, char **argv, int argc)
 {
   int regnum, numregs;
@@ -315,11 +433,8 @@ mi_cmd_data_list_register_names (char *command, char **argv, int argc)
     {
       regnum = atoi (argv[i]);
       if (regnum < 0 || regnum >= numregs)
-	{
-	  do_cleanups (cleanup);
-	  mi_error_message = xstrprintf ("bad register number");
-	  return MI_CMD_ERROR;
-	}
+	error ("bad register number");
+
       if (gdbarch_register_name (current_gdbarch, regnum) == NULL
 	  || *(gdbarch_register_name (current_gdbarch, regnum)) == '\0')
 	ui_out_field_string (uiout, NULL, "");
@@ -328,10 +443,9 @@ mi_cmd_data_list_register_names (char *command, char **argv, int argc)
 			     gdbarch_register_name (current_gdbarch, regnum));
     }
   do_cleanups (cleanup);
-  return MI_CMD_DONE;
 }
 
-enum mi_cmd_result
+void
 mi_cmd_data_list_changed_registers (char *command, char **argv, int argc)
 {
   static struct regcache *this_regs = NULL;
@@ -370,11 +484,7 @@ mi_cmd_data_list_changed_registers (char *command, char **argv, int argc)
 	    continue;
 	  changed = register_changed_p (regnum, prev_regs, this_regs);
 	  if (changed < 0)
-	    {
-	      do_cleanups (cleanup);
-	      mi_error_message = xstrprintf ("mi_cmd_data_list_changed_registers: Unable to read register contents.");
-	      return MI_CMD_ERROR;
-	    }
+	    error ("mi_cmd_data_list_changed_registers: Unable to read register contents.");
 	  else if (changed)
 	    ui_out_field_int (uiout, NULL, regnum);
 	}
@@ -392,23 +502,14 @@ mi_cmd_data_list_changed_registers (char *command, char **argv, int argc)
 	{
 	  changed = register_changed_p (regnum, prev_regs, this_regs);
 	  if (changed < 0)
-	    {
-	      do_cleanups (cleanup);
-	      mi_error_message = xstrprintf ("mi_cmd_data_list_register_change: Unable to read register contents.");
-	      return MI_CMD_ERROR;
-	    }
+	    error ("mi_cmd_data_list_register_change: Unable to read register contents.");
 	  else if (changed)
 	    ui_out_field_int (uiout, NULL, regnum);
 	}
       else
-	{
-	  do_cleanups (cleanup);
-	  mi_error_message = xstrprintf ("bad register number");
-	  return MI_CMD_ERROR;
-	}
+	error ("bad register number");
     }
   do_cleanups (cleanup);
-  return MI_CMD_DONE;
 }
 
 static int
@@ -444,10 +545,10 @@ register_changed_p (int regnum, struct regcache *prev_regs,
    format argumetn there can be a sequence of numbers, indicating which
    registers to fetch the content of.  If the format is the only argument,
    a list of all the registers with their values is returned.  */
-enum mi_cmd_result
+void
 mi_cmd_data_list_register_values (char *command, char **argv, int argc)
 {
-  int regnum, numregs, format, result;
+  int regnum, numregs, format;
   int i;
   struct cleanup *list_cleanup, *tuple_cleanup;
 
@@ -461,10 +562,7 @@ mi_cmd_data_list_register_values (char *command, char **argv, int argc)
 	    + gdbarch_num_pseudo_regs (current_gdbarch);
 
   if (argc == 0)
-    {
-      mi_error_message = xstrprintf ("mi_cmd_data_list_register_values: Usage: -data-list-register-values <format> [<regnum1>...<regnumN>]");
-      return MI_CMD_ERROR;
-    }
+    error ("mi_cmd_data_list_register_values: Usage: -data-list-register-values <format> [<regnum1>...<regnumN>]");
 
   format = (int) argv[0][0];
 
@@ -481,12 +579,7 @@ mi_cmd_data_list_register_values (char *command, char **argv, int argc)
 	    continue;
 	  tuple_cleanup = make_cleanup_ui_out_tuple_begin_end (uiout, NULL);
 	  ui_out_field_int (uiout, "number", regnum);
-	  result = get_register (regnum, format);
-	  if (result == -1)
-	    {
-	      do_cleanups (list_cleanup);
-	      return MI_CMD_ERROR;
-	    }
+	  get_register (regnum, format);
 	  do_cleanups (tuple_cleanup);
 	}
     }
@@ -503,27 +596,17 @@ mi_cmd_data_list_register_values (char *command, char **argv, int argc)
 	{
 	  tuple_cleanup = make_cleanup_ui_out_tuple_begin_end (uiout, NULL);
 	  ui_out_field_int (uiout, "number", regnum);
-	  result = get_register (regnum, format);
-	  if (result == -1)
-	    {
-	      do_cleanups (list_cleanup);
-	      return MI_CMD_ERROR;
-	    }
+	  get_register (regnum, format);
 	  do_cleanups (tuple_cleanup);
 	}
       else
-	{
-	  do_cleanups (list_cleanup);
-	  mi_error_message = xstrprintf ("bad register number");
-	  return MI_CMD_ERROR;
-	}
+	error ("bad register number");
     }
   do_cleanups (list_cleanup);
-  return MI_CMD_DONE;
 }
 
 /* Output one register's contents in the desired format.  */
-static int
+static void
 get_register (int regnum, int format)
 {
   gdb_byte buffer[MAX_REGISTER_SIZE];
@@ -542,10 +625,7 @@ get_register (int regnum, int format)
 		  &realnum, buffer);
 
   if (optim)
-    {
-      mi_error_message = xstrprintf ("Optimized out");
-      return -1;
-    }
+    error ("Optimized out");
 
   if (format == 'r')
     {
@@ -566,18 +646,20 @@ get_register (int regnum, int format)
     }
   else
     {
+      struct value_print_options opts;
+      get_formatted_print_options (&opts, format);
+      opts.deref_ref = 1;
       val_print (register_type (current_gdbarch, regnum), buffer, 0, 0,
-		 stb->stream, format, 1, 0, Val_pretty_default);
+		 stb->stream, 0, &opts, current_language);
       ui_out_field_stream (uiout, "value", stb);
       ui_out_stream_delete (stb);
     }
-  return 1;
 }
 
 /* Write given values into registers. The registers and values are
    given as pairs.  The corresponding MI command is 
    -data-write-register-values <format> [<regnum1> <value1>...<regnumN> <valueN>]*/
-enum mi_cmd_result
+void
 mi_cmd_data_write_register_values (char *command, char **argv, int argc)
 {
   int numregs, i;
@@ -593,30 +675,18 @@ mi_cmd_data_write_register_values (char *command, char **argv, int argc)
 	    + gdbarch_num_pseudo_regs (current_gdbarch);
 
   if (argc == 0)
-    {
-      mi_error_message = xstrprintf ("mi_cmd_data_write_register_values: Usage: -data-write-register-values <format> [<regnum1> <value1>...<regnumN> <valueN>]");
-      return MI_CMD_ERROR;
-    }
+    error ("mi_cmd_data_write_register_values: Usage: -data-write-register-values <format> [<regnum1> <value1>...<regnumN> <valueN>]");
 
   format = (int) argv[0][0];
 
   if (!target_has_registers)
-    {
-      mi_error_message = xstrprintf ("mi_cmd_data_write_register_values: No registers.");
-      return MI_CMD_ERROR;
-    }
+    error ("mi_cmd_data_write_register_values: No registers.");
 
   if (!(argc - 1))
-    {
-      mi_error_message = xstrprintf ("mi_cmd_data_write_register_values: No regs and values specified.");
-      return MI_CMD_ERROR;
-    }
+    error ("mi_cmd_data_write_register_values: No regs and values specified.");
 
   if ((argc - 1) % 2)
-    {
-      mi_error_message = xstrprintf ("mi_cmd_data_write_register_values: Regs and vals are not in pairs.");
-      return MI_CMD_ERROR;
-    }
+    error ("mi_cmd_data_write_register_values: Regs and vals are not in pairs.");
 
   for (i = 1; i < argc; i = i + 2)
     {
@@ -635,32 +705,28 @@ mi_cmd_data_write_register_values (char *command, char **argv, int argc)
 	  regcache_cooked_write_signed (get_current_regcache (), regnum, value);
 	}
       else
-	{
-	  mi_error_message = xstrprintf ("bad register number");
-	  return MI_CMD_ERROR;
-	}
+	error ("bad register number");
     }
-  return MI_CMD_DONE;
 }
 
 /* Evaluate the value of the argument.  The argument is an
    expression. If the expression contains spaces it needs to be
    included in double quotes.  */
-enum mi_cmd_result
+void
 mi_cmd_data_evaluate_expression (char *command, char **argv, int argc)
 {
   struct expression *expr;
   struct cleanup *old_chain = NULL;
   struct value *val;
   struct ui_stream *stb = NULL;
+  struct value_print_options opts;
 
   stb = ui_out_stream_new (uiout);
 
   if (argc != 1)
     {
-      mi_error_message = xstrprintf ("mi_cmd_data_evaluate_expression: Usage: -data-evaluate-expression expression");
       ui_out_stream_delete (stb);
-      return MI_CMD_ERROR;
+      error ("mi_cmd_data_evaluate_expression: Usage: -data-evaluate-expression expression");
     }
 
   expr = parse_expression (argv[0]);
@@ -670,60 +736,16 @@ mi_cmd_data_evaluate_expression (char *command, char **argv, int argc)
   val = evaluate_expression (expr);
 
   /* Print the result of the expression evaluation.  */
+  get_user_print_options (&opts);
+  opts.deref_ref = 0;
   val_print (value_type (val), value_contents (val),
-	     value_embedded_offset (val), VALUE_ADDRESS (val),
-	     stb->stream, 0, 0, 0, 0);
+	     value_embedded_offset (val), value_address (val),
+	     stb->stream, 0, &opts, current_language);
 
   ui_out_field_stream (uiout, "value", stb);
   ui_out_stream_delete (stb);
 
   do_cleanups (old_chain);
-
-  return MI_CMD_DONE;
-}
-
-enum mi_cmd_result
-mi_cmd_target_download (char *args, int from_tty)
-{
-  char *run;
-  struct cleanup *old_cleanups = NULL;
-
-  run = xstrprintf ("load %s", args);
-  old_cleanups = make_cleanup (xfree, run);
-  execute_command (run, from_tty);
-
-  do_cleanups (old_cleanups);
-  return MI_CMD_DONE;
-}
-
-/* Connect to the remote target.  */
-enum mi_cmd_result
-mi_cmd_target_select (char *args, int from_tty)
-{
-  char *run;
-  struct cleanup *old_cleanups = NULL;
-
-  run = xstrprintf ("target %s", args);
-  old_cleanups = make_cleanup (xfree, run);
-
-  /* target-select is always synchronous.  Once the call has returned
-     we know that we are connected.  */
-  /* NOTE: At present all targets that are connected are also
-     (implicitly) talking to a halted target.  In the future this may
-     change.  */
-  execute_command (run, from_tty);
-
-  do_cleanups (old_cleanups);
-
-  /* Issue the completion message here.  */
-  if (last_async_command)
-    fputs_unfiltered (last_async_command, raw_stdout);
-  fputs_unfiltered ("^connected", raw_stdout);
-  mi_out_put (uiout, raw_stdout);
-  mi_out_rewind (uiout);
-  fputs_unfiltered ("\n", raw_stdout);
-  do_exec_cleanups (ALL_CLEANUPS);
-  return MI_CMD_QUIET;
 }
 
 /* DATA-MEMORY-READ:
@@ -745,7 +767,7 @@ mi_cmd_target_select (char *args, int from_tty)
    Returns: 
    The number of bytes read is SIZE*ROW*COL. */
 
-enum mi_cmd_result
+void
 mi_cmd_data_read_memory (char *command, char **argv, int argc)
 {
   struct cleanup *cleanups = make_cleanup (null_cleanup, NULL);
@@ -790,10 +812,7 @@ mi_cmd_data_read_memory (char *command, char **argv, int argc)
   argc -= optind;
 
   if (argc < 5 || argc > 6)
-    {
-      mi_error_message = xstrprintf ("mi_cmd_data_read_memory: Usage: ADDR WORD-FORMAT WORD-SIZE NR-ROWS NR-COLS [ASCHAR].");
-      return MI_CMD_ERROR;
-    }
+    error ("mi_cmd_data_read_memory: Usage: ADDR WORD-FORMAT WORD-SIZE NR-ROWS NR-COLS [ASCHAR].");
 
   /* Extract all the arguments. */
 
@@ -829,17 +848,13 @@ mi_cmd_data_read_memory (char *command, char **argv, int argc)
   /* The number of rows.  */
   nr_rows = atol (argv[3]);
   if (nr_rows <= 0)
-    {
-      mi_error_message = xstrprintf ("mi_cmd_data_read_memory: invalid number of rows.");
-      return MI_CMD_ERROR;
-    }
+    error ("mi_cmd_data_read_memory: invalid number of rows.");
+
   /* Number of bytes per row.  */
   nr_cols = atol (argv[4]);
   if (nr_cols <= 0)
-    {
-      mi_error_message = xstrprintf ("mi_cmd_data_read_memory: invalid number of columns.");
-      return MI_CMD_ERROR;
-    }
+    error ("mi_cmd_data_read_memory: invalid number of columns.");
+
   /* The un-printable character when printing ascii.  */
   if (argc == 6)
     aschar = *argv[5];
@@ -851,14 +866,10 @@ mi_cmd_data_read_memory (char *command, char **argv, int argc)
   mbuf = xcalloc (total_bytes, 1);
   make_cleanup (xfree, mbuf);
 
-  nr_bytes = target_read (&current_target, TARGET_OBJECT_MEMORY, NULL,
-			  mbuf, addr, total_bytes);
+  nr_bytes = target_read_until_error (&current_target, TARGET_OBJECT_MEMORY, 
+				      NULL, mbuf, addr, total_bytes);
   if (nr_bytes <= 0)
-    {
-      do_cleanups (cleanups);
-      mi_error_message = xstrdup ("Unable to read memory.");
-      return MI_CMD_ERROR;
-    }
+    error ("Unable to read memory.");
 
   /* Output the header information.  */
   ui_out_field_core_addr (uiout, "addr", addr);
@@ -884,10 +895,13 @@ mi_cmd_data_read_memory (char *command, char **argv, int argc)
 	int col_byte;
 	struct cleanup *cleanup_tuple;
 	struct cleanup *cleanup_list_data;
+	struct value_print_options opts;
+
 	cleanup_tuple = make_cleanup_ui_out_tuple_begin_end (uiout, NULL);
 	ui_out_field_core_addr (uiout, "addr", addr + row_byte);
 	/* ui_out_field_core_addr_symbolic (uiout, "saddr", addr + row_byte); */
 	cleanup_list_data = make_cleanup_ui_out_list_begin_end (uiout, "data");
+	get_formatted_print_options (&opts, word_format);
 	for (col = 0, col_byte = row_byte;
 	     col < nr_cols;
 	     col++, col_byte += word_size)
@@ -899,7 +913,7 @@ mi_cmd_data_read_memory (char *command, char **argv, int argc)
 	    else
 	      {
 		ui_file_rewind (stream->stream);
-		print_scalar_formatted (mbuf + col_byte, word_type, word_format,
+		print_scalar_formatted (mbuf + col_byte, word_type, &opts,
 					word_asize, stream->stream);
 		ui_out_field_stream (uiout, NULL, stream);
 	      }
@@ -930,7 +944,6 @@ mi_cmd_data_read_memory (char *command, char **argv, int argc)
     do_cleanups (cleanup_list_memory);
   }
   do_cleanups (cleanups);
-  return MI_CMD_DONE;
 }
 
 /* DATA-MEMORY-WRITE:
@@ -949,7 +962,7 @@ mi_cmd_data_read_memory (char *command, char **argv, int argc)
    Writes VALUE into ADDR + (COLUMN_OFFSET * WORD_SIZE).
 
    Prints nothing.  */
-enum mi_cmd_result
+void
 mi_cmd_data_write_memory (char *command, char **argv, int argc)
 {
   CORE_ADDR addr;
@@ -990,10 +1003,7 @@ mi_cmd_data_write_memory (char *command, char **argv, int argc)
   argc -= optind;
 
   if (argc != 4)
-    {
-      mi_error_message = xstrprintf ("mi_cmd_data_write_memory: Usage: [-o COLUMN_OFFSET] ADDR FORMAT WORD-SIZE VALUE.");
-      return MI_CMD_ERROR;
-    }
+    error ("mi_cmd_data_write_memory: Usage: [-o COLUMN_OFFSET] ADDR FORMAT WORD-SIZE VALUE.");
 
   /* Extract all the arguments.  */
   /* Start address of the memory dump.  */
@@ -1017,11 +1027,9 @@ mi_cmd_data_write_memory (char *command, char **argv, int argc)
   write_memory (addr, buffer, word_size);
   /* Free the buffer.  */
   do_cleanups (old_chain);
-
-  return MI_CMD_DONE;
 }
 
-enum mi_cmd_result
+void
 mi_cmd_enable_timings (char *command, char **argv, int argc)
 {
   if (argc == 0)
@@ -1038,14 +1046,13 @@ mi_cmd_enable_timings (char *command, char **argv, int argc)
   else
     goto usage_error;
     
-  return MI_CMD_DONE;
+  return;
 
  usage_error:
   error ("mi_cmd_enable_timings: Usage: %s {yes|no}", command);
-  return MI_CMD_ERROR;
 }
 
-enum mi_cmd_result
+void
 mi_cmd_list_features (char *command, char **argv, int argc)
 {
   if (argc == 0)
@@ -1055,98 +1062,95 @@ mi_cmd_list_features (char *command, char **argv, int argc)
 
       ui_out_field_string (uiout, NULL, "frozen-varobjs");
       ui_out_field_string (uiout, NULL, "pending-breakpoints");
+      ui_out_field_string (uiout, NULL, "thread-info");
+
+#if HAVE_PYTHON
+      ui_out_field_string (uiout, NULL, "python");
+#endif
       
       do_cleanups (cleanup);
-
-      return MI_CMD_DONE;
+      return;
     }
 
   error ("-list-features should be passed no arguments");
-  return MI_CMD_ERROR;
 }
- 
+
+void
+mi_cmd_list_target_features (char *command, char **argv, int argc)
+{
+  if (argc == 0)
+    {
+      struct cleanup *cleanup = NULL;
+      cleanup = make_cleanup_ui_out_list_begin_end (uiout, "features");      
+
+      if (target_can_async_p ())
+	ui_out_field_string (uiout, NULL, "async");
+      
+      do_cleanups (cleanup);
+      return;
+    }
+
+  error ("-list-target-features should be passed no arguments");
+}
+
 /* Execute a command within a safe environment.
    Return <0 for error; >=0 for ok.
 
    args->action will tell mi_execute_command what action
-   to perfrom after the given command has executed (display/supress
+   to perfrom after the given command has executed (display/suppress
    prompt, display error). */
 
 static void
 captured_mi_execute_command (struct ui_out *uiout, void *data)
 {
-  struct captured_mi_execute_command_args *args =
-    (struct captured_mi_execute_command_args *) data;
-  struct mi_parse *context = args->command;
+  struct mi_parse *context = (struct mi_parse *) data;
 
   struct mi_timestamp cmd_finished;
 
+  running_result_record_printed = 0;
   switch (context->op)
     {
-
     case MI_COMMAND:
       /* A MI command was read from the input stream.  */
       if (mi_debug_p)
 	/* FIXME: gdb_???? */
 	fprintf_unfiltered (raw_stdout, " token=`%s' command=`%s' args=`%s'\n",
 			    context->token, context->command, context->args);
-      /* FIXME: cagney/1999-09-25: Rather than this convoluted
-         condition expression, each function should return an
-         indication of what action is required and then switch on
-         that.  */
-      args->action = EXECUTE_COMMAND_DISPLAY_PROMPT;
 
       if (do_timings)
 	current_command_ts = context->cmd_start;
 
-      args->rc = mi_cmd_execute (context);
+      mi_cmd_execute (context);
 
       if (do_timings)
-          timestamp (&cmd_finished);
+	timestamp (&cmd_finished);
 
-      if (!target_can_async_p () || !target_executing)
-	{
-	  /* Print the result if there were no errors.
+      /* Print the result if there were no errors.
 
-	     Remember that on the way out of executing a command, you have
-	     to directly use the mi_interp's uiout, since the command could 
-	     have reset the interpreter, in which case the current uiout 
-	     will most likely crash in the mi_out_* routines.  */
-	  if (args->rc == MI_CMD_DONE)
-	    {
-	      fputs_unfiltered (context->token, raw_stdout);
-	      fputs_unfiltered ("^done", raw_stdout);
-	      mi_out_put (uiout, raw_stdout);
-	      mi_out_rewind (uiout);
-	      /* Have to check cmd_start, since the command could be
-		 -enable-timings.  */
-	      if (do_timings && context->cmd_start)
-		  print_diff (context->cmd_start, &cmd_finished);
-	      fputs_unfiltered ("\n", raw_stdout);
-	    }
-	  else if (args->rc == MI_CMD_ERROR)
-	    {
-	      if (mi_error_message)
-		{
-		  fputs_unfiltered (context->token, raw_stdout);
-		  fputs_unfiltered ("^error,msg=\"", raw_stdout);
-		  fputstr_unfiltered (mi_error_message, '"', raw_stdout);
-		  xfree (mi_error_message);
-		  mi_error_message = NULL;
-		  fputs_unfiltered ("\"\n", raw_stdout);
-		}
-	      mi_out_rewind (uiout);
-	    }
-	  else
-	    mi_out_rewind (uiout);
-	}
-      else if (sync_execution)
+	 Remember that on the way out of executing a command, you have
+	 to directly use the mi_interp's uiout, since the command could 
+	 have reset the interpreter, in which case the current uiout 
+	 will most likely crash in the mi_out_* routines.  */
+      if (!running_result_record_printed)
 	{
-	  /* Don't print the prompt. We are executing the target in
-	     synchronous mode.  */
-	  args->action = EXECUTE_COMMAND_SUPRESS_PROMPT;
-	  return;
+	  fputs_unfiltered (context->token, raw_stdout);
+	  /* There's no particularly good reason why target-connect results
+	     in not ^done.  Should kill ^connected for MI3.  */
+	  fputs_unfiltered (strcmp (context->command, "target-select") == 0
+			    ? "^connected" : "^done", raw_stdout);
+	  mi_out_put (uiout, raw_stdout);
+	  mi_out_rewind (uiout);
+	  /* Have to check cmd_start, since the command could be
+	     -enable-timings.  */
+	  if (do_timings && context->cmd_start)
+	    print_diff (context->cmd_start, &cmd_finished);
+	  fputs_unfiltered ("\n", raw_stdout);
 	}
+      else
+	    /* The command does not want anything to be printed.  In that
+	       case, the command probably should not have written anything
+	       to uiout, but in case it has written something, discard it.  */
+	mi_out_rewind (uiout);
       break;
 
     case CLI_COMMAND:
@@ -1160,7 +1164,7 @@ captured_mi_execute_command (struct ui_out *uiout, void *data)
 	/* Call the "console" interpreter.  */
 	argv[0] = "console";
 	argv[1] = context->command;
-	args->rc = mi_cmd_interpreter_exec ("-interpreter-exec", argv, 2);
+	mi_cmd_interpreter_exec ("-interpreter-exec", argv, 2);
 
 	/* If we changed interpreters, DON'T print out anything.  */
 	if (current_interp_named_p (INTERP_MI)
@@ -1168,27 +1172,13 @@ captured_mi_execute_command (struct ui_out *uiout, void *data)
 	    || current_interp_named_p (INTERP_MI2)
 	    || current_interp_named_p (INTERP_MI3))
 	  {
-	    if (args->rc == MI_CMD_DONE)
+	    if (!running_result_record_printed)
 	      {
 		fputs_unfiltered (context->token, raw_stdout);
 		fputs_unfiltered ("^done", raw_stdout);
 		mi_out_put (uiout, raw_stdout);
 		mi_out_rewind (uiout);
 		fputs_unfiltered ("\n", raw_stdout);
-		args->action = EXECUTE_COMMAND_DISPLAY_PROMPT;
-	      }
-	    else if (args->rc == MI_CMD_ERROR)
-	      {
-		if (mi_error_message)
-		  {
-		    fputs_unfiltered (context->token, raw_stdout);
-		    fputs_unfiltered ("^error,msg=\"", raw_stdout);
-		    fputstr_unfiltered (mi_error_message, '"', raw_stdout);
-		    xfree (mi_error_message);
-		    mi_error_message = NULL;
-		    fputs_unfiltered ("\"\n", raw_stdout);
-		  }
-		mi_out_rewind (uiout);
 	      }
 	    else
 	      mi_out_rewind (uiout);
@@ -1206,7 +1196,6 @@ void
 mi_execute_command (char *cmd, int from_tty)
 {
   struct mi_parse *command;
-  struct captured_mi_execute_command_args args;
   struct ui_out *saved_uiout = uiout;
 
   /* This is to handle EOF (^D). We just quit gdb.  */
@@ -1219,6 +1208,7 @@ mi_execute_command (char *cmd, int from_tty)
   if (command != NULL)
     {
       struct gdb_exception result;
+      ptid_t previous_ptid = inferior_ptid;
 
       if (do_timings)
 	{
@@ -1227,20 +1217,8 @@ mi_execute_command (char *cmd, int from_tty)
 	  timestamp (command->cmd_start);
 	}
 
-      /* FIXME: cagney/1999-11-04: Can this use of catch_exceptions either
-         be pushed even further down or even eliminated?  */
-      args.command = command;
-      result = catch_exception (uiout, captured_mi_execute_command, &args,
+      result = catch_exception (uiout, captured_mi_execute_command, command,
 				RETURN_MASK_ALL);
-      exception_print (gdb_stderr, result);
-
-      if (args.action == EXECUTE_COMMAND_SUPRESS_PROMPT)
-	{
-	  /* The command is executing synchronously.  Bail out early
-	     suppressing the finished prompt.  */
-	  mi_parse_free (command);
-	  return;
-	}
       if (result.reason < 0)
 	{
 	  /* The command execution failed and error() was called
@@ -1250,10 +1228,46 @@ mi_execute_command (char *cmd, int from_tty)
 	  if (result.message == NULL)
 	    fputs_unfiltered ("unknown error", raw_stdout);
 	  else
-	      fputstr_unfiltered (result.message, '"', raw_stdout);
+	    fputstr_unfiltered (result.message, '"', raw_stdout);
 	  fputs_unfiltered ("\"\n", raw_stdout);
 	  mi_out_rewind (uiout);
 	}
+
+      if (/* The notifications are only output when the top-level
+	     interpreter (specified on the command line) is MI.  */      
+	  ui_out_is_mi_like_p (interp_ui_out (top_level_interpreter ()))
+	  /* Don't try report anything if there are no threads -- 
+	     the program is dead.  */
+	  && thread_count () != 0
+	  /* -thread-select explicitly changes thread. If frontend uses that
+	     internally, we don't want to emit =thread-selected, since
+	     =thread-selected is supposed to indicate user's intentions.  */
+	  && strcmp (command->command, "thread-select") != 0)
+	{
+	  struct mi_interp *mi = top_level_interpreter_data ();
+	  struct thread_info *ti = inferior_thread ();
+	  int report_change;
+
+	  if (command->thread == -1)
+	    {
+	      report_change = !ptid_equal (previous_ptid, null_ptid)
+		&& !ptid_equal (inferior_ptid, previous_ptid);
+	    }
+	  else
+	    {
+	      report_change = (ti->num != command->thread);
+	    }
+
+	  if (report_change)
+	    {     
+	      target_terminal_ours ();
+	      fprintf_unfiltered (mi->event_channel, 
+				  "thread-selected,id=\"%d\"",
+				  ti->num);
+	      gdb_flush (mi->event_channel);
+	    }
+	}
+
       mi_parse_free (command);
     }
 
@@ -1263,50 +1277,64 @@ mi_execute_command (char *cmd, int from_tty)
   /* ..... */
 }
 
-static enum mi_cmd_result
+static void
 mi_cmd_execute (struct mi_parse *parse)
 {
+  struct cleanup *cleanup;
+  int i;
   free_all_values ();
 
-  if (parse->cmd->argv_func != NULL
-      || parse->cmd->args_func != NULL)
-    {
-      /* FIXME: We need to save the token because the command executed
-         may be asynchronous and need to print the token again.
-         In the future we can pass the token down to the func
-         and get rid of the last_async_command.  */
-      /* The problem here is to keep the token around when we launch
-         the target, and we want to interrupt it later on.  The
-         interrupt command will have its own token, but when the
-         target stops, we must display the token corresponding to the
-         last execution command given.  So we have another string where
-         we copy the token (previous_async_command), if this was
-         indeed the token of an execution command, and when we stop we
-         print that one.  This is possible because the interrupt
-         command, when over, will copy that token back into the
-         default token string (last_async_command).  */
+  current_token = xstrdup (parse->token);
+  cleanup = make_cleanup (free_current_contents, &current_token);
 
-      if (target_executing)
+  if (parse->frame != -1 && parse->thread == -1)
+    error (_("Cannot specify --frame without --thread"));
+
+  if (parse->thread != -1)
+    {
+      struct thread_info *tp = find_thread_id (parse->thread);
+      if (!tp)
+	error (_("Invalid thread id: %d"), parse->thread);
+
+      if (is_exited (tp->ptid))
+	error (_("Thread id: %d has terminated"), parse->thread);
+
+      switch_to_thread (tp->ptid);
+    }
+
+  if (parse->frame != -1)
+    {
+      struct frame_info *fid;
+      int frame = parse->frame;
+      fid = find_relative_frame (get_current_frame (), &frame);
+      if (frame == 0)
+	/* find_relative_frame was successful */
+	select_frame (fid);
+      else
+	error (_("Invalid frame id: %d"), frame);
+    }
+
+  if (parse->cmd->argv_func != NULL)
+    {
+      if (target_can_async_p ()
+	  && target_has_execution
+	  && (is_exited (inferior_ptid))
+	  && (strcmp (parse->command, "thread-info") != 0
+	      && strcmp (parse->command, "thread-list-ids") != 0
+	      && strcmp (parse->command, "thread-select") != 0))
 	{
-	  if (!previous_async_command)
-	    previous_async_command = xstrdup (last_async_command);
-	  if (strcmp (parse->command, "exec-interrupt"))
-	    {
-	      fputs_unfiltered (parse->token, raw_stdout);
-	      fputs_unfiltered ("^error,msg=\"", raw_stdout);
-	      fputs_unfiltered ("Cannot execute command ", raw_stdout);
-	      fputstr_unfiltered (parse->command, '"', raw_stdout);
-	      fputs_unfiltered (" while target running", raw_stdout);
-	      fputs_unfiltered ("\"\n", raw_stdout);
-	      return MI_CMD_ERROR;
-	    }
+	  struct ui_file *stb;
+	  stb = mem_fileopen ();
+
+	  fputs_unfiltered ("Cannot execute command ", stb);
+	  fputstr_unfiltered (parse->command, '"', stb);
+	  fputs_unfiltered (" without a selected thread", stb);
+
+	  make_cleanup_ui_file_delete (stb);
+	  error_stream (stb);
 	}
-      last_async_command = xstrdup (parse->token);
-      make_exec_cleanup (free_current_contents, &last_async_command);
-      /* FIXME: DELETE THIS! */
-      if (parse->cmd->args_func != NULL)
-	return parse->cmd->args_func (parse->args, 0 /*from_tty */ );
-      return parse->cmd->argv_func (parse->command, parse->argv, parse->argc);
+
+      parse->cmd->argv_func (parse->command, parse->argv, parse->argc);
     }
   else if (parse->cmd->cli.cmd != 0)
     {
@@ -1315,19 +1343,22 @@ mi_cmd_execute (struct mi_parse *parse)
       /* Must be a synchronous one.  */
       mi_execute_cli_command (parse->cmd->cli.cmd, parse->cmd->cli.args_p,
 			      parse->args);
-      return MI_CMD_DONE;
     }
   else
     {
       /* FIXME: DELETE THIS.  */
-      fputs_unfiltered (parse->token, raw_stdout);
-      fputs_unfiltered ("^error,msg=\"", raw_stdout);
-      fputs_unfiltered ("Undefined mi command: ", raw_stdout);
-      fputstr_unfiltered (parse->command, '"', raw_stdout);
-      fputs_unfiltered (" (missing implementation)", raw_stdout);
-      fputs_unfiltered ("\"\n", raw_stdout);
-      return MI_CMD_ERROR;
+      struct ui_file *stb;
+
+      stb = mem_fileopen ();
+
+      fputs_unfiltered ("Undefined mi command: ", stb);
+      fputstr_unfiltered (parse->command, '"', stb);
+      fputs_unfiltered (" (missing implementation)", stb);
+
+      make_cleanup_ui_file_delete (stb);
+      error_stream (stb);
     }
+  do_cleanups (cleanup);
 }
 
 /* FIXME: This is just a hack so we can get some extra commands going.
@@ -1356,85 +1387,34 @@ mi_execute_cli_command (const char *cmd, int args_p, const char *args)
     }
 }
 
-enum mi_cmd_result
-mi_execute_async_cli_command (char *mi, char *args, int from_tty)
+void
+mi_execute_async_cli_command (char *cli_command, char **argv, int argc)
 {
   struct cleanup *old_cleanups;
   char *run;
-  char *async_args;
 
   if (target_can_async_p ())
-    {
-      async_args = (char *) xmalloc (strlen (args) + 2);
-      make_exec_cleanup (free, async_args);
-      strcpy (async_args, args);
-      strcat (async_args, "&");
-      run = xstrprintf ("%s %s", mi, async_args);
-      make_exec_cleanup (free, run);
-      add_continuation (mi_exec_async_cli_cmd_continuation, NULL);
-      old_cleanups = NULL;
-    }
+    run = xstrprintf ("%s %s&", cli_command, argc ? *argv : "");
   else
-    {
-      run = xstrprintf ("%s %s", mi, args);
-      old_cleanups = make_cleanup (xfree, run);
-    }
-
-  if (!target_can_async_p ())
-    {
-      /* NOTE: For synchronous targets asynchronous behavour is faked by
-         printing out the GDB prompt before we even try to execute the
-         command.  */
-      if (last_async_command)
-	fputs_unfiltered (last_async_command, raw_stdout);
-      fputs_unfiltered ("^running\n", raw_stdout);
-      fputs_unfiltered ("(gdb) \n", raw_stdout);
-      gdb_flush (raw_stdout);
-    }
-  else
-    {
-      /* FIXME: cagney/1999-11-29: Printing this message before
-         calling execute_command is wrong.  It should only be printed
-         once gdb has confirmed that it really has managed to send a
-         run command to the target.  */
-      if (last_async_command)
-	fputs_unfiltered (last_async_command, raw_stdout);
-      fputs_unfiltered ("^running\n", raw_stdout);
-    }
+    run = xstrprintf ("%s %s", cli_command, argc ? *argv : "");
+  old_cleanups = make_cleanup (xfree, run);  
 
   execute_command ( /*ui */ run, 0 /*from_tty */ );
 
-  if (!target_can_async_p ())
+  if (target_can_async_p ())
+    {
+      /* If we're not executing, an exception should have been throw.  */
+      gdb_assert (is_running (inferior_ptid));
+      do_cleanups (old_cleanups);
+    }
+  else
     {
       /* Do this before doing any printing.  It would appear that some
          print code leaves garbage around in the buffer.  */
       do_cleanups (old_cleanups);
-      /* If the target was doing the operation synchronously we fake
-         the stopped message.  */
-      if (last_async_command)
-	fputs_unfiltered (last_async_command, raw_stdout);
-      fputs_unfiltered ("*stopped", raw_stdout);
-      mi_out_put (uiout, raw_stdout);
-      mi_out_rewind (uiout);
       if (do_timings)
       	print_diff_now (current_command_ts);
-      fputs_unfiltered ("\n", raw_stdout);
-      return MI_CMD_QUIET;
     }
-  return MI_CMD_DONE;
-}
-
-void
-mi_exec_async_cli_cmd_continuation (struct continuation_arg *arg)
-{
-  if (last_async_command)
-    fputs_unfiltered (last_async_command, raw_stdout);
-  fputs_unfiltered ("*stopped", raw_stdout);
-  mi_out_put (uiout, raw_stdout);
-  fputs_unfiltered ("\n", raw_stdout);
-  fputs_unfiltered ("(gdb) \n", raw_stdout);
-  gdb_flush (raw_stdout);
-  do_exec_cleanups (ALL_CLEANUPS);
 }
 
 void
@@ -1486,8 +1466,8 @@ mi_load_progress (const char *section_name,
       xfree (previous_sect_name);
       previous_sect_name = xstrdup (section_name);
 
-      if (last_async_command)
-	fputs_unfiltered (last_async_command, raw_stdout);
+      if (current_token)
+	fputs_unfiltered (current_token, raw_stdout);
       fputs_unfiltered ("+download", raw_stdout);
       cleanup_tuple = make_cleanup_ui_out_tuple_begin_end (uiout, NULL);
       ui_out_field_string (uiout, "section", section_name);
@@ -1505,8 +1485,8 @@ mi_load_progress (const char *section_name,
       struct cleanup *cleanup_tuple;
       last_update.tv_sec = time_now.tv_sec;
       last_update.tv_usec = time_now.tv_usec;
-      if (last_async_command)
-	fputs_unfiltered (last_async_command, raw_stdout);
+      if (current_token)
+	fputs_unfiltered (current_token, raw_stdout);
       fputs_unfiltered ("+download", raw_stdout);
       cleanup_tuple = make_cleanup_ui_out_tuple_begin_end (uiout, NULL);
       ui_out_field_string (uiout, "section", section_name);

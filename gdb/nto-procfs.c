@@ -61,7 +61,7 @@ static int procfs_can_run (void);
 
 static ptid_t procfs_wait (ptid_t, struct target_waitstatus *);
 
-static int procfs_xfer_memory (CORE_ADDR, char *, int, int,
+static int procfs_xfer_memory (CORE_ADDR, gdb_byte *, int, int,
 			       struct mem_attrib *attrib,
 			       struct target_ops *);
 
@@ -125,6 +125,7 @@ procfs_open (char *arg, int from_tty)
   char buffer[50];
   int fd, total_size;
   procfs_sysinfo *sysinfo;
+  struct cleanup *cleanups;
 
   nto_is_nto_target = procfs_is_nto_target;
 
@@ -169,13 +170,13 @@ procfs_open (char *arg, int from_tty)
 		       safe_strerror (errno));
       error (_("Invalid procfs arg"));
     }
+  cleanups = make_cleanup_close (fd);
 
   sysinfo = (void *) buffer;
   if (devctl (fd, DCMD_PROC_SYSINFO, sysinfo, sizeof buffer, 0) != EOK)
     {
       printf_filtered ("Error getting size: %d (%s)\n", errno,
 		       safe_strerror (errno));
-      close (fd);
       error (_("Devctl failed."));
     }
   else
@@ -186,7 +187,6 @@ procfs_open (char *arg, int from_tty)
 	{
 	  printf_filtered ("Memory error: %d (%s)\n", errno,
 			   safe_strerror (errno));
-	  close (fd);
 	  error (_("alloca failed."));
 	}
       else
@@ -195,7 +195,6 @@ procfs_open (char *arg, int from_tty)
 	    {
 	      printf_filtered ("Error getting sysinfo: %d (%s)\n", errno,
 			       safe_strerror (errno));
-	      close (fd);
 	      error (_("Devctl failed."));
 	    }
 	  else
@@ -203,14 +202,11 @@ procfs_open (char *arg, int from_tty)
 	      if (sysinfo->type !=
 		  nto_map_arch_to_cputype (gdbarch_bfd_arch_info
 					   (current_gdbarch)->arch_name))
-		{
-		  close (fd);
-		  error (_("Invalid target CPU."));
-		}
+		error (_("Invalid target CPU."));
 	    }
 	}
     }
-  close (fd);
+  do_cleanups (cleanups);
   printf_filtered ("Debugging using %s\n", nto_procfs_path);
 }
 
@@ -259,12 +255,17 @@ procfs_find_new_threads (void)
   return;
 }
 
+static void
+do_closedir_cleanup (void *dir)
+{
+  closedir (dir);
+}
+
 void
 procfs_pidlist (char *args, int from_tty)
 {
   DIR *dp = NULL;
   struct dirent *dirp = NULL;
-  int fd = -1;
   char buf[512];
   procfs_info *pidinfo = NULL;
   procfs_debuginfo *info = NULL;
@@ -272,6 +273,7 @@ procfs_pidlist (char *args, int from_tty)
   pid_t num_threads = 0;
   pid_t pid;
   char name[512];
+  struct cleanup *cleanups;
 
   dp = opendir (nto_procfs_path);
   if (dp == NULL)
@@ -281,18 +283,23 @@ procfs_pidlist (char *args, int from_tty)
       return;
     }
 
+  cleanups = make_cleanup (do_closedir_cleanup, dp);
+
   /* Start scan at first pid.  */
   rewinddir (dp);
 
   do
     {
+      int fd;
+      struct cleanup *inner_cleanup;
+
       /* Get the right pid and procfs path for the pid.  */
       do
 	{
 	  dirp = readdir (dp);
 	  if (dirp == NULL)
 	    {
-	      closedir (dp);
+	      do_cleanups (cleanups);
 	      return;
 	    }
 	  snprintf (buf, 511, "%s/%s/as", nto_procfs_path, dirp->d_name);
@@ -306,9 +313,10 @@ procfs_pidlist (char *args, int from_tty)
 	{
 	  fprintf_unfiltered (gdb_stderr, "failed to open %s - %d (%s)\n",
 			      buf, errno, safe_strerror (errno));
-	  closedir (dp);
+	  do_cleanups (cleanups);
 	  return;
 	}
+      inner_cleanup = make_cleanup_close (fd);
 
       pidinfo = (procfs_info *) buf;
       if (devctl (fd, DCMD_PROC_INFO, pidinfo, sizeof (buf), 0) != EOK)
@@ -336,12 +344,12 @@ procfs_pidlist (char *args, int from_tty)
 	  if (status->tid != 0)
 	    printf_filtered ("%s - %d/%d\n", name, pid, status->tid);
 	}
-      close (fd);
+
+      do_cleanups (inner_cleanup);
     }
   while (dirp != NULL);
 
-  close (fd);
-  closedir (dp);
+  do_cleanups (cleanups);
   return;
 }
 
@@ -494,8 +502,10 @@ procfs_meminfo (char *args, int from_tty)
 static void
 procfs_files_info (struct target_ops *ignore)
 {
+  struct inferior *inf = current_inferior ();
+
   printf_unfiltered ("\tUsing the running image of %s %s via %s.\n",
-		     attach_flag ? "attached" : "child",
+		     inf->attach_flag ? "attached" : "child",
 		     target_pid_to_str (inferior_ptid), nto_procfs_path);
 }
 
@@ -508,10 +518,11 @@ procfs_can_run (void)
 
 /* Attach to process PID, then initialize for debugging it.  */
 static void
-procfs_attach (char *args, int from_tty)
+procfs_attach (struct target_ops *ops, char *args, int from_tty)
 {
   char *exec_file;
   int pid;
+  struct inferior *inf;
 
   if (!args)
     error_no_arg (_("process-id to attach"));
@@ -535,7 +546,12 @@ procfs_attach (char *args, int from_tty)
       gdb_flush (gdb_stdout);
     }
   inferior_ptid = do_attach (pid_to_ptid (pid));
+  inf = add_inferior (pid);
+  inf->attach_flag = 1;
+
   push_target (&procfs_ops);
+
+  procfs_find_new_threads ();
 }
 
 static void
@@ -571,9 +587,8 @@ do_attach (ptid_t ptid)
   if (devctl (ctl_fd, DCMD_PROC_STATUS, &status, sizeof (status), 0) == EOK
       && status.flags & _DEBUG_FLAG_STOPPED)
     SignalKill (nto_node (), PIDGET (ptid), 0, SIGCONT, 0, 0);
-  attach_flag = 1;
   nto_init_solib_absolute_prefix ();
-  return ptid;
+  return ptid_build (PIDGET (ptid), 0, status.tid);
 }
 
 /* Ask the user what to do when an interrupt is received.  */
@@ -607,7 +622,7 @@ nto_interrupt (int signo)
   /* If this doesn't work, try more severe steps.  */
   signal (signo, nto_interrupt_twice);
 
-  target_stop ();
+  target_stop (inferior_ptid);
 }
 
 static ptid_t
@@ -706,7 +721,7 @@ procfs_wait (ptid_t ptid, struct target_waitstatus *ourstatus)
 	}
     }
 
-  return inferior_ptid;
+  return ptid_build (status.pid, 0, status.tid);
 }
 
 /* Read the current values of the inferior's registers, both the
@@ -744,7 +759,7 @@ procfs_fetch_registers (struct regcache *regcache, int regno)
    doesn't allow memory operations to cross below us in the target stack
    anyway.  */
 static int
-procfs_xfer_memory (CORE_ADDR memaddr, char *myaddr, int len, int dowrite,
+procfs_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int dowrite,
 		    struct mem_attrib *attrib, struct target_ops *target)
 {
   int nbytes = 0;
@@ -766,9 +781,10 @@ procfs_xfer_memory (CORE_ADDR memaddr, char *myaddr, int len, int dowrite,
    on signals, etc.  We'd better not have left any breakpoints
    in the program or it'll die when it hits one.  */
 static void
-procfs_detach (char *args, int from_tty)
+procfs_detach (struct target_ops *ops, char *args, int from_tty)
 {
   int siggnal = 0;
+  int pid;
 
   if (from_tty)
     {
@@ -787,9 +803,11 @@ procfs_detach (char *args, int from_tty)
 
   close (ctl_fd);
   ctl_fd = -1;
-  init_thread_list ();
+
+  pid = ptid_get_pid (inferior_ptid);
   inferior_ptid = null_ptid;
-  attach_flag = 0;
+  detach_inferior (pid);
+  init_thread_list ();
   unpush_target (&procfs_ops);	/* Pop out of handling an inferior.  */
 }
 
@@ -838,6 +856,7 @@ procfs_resume (ptid_t ptid, int step, enum target_signal signo)
 {
   int signal_to_pass;
   procfs_status status;
+  sigset_t *run_fault = (sigset_t *) (void *) &run.fault;
 
   if (ptid_equal (inferior_ptid, null_ptid))
     return;
@@ -849,17 +868,17 @@ procfs_resume (ptid_t ptid, int step, enum target_signal signo)
   if (step)
     run.flags |= _DEBUG_RUN_STEP;
 
-  sigemptyset ((sigset_t *) &run.fault);
-  sigaddset ((sigset_t *) &run.fault, FLTBPT);
-  sigaddset ((sigset_t *) &run.fault, FLTTRACE);
-  sigaddset ((sigset_t *) &run.fault, FLTILL);
-  sigaddset ((sigset_t *) &run.fault, FLTPRIV);
-  sigaddset ((sigset_t *) &run.fault, FLTBOUNDS);
-  sigaddset ((sigset_t *) &run.fault, FLTIOVF);
-  sigaddset ((sigset_t *) &run.fault, FLTIZDIV);
-  sigaddset ((sigset_t *) &run.fault, FLTFPE);
+  sigemptyset (run_fault);
+  sigaddset (run_fault, FLTBPT);
+  sigaddset (run_fault, FLTTRACE);
+  sigaddset (run_fault, FLTILL);
+  sigaddset (run_fault, FLTPRIV);
+  sigaddset (run_fault, FLTBOUNDS);
+  sigaddset (run_fault, FLTIOVF);
+  sigaddset (run_fault, FLTIZDIV);
+  sigaddset (run_fault, FLTFPE);
   /* Peter V will be changing this at some point.  */
-  sigaddset ((sigset_t *) &run.fault, FLTPAGE);
+  sigaddset (run_fault, FLTPAGE);
 
   run.flags |= _DEBUG_RUN_ARM;
 
@@ -895,7 +914,7 @@ procfs_resume (ptid_t ptid, int step, enum target_signal signo)
 }
 
 static void
-procfs_mourn_inferior (void)
+procfs_mourn_inferior (struct target_ops *ops)
 {
   if (!ptid_equal (inferior_ptid, null_ptid))
     {
@@ -906,7 +925,6 @@ procfs_mourn_inferior (void)
   init_thread_list ();
   unpush_target (&procfs_ops);
   generic_mourn_inferior ();
-  attach_flag = 0;
 }
 
 /* This function breaks up an argument string into an argument
@@ -970,8 +988,8 @@ breakup_args (char *scratch, char **argv)
 }
 
 static void
-procfs_create_inferior (char *exec_file, char *allargs, char **env,
-			int from_tty)
+procfs_create_inferior (struct target_ops *ops, char *exec_file,
+			char *allargs, char **env, int from_tty)
 {
   struct inheritance inherit;
   pid_t pid;
@@ -981,6 +999,7 @@ procfs_create_inferior (char *exec_file, char *allargs, char **env,
   int fd, fds[3];
   sigset_t set;
   const char *inferior_io_terminal = get_inferior_io_terminal ();
+  struct inferior *inf;
 
   argv = xmalloc (((strlen (allargs) + 1) / (unsigned) 2 + 2) *
 		  sizeof (*argv));
@@ -1074,8 +1093,11 @@ procfs_create_inferior (char *exec_file, char *allargs, char **env,
     close (fds[2]);
 
   inferior_ptid = do_attach (pid_to_ptid (pid));
+  procfs_find_new_threads ();
 
-  attach_flag = 0;
+  inf = add_inferior (pid);
+  inf->attach_flag = 0;
+
   flags = _DEBUG_FLAG_KLC;	/* Kill-on-Last-Close flag.  */
   errn = devctl (ctl_fd, DCMD_PROC_SET_FLAG, &flags, sizeof (flags), 0);
   if (errn != EOK)
@@ -1090,11 +1112,10 @@ procfs_create_inferior (char *exec_file, char *allargs, char **env,
   if (exec_bfd != NULL
       || (symfile_objfile != NULL && symfile_objfile->obfd != NULL))
     solib_create_inferior_hook ();
-  stop_soon = 0;
 }
 
 static void
-procfs_stop (void)
+procfs_stop (ptid_t ptid)
 {
   devctl (ctl_fd, DCMD_PROC_STOP, NULL, 0, 0);
 }
@@ -1192,7 +1213,8 @@ procfs_store_registers (struct regcache *regcache, int regno)
       if (dev_set == -1)
 	return;
 
-      len = nto_register_area (regno, regset, &off);
+      len = nto_register_area (get_regcache_arch (regcache),
+			       regno, regset, &off);
 
       if (len < 1)
 	return;

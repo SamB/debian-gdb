@@ -45,10 +45,10 @@ initialize_tdesc_powerpc_7400 (void)
   tdesc_create_reg (feature, "r29", 29, 1, NULL, 32, "uint32");
   tdesc_create_reg (feature, "r30", 30, 1, NULL, 32, "uint32");
   tdesc_create_reg (feature, "r31", 31, 1, NULL, 32, "uint32");
-  tdesc_create_reg (feature, "pc", 64, 1, NULL, 32, "uint32");
+  tdesc_create_reg (feature, "pc", 64, 1, NULL, 32, "code_ptr");
   tdesc_create_reg (feature, "msr", 65, 1, NULL, 32, "uint32");
   tdesc_create_reg (feature, "cr", 66, 1, NULL, 32, "uint32");
-  tdesc_create_reg (feature, "lr", 67, 1, NULL, 32, "uint32");
+  tdesc_create_reg (feature, "lr", 67, 1, NULL, 32, "code_ptr");
   tdesc_create_reg (feature, "ctr", 68, 1, NULL, 32, "uint32");
   tdesc_create_reg (feature, "xer", 69, 1, NULL, 32, "uint32");
 
@@ -170,7 +170,7 @@ initialize_tdesc_powerpc_7400 (void)
   append_composite_type_field (type, xstrdup ("v8_int16"), field_type);
   field_type = tdesc_named_type (feature, "v16i8");
   append_composite_type_field (type, xstrdup ("v16_int8"), field_type);
-  TYPE_FLAGS (type) |= TYPE_FLAG_VECTOR;
+  TYPE_VECTOR (type) = 1;
   tdesc_record_type (feature, type);
 
   tdesc_create_reg (feature, "vr0", 119, 1, NULL, 128, "vec128");

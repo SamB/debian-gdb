@@ -40,6 +40,8 @@
 #include "interps.h"
 #include "main.h"
 
+#include "python/python.h"
+
 /* If nonzero, display time usage both at startup and for each command.  */
 
 int display_time;
@@ -61,6 +63,9 @@ int dbx_commands = 0;
 
 /* System root path, used to find libraries etc.  */
 char *gdb_sysroot = 0;
+
+/* GDB datadir, used to store data files.  */
+char *gdb_datadir = 0;
 
 struct ui_file *gdb_stdout;
 struct ui_file *gdb_stderr;
@@ -131,6 +136,8 @@ captured_main (void *data)
   char *pid_or_core_arg = NULL;
   char *cdarg = NULL;
   char *ttyarg = NULL;
+
+  int python_script = 0;
 
   /* These are static so that we can take their address in an initializer.  */
   static int print_help;
@@ -268,6 +275,40 @@ captured_main (void *data)
 	}
     }
 
+#ifdef GDB_DATADIR_RELOCATABLE
+  gdb_datadir = make_relative_prefix (argv[0], BINDIR, GDB_DATADIR);
+  if (gdb_datadir)
+    {
+      struct stat s;
+      int res = 0;
+
+      if (stat (gdb_datadir, &s) == 0)
+	if (S_ISDIR (s.st_mode))
+	  res = 1;
+
+      if (res == 0)
+	{
+	  xfree (gdb_datadir);
+	  gdb_datadir = xstrdup (GDB_DATADIR);
+	}
+    }
+  else
+    gdb_datadir = xstrdup (GDB_DATADIR);
+#else
+  gdb_datadir = xstrdup (GDB_DATADIR);
+#endif /* GDB_DATADIR_RELOCATABLE */
+
+  /* Canonicalize the GDB's datadir path.  */
+  if (*gdb_datadir)
+    {
+      char *canon_debug = lrealpath (gdb_datadir);
+      if (canon_debug)
+	{
+	  xfree (gdb_datadir);
+	  gdb_datadir = canon_debug;
+	}
+    }
+
   /* There will always be an interpreter.  Either the one passed into
      this captured main, or one specified by the user at start up, or
      the console.  Initialize the interpreter to the one requested by 
@@ -350,10 +391,14 @@ captured_main (void *data)
       {"args", no_argument, &set_args, 1},
      {"l", required_argument, 0, 'l'},
       {"return-child-result", no_argument, &return_child_result, 1},
+#ifdef HAVE_PYTHON
+      {"python", no_argument, 0, 'P'},
+      {"P", no_argument, 0, 'P'},
+#endif
       {0, no_argument, 0, 0}
     };
 
-    while (1)
+    while (!python_script)
       {
 	int option_index;
 
@@ -370,6 +415,9 @@ captured_main (void *data)
 	  {
 	  case 0:
 	    /* Long option that just sets a flag.  */
+	    break;
+	  case 'P':
+	    python_script = 1;
 	    break;
 	  case OPT_SE:
 	    symarg = optarg;
@@ -547,7 +595,31 @@ extern int gdbtk_test (char *);
 	use_windows = 0;
       }
 
-    if (set_args)
+    if (python_script)
+      {
+	/* The first argument is a python script to evaluate, and
+	   subsequent arguments are passed to the script for
+	   processing there.  */
+	if (optind >= argc)
+	  {
+	    fprintf_unfiltered (gdb_stderr,
+				_("%s: Python script file name required\n"),
+				argv[0]);
+	    exit (1);
+	  }
+
+	/* FIXME: should handle inferior I/O intelligently here.
+	   E.g., should be possible to run gdb in pipeline and have
+	   Python (and gdb) output go to stderr or file; and if a
+	   prompt is needed, open the tty.  */
+	quiet = 1;
+	/* FIXME: should read .gdbinit if, and only if, a prompt is
+	   requested by the script.  Though... maybe this is not
+	   ideal?  */
+	/* FIXME: likewise, reading in history.  */
+	inhibit_gdbinit = 1;
+      }
+    else if (set_args)
       {
 	/* The remaining options are the command-line options for the
 	   inferior.  The first one is the sym/exec file, and the rest
@@ -649,7 +721,7 @@ Excess command line arguments ignored. (%s%s)\n"),
     if (interp == NULL)
       error (_("Interpreter `%s' unrecognized"), interpreter_p);
     /* Install it.  */
-    if (!interp_set (interp))
+    if (!interp_set (interp, 1))
       {
         fprintf_unfiltered (gdb_stderr,
 			    "Interpreter `%s' failed to initialize.\n",
@@ -783,23 +855,6 @@ Can't attach to process and specify a core file at the same time."));
 
   for (i = 0; i < ncmd; i++)
     {
-#if 0
-      /* NOTE: cagney/1999-11-03: SET_TOP_LEVEL() was a macro that
-         expanded into a call to setjmp().  */
-      if (!SET_TOP_LEVEL ()) /* NB: This is #if 0'd out */
-	{
-	  /* NOTE: I am commenting this out, because it is not clear
-	     where this feature is used. It is very old and
-	     undocumented. ezannoni: 1999-05-04 */
-#if 0
-	  if (cmdarg[i][0] == '-' && cmdarg[i][1] == '\0')
-	    read_command_file (stdin);
-	  else
-#endif
-	    source_script (cmdarg[i], !batch);
-	  do_cleanups (ALL_CLEANUPS);
-	}
-#endif
       if (cmdarg[i].type == CMDARG_FILE)
         catch_command_errors (source_script, cmdarg[i].string,
 			      !batch, RETURN_MASK_ALL);
@@ -810,20 +865,14 @@ Can't attach to process and specify a core file at the same time."));
   xfree (cmdarg);
 
   /* Read in the old history after all the command files have been read. */
-  init_history ();
+  if (!python_script)
+    init_history ();
 
   if (batch)
     {
       /* We have hit the end of the batch file.  */
       quit_force (NULL, 0);
     }
-
-  /* Do any host- or target-specific hacks.  This is used for i960 targets
-     to force the user to set a nindy target and spec its parameters.  */
-
-#ifdef BEFORE_MAIN_LOOP_HOOK
-  BEFORE_MAIN_LOOP_HOOK;
-#endif
 
   /* Show time and/or space usage.  */
 
@@ -846,40 +895,25 @@ Can't attach to process and specify a core file at the same time."));
 #endif
     }
 
-#if 0
-  /* FIXME: cagney/1999-11-06: The original main loop was like: */
-  while (1)
+#ifdef HAVE_PYTHON
+  if (python_script)
     {
-      if (!SET_TOP_LEVEL ())
-	{
-	  do_cleanups (ALL_CLEANUPS);	/* Do complete cleanup */
-	  /* GUIs generally have their own command loop, mainloop, or
-	     whatever.  This is a good place to gain control because
-	     many error conditions will end up here via longjmp().  */
-	  if (deprecated_command_loop_hook)
-	    deprecated_command_loop_hook ();
-	  else
-	    deprecated_command_loop ();
-	  quit_command ((char *) 0, instream == stdin);
-	}
+      extern int pagination_enabled;
+      pagination_enabled = 0;
+      run_python_script (argc - optind, &argv[optind]);
+      return 1;
     }
-  /* NOTE: If the command_loop() returned normally, the loop would
-     attempt to exit by calling the function quit_command().  That
-     function would either call exit() or throw an error returning
-     control to SET_TOP_LEVEL. */
-  /* NOTE: The function do_cleanups() was called once each time round
-     the loop.  The usefulness of the call isn't clear.  If an error
-     was thrown, everything would have already been cleaned up.  If
-     command_loop() returned normally and quit_command() was called,
-     either exit() or error() (again cleaning up) would be called. */
+  else
 #endif
-  /* NOTE: cagney/1999-11-07: There is probably no reason for not
-     moving this loop and the code found in captured_command_loop()
-     into the command_loop() proper.  The main thing holding back that
-     change - SET_TOP_LEVEL() - has been eliminated. */
-  while (1)
     {
-      catch_errors (captured_command_loop, 0, "", RETURN_MASK_ALL);
+      /* NOTE: cagney/1999-11-07: There is probably no reason for not
+	 moving this loop and the code found in captured_command_loop()
+	 into the command_loop() proper.  The main thing holding back that
+	 change - SET_TOP_LEVEL() - has been eliminated. */
+      while (1)
+	{
+	  catch_errors (captured_command_loop, 0, "", RETURN_MASK_ALL);
+	}
     }
   /* No exit -- exit is through quit_command.  */
 }
@@ -905,7 +939,12 @@ print_gdb_help (struct ui_file *stream)
   fputs_unfiltered (_("\
 This is the GNU debugger.  Usage:\n\n\
     gdb [options] [executable-file [core-file or process-id]]\n\
-    gdb [options] --args executable-file [inferior-arguments ...]\n\n\
+    gdb [options] --args executable-file [inferior-arguments ...]\n"), stream);
+#ifdef HAVE_PYTHON
+  fputs_unfiltered (_("\
+    gdb [options] [--python|-P] script-file [script-arguments ...]\n"), stream);
+#endif
+  fputs_unfiltered (_("\n\
 Options:\n\n\
 "), stream);
   fputs_unfiltered (_("\
@@ -943,7 +982,13 @@ Options:\n\n\
   --nw		     Do not use a window interface.\n\
   --nx               Do not read "), stream);
   fputs_unfiltered (gdbinit, stream);
-  fputs_unfiltered (_(" file.\n\
+  fputs_unfiltered (_(" file.\n"), stream);
+#ifdef HAVE_PYTHON
+  fputs_unfiltered (_("\
+  --python, -P       Following argument is Python script file; remaining\n\
+                     arguments are passed to script.\n"), stream);
+#endif
+  fputs_unfiltered (_("\
   --quiet            Do not print version number on startup.\n\
   --readnow          Fully read symbol files on first access.\n\
 "), stream);
@@ -966,6 +1011,9 @@ Options:\n\n\
   fputs_unfiltered (_("\n\
 For more information, type \"help\" from within GDB, or consult the\n\
 GDB manual (available as on-line info or a printed manual).\n\
-Report bugs to \"bug-gdb@gnu.org\".\
 "), stream);
+  if (REPORT_BUGS_TO[0] && stream == gdb_stdout)
+    fprintf_unfiltered (stream, _("\
+Report bugs to \"%s\".\n\
+"), REPORT_BUGS_TO);
 }

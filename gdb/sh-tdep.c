@@ -51,8 +51,23 @@
 
 /* sh flags */
 #include "elf/sh.h"
+#include "elf/dwarf2.h"
 /* registers numbers shared with the simulator */
 #include "gdb/sim-sh.h"
+
+/* List of "set sh ..." and "show sh ..." commands.  */
+static struct cmd_list_element *setshcmdlist = NULL;
+static struct cmd_list_element *showshcmdlist = NULL;
+
+static const char sh_cc_gcc[] = "gcc";
+static const char sh_cc_renesas[] = "renesas";
+static const char *sh_cc_enum[] = {
+  sh_cc_gcc,
+  sh_cc_renesas, 
+  NULL
+};
+
+static const char *sh_active_calling_convention = sh_cc_gcc;
 
 static void (*sh_show_regs) (struct frame_info *);
 
@@ -72,6 +87,14 @@ struct sh_frame_cache
   CORE_ADDR saved_regs[SH_NUM_REGS];
   CORE_ADDR saved_sp;
 };
+
+static int
+sh_is_renesas_calling_convention (struct type *func_type)
+{
+  return ((func_type
+	   && TYPE_CALLING_CONVENTION (func_type) == DW_CC_GNU_renesas_sh)
+	  || sh_active_calling_convention == sh_cc_renesas);
+}
 
 static const char *
 sh_sh_register_name (struct gdbarch *gdbarch, int reg_nr)
@@ -496,14 +519,6 @@ sh_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr, int *lenptr)
 #define IS_ADD_REG_TO_FP(x)	(((x) & 0xff0f) == 0x3e0c)
 #define IS_ADD_IMM_FP(x) 	(((x) & 0xff00) == 0x7e00)
 
-/* Disassemble an instruction.  */
-static int
-gdb_print_insn_sh (bfd_vma memaddr, disassemble_info * info)
-{
-  info->endian = gdbarch_byte_order (current_gdbarch);
-  return print_insn_sh (memaddr, info);
-}
-
 static CORE_ADDR
 sh_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
 		     struct sh_frame_cache *cache, ULONGEST fpscr)
@@ -783,10 +798,15 @@ sh_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR start_pc)
 */
 
 static int
-sh_use_struct_convention (int gcc_p, struct type *type)
+sh_use_struct_convention (int renesas_abi, struct type *type)
 {
   int len = TYPE_LENGTH (type);
   int nelem = TYPE_NFIELDS (type);
+
+  /* The Renesas ABI returns aggregate types always on stack.  */
+  if (renesas_abi && (TYPE_CODE (type) == TYPE_CODE_STRUCT
+		      || TYPE_CODE (type) == TYPE_CODE_UNION))
+    return 1;
 
   /* Non-power of 2 length types and types bigger than 8 bytes (which don't
      fit in two registers anyway) use struct convention.  */
@@ -811,6 +831,15 @@ sh_use_struct_convention (int gcc_p, struct type *type)
 
   /* Otherwise use struct convention.  */
   return 1;
+}
+
+static int
+sh_use_struct_convention_nofpu (int renesas_abi, struct type *type)
+{
+  /* The Renesas ABI returns long longs/doubles etc. always on stack.  */
+  if (renesas_abi && TYPE_NFIELDS (type) == 0 && TYPE_LENGTH (type) >= 8)
+    return 1;
+  return sh_use_struct_convention (renesas_abi, type);
 }
 
 static CORE_ADDR
@@ -924,7 +953,7 @@ sh_init_flt_argreg (void)
    29) the parity of the register number is preserved, which is important
    for the double register passing test (see the "argreg & 1" test below). */
 static int
-sh_next_flt_argreg (struct gdbarch *gdbarch, int len)
+sh_next_flt_argreg (struct gdbarch *gdbarch, int len, struct type *func_type)
 {
   int argreg;
 
@@ -943,7 +972,10 @@ sh_next_flt_argreg (struct gdbarch *gdbarch, int len)
       /* Doubles are always starting in a even register number. */
       if (argreg & 1)
 	{
-	  flt_argreg_array[argreg] = 1;
+	  /* In gcc ABI, the skipped register is lost for further argument
+	     passing now.  Not so in Renesas ABI.  */
+	  if (!sh_is_renesas_calling_convention (func_type))
+	    flt_argreg_array[argreg] = 1;
 
 	  ++argreg;
 
@@ -954,7 +986,8 @@ sh_next_flt_argreg (struct gdbarch *gdbarch, int len)
       /* Also mark the next register as used. */
       flt_argreg_array[argreg + 1] = 1;
     }
-  else if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_LITTLE)
+  else if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_LITTLE
+	   && !sh_is_renesas_calling_convention (func_type))
     {
       /* In little endian, gcc passes floats like this: f5, f4, f7, f6, ... */
       if (!flt_argreg_array[argreg + 1])
@@ -1026,19 +1059,24 @@ sh_push_dummy_call_fpu (struct gdbarch *gdbarch,
   int argreg = ARG0_REGNUM;
   int flt_argreg = 0;
   int argnum;
+  struct type *func_type = value_type (function);
   struct type *type;
   CORE_ADDR regval;
   char *val;
   int len, reg_size = 0;
   int pass_on_stack = 0;
   int treat_as_flt;
+  int last_reg_arg = INT_MAX;
+
+  /* The Renesas ABI expects all varargs arguments, plus the last
+     non-vararg argument to be on the stack, no matter how many
+     registers have been used so far.  */
+  if (sh_is_renesas_calling_convention (func_type)
+      && TYPE_VARARGS (func_type))
+    last_reg_arg = TYPE_NFIELDS (func_type) - 2;
 
   /* first force sp to a 4-byte alignment */
   sp = sh_frame_align (gdbarch, sp);
-
-  if (struct_return)
-    regcache_cooked_write_unsigned (regcache,
-				    STRUCT_RETURN_REGNUM, struct_addr);
 
   /* make room on stack for args */
   sp -= sh_stack_allocsize (nargs, args);
@@ -1062,7 +1100,14 @@ sh_push_dummy_call_fpu (struct gdbarch *gdbarch,
       /* Find out the next register to use for a floating point value. */
       treat_as_flt = sh_treat_as_flt_p (type);
       if (treat_as_flt)
-	flt_argreg = sh_next_flt_argreg (gdbarch, len);
+	flt_argreg = sh_next_flt_argreg (gdbarch, len, func_type);
+      /* In Renesas ABI, long longs and aggregate types are always passed
+	 on stack.  */
+      else if (sh_is_renesas_calling_convention (func_type)
+	       && ((TYPE_CODE (type) == TYPE_CODE_INT && len == 8)
+		   || TYPE_CODE (type) == TYPE_CODE_STRUCT
+		   || TYPE_CODE (type) == TYPE_CODE_UNION))
+	pass_on_stack = 1;
       /* In contrast to non-FPU CPUs, arguments are never split between
 	 registers and stack.  If an argument doesn't fit in the remaining
 	 registers it's always pushed entirely on the stack.  */
@@ -1073,7 +1118,8 @@ sh_push_dummy_call_fpu (struct gdbarch *gdbarch,
 	{
 	  if ((treat_as_flt && flt_argreg > FLOAT_ARGLAST_REGNUM)
 	      || (!treat_as_flt && (argreg > ARGLAST_REGNUM
-	                            || pass_on_stack)))
+	                            || pass_on_stack))
+	      || argnum > last_reg_arg)
 	    {
 	      /* The data goes entirely on the stack, 4-byte aligned. */
 	      reg_size = (len + 3) & ~3;
@@ -1116,6 +1162,19 @@ sh_push_dummy_call_fpu (struct gdbarch *gdbarch,
 	}
     }
 
+  if (struct_return)
+    {
+      if (sh_is_renesas_calling_convention (func_type))
+	/* If the function uses the Renesas ABI, subtract another 4 bytes from
+	   the stack and store the struct return address there.  */
+	write_memory_unsigned_integer (sp -= 4, 4, struct_addr);
+      else
+	/* Using the gcc ABI, the "struct return pointer" pseudo-argument has
+	   its own dedicated register.  */
+	regcache_cooked_write_unsigned (regcache,
+					STRUCT_RETURN_REGNUM, struct_addr);
+    }
+
   /* Store return address. */
   regcache_cooked_write_unsigned (regcache, PR_REGNUM, bp_addr);
 
@@ -1138,17 +1197,23 @@ sh_push_dummy_call_nofpu (struct gdbarch *gdbarch,
   int stack_offset = 0;
   int argreg = ARG0_REGNUM;
   int argnum;
+  struct type *func_type = value_type (function);
   struct type *type;
   CORE_ADDR regval;
   char *val;
-  int len, reg_size;
+  int len, reg_size = 0;
+  int pass_on_stack = 0;
+  int last_reg_arg = INT_MAX;
+
+  /* The Renesas ABI expects all varargs arguments, plus the last
+     non-vararg argument to be on the stack, no matter how many
+     registers have been used so far.  */
+  if (sh_is_renesas_calling_convention (func_type)
+      && TYPE_VARARGS (func_type))
+    last_reg_arg = TYPE_NFIELDS (func_type) - 2;
 
   /* first force sp to a 4-byte alignment */
   sp = sh_frame_align (gdbarch, sp);
-
-  if (struct_return)
-    regcache_cooked_write_unsigned (regcache,
-				    STRUCT_RETURN_REGNUM, struct_addr);
 
   /* make room on stack for args */
   sp -= sh_stack_allocsize (nargs, args);
@@ -1162,9 +1227,21 @@ sh_push_dummy_call_nofpu (struct gdbarch *gdbarch,
       len = TYPE_LENGTH (type);
       val = sh_justify_value_in_reg (gdbarch, args[argnum], len);
 
+      /* Some decisions have to be made how various types are handled.
+	 This also differs in different ABIs. */
+      pass_on_stack = 0;
+      /* Renesas ABI pushes doubles and long longs entirely on stack.
+	 Same goes for aggregate types.  */
+      if (sh_is_renesas_calling_convention (func_type)
+	  && ((TYPE_CODE (type) == TYPE_CODE_INT && len >= 8)
+	      || (TYPE_CODE (type) == TYPE_CODE_FLT && len >= 8)
+	      || TYPE_CODE (type) == TYPE_CODE_STRUCT
+	      || TYPE_CODE (type) == TYPE_CODE_UNION))
+	pass_on_stack = 1;
       while (len > 0)
 	{
-	  if (argreg > ARGLAST_REGNUM)
+	  if (argreg > ARGLAST_REGNUM || pass_on_stack
+	      || argnum > last_reg_arg)
 	    {
 	      /* The remainder of the data goes entirely on the stack,
 	         4-byte aligned. */
@@ -1185,6 +1262,19 @@ sh_push_dummy_call_nofpu (struct gdbarch *gdbarch,
 	  len -= reg_size;
 	  val += reg_size;
 	}
+    }
+
+  if (struct_return)
+    {
+      if (sh_is_renesas_calling_convention (func_type))
+	/* If the function uses the Renesas ABI, subtract another 4 bytes from
+	   the stack and store the struct return address there.  */
+	write_memory_unsigned_integer (sp -= 4, 4, struct_addr);
+      else
+	/* Using the gcc ABI, the "struct return pointer" pseudo-argument has
+	   its own dedicated register.  */
+	regcache_cooked_write_unsigned (regcache,
+					STRUCT_RETURN_REGNUM, struct_addr);
     }
 
   /* Store return address. */
@@ -1292,11 +1382,12 @@ sh_store_return_value_fpu (struct type *type, struct regcache *regcache,
 }
 
 static enum return_value_convention
-sh_return_value_nofpu (struct gdbarch *gdbarch, struct type *type,
-		       struct regcache *regcache,
+sh_return_value_nofpu (struct gdbarch *gdbarch, struct type *func_type,
+		       struct type *type, struct regcache *regcache,
 		       gdb_byte *readbuf, const gdb_byte *writebuf)
 {
-  if (sh_use_struct_convention (0, type))
+  if (sh_use_struct_convention_nofpu (
+  	sh_is_renesas_calling_convention (func_type), type))
     return RETURN_VALUE_STRUCT_CONVENTION;
   if (writebuf)
     sh_store_return_value_nofpu (type, regcache, writebuf);
@@ -1306,11 +1397,12 @@ sh_return_value_nofpu (struct gdbarch *gdbarch, struct type *type,
 }
 
 static enum return_value_convention
-sh_return_value_fpu (struct gdbarch *gdbarch, struct type *type,
-		     struct regcache *regcache,
+sh_return_value_fpu (struct gdbarch *gdbarch, struct type *func_type,
+		     struct type *type, struct regcache *regcache,
 		     gdb_byte *readbuf, const gdb_byte *writebuf)
 {
-  if (sh_use_struct_convention (0, type))
+  if (sh_use_struct_convention (
+	sh_is_renesas_calling_convention (func_type), type))
     return RETURN_VALUE_STRUCT_CONVENTION;
   if (writebuf)
     sh_store_return_value_fpu (type, regcache, writebuf);
@@ -2032,11 +2124,11 @@ sh_sh2a_register_type (struct gdbarch *gdbarch, int reg_nr)
 {
   if ((reg_nr >= gdbarch_fp0_regnum (gdbarch)
        && (reg_nr <= FP_LAST_REGNUM)) || (reg_nr == FPUL_REGNUM))
-    return builtin_type_float;
+    return builtin_type (gdbarch)->builtin_float;
   else if (reg_nr >= DR0_REGNUM && reg_nr <= DR_LAST_REGNUM)
-    return builtin_type_double;
+    return builtin_type (gdbarch)->builtin_double;
   else
-    return builtin_type_int;
+    return builtin_type (gdbarch)->builtin_int;
 }
 
 /* Return the GDB type object for the "standard" data type
@@ -2046,18 +2138,18 @@ sh_sh3e_register_type (struct gdbarch *gdbarch, int reg_nr)
 {
   if ((reg_nr >= gdbarch_fp0_regnum (gdbarch)
        && (reg_nr <= FP_LAST_REGNUM)) || (reg_nr == FPUL_REGNUM))
-    return builtin_type_float;
+    return builtin_type (gdbarch)->builtin_float;
   else
-    return builtin_type_int;
+    return builtin_type (gdbarch)->builtin_int;
 }
 
 static struct type *
-sh_sh4_build_float_register_type (int high)
+sh_sh4_build_float_register_type (struct gdbarch *gdbarch, int high)
 {
   struct type *temp;
 
-  temp = create_range_type (NULL, builtin_type_int, 0, high);
-  return create_array_type (NULL, builtin_type_float, temp);
+  temp = create_range_type (NULL, builtin_type_int32, 0, high);
+  return create_array_type (NULL, builtin_type (gdbarch)->builtin_float, temp);
 }
 
 static struct type *
@@ -2065,19 +2157,19 @@ sh_sh4_register_type (struct gdbarch *gdbarch, int reg_nr)
 {
   if ((reg_nr >= gdbarch_fp0_regnum (gdbarch)
        && (reg_nr <= FP_LAST_REGNUM)) || (reg_nr == FPUL_REGNUM))
-    return builtin_type_float;
+    return builtin_type (gdbarch)->builtin_float;
   else if (reg_nr >= DR0_REGNUM && reg_nr <= DR_LAST_REGNUM)
-    return builtin_type_double;
+    return builtin_type (gdbarch)->builtin_double;
   else if (reg_nr >= FV0_REGNUM && reg_nr <= FV_LAST_REGNUM)
-    return sh_sh4_build_float_register_type (3);
+    return sh_sh4_build_float_register_type (gdbarch, 3);
   else
-    return builtin_type_int;
+    return builtin_type (gdbarch)->builtin_int;
 }
 
 static struct type *
 sh_default_register_type (struct gdbarch *gdbarch, int reg_nr)
 {
-  return builtin_type_int;
+  return builtin_type (gdbarch)->builtin_int;
 }
 
 /* Is a register in a reggroup?
@@ -2342,7 +2434,7 @@ sh_sh2a_register_sim_regno (struct gdbarch *gdbarch, int nr)
 static void
 sh_dwarf2_frame_init_reg (struct gdbarch *gdbarch, int regnum,
                           struct dwarf2_frame_state_reg *reg,
-			  struct frame_info *next_frame)
+			  struct frame_info *this_frame)
 {
   /* Mark the PC as the destination for the return address.  */
   if (regnum == gdbarch_pc_regnum (gdbarch))
@@ -2412,7 +2504,7 @@ sh_alloc_frame_cache (void)
 }
 
 static struct sh_frame_cache *
-sh_frame_cache (struct frame_info *next_frame, void **this_cache)
+sh_frame_cache (struct frame_info *this_frame, void **this_cache)
 {
   struct sh_frame_cache *cache;
   CORE_ADDR current_pc;
@@ -2429,16 +2521,16 @@ sh_frame_cache (struct frame_info *next_frame, void **this_cache)
      However, for functions that don't need it, the frame pointer is
      optional.  For these "frameless" functions the frame pointer is
      actually the frame pointer of the calling frame. */
-  cache->base = frame_unwind_register_unsigned (next_frame, FP_REGNUM);
+  cache->base = get_frame_register_unsigned (this_frame, FP_REGNUM);
   if (cache->base == 0)
     return cache;
 
-  cache->pc = frame_func_unwind (next_frame, NORMAL_FRAME);
-  current_pc = frame_pc_unwind (next_frame);
+  cache->pc = get_frame_func (this_frame);
+  current_pc = get_frame_pc (this_frame);
   if (cache->pc != 0)
     {
       ULONGEST fpscr;
-      fpscr = frame_unwind_register_unsigned (next_frame, FPSCR_REGNUM);
+      fpscr = get_frame_register_unsigned (this_frame, FPSCR_REGNUM);
       sh_analyze_prologue (cache->pc, current_pc, cache, fpscr);
     }
 
@@ -2451,9 +2543,9 @@ sh_frame_cache (struct frame_info *next_frame, void **this_cache)
          setup yet.  Try to reconstruct the base address for the stack
          frame by looking at the stack pointer.  For truly "frameless"
          functions this might work too.  */
-      cache->base = frame_unwind_register_unsigned
-		    (next_frame,
-		     gdbarch_sp_regnum (get_frame_arch (next_frame)));
+      cache->base = get_frame_register_unsigned
+		    (this_frame,
+		     gdbarch_sp_regnum (get_frame_arch (this_frame)));
     }
 
   /* Now that we have the base address for the stack frame we can
@@ -2469,30 +2561,17 @@ sh_frame_cache (struct frame_info *next_frame, void **this_cache)
   return cache;
 }
 
-static void
-sh_frame_prev_register (struct frame_info *next_frame, void **this_cache,
-			int regnum, int *optimizedp,
-			enum lval_type *lvalp, CORE_ADDR *addrp,
-			int *realnump, gdb_byte *valuep)
+static struct value *
+sh_frame_prev_register (struct frame_info *this_frame,
+			void **this_cache, int regnum)
 {
-  struct gdbarch *gdbarch = get_frame_arch (next_frame);
-  struct sh_frame_cache *cache = sh_frame_cache (next_frame, this_cache);
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
+  struct sh_frame_cache *cache = sh_frame_cache (this_frame, this_cache);
 
   gdb_assert (regnum >= 0);
 
   if (regnum == gdbarch_sp_regnum (gdbarch) && cache->saved_sp)
-    {
-      *optimizedp = 0;
-      *lvalp = not_lval;
-      *addrp = 0;
-      *realnump = -1;
-      if (valuep)
-	{
-	  /* Store the value.  */
-	  store_unsigned_integer (valuep, 4, cache->saved_sp);
-	}
-      return;
-    }
+    return frame_unwind_got_constant (this_frame, regnum, cache->saved_sp);
 
   /* The PC of the previous frame is stored in the PR register of
      the current frame.  Frob regnum so that we pull the value from
@@ -2501,33 +2580,17 @@ sh_frame_prev_register (struct frame_info *next_frame, void **this_cache,
     regnum = PR_REGNUM;
 
   if (regnum < SH_NUM_REGS && cache->saved_regs[regnum] != -1)
-    {
-      *optimizedp = 0;
-      *lvalp = lval_memory;
-      *addrp = cache->saved_regs[regnum];
-      *realnump = -1;
-      if (valuep)
-	{
-	  /* Read the value in from memory.  */
-	  read_memory (*addrp, valuep,
-		       register_size (gdbarch, regnum));
-	}
-      return;
-    }
+    return frame_unwind_got_memory (this_frame, regnum,
+                                    cache->saved_regs[regnum]);
 
-  *optimizedp = 0;
-  *lvalp = lval_register;
-  *addrp = 0;
-  *realnump = regnum;
-  if (valuep)
-    frame_unwind_register (next_frame, (*realnump), valuep);
+  return frame_unwind_got_register (this_frame, regnum, regnum);
 }
 
 static void
-sh_frame_this_id (struct frame_info *next_frame, void **this_cache,
+sh_frame_this_id (struct frame_info *this_frame, void **this_cache,
 		  struct frame_id *this_id)
 {
-  struct sh_frame_cache *cache = sh_frame_cache (next_frame, this_cache);
+  struct sh_frame_cache *cache = sh_frame_cache (this_frame, this_cache);
 
   /* This marks the outermost frame.  */
   if (cache->base == 0)
@@ -2539,14 +2602,10 @@ sh_frame_this_id (struct frame_info *next_frame, void **this_cache,
 static const struct frame_unwind sh_frame_unwind = {
   NORMAL_FRAME,
   sh_frame_this_id,
-  sh_frame_prev_register
+  sh_frame_prev_register,
+  NULL,
+  default_frame_sniffer
 };
-
-static const struct frame_unwind *
-sh_frame_sniffer (struct frame_info *next_frame)
-{
-  return &sh_frame_unwind;
-}
 
 static CORE_ADDR
 sh_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
@@ -2563,16 +2622,17 @@ sh_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 }
 
 static struct frame_id
-sh_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
+sh_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
 {
-  return frame_id_build (sh_unwind_sp (gdbarch, next_frame),
-			 frame_pc_unwind (next_frame));
+  CORE_ADDR sp = get_frame_register_unsigned (this_frame,
+					      gdbarch_sp_regnum (gdbarch));
+  return frame_id_build (sp, get_frame_pc (this_frame));
 }
 
 static CORE_ADDR
-sh_frame_base_address (struct frame_info *next_frame, void **this_cache)
+sh_frame_base_address (struct frame_info *this_frame, void **this_cache)
 {
-  struct sh_frame_cache *cache = sh_frame_cache (next_frame, this_cache);
+  struct sh_frame_cache *cache = sh_frame_cache (this_frame, this_cache);
 
   return cache->base;
 }
@@ -2747,7 +2807,7 @@ sh_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_breakpoint_from_pc (gdbarch, sh_breakpoint_from_pc);
 
-  set_gdbarch_print_insn (gdbarch, gdb_print_insn_sh);
+  set_gdbarch_print_insn (gdbarch, print_insn_sh);
   set_gdbarch_register_sim_regno (gdbarch, legacy_register_sim_regno);
 
   set_gdbarch_return_value (gdbarch, sh_return_value_nofpu);
@@ -2762,7 +2822,7 @@ sh_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_frame_align (gdbarch, sh_frame_align);
   set_gdbarch_unwind_sp (gdbarch, sh_unwind_sp);
   set_gdbarch_unwind_pc (gdbarch, sh_unwind_pc);
-  set_gdbarch_unwind_dummy_id (gdbarch, sh_unwind_dummy_id);
+  set_gdbarch_dummy_id (gdbarch, sh_dummy_id);
   frame_base_set_default (gdbarch, &sh_frame_base);
 
   set_gdbarch_in_function_epilogue_p (gdbarch, sh_in_function_epilogue_p);
@@ -2873,10 +2933,24 @@ sh_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   /* Hook in ABI-specific overrides, if they have been registered.  */
   gdbarch_init_osabi (info, gdbarch);
 
-  frame_unwind_append_sniffer (gdbarch, dwarf2_frame_sniffer);
-  frame_unwind_append_sniffer (gdbarch, sh_frame_sniffer);
+  dwarf2_append_unwinders (gdbarch);
+  frame_unwind_append_unwinder (gdbarch, &sh_frame_unwind);
 
   return gdbarch;
+}
+
+static void
+show_sh_command (char *args, int from_tty)
+{
+  help_list (showshcmdlist, "show sh ", all_commands, gdb_stdout);
+}
+
+static void
+set_sh_command (char *args, int from_tty)
+{
+  printf_unfiltered
+    ("\"set sh\" must be followed by an appropriate subcommand.\n");
+  help_list (setshcmdlist, "set sh ", all_commands, gdb_stdout);
 }
 
 extern initialize_file_ftype _initialize_sh_tdep;	/* -Wmissing-prototypes */
@@ -2889,4 +2963,20 @@ _initialize_sh_tdep (void)
   gdbarch_register (bfd_arch_sh, sh_gdbarch_init, NULL);
 
   add_com ("regs", class_vars, sh_show_regs_command, _("Print all registers"));
+  
+  add_prefix_cmd ("sh", no_class, set_sh_command, "SH specific commands.",
+                  &setshcmdlist, "set sh ", 0, &setlist);
+  add_prefix_cmd ("sh", no_class, show_sh_command, "SH specific commands.",
+                  &showshcmdlist, "show sh ", 0, &showlist);
+  
+  add_setshow_enum_cmd ("calling-convention", class_vars, sh_cc_enum,
+			&sh_active_calling_convention,
+			_("Set calling convention used when calling target "
+			  "functions from GDB."),
+			_("Show calling convention used when calling target "
+			  "functions from GDB."),
+			_("gcc       - Use GCC calling convention (default).\n"
+			  "renesas   - Enforce Renesas calling convention."),
+			NULL, NULL,
+			&setshcmdlist, &showshcmdlist);
 }

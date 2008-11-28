@@ -37,6 +37,7 @@
 #include "symtab.h"
 #include "target-descriptions.h"
 #include "mips-linux-tdep.h"
+#include "glibc-tdep.h"
 
 static struct target_so_ops mips_svr4_so_ops;
 
@@ -603,7 +604,7 @@ mips_linux_in_dynsym_stub (CORE_ADDR pc, char *name)
 {
   unsigned char buf[28], *p;
   ULONGEST insn, insn1;
-  int n64 = (mips_abi (current_gdbarch) == MIPS_ABI_N64);
+  int n64 = (mips_abi (target_gdbarch) == MIPS_ABI_N64);
 
   read_memory (pc - 12, buf, 28);
 
@@ -666,13 +667,13 @@ mips_linux_in_dynsym_stub (CORE_ADDR pc, char *name)
 }
 
 /* Return non-zero iff PC belongs to the dynamic linker resolution
-   code or to a stub.  */
+   code, a PLT entry, or a lazy binding stub.  */
 
 static int
 mips_linux_in_dynsym_resolve_code (CORE_ADDR pc)
 {
   /* Check whether PC is in the dynamic linker.  This also checks
-     whether it is in the .plt section, which MIPS does not use.  */
+     whether it is in the .plt section, used by non-PIC executables.  */
   if (svr4_in_dynsym_resolve_code (pc))
     return 1;
 
@@ -688,8 +689,8 @@ mips_linux_in_dynsym_resolve_code (CORE_ADDR pc)
    and glibc_skip_solib_resolver in glibc-tdep.c.  The normal glibc
    implementation of this triggers at "fixup" from the same objfile as
    "_dl_runtime_resolve"; MIPS GNU/Linux can trigger at
-   "__dl_runtime_resolve" directly.  An unresolved PLT entry will
-   point to _dl_runtime_resolve, which will first call
+   "__dl_runtime_resolve" directly.  An unresolved lazy binding
+   stub will point to _dl_runtime_resolve, which will first call
    __dl_runtime_resolve, and then pass control to the resolved
    function.  */
 
@@ -703,7 +704,7 @@ mips_linux_skip_resolver (struct gdbarch *gdbarch, CORE_ADDR pc)
   if (resolver && SYMBOL_VALUE_ADDRESS (resolver) == pc)
     return frame_pc_unwind (get_current_frame ());
 
-  return 0;
+  return glibc_skip_solib_resolver (gdbarch, pc);
 }
 
 /* Signal trampoline support.  There are four supported layouts for a
@@ -712,12 +713,12 @@ mips_linux_skip_resolver (struct gdbarch *gdbarch, CORE_ADDR pc)
    efficient way, but simplest.  First, declare all the unwinders.  */
 
 static void mips_linux_o32_sigframe_init (const struct tramp_frame *self,
-					  struct frame_info *next_frame,
+					  struct frame_info *this_frame,
 					  struct trad_frame_cache *this_cache,
 					  CORE_ADDR func);
 
 static void mips_linux_n32n64_sigframe_init (const struct tramp_frame *self,
-					     struct frame_info *next_frame,
+					     struct frame_info *this_frame,
 					     struct trad_frame_cache *this_cache,
 					     CORE_ADDR func);
 
@@ -853,11 +854,11 @@ static const struct tramp_frame mips_linux_n64_rt_sigframe = {
 
 static void
 mips_linux_o32_sigframe_init (const struct tramp_frame *self,
-			      struct frame_info *next_frame,
+			      struct frame_info *this_frame,
 			      struct trad_frame_cache *this_cache,
 			      CORE_ADDR func)
 {
-  struct gdbarch *gdbarch = get_frame_arch (next_frame);
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
   int ireg, reg_position;
   CORE_ADDR sigcontext_base = func - SIGFRAME_CODE_OFFSET;
   const struct mips_regnum *regs = mips_regnum (gdbarch);
@@ -958,7 +959,7 @@ mips_linux_o32_sigframe_init (const struct tramp_frame *self,
     sigset_t            uc_sigmask;   [ mask last for extensibility ]
   };
 
-  struct rt_sigframe_n32 {
+  struct rt_sigframe {
     u32 rs_ass[4];                  [ argument save space for o32 ]
     u32 rs_code[2];                 [ signal trampoline ]
     struct siginfo rs_info;
@@ -979,15 +980,23 @@ mips_linux_o32_sigframe_init (const struct tramp_frame *self,
     unsigned long long sc_regs[32];
     unsigned long long sc_fpregs[32];
     unsigned long long sc_mdhi;
+    unsigned long long sc_hi1;
+    unsigned long long sc_hi2;
+    unsigned long long sc_hi3;
     unsigned long long sc_mdlo;
+    unsigned long long sc_lo1;
+    unsigned long long sc_lo2;
+    unsigned long long sc_lo3;
     unsigned long long sc_pc;
-    unsigned int       sc_status;
     unsigned int       sc_fpc_csr;
-    unsigned int       sc_fpc_eir;
     unsigned int       sc_used_math;
-    unsigned int       sc_cause;
-    unsigned int       sc_badvaddr;
-  };  */
+    unsigned int       sc_dsp;
+    unsigned int       sc_reserved;
+  };
+
+  That is the post-2.6.12 definition of the 64-bit sigcontext; before
+  then, there were no hi1-hi3 or lo1-lo3.  Cause and badvaddr were
+  included too.  */
 /* *INDENT-ON* */
 
 #define N32_STACK_T_SIZE		STACK_T_SIZE
@@ -1004,22 +1013,19 @@ mips_linux_o32_sigframe_init (const struct tramp_frame *self,
 #define N64_SIGCONTEXT_REGS     (0 * 8)
 #define N64_SIGCONTEXT_FPREGS   (32 * 8)
 #define N64_SIGCONTEXT_HI       (64 * 8)
-#define N64_SIGCONTEXT_LO       (65 * 8)
-#define N64_SIGCONTEXT_PC       (66 * 8)
-#define N64_SIGCONTEXT_FPCSR    (67 * 8 + 1 * 4)
-#define N64_SIGCONTEXT_FIR      (67 * 8 + 2 * 4)
-#define N64_SIGCONTEXT_CAUSE    (67 * 8 + 4 * 4)
-#define N64_SIGCONTEXT_BADVADDR (67 * 8 + 5 * 4)
+#define N64_SIGCONTEXT_LO       (68 * 8)
+#define N64_SIGCONTEXT_PC       (72 * 8)
+#define N64_SIGCONTEXT_FPCSR    (73 * 8)
 
 #define N64_SIGCONTEXT_REG_SIZE 8
 
 static void
 mips_linux_n32n64_sigframe_init (const struct tramp_frame *self,
-				 struct frame_info *next_frame,
+				 struct frame_info *this_frame,
 				 struct trad_frame_cache *this_cache,
 				 CORE_ADDR func)
 {
-  struct gdbarch *gdbarch = get_frame_arch (next_frame);
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
   int ireg, reg_position;
   CORE_ADDR sigcontext_base = func - SIGFRAME_CODE_OFFSET;
   const struct mips_regnum *regs = mips_regnum (gdbarch);
@@ -1063,12 +1069,6 @@ mips_linux_n32n64_sigframe_init (const struct tramp_frame *self,
   trad_frame_set_reg_addr (this_cache,
 			   regs->lo + gdbarch_num_regs (gdbarch),
 			   sigcontext_base + N64_SIGCONTEXT_LO);
-  trad_frame_set_reg_addr (this_cache,
-			   regs->cause + gdbarch_num_regs (gdbarch),
-			   sigcontext_base + N64_SIGCONTEXT_CAUSE);
-  trad_frame_set_reg_addr (this_cache,
-			   regs->badvaddr + gdbarch_num_regs (gdbarch),
-			   sigcontext_base + N64_SIGCONTEXT_BADVADDR);
 
   /* Choice of the bottom of the sigframe is somewhat arbitrary.  */
   trad_frame_set_id (this_cache,
@@ -1100,6 +1100,26 @@ mips_linux_restart_reg_p (struct gdbarch *gdbarch)
   /* If we do, then MIPS_RESTART_REGNUM is safe to check; it will
      either be GPR-sized or missing.  */
   return register_size (gdbarch, MIPS_RESTART_REGNUM) > 0;
+}
+
+/* When FRAME is at a syscall instruction, return the PC of the next
+   instruction to be executed.  */
+
+CORE_ADDR
+mips_linux_syscall_next_pc (struct frame_info *frame)
+{
+  CORE_ADDR pc = get_frame_pc (frame);
+  ULONGEST v0 = get_frame_register_unsigned (frame, MIPS_V0_REGNUM);
+
+  /* If we are about to make a sigreturn syscall, use the unwinder to
+     decode the signal frame.  */
+  if (v0 == MIPS_NR_sigreturn
+      || v0 == MIPS_NR_rt_sigreturn
+      || v0 == MIPS_NR_N64_rt_sigreturn
+      || v0 == MIPS_NR_N32_rt_sigreturn)
+    return frame_pc_unwind (get_current_frame ());
+
+  return pc + 4;
 }
 
 /* Initialize one of the GNU/Linux OS ABIs.  */
@@ -1152,7 +1172,6 @@ mips_linux_init_abi (struct gdbarch_info info,
 	break;
     }
 
-  set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);
   set_gdbarch_skip_solib_resolver (gdbarch, mips_linux_skip_resolver);
 
   set_gdbarch_software_single_step (gdbarch, mips_software_single_step);
@@ -1175,6 +1194,8 @@ mips_linux_init_abi (struct gdbarch_info info,
 
   set_gdbarch_core_read_description (gdbarch,
 				     mips_linux_core_read_description);
+
+  tdep->syscall_next_pc = mips_linux_syscall_next_pc;
 
   if (tdesc_data)
     {

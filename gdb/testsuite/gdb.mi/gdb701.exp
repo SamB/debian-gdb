@@ -13,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Please email any bugs, comments, and/or additions to this file to:
-# bug-gdb@prep.ai.mit.edu
-
 #
 # test gdb/701
 #
@@ -49,9 +46,7 @@ mi_run_to_main
 # Step over "foo = 0"
 mi_next "step over \"foo = 0\""
 
-mi_gdb_test "-var-create fooPtr * foo" \
-  "(&\".*\"\r\n)*\\^done,name=\"fooPtr\",numchild=\"3\",value=\".*\",type=\"Foo \\*\"" \
-  "create fooPtr"
+mi_create_varobj "fooPtr" "foo" "create fooPtr"
 
 mi_gdb_test "-var-list-children fooPtr" \
   "(&\".*\"\r\n)*\\^done,numchild=\"3\",.*" \
