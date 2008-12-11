@@ -1,3 +1,9 @@
+gdb (6.8.50.20081210.python-1) experimental; urgency=low
+
+  * New snapshot from archer-tromey-python branch.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Wed, 10 Dec 2008 21:36:26 -0500
+
 gdb (6.8.50.20081120.python-1) experimental; urgency=low
 
   * Package archer-tromey-python branch for experimental.  Highlights since

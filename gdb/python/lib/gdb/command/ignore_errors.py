@@ -1,4 +1,4 @@
-# Iterator over frames.
+# Ignore errors in user commands.
 
 # Copyright (C) 2008 Free Software Foundation, Inc.
 
@@ -15,19 +15,23 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-class FrameIterator:
-    """An iterator that iterates over frames."""
+import gdb
 
-    def __init__ (self, frame):
-        "Initialize a FrameIterator.  FRAME is the starting frame."
-        self.frame = frame
+class IgnoreErrorsCommand (gdb.Command):
+    """Execute a single command, ignoring all errors.
+Only one-line commands are supported.
+This is primarily useful in scripts."""
 
-    def __iter__ (self):
-        return self
+    def __init__ (self):
+        super (IgnoreErrorsCommand, self).__init__ ("ignore-errors",
+                                                    gdb.COMMAND_OBSCURE,
+                                                    # FIXME...
+                                                    gdb.COMPLETE_COMMAND)
 
-    def next (self):
-        result = self.frame
-        if result == None:
-            raise StopIteration
-        self.frame = result.older ()
-        return result
+    def invoke (self, arg, from_tty):
+        try:
+            gdb.execute (arg, from_tty)
+        except:
+            pass
+
+IgnoreErrorsCommand ()

@@ -165,10 +165,11 @@ valpy_string (PyObject *self, PyObject *args)
   volatile struct gdb_exception except;
   PyObject *unicode;
   const char *encoding = NULL;
+  const char *errors = NULL;
   const char *user_encoding = NULL;
   const char *la_encoding = NULL;
 
-  if (!PyArg_ParseTuple (args, "|s", &user_encoding))
+  if (!PyArg_ParseTuple (args, "|ss", &user_encoding, &errors))
     return NULL;
 
   TRY_CATCH (except, RETURN_MASK_ALL)
@@ -187,8 +188,8 @@ valpy_string (PyObject *self, PyObject *args)
       return NULL;
     }
 
-  encoding = user_encoding? user_encoding : la_encoding;
-  unicode = PyUnicode_Decode (buffer, length, encoding, NULL);
+  encoding = (user_encoding && *user_encoding) ? user_encoding : la_encoding;
+  unicode = PyUnicode_Decode (buffer, length, encoding, errors);
   xfree (buffer);
 
   return unicode;
@@ -651,6 +652,18 @@ valpy_richcompare (PyObject *self, PyObject *other, int op)
   Py_RETURN_FALSE;
 }
 
+/* Helper function to determine if a type is "int-like".  */
+static int
+is_intlike (struct type *type, int ptr_ok)
+{
+  CHECK_TYPEDEF (type);
+  return (TYPE_CODE (type) == TYPE_CODE_INT
+	  || TYPE_CODE (type) == TYPE_CODE_ENUM
+	  || TYPE_CODE (type) == TYPE_CODE_BOOL
+	  || TYPE_CODE (type) == TYPE_CODE_CHAR
+	  || (ptr_ok && TYPE_CODE (type) == TYPE_CODE_PTR));
+}
+
 /* Implements conversion to int.  */
 static PyObject *
 valpy_int (PyObject *self)
@@ -661,7 +674,7 @@ valpy_int (PyObject *self)
   volatile struct gdb_exception except;
 
   CHECK_TYPEDEF (type);
-  if (TYPE_CODE (type) != TYPE_CODE_INT)
+  if (!is_intlike (type, 0))
     {
       PyErr_SetString (PyExc_RuntimeError, "cannot convert value to int");
       return NULL;
@@ -685,8 +698,7 @@ valpy_long (PyObject *self)
   LONGEST l = 0;
   volatile struct gdb_exception except;
 
-  CHECK_TYPEDEF (type);
-  if (TYPE_CODE (type) != TYPE_CODE_INT && TYPE_CODE (type) != TYPE_CODE_PTR)
+  if (!is_intlike (type, 1))
     {
       PyErr_SetString (PyExc_RuntimeError, "cannot convert value to long");
       return NULL;
@@ -834,7 +846,7 @@ convert_value_from_python (PyObject *obj)
 
 /* Returns value object in the ARGth position in GDB's history.  */
 PyObject *
-gdbpy_get_value_from_history (PyObject *self, PyObject *args)
+gdbpy_history (PyObject *self, PyObject *args)
 {
   int i;
   struct value *res_val = NULL;	  /* Initialize to appease gcc warning.  */

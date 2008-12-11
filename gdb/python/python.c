@@ -27,6 +27,7 @@
 #include "gdb_regex.h"
 #include "language.h"
 #include "valprint.h"
+#include "event-loop.h"
 
 #include <ctype.h>
 
@@ -223,7 +224,7 @@ gdbpy_parameter_value (enum var_types type, void *var)
    value.  */
 
 static PyObject *
-get_parameter (PyObject *self, PyObject *args)
+gdbpy_parameter (PyObject *self, PyObject *args)
 {
   struct cmd_list_element *alias, *prefix, *cmd;
   char *arg, *newarg;
@@ -394,6 +395,133 @@ gdbpy_decode_line (PyObject *self, PyObject *args)
   Py_RETURN_NONE;
 }
 
+/* Parse a string and evaluate it as an expression.  */
+static PyObject *
+gdbpy_parse_and_eval (PyObject *self, PyObject *args)
+{
+  char *expr_str;
+  struct value *result = NULL;
+  volatile struct gdb_exception except;
+
+  if (!PyArg_ParseTuple (args, "s", &expr_str))
+    return NULL;
+
+  TRY_CATCH (except, RETURN_MASK_ALL)
+    {
+      result = parse_and_eval (expr_str);
+    }
+  GDB_PY_HANDLE_EXCEPTION (except);
+
+  return value_to_value_object (result);
+}
+
+
+
+/* Posting and handling events.  */
+
+/* A single event.  */
+struct gdbpy_event
+{
+  /* The Python event.  This is just a callable object.  */
+  PyObject *event;
+  /* The next event.  */
+  struct gdbpy_event *next;
+};
+
+/* All pending events.  */
+static struct gdbpy_event *gdbpy_event_list;
+/* The final link of the event list.  */
+static struct gdbpy_event **gdbpy_event_list_end;
+
+/* We use a file handler, and not an async handler, so that we can
+   wake up the main thread even when it is blocked in poll().  */
+static int gdbpy_event_fds[2];
+
+/* The file handler callback.  This reads from the internal pipe, and
+   then processes the Python event queue.  This will always be run in
+   the main gdb thread.  */
+static void
+gdbpy_run_events (int err, gdb_client_data ignore)
+{
+  PyGILState_STATE state;
+  char buffer[100];
+  int r;
+
+  state = PyGILState_Ensure ();
+
+  /* Just read whatever is available on the fd.  It is relatively
+     harmless if there are any bytes left over.  */
+  r = read (gdbpy_event_fds[0], buffer, sizeof (buffer));
+
+  while (gdbpy_event_list)
+    {
+      /* Dispatching the event might push a new element onto the event
+	 loop, so we update here "atomically enough".  */
+      struct gdbpy_event *item = gdbpy_event_list;
+      gdbpy_event_list = gdbpy_event_list->next;
+      if (gdbpy_event_list == NULL)
+	gdbpy_event_list_end = &gdbpy_event_list;
+
+      /* Ignore errors.  */
+      PyObject_CallObject (item->event, NULL);
+
+      Py_DECREF (item->event);
+      xfree (item);
+    }
+
+  PyGILState_Release (state);
+}
+
+/* Submit an event to the gdb thread.  */
+static PyObject *
+gdbpy_post_event (PyObject *self, PyObject *args)
+{
+  struct gdbpy_event *event;
+  PyObject *func;
+  int wakeup;
+
+  if (!PyArg_ParseTuple (args, "O", &func))
+    return NULL;
+
+  if (!PyCallable_Check (func))
+    {
+      PyErr_SetString (PyExc_RuntimeError, "Posted event is not callable");
+      return NULL;
+    }
+
+  Py_INCREF (func);
+
+  /* From here until the end of the function, we have the GIL, so we
+     can operate on our global data structures without worrying.  */
+  wakeup = gdbpy_event_list == NULL;
+
+  event = XNEW (struct gdbpy_event);
+  event->event = func;
+  event->next = NULL;
+  *gdbpy_event_list_end = event;
+  gdbpy_event_list_end = &event->next;
+
+  /* Wake up gdb when needed.  */
+  if (wakeup)
+    {
+      char c = 'q';		/* Anything. */
+      write (gdbpy_event_fds[1], &c, 1);
+    }
+
+  Py_RETURN_NONE;
+}
+
+/* Initialize the Python event handler.  */
+static void
+gdbpy_initialize_events (void)
+{
+  if (!pipe (gdbpy_event_fds))
+    {
+      gdbpy_event_list_end = &gdbpy_event_list;
+      add_file_handler (gdbpy_event_fds[0], gdbpy_run_events, NULL);
+    }
+}
+
 
 
 /* Threads.  */
@@ -432,7 +560,7 @@ update_tuple_callback (struct thread_info *info, void *user_data)
 /* Python function which yields a tuple holding all valid thread IDs.  */
 
 static PyObject *
-gdbpy_get_threads (PyObject *unused1, PyObject *unused2)
+gdbpy_threads (PyObject *unused1, PyObject *unused2)
 {
   int thread_count = 0;
   struct set_thread_info info;
@@ -456,7 +584,7 @@ gdbpy_get_threads (PyObject *unused1, PyObject *unused2)
 /* Python function that returns the current thread's ID.  */
 
 static PyObject *
-gdbpy_get_current_thread (PyObject *unused1, PyObject *unused2)
+gdbpy_current_thread (PyObject *unused1, PyObject *unused2)
 {
   if (PIDGET (inferior_ptid) == 0)
     Py_RETURN_NONE;
@@ -645,7 +773,7 @@ gdbpy_get_current_objfile (PyObject *unused1, PyObject *unused2)
 
 /* Return a sequence holding all the Objfiles.  */
 static PyObject *
-gdbpy_get_objfiles (PyObject *unused1, PyObject *unused2)
+gdbpy_objfiles (PyObject *unused1, PyObject *unused2)
 {
   struct objfile *objf;
   PyObject *list;
@@ -1083,7 +1211,7 @@ gdbpy_get_varobj_pretty_printer (struct type *type)
    pretty printer instance, or None.  This function is useful as an
    argument to the MI command -var-set-visualizer.  */
 static PyObject *
-gdbpy_get_default_visualizer (PyObject *self, PyObject *args)
+gdbpy_default_visualizer (PyObject *self, PyObject *args)
 {
   PyObject *val_obj;
   PyObject *cons, *printer = NULL;
@@ -1147,10 +1275,10 @@ eval_python_from_control_command (struct command_line *cmd)
 int
 apply_val_pretty_printer (struct type *type, const gdb_byte *valaddr,
 			  int embedded_offset, CORE_ADDR address,
-			  struct ui_ifle *stream, int format,
+			  struct ui_file *stream, int format,
 			  int deref_ref, int recurse,
 			  enum val_prettyprint pretty,
-			  const language_defn *language)
+			  const struct language_defn *language)
 {
   return 0;
 }
@@ -1265,6 +1393,8 @@ Enables or disables auto-loading of Python code when an object is opened."),
   gdbpy_initialize_parameters ();
   gdbpy_initialize_objfile ();
 
+  gdbpy_initialize_events ();
+
   PyRun_SimpleString ("import gdb");
   PyRun_SimpleString ("gdb.pretty_printers = {}");
 
@@ -1322,31 +1452,31 @@ if hasattr (gdb, 'datadir'):\n\
 
 static PyMethodDef GdbMethods[] =
 {
-  { "get_value_from_history", gdbpy_get_value_from_history, METH_VARARGS,
+  { "history", gdbpy_history, METH_VARARGS,
     "Get a value from history" },
   { "execute", execute_gdb_command, METH_VARARGS,
     "Execute a gdb command" },
   { "cli", gdbpy_cli, METH_NOARGS,
     "Enter the gdb CLI" },
-  { "get_parameter", get_parameter, METH_VARARGS,
+  { "parameter", gdbpy_parameter, METH_VARARGS,
     "Return a gdb parameter's value" },
 
   { "get_breakpoints", gdbpy_get_breakpoints, METH_NOARGS,
     "Return a tuple of all breakpoint objects" },
 
-  { "get_default_visualizer", gdbpy_get_default_visualizer, METH_VARARGS,
+  { "default_visualizer", gdbpy_default_visualizer, METH_VARARGS,
     "Find the default visualizer for a Value." },
 
-  { "get_current_objfile", gdbpy_get_current_objfile, METH_NOARGS,
+  { "current_objfile", gdbpy_get_current_objfile, METH_NOARGS,
     "Return the current Objfile being loaded, or None." },
-  { "get_objfiles", gdbpy_get_objfiles, METH_NOARGS,
+  { "objfiles", gdbpy_objfiles, METH_NOARGS,
     "Return a sequence of all loaded objfiles." },
 
-  { "get_frames", gdbpy_get_frames, METH_NOARGS,
+  { "frames", gdbpy_frames, METH_NOARGS,
     "Return a tuple of all frame objects" },
-  { "get_current_frame", gdbpy_get_current_frame, METH_NOARGS,
+  { "current_frame", gdbpy_current_frame, METH_NOARGS,
     "Return the current frame object" },
-  { "get_selected_frame", gdbpy_get_selected_frame, METH_NOARGS,
+  { "selected_frame", gdbpy_selected_frame, METH_NOARGS,
     "Return the selected frame object" },
   { "frame_stop_reason_string", gdbpy_frame_stop_reason_string,
     METH_VARARGS, "Return a string explaining unwind stop reason" },
@@ -1359,7 +1489,7 @@ static PyMethodDef GdbMethods[] =
   { "find_pc_function", gdbpy_find_pc_function, METH_VARARGS,
     "Return the function containing the given pc value, or None." },
 
-  { "get_block_for_pc", gdbpy_get_block_for_pc, METH_VARARGS,
+  { "block_for_pc", gdbpy_block_for_pc, METH_VARARGS,
     "Return the block containing the given pc value, or None." },
 
   { "decode_line", gdbpy_decode_line, METH_VARARGS,
@@ -1367,12 +1497,18 @@ static PyMethodDef GdbMethods[] =
 Return a tuple holding the file name (or None) and line number (or None).\n\
 Note: may later change to return an object." },
 
-  { "get_threads", gdbpy_get_threads, METH_NOARGS,
+  { "threads", gdbpy_threads, METH_NOARGS,
     "Return a tuple holding all the valid thread IDs." },
-  { "get_current_thread", gdbpy_get_current_thread, METH_NOARGS,
+  { "current_thread", gdbpy_current_thread, METH_NOARGS,
     "Return the thread ID of the current thread." },
   { "switch_to_thread", gdbpy_switch_to_thread, METH_VARARGS,
     "Switch to a thread, given the thread ID." },
+
+  { "parse_and_eval", gdbpy_parse_and_eval, METH_VARARGS,
+    "Parse a string as an expression, evaluate it, and return the result." },
+
+  { "post_event", gdbpy_post_event, METH_VARARGS,
+    "Post an event into gdb's event loop." },
 
   { "write", gdbpy_write, METH_VARARGS,
     "Write a string using gdb's filtered stream." },

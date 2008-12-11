@@ -69,14 +69,14 @@ extern PyTypeObject block_object_type;
 extern PyTypeObject value_object_type;
 extern PyTypeObject symbol_object_type;
 
-PyObject *gdbpy_get_value_from_history (PyObject *self, PyObject *args);
+PyObject *gdbpy_history (PyObject *self, PyObject *args);
 PyObject *gdbpy_get_breakpoints (PyObject *, PyObject *);
-PyObject *gdbpy_get_frames (PyObject *, PyObject *);
-PyObject *gdbpy_get_current_frame (PyObject *, PyObject *);
+PyObject *gdbpy_frames (PyObject *, PyObject *);
+PyObject *gdbpy_current_frame (PyObject *, PyObject *);
 PyObject *gdbpy_frame_stop_reason_string (PyObject *, PyObject *);
 PyObject *gdbpy_lookup_symbol (PyObject *self, PyObject *args);
-PyObject *gdbpy_get_selected_frame (PyObject *self, PyObject *args);
-PyObject *gdbpy_get_block_for_pc (PyObject *self, PyObject *args);
+PyObject *gdbpy_selected_frame (PyObject *self, PyObject *args);
+PyObject *gdbpy_block_for_pc (PyObject *self, PyObject *args);
 
 PyObject *symtab_and_line_to_sal_object (struct symtab_and_line sal);
 PyObject *symtab_to_symtab_object (struct symtab *symtab);
