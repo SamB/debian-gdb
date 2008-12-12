@@ -1,6 +1,6 @@
 /* Gdb/Python header for private use by Python module.
 
-   Copyright (C) 2008 Free Software Foundation, Inc.
+   Copyright (C) 2008, 2009 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -55,6 +55,7 @@ typedef int Py_ssize_t;
 #define PyEval_InitThreads() 0
 #define PyThreadState_Swap(ARG) (ARG)
 #define PyEval_InitThreads() 0
+#define PyEval_ReleaseLock() 0
 #endif
 
 #include "command.h"
@@ -70,20 +71,21 @@ extern PyTypeObject value_object_type;
 extern PyTypeObject symbol_object_type;
 
 PyObject *gdbpy_history (PyObject *self, PyObject *args);
-PyObject *gdbpy_get_breakpoints (PyObject *, PyObject *);
+PyObject *gdbpy_breakpoints (PyObject *, PyObject *);
 PyObject *gdbpy_frames (PyObject *, PyObject *);
-PyObject *gdbpy_current_frame (PyObject *, PyObject *);
+PyObject *gdbpy_newest_frame (PyObject *, PyObject *);
 PyObject *gdbpy_frame_stop_reason_string (PyObject *, PyObject *);
 PyObject *gdbpy_lookup_symbol (PyObject *self, PyObject *args);
 PyObject *gdbpy_selected_frame (PyObject *self, PyObject *args);
 PyObject *gdbpy_block_for_pc (PyObject *self, PyObject *args);
+PyObject *gdbpy_read_memory (PyObject *self, PyObject *args);
+PyObject *gdbpy_write_memory (PyObject *self, PyObject *args);
 
 PyObject *symtab_and_line_to_sal_object (struct symtab_and_line sal);
 PyObject *symtab_to_symtab_object (struct symtab *symtab);
 PyObject *symbol_to_symbol_object (struct symbol *sym);
 PyObject *block_to_block_object (struct block *block);
 PyObject *value_to_value_object (struct value *v);
-PyObject *gdb_owned_value_to_value_object (struct value *v);
 PyObject *type_to_type_object (struct type *);
 PyObject *objfile_to_objfile_object (struct objfile *);
 
@@ -108,6 +110,7 @@ void gdbpy_initialize_blocks (void);
 void gdbpy_initialize_functions (void);
 void gdbpy_initialize_objfile (void);
 void gdbpy_initialize_parameters (void);
+void gdbpy_initialize_membuf (void);
 
 struct cleanup *make_cleanup_py_decref (PyObject *py);
 struct cleanup *make_cleanup_py_restore_gil (PyGILState_STATE *state);
@@ -126,6 +129,19 @@ PyObject *gdbpy_parameter_value (enum var_types, void *);
 	return PyErr_Format (Exception.reason == RETURN_QUIT		\
 			     ? PyExc_KeyboardInterrupt : PyExc_RuntimeError, \
 			     "%s", Exception.message);			\
+    } while (0)
+
+/* Use this after a TRY_EXCEPT to throw the appropriate Python
+   exception.  This macro is for use inside setter functions.  */
+#define GDB_PY_SET_HANDLE_EXCEPTION(Exception)				\
+    do {								\
+      if (Exception.reason < 0)						\
+        {								\
+	  PyErr_Format (Exception.reason == RETURN_QUIT			\
+			? PyExc_KeyboardInterrupt : PyExc_RuntimeError, \
+			"%s", Exception.message);			\
+	  return -1;							\
+	}								\
     } while (0)
 
 

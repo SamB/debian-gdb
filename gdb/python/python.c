@@ -1,6 +1,6 @@
 /* General python/gdb code
 
-   Copyright (C) 2008 Free Software Foundation, Inc.
+   Copyright (C) 2008, 2009 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -228,6 +228,7 @@ gdbpy_parameter (PyObject *self, PyObject *args)
 {
   struct cmd_list_element *alias, *prefix, *cmd;
   char *arg, *newarg;
+  int found = -1;
   volatile struct gdb_exception except;
 
   if (! PyArg_ParseTuple (args, "s", &arg))
@@ -237,15 +238,13 @@ gdbpy_parameter (PyObject *self, PyObject *args)
 
   TRY_CATCH (except, RETURN_MASK_ALL)
     {
-      if (! lookup_cmd_composition (newarg, &alias, &prefix, &cmd))
-	{
-	  xfree (newarg);
-	  return PyErr_Format (PyExc_RuntimeError,
-			       "could not find parameter `%s'", arg);
-	}
+      found = lookup_cmd_composition (newarg, &alias, &prefix, &cmd);
     }
   xfree (newarg);
   GDB_PY_HANDLE_EXCEPTION (except);
+  if (!found)
+    return PyErr_Format (PyExc_RuntimeError,
+			 "could not find parameter `%s'", arg);
 
   if (! cmd->var)
     return PyErr_Format (PyExc_RuntimeError, "`%s' is not a parameter", arg);
@@ -505,7 +504,8 @@ gdbpy_post_event (PyObject *self, PyObject *args)
   if (wakeup)
     {
       char c = 'q';		/* Anything. */
-      write (gdbpy_event_fds[1], &c, 1);
+      if (write (gdbpy_event_fds[1], &c, 1) != 1)
+        return PyErr_SetFromErrno (PyExc_IOError);
     }
 
   Py_RETURN_NONE;
@@ -739,6 +739,23 @@ gdbpy_new_objfile (struct objfile *objfile)
   strcpy (filename + len, GDBPY_AUTO_FILENAME);
 
   input = fopen (filename, "r");
+
+  if (!input && debug_file_directory)
+    {
+      /* Also try the same file in the separate debug info directory.  */
+      char *debugfile;
+
+      debugfile = xmalloc (strlen (filename)
+			   + strlen (debug_file_directory) + 1);
+      strcpy (debugfile, debug_file_directory);
+      /* FILENAME is absolute, so we don't need a "/" here.  */
+      strcat (debugfile, filename);
+
+      xfree (filename);
+      filename = debugfile;
+
+      input = fopen (filename, "r");
+    }
 
   if (input)
     {
@@ -991,7 +1008,8 @@ gdbpy_get_display_hint (PyObject *printer)
 /* Helper for apply_val_pretty_printer which calls to_string and
    formats the result.  */
 static void
-print_string_repr (PyObject *printer, struct ui_file *stream, int recurse,
+print_string_repr (PyObject *printer, const char *hint,
+		   struct ui_file *stream, int recurse,
 		   const struct value_print_options *options,
 		   const struct language_defn *language)
 {
@@ -1001,7 +1019,11 @@ print_string_repr (PyObject *printer, struct ui_file *stream, int recurse,
   output = pretty_print_one_value (printer, &replacement);
   if (output)
     {
-      fputs_filtered (output, stream);
+      if (hint && !strcmp (hint, "string"))
+	LA_PRINT_STRING (stream, (gdb_byte *) output, strlen (output),
+			 1, 0, options);
+      else
+	fputs_filtered (output, stream);
       xfree (output);
     }
   else if (replacement)
@@ -1013,25 +1035,23 @@ print_string_repr (PyObject *printer, struct ui_file *stream, int recurse,
 /* Helper for apply_val_pretty_printer that formats children of the
    printer, if any exist.  */
 static void
-print_children (PyObject *printer, struct ui_file *stream, int recurse,
+print_children (PyObject *printer, const char *hint,
+		struct ui_file *stream, int recurse,
 		const struct value_print_options *options,
 		const struct language_defn *language)
 {
-  char *hint;
-  int is_map = 0, i;
+  int is_map, is_array, done_flag, pretty;
+  unsigned int i;
   PyObject *children, *iter;
   struct cleanup *cleanups;
 
   if (! PyObject_HasAttr (printer, gdbpy_children_cst))
     return;
 
-  /* If we are printing a map, we want some special formatting.  */
-  hint = gdbpy_get_display_hint (printer);
-  if (hint)
-    {
-      is_map = ! strcmp (hint, "map");
-      xfree (hint);
-    }
+  /* If we are printing a map or an array, we want some special
+     formatting.  */
+  is_map = hint && ! strcmp (hint, "map");
+  is_array = hint && ! strcmp (hint, "array");
 
   children = PyObject_CallMethodObjArgs (printer, gdbpy_children_cst,
 					 NULL);
@@ -1051,14 +1071,24 @@ print_children (PyObject *printer, struct ui_file *stream, int recurse,
     }
   make_cleanup_py_decref (iter);
 
-  for (i = 0; ; ++i)
+  /* Use the prettyprint_arrays option if we are printing an array,
+     and the pretty option otherwise.  */
+  pretty = is_array ? options->prettyprint_arrays : options->pretty;
+
+  done_flag = 0;
+  for (i = 0; i < options->print_max; ++i)
     {
       PyObject *py_v, *item = PyIter_Next (iter);
       char *name;
       struct cleanup *inner_cleanup;
 
       if (! item)
-	break;
+	{
+	  /* Set a flag so we can know whether we printed all the
+	     available elements.  */
+	  done_flag = 1;
+	  break;
+	}
 
       if (! PyArg_ParseTuple (item, "sO", &name, &py_v))
 	{
@@ -1068,19 +1098,48 @@ print_children (PyObject *printer, struct ui_file *stream, int recurse,
 	}
       inner_cleanup = make_cleanup_py_decref (item);
 
+      /* Print initial "{".  For other elements, there are three
+	 cases:
+	 1. Maps.  Print a "," after each value element.
+	 2. Arrays.  Always print a ",".
+	 3. Other.  Always print a ",".  */
       if (i == 0)
 	fputs_filtered (" = {", stream);
       else if (! is_map || i % 2 == 0)
-	fputs_filtered (options->pretty ? "," : ", ", stream);
+	fputs_filtered (pretty ? "," : ", ", stream);
 
-      if (options->pretty && (! is_map || i % 2 == 0))
+      /* In summary mode, we just want to print "= {...}" if there is
+	 a value.  */
+      if (options->summary)
 	{
-	  fputs_filtered ("\n", stream);
-	  print_spaces_filtered (2 + 2 * recurse, stream);
+	  /* This increment tricks the post-loop logic to print what
+	     we want.  */
+	  ++i;
+	  /* Likewise.  */
+	  pretty = 0;
+	  break;
+	}
+
+      if (! is_map || i % 2 == 0)
+	{
+	  if (pretty)
+	    {
+	      fputs_filtered ("\n", stream);
+	      print_spaces_filtered (2 + 2 * recurse, stream);
+	    }
+	  else
+	    wrap_here (n_spaces (2 + 2 *recurse));
 	}
 
       if (is_map && i % 2 == 0)
 	fputs_filtered ("[", stream);
+      else if (is_array)
+	{
+	  /* We print the index, not whatever the child method
+	     returned as the name.  */
+	  if (options->print_array_indexes)
+	    fprintf_filtered (stream, "[%d] = ", i);
+	}
       else if (! is_map)
 	{
 	  fputs_filtered (name, stream);
@@ -1106,15 +1165,22 @@ print_children (PyObject *printer, struct ui_file *stream, int recurse,
 
       if (is_map && i % 2 == 0)
 	fputs_filtered ("] = ", stream);
-      else if (! options->pretty)
-	wrap_here (n_spaces (2 + 2 * recurse));
 
       do_cleanups (inner_cleanup);
     }
 
   if (i)
     {
-      if (options->pretty)
+      if (!done_flag)
+	{
+	  if (pretty)
+	    {
+	      fputs_filtered ("\n", stream);
+	      print_spaces_filtered (2 + 2 * recurse, stream);
+	    }
+	  fputs_filtered ("...", stream);
+	}
+      if (pretty)
 	{
 	  fputs_filtered ("\n", stream);
 	  print_spaces_filtered (2 * recurse, stream);
@@ -1135,7 +1201,7 @@ apply_val_pretty_printer (struct type *type, const gdb_byte *valaddr,
 {
   PyObject *func, *printer;
   struct value *value;
-  char *hint;
+  char *hint = NULL;
   struct cleanup *cleanups;
   int result = 0;
   PyGILState_STATE state;
@@ -1149,8 +1215,9 @@ apply_val_pretty_printer (struct type *type, const gdb_byte *valaddr,
     goto done;
 
   /* Instantiate the printer.  */
-  value = value_from_contents_and_address (type, valaddr, embedded_offset,
-					   address);
+  if (valaddr)
+    valaddr += embedded_offset;
+  value = value_from_contents_and_address (type, valaddr, address);
   printer = gdbpy_instantiate_printer (func, value);
   Py_DECREF (func);
 
@@ -1160,11 +1227,15 @@ apply_val_pretty_printer (struct type *type, const gdb_byte *valaddr,
       goto done;
     }
 
+  /* If we are printing a map, we want some special formatting.  */
+  hint = gdbpy_get_display_hint (printer);
+  make_cleanup (free_current_contents, &hint);
+
   make_cleanup_py_decref (printer);
   if (printer != Py_None)
     {
-      print_string_repr (printer, stream, recurse, options, language);
-      print_children (printer, stream, recurse, options, language);
+      print_string_repr (printer, hint, stream, recurse, options, language);
+      print_children (printer, hint, stream, recurse, options, language);
 
       result = 1;
     }
@@ -1392,8 +1463,8 @@ Enables or disables auto-loading of Python code when an object is opened."),
   gdbpy_initialize_types ();
   gdbpy_initialize_parameters ();
   gdbpy_initialize_objfile ();
-
   gdbpy_initialize_events ();
+  gdbpy_initialize_membuf ();
 
   PyRun_SimpleString ("import gdb");
   PyRun_SimpleString ("gdb.pretty_printers = {}");
@@ -1461,7 +1532,7 @@ static PyMethodDef GdbMethods[] =
   { "parameter", gdbpy_parameter, METH_VARARGS,
     "Return a gdb parameter's value" },
 
-  { "get_breakpoints", gdbpy_get_breakpoints, METH_NOARGS,
+  { "breakpoints", gdbpy_breakpoints, METH_NOARGS,
     "Return a tuple of all breakpoint objects" },
 
   { "default_visualizer", gdbpy_default_visualizer, METH_VARARGS,
@@ -1474,8 +1545,8 @@ static PyMethodDef GdbMethods[] =
 
   { "frames", gdbpy_frames, METH_NOARGS,
     "Return a tuple of all frame objects" },
-  { "current_frame", gdbpy_current_frame, METH_NOARGS,
-    "Return the current frame object" },
+  { "newest_frame", gdbpy_newest_frame, METH_NOARGS,
+    "Return the newest frame object" },
   { "selected_frame", gdbpy_selected_frame, METH_NOARGS,
     "Return the selected frame object" },
   { "frame_stop_reason_string", gdbpy_frame_stop_reason_string,
@@ -1509,6 +1580,13 @@ Note: may later change to return an object." },
 
   { "post_event", gdbpy_post_event, METH_VARARGS,
     "Post an event into gdb's event loop." },
+
+  { "read_memory", gdbpy_read_memory, METH_VARARGS,
+    "read_memory (address, length) -> buffer\n\
+Return a buffer object for reading from the inferior's memory." },
+  { "write_memory", gdbpy_write_memory, METH_VARARGS,
+    "write_memory (address, buffer [, length])\n\
+Write the given buffer object to the inferior's memory." },
 
   { "write", gdbpy_write, METH_VARARGS,
     "Write a string using gdb's filtered stream." },

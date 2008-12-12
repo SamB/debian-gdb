@@ -1,3 +1,10 @@
+gdb (6.8.50.20090116.python-1) experimental; urgency=low
+
+  * New snapshot from archer-tromey-python branch.
+  * Make sure that Python is enabled for the main gdb package.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Fri, 12 Dec 2008 11:30:41 -0500
+
 gdb (6.8.50.20081210.python-1) experimental; urgency=low
 
   * New snapshot from archer-tromey-python branch.

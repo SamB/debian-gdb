@@ -106,9 +106,9 @@ EXTRA_FLAGS := --disable-gdbtk --disable-shared --enable-tui \
 	$(arch_config_args) --build=$(DEB_HOST_GNU_TYPE)
 
 # Debian does not include 64-bit expat packages yet, so --with-expat
-# is here rather than in EXTRA_FLAGS.
+# is here rather than in EXTRA_FLAGS.  Similarly Python.
 DEB_CONFIGURE_EXTRA_FLAGS := --host=$(DEB_HOST_GNU_TYPE) $(EXTRA_FLAGS) \
-	--with-expat
+	--with-expat --with-python
 
 DEB_MAKE_BUILD_TARGET = all info
 

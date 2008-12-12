@@ -1,3 +1,78 @@
+2009-01-14  Phil Muldoon  <pmuldoon@redhat.com>
+
+	* gdb.texinfo (Python Commands): Remove documentation
+	prompts from scripted example.
+
+2009-01-13  Phil Muldoon  <pmuldoon@redhat.com>
+
+	* gdb.texinfo (Basic Python):  Fix typos.
+	(Commands In Python): Likewise.
+	(Types From Inferior): Likewise.
+	(Frames In Python): Likewise.
+
+2009-01-07  Tom Tromey  <tromey@redhat.com>
+
+	* gdb.texinfo (Python API): Normalize capitalization.
+	(Basic Python): Likewise.
+	(Auto-loading): Likewise.
+	(Functions In Python): Likewise.
+	(Objfiles In Python): Likewise.
+	(Breakpoints In Python): Likewise.
+	(Frames In Python): Likewise.  Fix typo.  Comment out bad xref.
+
+2008-12-29  Thiago Jung Bauermann  <bauerman@br.ibm.com>
+
+	* gdb.texinfo (Basic Python): Document gdb.read_memory and
+	gdb.write_memory.
+
+2008-12-24  Thiago Jung Bauermann  <bauerman@br.ibm.com>
+
+	* gdb.texinfo (Basic Python): Document Frame-related functions.
+	(Frames in Python): New node.
+	(Python API): Update.
+
+2008-12-17  Tom Tromey  <tromey@redhat.com>
+
+	* gdb.texinfo (Types From Inferior): Document const, volatile,
+	and unqualified methods.
+
+2008-12-16  Thiago Jung Bauermann  <bauerman@br.ibm.com>
+
+	* gdb.texinfo (Commands in Python): Mention need of importing the gdb
+	Python module.
+	(Functions In Python): Add example.
+
+2008-12-16  Thiago Jung Bauermann  <bauerman@br.ibm.com>
+
+	* gdb.texinfo (GDB/MI Variable Objects): Fix references to renamed
+	`gdb.default_visualizer' Python function.
+
+2008-12-15  Paul Pluzhnikov  <ppluzhnikov@google.com>
+
+	* gdb.texinfo (Basic Python): Clarify gdb.parameter argument.
+	
+2008-12-15  Paul Pluzhnikov  <ppluzhnikov@google.com>
+
+	* gdb.texinfo: Fix GDBN references.
+	
+2008-12-15  Tom Tromey  <tromey@redhat.com>
+
+	* gdb.texinfo (Auto-loading): Document debug-file-directory
+	search.
+
+2008-12-15  Tom Tromey  <tromey@redhat.com>
+
+	* gdb.texinfo (Basic Python): Document gdb.breakpoints.
+	(Breakpoints in Python): New node.
+
+2008-12-12  Tom Tromey  <tromey@redhat.com>
+
+	* gdb.texinfo (Pretty Printing): Document 'array' hint.
+
+2008-12-12  Tom Tromey  <tromey@redhat.com>
+
+	* gdb.texinfo (Pretty Printing): Document 'string' hint.
+
 2008-12-10  Tom Tromey  <tromey@redhat.com>
 
 	* gdb.texinfo (Basic Python): Document post_event.
@@ -136,6 +211,71 @@
 2008-09-29  Tom Tromey  <tromey@redhat.com>
 
 	* gdb.texinfo (Pretty Printing): Update example.
+
+2009-01-06  Sandra Loosemore  <sandra@codesourcery.com>
+
+	* gdb.texinfo (Remote Configuration): Document new
+	"set/show tcp auto-retry" and "set/show tcp connect-timeout"
+	commands.
+
+2008-12-28  Pedro Alves  <pedro@codesourcery.com>
+
+	* gdbint.texinfo (gdbarch_cannot_fetch_register): Don't mention
+	FETCH_INFERIOR_REGISTERS.
+	(Native Conditionals): Remove obsolete CHILD_PREPARE_TO_STORE,
+	FETCH_INFERIOR_REGISTERS descriptions.  Remove
+	gdbarch_get_longjmp_target descrition, since already described in
+	Target Conditionals.  Move gdbarch_fp0_regnum description to ...
+	(Target Conditionals): ... here.
+
+2008-12-16  Joel Brobecker  <brobecker@adacore.com>
+
+	* gdb.texinfo (Omissions from Ada): Add missing GDB prompt in
+	examples.
+	(Additions to Ada): Likewise.  Add the missing opening and closing
+	parenthesis of the GDB prompt in one of the examples.
+
+2008-12-14  Joel Brobecker  <brobecker@adacore.com>
+
+	* gdb.texinfo (Omissions from Ada): Remove incorrect documentation
+	about the result of 'Address not being of type System.Address.
+	This problem has been fixed a while ago.
+
+2008-12-02  Vladimir Prus  <vladimir@codesourcery.com>
+
+	MI non-stop and multiprocess docs.
+
+        * gdb.texinfo (GDB/MI): New section 'GDB/MI General Design'
+        (GDB/MI Output Records): New section 'GDB/MI Frame Information'
+        Adjust documentation for *stopped, document =thread-created,
+        =thread-exited, =thread-group-created and =thread-group-exited.
+        (GDB/MI Thread Commands): Document the 'state' field in
+        -thread-info output.
+        (GDB/MI Program Execution): Mention --all and --thread-group
+        options.
+        (GDB/MI Variable Objects): Describe floating and fixed variable
+        objects.
+        (GDB/MI Miscellaneous Commands): Document -list-thread-groups.
+
+2008-12-02  Vladimir Prus  <vladimir@codesourcery.com>
+
+        * gdb.texinfo (Operating System Information): New appendix.
+        (Operating System Auxiliary Information): Document 'info os processes'
+        (Remote Configuration): Document 'osdata'
+        (General Query Packets): Document qXfer:osdata:read.
+
+2008-11-27  Tristan Gingold  <gingold@adacore.com>
+
+	* gdb.texinfo (Darwin): Document Darwin specific features.
+
+2008-11-25  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* gdbint.texinfo (Target Conditionals): Extend the
+	gdbarch_breakpoint_from_pc description.
+
+2008-11-22  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* gdb.texinfo (M68K Features): Fix typo.
 
 2008-11-18  Paul Pluzhnikov  <ppluzhnikov@google.com>
 
