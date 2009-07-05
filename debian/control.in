@@ -2,13 +2,13 @@ Source: gdb
 Maintainer: Daniel Jacobowitz <dan@debian.org>
 Section: devel
 Priority: optional
-Standards-Version: 3.7.3
-Build-Depends: autoconf, libtool, texinfo (>= 4.7-2.2), texlive-base, libncurses5-dev, libreadline5-dev, bison, gettext, debhelper (>= 4.9.0), dejagnu, gcj [!kfreebsd-amd64 !kfreebsd-i386 !hurd-i386 !alpha !arm !hppa], gobjc [!armel], mig [@gnu@], cdbs (>= 0.4.17), quilt (>= 0.30), libkvm-dev [@kfreebsd@], type-handling (>= 0.2.1), libunwind7-dev [ia64], flex | flex-old, libexpat1-dev, g++-multilib [i386 powerpc s390 sparc], lib64readline5-dev [i386 powerpc s390 sparc], python-dev, zlib1g-dev, procps
+Standards-Version: 3.8.1
+Build-Depends: autoconf, libtool, texinfo (>= 4.7-2.2), texlive-base, libncurses5-dev, libreadline5-dev, bison, gettext, debhelper (>= 7), dejagnu, gcj [!kfreebsd-amd64 !kfreebsd-i386 !hurd-i386 !alpha !arm !hppa], gobjc [!armel], mig [@gnu@], cdbs (>= 0.4.17), quilt (>= 0.30), libkvm-dev [@kfreebsd@], type-handling (>= 0.2.1), libunwind7-dev [ia64], flex | flex-old, libexpat1-dev, g++-multilib [i386 powerpc s390 sparc], lib64readline5-dev [i386 powerpc s390 sparc], python-dev, zlib1g-dev, procps
 
 Package: gdb@TS@
 Architecture: any
 Section: devel
-Depends: ${shlibs:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}
 Suggests: gdb-doc
 Description: The GNU Debugger
  GDB is a source-level debugger, capable of breaking programs at
@@ -20,7 +20,7 @@ Description: The GNU Debugger
 Package: gdb64
 Architecture: i386 powerpc s390 sparc
 Section: devel
-Depends: ${shlibs:Depends}, gdb
+Depends: ${shlibs:Depends}, gdb, ${misc:Depends}
 Description: The GNU Debugger (64-bit)
  GDB is a source-level debugger, capable of breaking programs at
  any specific line, displaying variable values, and determining
@@ -31,6 +31,7 @@ Description: The GNU Debugger (64-bit)
 Package: libgdb-dev
 Architecture: any
 Section: libdevel
+Depends: ${shlibs:Depends}, ${misc:Depends}, binutils-dev, libexpat1-dev, python-dev, zlib1g-dev, libncurses5-dev, libreadline5-dev
 Priority: extra
 Description: The GNU Debugger (libgdb.a)
  GDB is a source-level debugger, capable of breaking programs at

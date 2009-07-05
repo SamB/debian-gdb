@@ -1,6 +1,6 @@
 /* Python interface to objfiles.
 
-   Copyright (C) 2008 Free Software Foundation, Inc.
+   Copyright (C) 2008, 2009 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -29,7 +29,7 @@ typedef struct
   /* The corresponding objfile.  */
   struct objfile *objfile;
 
-  /* The pretty-printer dictionary.  */
+  /* The pretty-printer list of functions.  */
   PyObject *printers;
 } objfile_object;
 
@@ -66,7 +66,7 @@ objfpy_new (PyTypeObject *type, PyObject *args, PyObject *keywords)
     {
       self->objfile = NULL;
 
-      self->printers = PyDict_New ();
+      self->printers = PyList_New (0);
       if (!self->printers)
 	{
 	  Py_DECREF (self);
@@ -87,6 +87,7 @@ objfpy_get_printers (PyObject *o, void *ignore)
 static int
 objfpy_set_printers (PyObject *o, PyObject *value, void *ignore)
 {
+  PyObject *tmp;
   objfile_object *self = (objfile_object *) o;
   if (! value)
     {
@@ -95,16 +96,18 @@ objfpy_set_printers (PyObject *o, PyObject *value, void *ignore)
       return -1;
     }
 
-  if (! PyDict_Check (value))
+  if (! PyList_Check (value))
     {
       PyErr_SetString (PyExc_TypeError,
-		       "the pretty_printers attribute must be a dictionary");
+		       "the pretty_printers attribute must be a list");
       return -1;
     }
 
-  Py_XDECREF (self->printers);
+  /* Take care in case the LHS and RHS are related somehow.  */
+  tmp = self->printers;
   Py_INCREF (value);
   self->printers = value;
+  Py_XDECREF (tmp);
 
   return 0;
 }
@@ -116,14 +119,19 @@ objfpy_set_printers (PyObject *o, PyObject *value, void *ignore)
 static void
 clean_up_objfile (struct objfile *objfile, void *datum)
 {
+  PyGILState_STATE state;
   objfile_object *object = datum;
+
+  state = PyGILState_Ensure ();
   object->objfile = NULL;
   Py_DECREF ((PyObject *) object);
+  PyGILState_Release (state);
 }
 
-/* Return the Python object of type Objfile representing OBJFILE.  If
-   the object has already been created, return it.  Otherwise, create
-   it.  Return NULL and set the Python error on failure.  */
+/* Return a borrowed reference to the Python object of type Objfile
+   representing OBJFILE.  If the object has already been created,
+   return it.  Otherwise, create it.  Return NULL and set the Python
+   error on failure.  */
 PyObject *
 objfile_to_objfile_object (struct objfile *objfile)
 {
@@ -139,7 +147,7 @@ objfile_to_objfile_object (struct objfile *objfile)
 
 	  object->objfile = objfile;
 
-	  object->printers = PyDict_New ();
+	  object->printers = PyList_New (0);
 	  if (!object->printers)
 	    {
 	      Py_DECREF (object);

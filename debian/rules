@@ -94,6 +94,10 @@ ifdef GDB_TARGET
 
   arch_config_args += --program-prefix=$(TP) \
     --target=$(DEB_TARGET_ALIAS) --with-sysroot=/usr/$(DEB_TARGET_ALIAS)
+else
+  # To avoid file conflicts, only enable the global gdbinit file for native
+  # debuggers.
+  arch_config_args += --with-system-gdbinit=/etc/gdb/gdbinit
 endif
 
 INSTALL = $(install)
@@ -173,30 +177,22 @@ ifneq ($(DEB_CROSS),yes)
 	# Gcore is only useful for native GDB.
 	$(INSTALL) -m 755 -o root -g root \
 		gdb/gdb_gcore.sh debian/gdb$(TS)/usr/bin/$(TP)gcore
+
+	# Only ship a global gdbinit for the native GDB.
+	install -d debian/gdb$(TS)/etc/gdb
+	install -m 644 debian/gdbinit debian/gdb$(TS)/etc/gdb/
 endif
 
-ifeq ($(build64),yes)
+binary-post-install/gdb64 ::
 	install -d debian/gdb64/usr/bin
 	install -s -m 755 $(BUILDDIR64)/gdb/gdb debian/gdb64/usr/bin/gdb64
 	dh_link -pgdb64 usr/share/man/man1/gdb.1 usr/share/man/man1/gdb64.1
-endif
 
-	rm -rf debian/tmp/usr/include \
-		debian/tmp/usr/lib/lib*.* \
-		debian/tmp/usr/share/locale
-
-	# Remove the entire info directory; it only contains dummy files,
-	# not the real manuals.
-	rm -rf debian/tmp/usr/share/info
-
-ifneq ($(DEB_CROSS),yes)
-	# libgdb-dev is only required for native GDB.
-	install -d debian/tmp/usr/lib
-	install -m 644 $(DEB_BUILDDIR)/gdb/libgdb.a debian/tmp/usr/lib/
+binary-post-install/libgdb-dev ::
+	install -m 644 $(DEB_BUILDDIR)/gdb/libgdb.a debian/libgdb-dev/usr/lib/
 	if test -e $(DEB_BUILDDIR)/sim/*/libsim.a; then \
-	  install -m 644 $(DEB_BUILDDIR)/sim/*/libsim.a debian/tmp/usr/lib/; \
+	  install -m 644 $(DEB_BUILDDIR)/sim/*/libsim.a debian/libgdb-dev/usr/lib/; \
 	fi
-endif
 
 debian/control:: debian/control.in $(CROSS_FORCE)
 	cat debian/control.in \

@@ -70,6 +70,9 @@ proc test_value_creation {} {
   gdb_py_test_silent_cmd "python a = gdb.Value (u'unicode test')" "create unicode value" 1
   gdb_test "python print a" "\"unicode test\"" "print Unicode string"
   gdb_test "python print a.__class__" "<type 'gdb.Value'>" "verify type of unicode string"
+
+  # Test address attribute is None in a non-addressable value
+  gdb_test "python print 'result =', i.address" "= None" "Test address attribute in non-addressable value"
 }
 
 proc test_value_numeric_ops {} {
@@ -225,11 +228,27 @@ proc test_value_in_inferior {} {
 
   # Check that the dereferenced value is sane
   gdb_test "python print arg0" "0x.*$testfile\"" "verify dereferenced value"
+
+  # Smoke-test is_optimized_out attribute
+  gdb_test "python print 'result =', arg0.is_optimized_out" "= False" "Test is_optimized_out attribute"
+
+  # Test address attribute
+  gdb_test "python print 'result =', arg0.address" "= 0x\[\[:xdigit:\]\]+" "Test address attribute"
+}
+
+# A few objfile tests.
+proc test_objfiles {} {
+    gdb_test "python\nok=False\nfor file in gdb.objfiles():\n  if 'python-value' in file.filename:\n    ok=True\nprint ok\nend" "True"
+
+    gdb_test "python print gdb.objfiles()\[0\].pretty_printers" "\\\[\\\]"
+
+    gdb_test "python gdb.objfiles()\[0\].pretty_printers = 0" \
+      "pretty_printers attribute must be a list.*Error while executing Python code."
 }
 
 proc test_value_after_death {} {
   # Construct a type while the inferior is still running.
-  gdb_py_test_silent_cmd "python ptrtype = gdb.Type('PTR')" \
+  gdb_py_test_silent_cmd "python ptrtype = gdb.lookup_type('PTR')" \
     "create PTR type" 1
 
   # Kill the inferior and remove the symbols.
@@ -250,10 +269,9 @@ proc test_value_after_death {} {
     "delete PTR type" 1
 
   # Now see if the value's type is still valid.
-  gdb_test "python print castval.type()" "struct s .." \
+  gdb_test "python print castval.type" "PTR ." \
     "print value's type"
 }
-
 
 # Start with a fresh gdb.
 
@@ -274,6 +292,7 @@ test_value_creation
 test_value_numeric_ops
 test_value_boolean
 test_value_compare
+test_objfiles
 
 # The following tests require execution.
 

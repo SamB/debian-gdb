@@ -142,6 +142,60 @@ extern void set_value_pointed_to_offset (struct value *value, int val);
 extern int value_embedded_offset (struct value *value);
 extern void set_value_embedded_offset (struct value *value, int val);
 
+/* For lval_computed values, this structure holds functions used to
+   retrieve and set the value (or portions of the value).
+
+   For each function, 'V' is the 'this' pointer: an lval_funcs
+   function F may always assume that the V it receives is an
+   lval_computed value, and has F in the appropriate slot of its
+   lval_funcs structure.  */
+
+struct lval_funcs
+{
+  /* Fill in VALUE's contents.  This is used to "un-lazy" values.  If
+     a problem arises in obtaining VALUE's bits, this function should
+     call 'error'.  */
+  void (*read) (struct value *v);
+
+  /* Handle an assignment TOVAL = FROMVAL by writing the value of
+     FROMVAL to TOVAL's location.  The contents of TOVAL have not yet
+     been updated.  If a problem arises in doing so, this function
+     should call 'error'.  */
+  void (*write) (struct value *toval, struct value *fromval);
+
+  /* Return a duplicate of VALUE's closure, for use in a new value.
+     This may simply return the same closure, if VALUE's is
+     reference-counted or statically allocated.
+
+     This may be NULL, in which case VALUE's closure is re-used in the
+     new value.  */
+  void *(*copy_closure) (struct value *v);
+
+  /* Drop VALUE's reference to its closure.  Maybe this frees the
+     closure; maybe this decrements a reference count; maybe the
+     closure is statically allocated and this does nothing.
+
+     This may be NULL, in which case no action is taken to free
+     VALUE's closure.  */
+  void (*free_closure) (struct value *v);
+};
+
+/* Create a computed lvalue, with type TYPE, function pointers FUNCS,
+   and closure CLOSURE.  */
+
+extern struct value *allocate_computed_value (struct type *type,
+                                              struct lval_funcs *funcs,
+                                              void *closure);
+
+/* If VALUE is lval_computed, return its lval_funcs structure.  */
+
+extern struct lval_funcs *value_computed_funcs (struct value *value);
+
+/* If VALUE is lval_computed, return its closure.  The meaning of the
+   returned value depends on the functions VALUE uses.  */
+
+extern void *value_computed_closure (struct value *value);
+
 /* If zero, contents of this value are in the contents field.  If
    nonzero, contents are in inferior.  If the lval field is lval_memory,
    the contents are in inferior memory at location.address plus offset.
@@ -205,6 +259,11 @@ extern void set_value_optimized_out (struct value *value, int val);
 extern int value_initialized (struct value *);
 extern void set_value_initialized (struct value *, int);
 
+/* Set COMPONENT's location as appropriate for a component of WHOLE
+   --- regardless of what kind of lvalue WHOLE is.  */
+extern void set_value_component_location (struct value *component,
+                                          struct value *whole);
+
 /* While the following fields are per- VALUE .CONTENT .PIECE (i.e., a
    single value might have multiple LVALs), this hacked interface is
    limited to just the first PIECE.  Expect further change.  */
@@ -250,17 +309,6 @@ extern struct value *coerce_ref (struct value *value);
 
 extern struct value *coerce_array (struct value *value);
 
-/* Internal variables (variables for convenience of use of debugger)
-   are recorded as a chain of these structures.  */
-
-struct internalvar
-{
-  struct internalvar *next;
-  char *name;
-  struct value *value;
-  int endian;
-};
-
 
 
 #include "symtab.h"
@@ -291,7 +339,6 @@ extern struct value *value_from_pointer (struct type *type, CORE_ADDR addr);
 extern struct value *value_from_double (struct type *type, DOUBLEST num);
 extern struct value *value_from_decfloat (struct type *type,
 					  const gdb_byte *decbytes);
-extern struct value *value_from_string (char *string);
 
 extern struct value *value_at (struct type *type, CORE_ADDR addr);
 extern struct value *value_at_lazy (struct type *type, CORE_ADDR addr);
@@ -312,6 +359,8 @@ extern CORE_ADDR address_from_register (struct type *type, int regnum,
 
 extern struct value *value_of_variable (struct symbol *var, struct block *b);
 
+extern struct value *address_of_variable (struct symbol *var, struct block *b);
+
 extern struct value *value_of_register (int regnum, struct frame_info *frame);
 
 struct value *value_of_register_lazy (struct frame_info *frame, int regnum);
@@ -320,9 +369,6 @@ extern int symbol_read_needs_frame (struct symbol *);
 
 extern struct value *read_var_value (struct symbol *var,
 				     struct frame_info *frame);
-
-extern struct value *locate_var_value (struct symbol *var,
-				       struct frame_info *frame);
 
 extern struct value *allocate_value (struct type *type);
 extern struct value *allocate_value_lazy (struct type *type);
@@ -334,7 +380,10 @@ extern struct value *value_mark (void);
 
 extern void value_free_to_mark (struct value *mark);
 
-extern struct value *value_string (char *ptr, int len);
+extern struct value *value_cstring (char *ptr, int len,
+				    struct type *char_type);
+extern struct value *value_string (char *ptr, int len,
+				   struct type *char_type);
 extern struct value *value_bitstring (char *ptr, int len);
 
 extern struct value *value_array (int lowbound, int highbound,
@@ -433,12 +482,17 @@ extern int value_in (struct value *element, struct value *set);
 extern int value_bit_index (struct type *type, const gdb_byte *addr,
 			    int index);
 
-extern int using_struct_return (struct type *func_type,
+extern int using_struct_return (struct gdbarch *gdbarch,
+				struct type *func_type,
 				struct type *value_type);
 
 extern struct value *evaluate_expression (struct expression *exp);
 
 extern struct value *evaluate_type (struct expression *exp);
+
+extern struct value *evaluate_subexp (struct type *expect_type,
+				      struct expression *exp,
+				      int *pos, enum noside noside);
 
 extern struct value *evaluate_subexpression_type (struct expression *exp,
 						  int subexp);
@@ -472,7 +526,13 @@ extern struct value *access_value_history (int num);
 
 extern struct value *value_of_internalvar (struct internalvar *var);
 
+extern int get_internalvar_integer (struct internalvar *var, LONGEST *l);
+
 extern void set_internalvar (struct internalvar *var, struct value *val);
+
+extern void set_internalvar_integer (struct internalvar *var, LONGEST l);
+
+extern void clear_internalvar (struct internalvar *var);
 
 extern void set_internalvar_component (struct internalvar *var,
 				       int offset,
@@ -482,6 +542,11 @@ extern void set_internalvar_component (struct internalvar *var,
 extern struct internalvar *lookup_only_internalvar (const char *name);
 
 extern struct internalvar *create_internalvar (const char *name);
+
+typedef struct value * (*internalvar_make_value) (struct internalvar *);
+
+extern struct internalvar *
+  create_internalvar_type_lazy (char *name, internalvar_make_value fun);
 
 extern struct internalvar *lookup_internalvar (const char *name);
 
@@ -527,7 +592,7 @@ extern void modify_field (gdb_byte *addr, LONGEST fieldval, int bitpos,
 extern void type_print (struct type *type, char *varstring,
 			struct ui_file *stream, int show);
 
-extern char * type_to_string (struct type *type);
+extern char *type_to_string (struct type *type);
 
 extern gdb_byte *baseclass_addr (struct type *type, int index,
 				 gdb_byte *valaddr,
@@ -562,7 +627,7 @@ extern int common_val_print (struct value *val,
 			     const struct value_print_options *options,
 			     const struct language_defn *language);
 
-extern int val_print_string (CORE_ADDR addr, int len, int width,
+extern int val_print_string (struct type *elttype, CORE_ADDR addr, int len,
 			     struct ui_file *stream,
 			     const struct value_print_options *options);
 
@@ -611,7 +676,7 @@ typedef struct value *(*internal_function_fn) (void *cookie,
 
 void add_internal_function (const char *name, const char *doc,
 			    internal_function_fn handler,
-			    void *cookie, void (*destroyer) (void *));
+			    void *cookie);
 
 struct value *call_internal_function (struct value *function,
 				      int argc, struct value **argv);

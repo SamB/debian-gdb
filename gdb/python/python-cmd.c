@@ -1,6 +1,6 @@
 /* gdb commands implemented in Python
 
-   Copyright (C) 2008 Free Software Foundation, Inc.
+   Copyright (C) 2008, 2009 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -47,7 +47,8 @@ static struct cmdpy_completer completers[] =
 
 #define N_COMPLETERS (sizeof (completers) / sizeof (completers[0]))
 
-/* A gdb command.  */
+/* A gdb command.  For the time being only ordinary commands (not
+   set/show commands) are allowed.  */
 struct cmdpy_object
 {
   PyObject_HEAD
@@ -56,13 +57,17 @@ struct cmdpy_object
      no longer installed.  */
   struct cmd_list_element *command;
 
-  /* For a prefix command, this is the list of sub-commands.  */
+  /* A prefix command requires storage for a list of its sub-commands.
+     A pointer to this is passed to add_prefix_command, and to add_cmd
+     for sub-commands of that prefix.  If this Command is not a prefix
+     command, then this field is unused.  */
   struct cmd_list_element *sub_list;
 };
 
 typedef struct cmdpy_object cmdpy_object;
 
 static PyTypeObject cmdpy_object_type;
+
 
 /* Constants used by this module.  */
 static PyObject *invoke_cst;
@@ -129,16 +134,11 @@ cmdpy_function (struct cmd_list_element *command, char *args, int from_tty)
     }
 
   if (! args)
-    {
-      argobj = Py_None;
-      Py_INCREF (argobj);
-    }
-  else
-    {
-      argobj = PyString_FromString (args);
-      if (! argobj)
-	error (_("Could not convert arguments to Python string."));
-    }
+    args = "";
+  argobj = PyUnicode_Decode (args, strlen (args), host_charset (), NULL);
+  if (! argobj)
+    error (_("Could not convert arguments to Python string."));
+
   ttyobj = from_tty ? Py_True : Py_False;
   Py_INCREF (ttyobj);
   result = PyObject_CallMethodObjArgs ((PyObject *) obj, invoke_cst, argobj,
@@ -196,10 +196,10 @@ cmdpy_completer (struct cmd_list_element *command, char *text, char *word)
       goto done;
     }
 
-  textobj = PyString_FromString (text);
+  textobj = PyUnicode_Decode (text, strlen (text), host_charset (), NULL);
   if (! textobj)
     error (_("Could not convert argument to Python string."));
-  wordobj = PyString_FromString (word);
+  wordobj = PyUnicode_Decode (word, strlen (word), host_charset (), NULL);
   if (! wordobj)
     error (_("Could not convert argument to Python string."));
 
@@ -265,13 +265,10 @@ cmdpy_completer (struct cmd_list_element *command, char *text, char *word)
    *BASE_LIST is set to the final prefix command's list of
    *sub-commands.
    
-   START_LIST is the list in which the search starts.
-   
    This function returns the xmalloc()d name of the new command.  On
    error sets the Python error and returns NULL.  */
-char *
-gdbpy_parse_command_name (char *text, struct cmd_list_element ***base_list,
-			  struct cmd_list_element **start_list)
+static char *
+parse_command_name (char *text, struct cmd_list_element ***base_list)
 {
   struct cmd_list_element *elt;
   int len = strlen (text);
@@ -304,7 +301,7 @@ gdbpy_parse_command_name (char *text, struct cmd_list_element ***base_list,
     ;
   if (i < 0)
     {
-      *base_list = start_list;
+      *base_list = &cmdlist;
       return result;
     }
 
@@ -313,7 +310,7 @@ gdbpy_parse_command_name (char *text, struct cmd_list_element ***base_list,
   prefix_text[i + 1] = '\0';
 
   text = prefix_text;
-  elt = lookup_cmd_1 (&text, *start_list, NULL, 1);
+  elt = lookup_cmd_1 (&text, cmdlist, NULL, 1);
   if (!elt || elt == (struct cmd_list_element *) -1)
     {
       PyErr_Format (PyExc_RuntimeError, _("could not find command prefix %s"),
@@ -339,16 +336,16 @@ gdbpy_parse_command_name (char *text, struct cmd_list_element ***base_list,
 
 /* Object initializer; sets up gdb-side structures for command.
 
-   Use: __init__(NAME, CMDCLASS, [COMPLETERCLASS, [PREFIX]]).
+   Use: __init__(NAME, COMMAND_CLASS [, COMPLETER_CLASS][, PREFIX]]).
 
    NAME is the name of the command.  It may consist of multiple words,
    in which case the final word is the name of the new command, and
    earlier words must be prefix commands.
 
-   CMDCLASS is the kind of command.  It should be one of the COMMAND_*
+   COMMAND_CLASS is the kind of command.  It should be one of the COMMAND_*
    constants defined in the gdb module.
 
-   COMPLETERCLASS is the kind of completer.  If not given, the
+   COMPLETER_CLASS is the kind of completer.  If not given, the
    "complete" method will be used.  Otherwise, it should be one of the
    COMPLETE_* constants defined in the gdb module.
 
@@ -359,7 +356,7 @@ gdbpy_parse_command_name (char *text, struct cmd_list_element ***base_list,
    
 */
 static int
-cmdpy_init (PyObject *self, PyObject *args, PyObject *kwds)
+cmdpy_init (PyObject *self, PyObject *args, PyObject *kw)
 {
   cmdpy_object *obj = (cmdpy_object *) self;
   char *name;
@@ -369,7 +366,10 @@ cmdpy_init (PyObject *self, PyObject *args, PyObject *kwds)
   volatile struct gdb_exception except;
   struct cmd_list_element **cmd_list;
   char *cmd_name, *pfx_name;
+  static char *keywords[] = { "name", "command_class", "completer_class",
+			      "prefix", NULL };
   PyObject *is_prefix = NULL;
+  int cmp;
 
   if (obj->command)
     {
@@ -380,7 +380,7 @@ cmdpy_init (PyObject *self, PyObject *args, PyObject *kwds)
       return -1;
     }
 
-  if (! PyArg_ParseTuple (args, "si|iO", &name, &cmdtype,
+  if (! PyArg_ParseTupleAndKeywords (args, kw, "si|iO", keywords, &name, &cmdtype,
 			  &completetype, &is_prefix))
     return -1;
 
@@ -401,35 +401,40 @@ cmdpy_init (PyObject *self, PyObject *args, PyObject *kwds)
       return -1;
     }
 
-  cmd_name = gdbpy_parse_command_name (name, &cmd_list, &cmdlist);
+  cmd_name = parse_command_name (name, &cmd_list);
   if (! cmd_name)
     return -1;
 
   pfx_name = NULL;
-  if (is_prefix == Py_True)
+  if (is_prefix != NULL) 
     {
-      int i, out;
-
-      /* Make a normalized form of the command name.  */
-      pfx_name = xmalloc (strlen (name) + 2);
-
-      i = 0;
-      out = 0;
-      while (name[i])
+      cmp = PyObject_IsTrue (is_prefix);
+      if (cmp == 1)
 	{
-	  /* Skip whitespace.  */
-	  while (name[i] == ' ' || name[i] == '\t')
-	    ++i;
-	  /* Copy non-whitespace characters.  */
-	  while (name[i] && name[i] != ' ' && name[i] != '\t')
-	    pfx_name[out++] = name[i++];
-	  /* Add a single space after each word -- including the final
-	     word.  */
-	  pfx_name[out++] = ' ';
+	  int i, out;
+	  
+	  /* Make a normalized form of the command name.  */
+	  pfx_name = xmalloc (strlen (name) + 2);
+	  
+	  i = 0;
+	  out = 0;
+	  while (name[i])
+	    {
+	      /* Skip whitespace.  */
+	      while (name[i] == ' ' || name[i] == '\t')
+		++i;
+	      /* Copy non-whitespace characters.  */
+	      while (name[i] && name[i] != ' ' && name[i] != '\t')
+		pfx_name[out++] = name[i++];
+	      /* Add a single space after each word -- including the final
+		 word.  */
+	      pfx_name[out++] = ' ';
+	    }
+	  pfx_name[out] = '\0';
 	}
-      pfx_name[out] = '\0';
+      else if (cmp < 0)
+	  return -1;
     }
-
   if (PyObject_HasAttr (self, gdbpy_doc_cst))
     {
       PyObject *ds_obj = PyObject_GetAttr (self, gdbpy_doc_cst);
@@ -494,19 +499,20 @@ gdbpy_initialize_commands (void)
   if (PyType_Ready (&cmdpy_object_type) < 0)
     return;
 
-  /* Note: alias and user seem to be special; pseudo appears to be
-     unused, and there is no reason to expose tui or xdb, I think.  */
+  /* Note: alias and user are special; pseudo appears to be unused,
+     and there is no reason to expose tui or xdb, I think.  */
   if (PyModule_AddIntConstant (gdb_module, "COMMAND_NONE", no_class) < 0
-      || PyModule_AddIntConstant (gdb_module, "COMMAND_RUN", class_run) < 0
-      || PyModule_AddIntConstant (gdb_module, "COMMAND_VARS", class_vars) < 0
+      || PyModule_AddIntConstant (gdb_module, "COMMAND_RUNNING", class_run) < 0
+      || PyModule_AddIntConstant (gdb_module, "COMMAND_DATA", class_vars) < 0
       || PyModule_AddIntConstant (gdb_module, "COMMAND_STACK", class_stack) < 0
       || PyModule_AddIntConstant (gdb_module, "COMMAND_FILES", class_files) < 0
       || PyModule_AddIntConstant (gdb_module, "COMMAND_SUPPORT",
 				  class_support) < 0
-      || PyModule_AddIntConstant (gdb_module, "COMMAND_INFO", class_info) < 0
-      || PyModule_AddIntConstant (gdb_module, "COMMAND_BREAKPOINT",
+      || PyModule_AddIntConstant (gdb_module, "COMMAND_STATUS", class_info) < 0
+      || PyModule_AddIntConstant (gdb_module, "COMMAND_BREAKPOINTS",
 				  class_breakpoint) < 0
-      || PyModule_AddIntConstant (gdb_module, "COMMAND_TRACE", class_trace) < 0
+      || PyModule_AddIntConstant (gdb_module, "COMMAND_TRACEPOINTS",
+				  class_trace) < 0
       || PyModule_AddIntConstant (gdb_module, "COMMAND_OBSCURE",
 				  class_obscure) < 0
       || PyModule_AddIntConstant (gdb_module, "COMMAND_MAINTENANCE",

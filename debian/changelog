@@ -1,3 +1,45 @@
+gdb (6.8.50.20090628-1) unstable; urgency=low
+
+  * New snapshot from trunk.  The experimental packages used the
+    archer-tromey-python branch; the whole branch has not been merged
+    to trunk, but significant portions of it have, and will be in GDB 7.
+    So this includes some Python scripting support.  Other highlights
+    since the last experimental package:
+    - Reverse debugging commands.  With a remote target that supports
+      reverse debugging, you can step backwards as easily as forwards.
+    - Process record and replay, a native Linux implementation of
+      reverse debugging.  Only 32-bit IA32 Linux is currently supported.
+    - MIPS/Linux hardware watchpoint support.
+    - Multi-byte and wide character set support, including wchar_t display.
+    - Inlined function support, including in backtrace and step/next/finish.
+    - Improved C++ template name parsing.
+    - Non-stop debugging (some threads remain running while others
+      are stopped in the debugger).  Only implemented so far for i386,
+      x86-64, and powerpc.
+    - A bug fix for discontiguous code, e.g. as found in the Linux kernel
+      (Closes: #513816).
+    - A build fix that affected SPARC (Closes: #512121).
+    - A build fix for casts on hurd-i386 (Closes: #494839).
+    - A fix for debugging multi-threaded programs that call exec, including
+      Eclipse with the Sun JVM (Closes: #490046).
+  * Removed thread-db-multiple-libraries.patch.  This let one GDB work with
+    both LinuxThreads and NPTL, but no Debian platform has both now.
+  * GDB now reads /etc/gdb/gdbinit at startup (Closes: #33187).
+  * Ship required libraries (libbfd, libopcodes, and libiberty) in
+    /usr/lib/gdb in the libgdb-dev package, in case binutils-dev's versions
+    are not close enough (Closes: #509873).
+  * Add dev package dependencies to libgdb-dev.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun, 05 Jul 2009 16:25:07 -0400
+
+gdb (6.8.50.20090519.python-1) experimental; urgency=low
+
+  * New snapshot from archer-tromey-python branch.
+  * Update debhelper compatibility level to 7.
+  * Update to Standards-Version: 3.8.1.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Thu, 04 Jun 2009 09:38:13 -0400
+
 gdb (6.8.50.20090116.python-1) experimental; urgency=low
 
   * New snapshot from archer-tromey-python branch.
@@ -26,6 +68,8 @@ gdb (6.8.50.20081120.python-1) experimental; urgency=low
     - Compressed debug information support; the new "gold" linker can generate
       compressed debug sections.
     - New "find" command to search memory.
+    - Native i386 debugger does not get confused about watchpoints when
+      using "target remote" (Closes: #513678).
   * Build depend on zlib1g-dev and python-dev.
   * Removed bfd-get-mtime-less.patch, gdb-rbreak-quoting.patch,
   ia64-array-bound.patch, cp-support-uninit.patch,

@@ -98,7 +98,7 @@ maintenance_command (char *args, int from_tty)
 static void
 maintenance_dump_me (char *args, int from_tty)
 {
-  if (query ("Should GDB dump core? "))
+  if (query (_("Should GDB dump core? ")))
     {
 #ifdef __DJGPP__
       /* SIGQUIT by default is ignored, so use SIGABRT instead.  */
@@ -906,12 +906,4 @@ When enabled GDB is profiled."),
 			   show_maintenance_profile_p,
 			   &maintenance_set_cmdlist,
 			   &maintenance_show_cmdlist);
-  add_setshow_filename_cmd ("gdb_datadir", class_maintenance,
-                           &gdb_datadir, _("Set GDB's datadir path."),
-                           _("Show GDB's datadir path."),
-                           _("\
-When set, GDB uses the specified path to search for data files."),
-                           NULL, NULL,
-                           &maintenance_set_cmdlist,
-                           &maintenance_show_cmdlist);
 }

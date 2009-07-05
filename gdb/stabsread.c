@@ -322,7 +322,7 @@ dbx_alloc_type (int typenums[2], struct objfile *objfile)
 
   if (typenums[0] == -1)
     {
-      return (alloc_type (objfile, NULL));
+      return (alloc_type (objfile));
     }
 
   type_addr = dbx_lookup_type (typenums);
@@ -332,7 +332,7 @@ dbx_alloc_type (int typenums[2], struct objfile *objfile)
      We will fill it in later if we find out how.  */
   if (*type_addr == 0)
     {
-      *type_addr = alloc_type (objfile, NULL);
+      *type_addr = alloc_type (objfile);
     }
 
   return (*type_addr);
@@ -578,6 +578,29 @@ symbol_reference_defined (char **string)
       return -1;
     }
 }
+
+static int
+stab_reg_to_regnum (struct symbol *sym, struct gdbarch *gdbarch)
+{
+  int regno = gdbarch_stab_reg_to_regnum (gdbarch, SYMBOL_VALUE (sym));
+
+  if (regno >= gdbarch_num_regs (gdbarch)
+		+ gdbarch_num_pseudo_regs (gdbarch))
+    {
+      reg_value_complaint (regno,
+			   gdbarch_num_regs (gdbarch)
+			     + gdbarch_num_pseudo_regs (gdbarch),
+			   SYMBOL_PRINT_NAME (sym));
+
+      regno = gdbarch_sp_regnum (gdbarch); /* Known safe, though useless */
+    }
+
+  return regno;
+}
+
+static const struct symbol_register_ops stab_register_funcs = {
+  stab_reg_to_regnum
+};
 
 struct symbol *
 define_symbol (CORE_ADDR valu, char *string, int desc, int type,
@@ -993,18 +1016,9 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
       /* Parameter which is in a register.  */
       SYMBOL_TYPE (sym) = read_type (&p, objfile);
       SYMBOL_CLASS (sym) = LOC_REGISTER;
+      SYMBOL_REGISTER_OPS (sym) = &stab_register_funcs;
       SYMBOL_IS_ARGUMENT (sym) = 1;
-      SYMBOL_VALUE (sym) = gdbarch_stab_reg_to_regnum (current_gdbarch, valu);
-      if (SYMBOL_VALUE (sym) >= gdbarch_num_regs (current_gdbarch)
-				  + gdbarch_num_pseudo_regs (current_gdbarch))
-	{
-	  reg_value_complaint (SYMBOL_VALUE (sym),
-			       gdbarch_num_regs (current_gdbarch)
-				 + gdbarch_num_pseudo_regs (current_gdbarch),
-			       SYMBOL_PRINT_NAME (sym));
-	  SYMBOL_VALUE (sym) = gdbarch_sp_regnum (current_gdbarch);
-	  /* Known safe, though useless */
-	}
+      SYMBOL_VALUE (sym) = valu;
       SYMBOL_DOMAIN (sym) = VAR_DOMAIN;
       add_symbol_to_list (sym, &local_symbols);
       break;
@@ -1013,17 +1027,8 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
       /* Register variable (either global or local).  */
       SYMBOL_TYPE (sym) = read_type (&p, objfile);
       SYMBOL_CLASS (sym) = LOC_REGISTER;
-      SYMBOL_VALUE (sym) = gdbarch_stab_reg_to_regnum (current_gdbarch, valu);
-      if (SYMBOL_VALUE (sym) >= gdbarch_num_regs (current_gdbarch)
-				+ gdbarch_num_pseudo_regs (current_gdbarch))
-	{
-	  reg_value_complaint (SYMBOL_VALUE (sym),
-			       gdbarch_num_regs (current_gdbarch)
-				 + gdbarch_num_pseudo_regs (current_gdbarch),
-			       SYMBOL_PRINT_NAME (sym));
-	  SYMBOL_VALUE (sym) = gdbarch_sp_regnum (current_gdbarch);
-	  /* Known safe, though useless */
-	}
+      SYMBOL_REGISTER_OPS (sym) = &stab_register_funcs;
+      SYMBOL_VALUE (sym) = valu;
       SYMBOL_DOMAIN (sym) = VAR_DOMAIN;
       if (within_function)
 	{
@@ -1059,6 +1064,7 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
 			     SYMBOL_LINKAGE_NAME (sym)) == 0)
 		{
 		  SYMBOL_CLASS (prev_sym) = LOC_REGISTER;
+		  SYMBOL_REGISTER_OPS (prev_sym) = &stab_register_funcs;
 		  /* Use the type from the LOC_REGISTER; that is the type
 		     that is actually in that register.  */
 		  SYMBOL_TYPE (prev_sym) = SYMBOL_TYPE (sym);
@@ -1296,18 +1302,9 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
       /* Reference parameter which is in a register.  */
       SYMBOL_TYPE (sym) = read_type (&p, objfile);
       SYMBOL_CLASS (sym) = LOC_REGPARM_ADDR;
+      SYMBOL_REGISTER_OPS (sym) = &stab_register_funcs;
       SYMBOL_IS_ARGUMENT (sym) = 1;
-      SYMBOL_VALUE (sym) = gdbarch_stab_reg_to_regnum (current_gdbarch, valu);
-      if (SYMBOL_VALUE (sym) >= gdbarch_num_regs (current_gdbarch)
-				+ gdbarch_num_pseudo_regs (current_gdbarch))
-	{
-	  reg_value_complaint (SYMBOL_VALUE (sym),
-			       gdbarch_num_regs (current_gdbarch)
-				 + gdbarch_num_pseudo_regs (current_gdbarch),
-			       SYMBOL_PRINT_NAME (sym));
-	  SYMBOL_VALUE (sym) = gdbarch_sp_regnum (current_gdbarch);
-	  /* Known safe, though useless */
-	}
+      SYMBOL_VALUE (sym) = valu;
       SYMBOL_DOMAIN (sym) = VAR_DOMAIN;
       add_symbol_to_list (sym, &local_symbols);
       break;
@@ -1685,7 +1682,7 @@ again:
 
     case 'f':			/* Function returning another type */
       type1 = read_type (pp, objfile);
-      type = make_function_type (type1, dbx_lookup_type (typenums));
+      type = make_function_type (type1, dbx_lookup_type (typenums), objfile);
       break;
 
     case 'g':                   /* Prototyped function.  (Sun)  */
@@ -1708,7 +1705,8 @@ again:
         const char *type_start = (*pp) - 1;
         struct type *return_type = read_type (pp, objfile);
         struct type *func_type
-          = make_function_type (return_type, dbx_lookup_type (typenums));
+          = make_function_type (return_type, dbx_lookup_type (typenums),
+				objfile);
         struct type_list {
           struct type *type;
           struct type_list *next;
@@ -2438,8 +2436,8 @@ read_member_functions (struct field_info *fip, char **pp, struct type *type,
 
       /* Skip GCC 3.X member functions which are duplicates of the callable
 	 constructor/destructor.  */
-      if (strcmp (main_fn_name, "__base_ctor") == 0
-	  || strcmp (main_fn_name, "__base_dtor") == 0
+      if (strcmp_iw (main_fn_name, "__base_ctor ") == 0
+	  || strcmp_iw (main_fn_name, "__base_dtor ") == 0
 	  || strcmp (main_fn_name, "__deleting_dtor") == 0)
 	{
 	  xfree (main_fn_name);
@@ -4294,7 +4292,7 @@ add_undefined_type (struct type *type, int typenums[2])
 
 /* Try to fix all undefined types pushed on the UNDEF_TYPES vector.  */
 
-void
+static void
 cleanup_undefined_types_noname (void)
 {
   int i;
@@ -4329,7 +4327,7 @@ cleanup_undefined_types_noname (void)
    yet defined at the time a pointer to it was made.
    Fix:  Do a full lookup on the struct/union tag.  */
 
-void
+static void
 cleanup_undefined_types_1 (void)
 {
   struct type **type;

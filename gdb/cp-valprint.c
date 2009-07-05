@@ -36,6 +36,7 @@
 #include "valprint.h"
 #include "cp-support.h"
 #include "language.h"
+#include "python/python.h"
 
 /* Controls printing of vtbl's */
 static void
@@ -418,12 +419,27 @@ cp_print_value (struct type *type, struct type *real_type,
       if (skip >= 1)
 	fprintf_filtered (stream, "<invalid address>");
       else
-	cp_print_value_fields (baseclass, thistype, base_valaddr,
-			       thisoffset + boffset, address + boffset,
-			       stream, recurse, options,
-			       ((struct type **)
-				obstack_base (&dont_print_vb_obstack)),
-			       0);
+	{
+	  int result = 0;
+
+	  /* Attempt to run the Python pretty-printers on the
+	     baseclass if possible.  */
+	  if (!options->raw)
+	    result = apply_val_pretty_printer (baseclass, base_valaddr,
+					       thisoffset + boffset,
+					       address + boffset,
+					       stream, recurse,
+					       options,
+					       current_language);
+	  	  
+	  if (!result)
+	    cp_print_value_fields (baseclass, thistype, base_valaddr,
+				   thisoffset + boffset, address + boffset,
+				   stream, recurse, options,
+				   ((struct type **)
+				    obstack_base (&dont_print_vb_obstack)),
+				   0);
+	}
       fputs_filtered (", ", stream);
 
     flush_it:
@@ -486,7 +502,7 @@ cp_print_static_field (struct type *type,
 
       CHECK_TYPEDEF (type);
       cp_print_value_fields (type, type, value_contents_all (val),
-			     value_embedded_offset (val), value_address (val),
+			     value_embedded_offset (val), addr,
 			     stream, recurse, options, NULL, 1);
       return;
     }
@@ -504,7 +520,7 @@ cp_print_static_field (struct type *type,
    field number.  If OFFSET is not exactly at the start of some field, set
    *DOMAIN to NULL.  */
 
-void
+static void
 cp_find_class_member (struct type **domain_p, int *fieldno,
 		      LONGEST offset)
 {

@@ -185,9 +185,6 @@ mi_cmd_var_delete (char *command, char **argv, int argc)
 
   var = varobj_get_handle (name);
 
-  if (var == NULL)
-    error (_("mi_cmd_var_delete: Variable object not found."));
-
   numdel = varobj_delete (var, NULL, children_only_p);
 
   ui_out_field_int (uiout, "ndeleted", numdel);
@@ -233,9 +230,6 @@ mi_cmd_var_set_format (char *command, char **argv, int argc)
   /* Get varobj handle, if a valid var obj name was specified */
   var = varobj_get_handle (argv[0]);
 
-  if (var == NULL)
-    error (_("mi_cmd_var_set_format: Variable object not found"));
-
   format = mi_parse_format (argv[1]);
   
   /* Set the format of VAR to given format */
@@ -265,25 +259,6 @@ mi_cmd_var_set_visualizer (char *command, char **argv, int argc)
 }
 
 void
-mi_cmd_var_set_child_range (char *command, char **argv, int argc)
-{
-  struct varobj *var;
-  int from, to;
-
-  if (argc != 3)
-    error (_("-var-set-child-range: NAME FROM TO"));
-
-  var = varobj_get_handle (argv[0]);
-  if (var == NULL)
-    error (_("Variable object not found"));
-
-  from = atoi (argv[1]);
-  to = atoi (argv[2]);
-
-  varobj_set_child_range (var, from, to);
-}
-
-void
 mi_cmd_var_set_frozen (char *command, char **argv, int argc)
 {
   struct varobj *var;
@@ -293,8 +268,6 @@ mi_cmd_var_set_frozen (char *command, char **argv, int argc)
     error (_("-var-set-format: Usage: NAME FROZEN_FLAG."));
 
   var = varobj_get_handle (argv[0]);
-  if (var == NULL)
-    error (_("Variable object not found"));
 
   if (strcmp (argv[1], "0") == 0)
     frozen = 0;
@@ -322,8 +295,6 @@ mi_cmd_var_show_format (char *command, char **argv, int argc)
 
   /* Get varobj handle, if a valid var obj name was specified */
   var = varobj_get_handle (argv[0]);
-  if (var == NULL)
-    error (_("mi_cmd_var_show_format: Variable object not found"));
 
   format = varobj_get_display_format (var);
 
@@ -341,8 +312,6 @@ mi_cmd_var_info_num_children (char *command, char **argv, int argc)
 
   /* Get varobj handle, if a valid var obj name was specified */
   var = varobj_get_handle (argv[0]);
-  if (var == NULL)
-    error (_("mi_cmd_var_info_num_children: Variable object not found"));
 
   ui_out_field_int (uiout, "numchild", varobj_get_num_children (var));
 }
@@ -404,7 +373,6 @@ mi_cmd_var_list_children (char *command, char **argv, int argc)
   int numchild;
   enum print_values print_values;
   int ix;
-  int from, to;
   char *display_hint;
 
   if (argc != 1 && argc != 2)
@@ -415,8 +383,6 @@ mi_cmd_var_list_children (char *command, char **argv, int argc)
     var = varobj_get_handle (argv[0]);
   else
     var = varobj_get_handle (argv[1]);
-  if (var == NULL)
-    error (_("Variable object not found"));
 
   children = varobj_list_children (var);
   ui_out_field_int (uiout, "numchild", VEC_length (varobj_p, children));
@@ -425,10 +391,6 @@ mi_cmd_var_list_children (char *command, char **argv, int argc)
   else
     print_values = PRINT_NO_VALUES;
 
-  varobj_get_child_range (var, children, &from, &to);
-  if (from >= to)
-    return;
-
   display_hint = varobj_get_display_hint (var);
   if (display_hint)
     {
@@ -436,11 +398,14 @@ mi_cmd_var_list_children (char *command, char **argv, int argc)
       xfree (display_hint);
     }
 
+  if (VEC_length (varobj_p, children) == 0)
+    return;
+
   if (mi_version (uiout) == 1)
     cleanup_children = make_cleanup_ui_out_tuple_begin_end (uiout, "children");
   else
     cleanup_children = make_cleanup_ui_out_list_begin_end (uiout, "children");
-  for (ix = from; ix < to && VEC_iterate (varobj_p, children, ix, child); ++ix)
+  for (ix = 0; VEC_iterate (varobj_p, children, ix, child); ++ix)
     {
       struct cleanup *cleanup_child;
       cleanup_child = make_cleanup_ui_out_tuple_begin_end (uiout, "child");
@@ -460,8 +425,6 @@ mi_cmd_var_info_type (char *command, char **argv, int argc)
 
   /* Get varobj handle, if a valid var obj name was specified */
   var = varobj_get_handle (argv[0]);
-  if (var == NULL)
-    error (_("mi_cmd_var_info_type: Variable object not found"));
 
   ui_out_field_string (uiout, "type", varobj_get_type (var));
 }
@@ -477,8 +440,6 @@ mi_cmd_var_info_path_expression (char *command, char **argv, int argc)
 
   /* Get varobj handle, if a valid var obj name was specified.  */
   var = varobj_get_handle (argv[0]);
-  if (var == NULL)
-    error (_("Variable object not found"));
   
   path_expr = varobj_get_path_expr (var);
 
@@ -496,8 +457,6 @@ mi_cmd_var_info_expression (char *command, char **argv, int argc)
 
   /* Get varobj handle, if a valid var obj name was specified */
   var = varobj_get_handle (argv[0]);
-  if (var == NULL)
-    error (_("mi_cmd_var_info_expression: Variable object not found"));
 
   lang = varobj_get_language (var);
 
@@ -517,8 +476,6 @@ mi_cmd_var_show_attributes (char *command, char **argv, int argc)
 
   /* Get varobj handle, if a valid var obj name was specified */
   var = varobj_get_handle (argv[0]);
-  if (var == NULL)
-    error (_("mi_cmd_var_show_attributes: Variable object not found"));
 
   attr = varobj_get_attributes (var);
   /* FIXME: define masks for attributes */
@@ -579,8 +536,6 @@ mi_cmd_var_evaluate_expression (char *command, char **argv, int argc)
  
      /* Get varobj handle, if a valid var obj name was specified */
   var = varobj_get_handle (argv[optind]);
-  if (var == NULL)
-    error (_("Variable object not found"));
    
   if (formatFound)
     ui_out_field_string (uiout, "value", varobj_get_formatted_value (var, format));
@@ -599,8 +554,6 @@ mi_cmd_var_assign (char *command, char **argv, int argc)
 
   /* Get varobj handle, if a valid var obj name was specified */
   var = varobj_get_handle (argv[0]);
-  if (var == NULL)
-    error (_("mi_cmd_var_assign: Variable object not found"));
 
   if (!varobj_editable_p (var))
     error (_("mi_cmd_var_assign: Variable object is not editable"));
@@ -679,8 +632,6 @@ mi_cmd_var_update (char *command, char **argv, int argc)
     {
       /* Get varobj handle, if a valid var obj name was specified */
       var = varobj_get_handle (name);
-      if (var == NULL)
-	error (_("mi_cmd_var_update: Variable object not found"));
 
       if (mi_version (uiout) <= 1)
         cleanup = make_cleanup_ui_out_tuple_begin_end (uiout, "changelist");
@@ -752,17 +703,14 @@ varobj_update_one (struct varobj *var, enum print_values print_values,
 
       if (r->children_changed)
 	{
-	  int ix, from, to;
+	  int ix;
 	  struct varobj *child;
 	  struct cleanup *cleanup =
 	    make_cleanup_ui_out_list_begin_end (uiout, "children");
 
 	  VEC (varobj_p)* children = varobj_list_children (r->varobj);
-	  varobj_get_child_range (r->varobj, children, &from, &to);
 
-	  for (ix = from;
-	       ix < to && VEC_iterate (varobj_p, children, ix, child);
-	       ++ix)
+	  for (ix = 0; VEC_iterate (varobj_p, children, ix, child); ++ix)
 	    {
 	      struct cleanup *cleanup_child;
 	      cleanup_child = make_cleanup_ui_out_tuple_begin_end (uiout, NULL);

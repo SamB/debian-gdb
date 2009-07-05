@@ -35,7 +35,6 @@
 #include "gdb_string.h"
 #include "exceptions.h"
 #include "valprint.h"
-
 #include <errno.h>
 
 extern void _initialize_typeprint (void);
@@ -237,7 +236,7 @@ print_type_scalar (struct type *type, LONGEST val, struct ui_file *stream)
       break;
 
     case TYPE_CODE_CHAR:
-      LA_PRINT_CHAR ((unsigned char) val, stream);
+      LA_PRINT_CHAR ((unsigned char) val, type, stream);
       break;
 
     case TYPE_CODE_BOOL:

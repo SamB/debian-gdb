@@ -1,5 +1,4 @@
 member-field-symtab.patch 
-thread-db-multiple-libraries.patch 
 dwarf2-cfi-warning.patch 
 gdbinit-ownership.patch
 gdb-pascal-support.patch

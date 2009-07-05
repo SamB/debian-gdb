@@ -1,6 +1,6 @@
 /* Convenience functions implemented in Python.
 
-   Copyright (C) 2008 Free Software Foundation, Inc.
+   Copyright (C) 2008, 2009 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -58,7 +58,6 @@ fnpy_call (void *cookie, int argc, struct value **argv)
   int i;
   struct value *value = NULL;
   PyObject *result, *callable, *args;
-  volatile struct gdb_exception except;
   struct cleanup *cleanup;
   PyGILState_STATE state;
 
@@ -81,37 +80,21 @@ fnpy_call (void *cookie, int argc, struct value **argv)
   if (!result)
     {
       gdbpy_print_stack ();
-      error(_("Error while executing Python code."));
+      error (_("Error while executing Python code."));
     }
 
-  TRY_CATCH (except, RETURN_MASK_ALL)
-    {
-      value = convert_value_from_python (result);
-    }
-  if (except.reason < 0)
+  value = convert_value_from_python (result);
+  if (value == NULL)
     {
       Py_DECREF (result);
       gdbpy_print_stack ();
-      throw_exception (except);
+      error (_("Error while executing Python code."));
     }
 
   Py_DECREF (result);
   do_cleanups (cleanup);
-  
+
   return value;
-}
-
-/* Called when destroying a struct internal_function.  */
-
-static void
-fnpy_destroy (void *cookie)
-{
-  PyGILState_STATE state;
-
-  state = PyGILState_Ensure ();
-  Py_DECREF ((PyObject *) cookie);
-  PyGILState_Release (state);
-
 }
 
 /* Initializer for a Function object.  It takes one argument, the name
@@ -135,7 +118,7 @@ fnpy_init (PyObject *self, PyObject *args, PyObject *kwds)
   if (! docstring)
     docstring = _("This function is not documented.");
 
-  add_internal_function (name, docstring, fnpy_call, self, fnpy_destroy);
+  add_internal_function (name, docstring, fnpy_call, self);
   return 0;
 }
 
@@ -144,10 +127,9 @@ fnpy_init (PyObject *self, PyObject *args, PyObject *kwds)
 void
 gdbpy_initialize_functions (void)
 {
-  fnpy_object_type.tp_new = PyType_GenericNew;
-  fnpy_object_type.tp_init = fnpy_init;
   if (PyType_Ready (&fnpy_object_type) < 0)
     return;
+
   Py_INCREF (&fnpy_object_type);
   PyModule_AddObject (gdb_module, "Function", (PyObject *) &fnpy_object_type);
 }
@@ -184,5 +166,15 @@ static PyTypeObject fnpy_object_type =
   0,				  /* tp_weaklistoffset */
   0,				  /* tp_iter */
   0,				  /* tp_iternext */
-  0				  /* tp_methods */
+  0,				  /* tp_methods */
+  0,				  /* tp_members */
+  0,				  /* tp_getset */
+  0,				  /* tp_base */
+  0,				  /* tp_dict */
+  0,				  /* tp_descr_get */
+  0,				  /* tp_descr_set */
+  0,				  /* tp_dictoffset */
+  fnpy_init,			  /* tp_init */
+  0,				  /* tp_alloc */
+  PyType_GenericNew		  /* tp_new */
 };
