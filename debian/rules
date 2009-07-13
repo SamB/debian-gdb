@@ -81,7 +81,11 @@ endif
 
 run_tests := yes
 
-ifneq ($(DEB_HOST_GNU_SYSTEM),linux-gnu)
+ifneq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
+  run_tests := no
+endif
+
+ifeq (,$(findstring linux, $(DEB_HOST_GNU_SYSTEM)))
   run_tests := no
 endif
 
@@ -114,7 +118,13 @@ EXTRA_FLAGS := --disable-gdbtk --disable-shared --enable-tui \
 DEB_CONFIGURE_EXTRA_FLAGS := --host=$(DEB_HOST_GNU_TYPE) $(EXTRA_FLAGS) \
 	--with-expat --with-python
 
-DEB_MAKE_BUILD_TARGET = all info
+# Support parallel=<n> in DEB_BUILD_OPTIONS (see #209008)
+COMMA = ,
+ifneq (,$(filter parallel=%,$(subst $(COMMA), ,$(DEB_BUILD_OPTIONS))))
+  NJOBS := -j $(subst parallel=,,$(filter parallel=%,$(subst $(COMMA), ,$(DEB_BUILD_OPTIONS))))
+endif
+
+DEB_MAKE_BUILD_TARGET = $(NJOBS) all
 
 post-patches::
 	if ! test -f gdb/version.in.backup; then \
@@ -125,7 +135,8 @@ post-patches::
 # This should probably be common-post-build-arch, but that runs during
 # install, under fakeroot, in CDBS 0.4.21.
 build/gdb$(TS):: check-stamp
-	$(MAKE) -C objdir/gdb/doc refcard.dvi refcard.ps
+	$(MAKE) -C $(DEB_BUILDDIR) info
+	$(MAKE) -C $(DEB_BUILDDIR)/gdb/doc refcard.dvi refcard.ps
 
 build/gdb64:: build64-stamp
 
@@ -133,14 +144,13 @@ build64-stamp:
 	mkdir -p $(BUILDDIR64)
 	cd $(BUILDDIR64) && CC="$(CC64)" CFLAGS="$(CFLAGS64)" AR=ar \
 	  ../configure $(EXTRA_FLAGS) --host=$(HOST64)
-	cd $(BUILDDIR64) && $(MAKE)
+	cd $(BUILDDIR64) && $(MAKE) $(NJOBS)
 	touch $@
 
 check-stamp:
 ifeq ($(run_tests),yes)
 	-ulimit -c unlimited; \
-	$(MAKE) -C objdir/gdb check \
-		2>&1 | tee objdir/check.log
+	$(MAKE) $(NJOBS) -C objdir/gdb check
 endif
 	touch $@
 
@@ -169,7 +179,7 @@ binary-post-install/gdb$(TS) ::
 	fi
 ifeq ($(run_tests),yes)
 	install -d debian/gdb$(TS)/usr/share/doc/gdb
-	install -m 644 objdir/check.log \
+	install -m 644 objdir/gdb/testsuite/gdb.sum \
 		debian/gdb$(TS)/usr/share/doc/gdb/check.log
 endif
 
@@ -182,6 +192,9 @@ ifneq ($(DEB_CROSS),yes)
 	install -d debian/gdb$(TS)/etc/gdb
 	install -m 644 debian/gdbinit debian/gdb$(TS)/etc/gdb/
 endif
+
+	rm -f debian/gdb$(TS)/usr/bin/$(TP)gdbtui
+	install -m 755 debian/gdbtui debian/gdb$(TS)/usr/bin/$(TP)gdbtui
 
 binary-post-install/gdb64 ::
 	install -d debian/gdb64/usr/bin
@@ -208,9 +221,8 @@ endif
 DEB_INSTALL_DOCS_gdb$(TS) = gdb/NEWS gdb/README gdb/doc/refcard.tex \
 		objdir/gdb/doc/refcard.dvi objdir/gdb/doc/refcard.ps
 DEB_INSTALL_CHANGELOGS_gdb$(TS) = gdb/ChangeLog
-DEB_INSTALL_MANPAGES_gdb$(TS) = gdb/gdb.1
 ifneq ($(DEB_CROSS),yes)
-DEB_INSTALL_MANPAGES_gdb$(TS) += debian/gcore.1
+DEB_INSTALL_MANPAGES_gdb$(TS) = debian/gcore.1
 endif
 
 DEB_INSTALL_DOCS_libgdb-dev = gdb/NEWS gdb/README

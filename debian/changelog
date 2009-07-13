@@ -1,3 +1,28 @@
+gdb (6.8.50.20090628-3) unstable; urgency=low
+
+  * Remove stray "set -x" from gdbtui script.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Mon, 13 Jul 2009 16:49:41 -0400
+
+gdb (6.8.50.20090628-2) unstable; urgency=low
+
+  * Re-enable gobjc testing on armel (Closes: #497161).
+  * Do not install an extra copy of the GDB man page in cross-debugger
+    packages (Closes: #492846).
+  * Add i386 %ebp backtrace patch from Michael Matz (Closes: #498030).
+    This improves backtraces on 32-bit programs with missing debug info
+    for some functions on the stack.
+  * Replace the separate gdbtui binary with a shell script (suggested
+    by Matthias Klose).
+  * Support parallel=<n> in DEB_BUILD_OPTIONS (from Matthias Klose).
+  * Support nocheck in DEB_BUILD_OPTIONS (from Matthias Klose).
+  * Run the testsuite on linux-gnueabi and linux-gnulp systems also
+    (from Matthias Klose).
+  * Package the DejaGNU .sum file instead of part of the build log.
+    It's bigger, but more useful (especially with parallel=).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Mon, 06 Jul 2009 14:52:31 -0400
+
 gdb (6.8.50.20090628-1) unstable; urgency=low
 
   * New snapshot from trunk.  The experimental packages used the
