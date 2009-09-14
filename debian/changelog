@@ -1,3 +1,11 @@
+gdb (6.8.50.20090628-4) unstable; urgency=low
+
+  * Mention online documentation in README.Debian (Closes: #537795).
+  * Fix GNU/Hurd support (Closes: #539351).
+  * Depend on libreadline-dev and lib64readline6-dev.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Mon, 14 Sep 2009 16:17:50 -0400
+
 gdb (6.8.50.20090628-3) unstable; urgency=low
 
   * Remove stray "set -x" from gdbtui script.

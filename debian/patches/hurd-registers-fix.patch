@@ -1,0 +1,38 @@
+Already applied to upstream CVS.
+
+2009-07-20  Thomas Schwinge  <tschwinge@gnu.org>
+
+	* i386gnu-nat.c (gnu_fetch_registers, gnu_store_registers): Adjust to
+	2009-02-23 target_ops changes.
+
+Index: src/gdb/i386gnu-nat.c
+===================================================================
+RCS file: /cvs/src/src/gdb/i386gnu-nat.c,v
+retrieving revision 1.36
+diff -u -p -r1.36 i386gnu-nat.c
+--- src/gdb/i386gnu-nat.c	3 Jan 2009 05:57:52 -0000	1.36
++++ src/gdb/i386gnu-nat.c	20 Jul 2009 09:50:16 -0000
+@@ -111,7 +111,8 @@ supply_fpregset (struct regcache *regcac
+ 
+ /* Fetch register REGNO, or all regs if REGNO is -1.  */
+ void
+-gnu_fetch_registers (struct regcache *regcache, int regno)
++gnu_fetch_registers (struct target_ops *ops,
++		     struct regcache *regcache, int regno)
+ {
+   struct proc *thread;
+ 
+@@ -202,7 +203,8 @@ store_fpregs (const struct regcache *reg
+ 
+ /* Store at least register REGNO, or all regs if REGNO == -1.  */
+ void
+-gnu_store_registers (struct regcache *regcache, int regno)
++gnu_store_registers (struct target_ops *ops,
++		     struct regcache *regcache, int regno)
+ {
+   struct proc *thread;
+   struct gdbarch *gdbarch = get_regcache_arch (regcache);
+
+
+Regards,
+ Thomas

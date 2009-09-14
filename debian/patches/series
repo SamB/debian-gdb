@@ -6,3 +6,5 @@ gdb-fortran-main.patch
 linux-clear-thread-list.patch
 man-page-args.patch
 i386-assume-frame.patch
+hurd-registers-fix.patch
+gdb-readline-6.0.patch
