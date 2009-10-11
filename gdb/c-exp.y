@@ -232,7 +232,7 @@ static int parse_number (char *, int, int, YYSTYPE *);
 %left '+' '-'
 %left '*' '/' '%'
 %right UNARY INCREMENT DECREMENT
-%right ARROW '.' '[' '('
+%right ARROW ARROW_STAR '.' DOT_STAR '[' '('
 %token <ssym> BLOCKNAME 
 %token <bval> FILENAME
 %type <bval> block
@@ -333,7 +333,7 @@ exp	:	exp ARROW qualified_name
 			  write_exp_elt_opcode (STRUCTOP_MPTR); }
 	;
 
-exp	:	exp ARROW '*' exp
+exp	:	exp ARROW_STAR exp
 			{ write_exp_elt_opcode (STRUCTOP_MPTR); }
 	;
 
@@ -368,7 +368,7 @@ exp	:	exp '.' qualified_name
 			  write_exp_elt_opcode (STRUCTOP_MEMBER); }
 	;
 
-exp	:	exp '.' '*' exp
+exp	:	exp DOT_STAR exp
 			{ write_exp_elt_opcode (STRUCTOP_MEMBER); }
 	;
 
@@ -1181,7 +1181,8 @@ parse_number (char *p, int len, int parsed_float, YYSTYPE *putithere)
 	  p[len - 2] = '\0';
 	  putithere->typed_val_decfloat.type
 	    = parse_type->builtin_decfloat;
-	  decimal_from_string (putithere->typed_val_decfloat.val, 4, p);
+	  decimal_from_string (putithere->typed_val_decfloat.val, 4,
+			       gdbarch_byte_order (parse_gdbarch), p);
 	  p[len - 2] = 'd';
 	  return DECFLOAT;
 	}
@@ -1191,7 +1192,8 @@ parse_number (char *p, int len, int parsed_float, YYSTYPE *putithere)
 	  p[len - 2] = '\0';
 	  putithere->typed_val_decfloat.type
 	    = parse_type->builtin_decdouble;
-	  decimal_from_string (putithere->typed_val_decfloat.val, 8, p);
+	  decimal_from_string (putithere->typed_val_decfloat.val, 8,
+			       gdbarch_byte_order (parse_gdbarch), p);
 	  p[len - 2] = 'd';
 	  return DECFLOAT;
 	}
@@ -1201,7 +1203,8 @@ parse_number (char *p, int len, int parsed_float, YYSTYPE *putithere)
 	  p[len - 2] = '\0';
 	  putithere->typed_val_decfloat.type
 	    = parse_type->builtin_declong;
-	  decimal_from_string (putithere->typed_val_decfloat.val, 16, p);
+	  decimal_from_string (putithere->typed_val_decfloat.val, 16,
+			       gdbarch_byte_order (parse_gdbarch), p);
 	  p[len - 2] = 'd';
 	  return DECFLOAT;
 	}
@@ -1437,14 +1440,19 @@ c_parse_escape (char **ptr, struct obstack *output)
     case '5':
     case '6':
     case '7':
-      if (output)
-	obstack_grow_str (output, "\\");
-      while (isdigit (*tokptr) && *tokptr != '8' && *tokptr != '9')
-	{
-	  if (output)
-	    obstack_1grow (output, *tokptr);
-	  ++tokptr;
-	}
+      {
+	int i;
+	if (output)
+	  obstack_grow_str (output, "\\");
+	for (i = 0;
+	     i < 3 && isdigit (*tokptr) && *tokptr != '8' && *tokptr != '9';
+	     ++i)
+	  {
+	    if (output)
+	      obstack_1grow (output, *tokptr);
+	    ++tokptr;
+	  }
+      }
       break;
 
       /* We handle UCNs later.  We could handle them here, but that
@@ -1656,7 +1664,8 @@ struct token
 static const struct token tokentab3[] =
   {
     {">>=", ASSIGN_MODIFY, BINOP_RSH, 0},
-    {"<<=", ASSIGN_MODIFY, BINOP_LSH, 0}
+    {"<<=", ASSIGN_MODIFY, BINOP_LSH, 0},
+    {"->*", ARROW_STAR, BINOP_END, 1}
   };
 
 static const struct token tokentab2[] =
@@ -1674,13 +1683,16 @@ static const struct token tokentab2[] =
     {"->", ARROW, BINOP_END, 0},
     {"&&", ANDAND, BINOP_END, 0},
     {"||", OROR, BINOP_END, 0},
+    /* "::" is *not* only C++: gdb overrides its meaning in several
+       different ways, e.g., 'filename'::func, function::variable.  */
     {"::", COLONCOLON, BINOP_END, 0},
     {"<<", LSH, BINOP_END, 0},
     {">>", RSH, BINOP_END, 0},
     {"==", EQUAL, BINOP_END, 0},
     {"!=", NOTEQUAL, BINOP_END, 0},
     {"<=", LEQ, BINOP_END, 0},
-    {">=", GEQ, BINOP_END, 0}
+    {">=", GEQ, BINOP_END, 0},
+    {".*", DOT_STAR, BINOP_END, 1}
   };
 
 /* Identifier-like tokens.  */
@@ -1839,6 +1851,10 @@ yylex (void)
   for (i = 0; i < sizeof tokentab3 / sizeof tokentab3[0]; i++)
     if (strncmp (tokstart, tokentab3[i].operator, 3) == 0)
       {
+	if (tokentab3[i].cxx_only
+	    && parse_language->la_language != language_cplus)
+	  break;
+
 	lexptr += 3;
 	yylval.opcode = tokentab3[i].opcode;
 	return tokentab3[i].token;
@@ -1848,6 +1864,10 @@ yylex (void)
   for (i = 0; i < sizeof tokentab2 / sizeof tokentab2[0]; i++)
     if (strncmp (tokstart, tokentab2[i].operator, 2) == 0)
       {
+	if (tokentab2[i].cxx_only
+	    && parse_language->la_language != language_cplus)
+	  break;
+
 	lexptr += 2;
 	yylval.opcode = tokentab2[i].opcode;
 	if (in_parse_field && tokentab2[i].token == ARROW)

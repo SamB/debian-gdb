@@ -284,10 +284,15 @@ struct language_defn
     int (*la_pass_by_reference) (struct type *type);
 
     /* Obtain a string from the inferior, storing it in a newly allocated
-       buffer in BUFFER, which should be freed by the caller.  LENGTH will
-       hold the size in bytes of the string (only actual characters, excluding
-       an eventual terminating null character).  CHARSET will hold the encoding
-       used in the string.  */
+       buffer in BUFFER, which should be freed by the caller.  If the
+       in- and out-parameter *LENGTH is specified at -1, the string is
+       read until a null character of the appropriate width is found -
+       otherwise the string is read to the length of characters specified.
+       On completion, *LENGTH will hold the size of the string in characters.
+       If a *LENGTH of -1 was specified it will count only actual
+       characters, excluding any eventual terminating null character.
+       Otherwise *LENGTH will include all characters - including any nulls.
+       CHARSET will hold the encoding used in the string.  */
     void (*la_get_string) (struct value *value, gdb_byte **buffer, int *length,
 			  const char **charset);
 
@@ -405,15 +410,6 @@ extern enum language set_language (enum language);
   ((c) >= 0x20				\
    && ((c) < 0x7F || (c) >= 0xA0)	\
    && (!sevenbit_strings || (c) < 0x80))
-
-#if 0
-/* FIXME: cagney/2000-03-04: This function does not appear to be used.
-   It can be deleted once 5.0 has been released. */
-/* Return a string that contains the hex digits of the number.  No preceeding
-   "0x" */
-
-extern char *longest_raw_hex_string (LONGEST);
-#endif
 
 /* Type predicates */
 

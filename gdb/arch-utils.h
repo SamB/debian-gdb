@@ -49,6 +49,11 @@ extern void
   simple_displaced_step_free_closure (struct gdbarch *gdbarch,
                                       struct displaced_step_closure *closure);
 
+/* Default implementation of gdbarch_displaced_hw_singlestep.  */
+extern int
+  default_displaced_step_hw_singlestep (struct gdbarch *gdbarch,
+					struct displaced_step_closure *closure);
+
 /* Possible value for gdbarch_displaced_step_location:
    Place displaced instructions at the program's entry point,
    leaving space for inferior function call return breakpoints.  */
@@ -92,7 +97,8 @@ extern CORE_ADDR generic_skip_trampoline_code (struct frame_info *frame,
 extern CORE_ADDR generic_skip_solib_resolver (struct gdbarch *gdbarch,
 					      CORE_ADDR pc);
 
-extern int generic_in_solib_return_trampoline (CORE_ADDR pc, char *name);
+extern int generic_in_solib_return_trampoline (struct gdbarch *gdbarch,
+					       CORE_ADDR pc, char *name);
 
 extern int generic_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR pc);
 
@@ -138,5 +144,13 @@ extern void gdbarch_info_fill (struct gdbarch_info *info);
    could be find, return NULL.  */
 
 extern struct gdbarch *gdbarch_from_bfd (bfd *abfd);
+
+/* Return "current" architecture.  If the target is running, this is the
+   architecture of the selected frame.  Otherwise, the "current" architecture
+   defaults to the target architecture.
+
+   This function should normally be called solely by the command interpreter
+   routines to determine the architecture to execute a command in.  */
+extern struct gdbarch *get_current_arch (void);
 
 #endif

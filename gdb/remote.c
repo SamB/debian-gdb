@@ -294,6 +294,9 @@ struct remote_state
 
   /* True if the stub reports support for vCont;t.  */
   int support_vCont_t;
+
+  /* True if the stub reports support for conditional tracepoints.  */
+  int cond_tracepoints;
 };
 
 /* Returns true if the multi-process extensions are in effect.  */
@@ -862,6 +865,9 @@ add_packet_config_cmd (struct packet_config *config, const char *name,
 				set_remote_protocol_packet_cmd,
 				show_remote_protocol_packet_cmd,
 				&remote_set_cmdlist, &remote_show_cmdlist);
+  /* The command code copies the documentation strings.  */
+  xfree (set_doc);
+  xfree (show_doc);
   /* set/show remote NAME-packet {auto,on,off} -- legacy.  */
   if (legacy)
     {
@@ -993,6 +999,9 @@ enum {
   PACKET_qXfer_siginfo_read,
   PACKET_qXfer_siginfo_write,
   PACKET_qAttached,
+  PACKET_ConditionalTracepoints,
+  PACKET_bc,
+  PACKET_bs,
   PACKET_MAX
 };
 
@@ -1166,7 +1175,6 @@ remote_query_attached (int pid)
 static struct inferior *
 remote_add_inferior (int pid, int attached)
 {
-  struct remote_state *rs = get_remote_state ();
   struct inferior *inf;
 
   /* Check whether this process we're learning about is to be
@@ -1203,8 +1211,6 @@ remote_add_thread (ptid_t ptid, int running)
 static void
 remote_notice_new_inferior (ptid_t currthread, int running)
 {
-  struct remote_state *rs = get_remote_state ();
-
   /* If this is a new thread, add it to GDB's thread list.
      If we leave it up to WFI to do this, bad things will happen.  */
 
@@ -1422,7 +1428,6 @@ static int
 remote_thread_alive (struct target_ops *ops, ptid_t ptid)
 {
   struct remote_state *rs = get_remote_state ();
-  int tid = ptid_get_tid (ptid);
   char *p, *endp;
 
   if (ptid_equal (ptid, magic_null_ptid))
@@ -1598,7 +1603,6 @@ read_ptid (char *buf, char **obuf)
   char *p = buf;
   char *pp;
   ULONGEST pid = 0, tid = 0;
-  ptid_t ptid;
 
   if (*p == 'p')
     {
@@ -2194,9 +2198,6 @@ static ptid_t
 remote_current_thread (ptid_t oldpid)
 {
   struct remote_state *rs = get_remote_state ();
-  char *p = rs->buf;
-  int tid;
-  int pid;
 
   putpkt ("qC");
   getpkt (&rs->buf, &rs->buf_size, 0);
@@ -2877,6 +2878,7 @@ remote_check_symbols (struct objfile *objfile)
 	xsnprintf (msg, get_remote_packet_size (), "qSymbol::%s", &reply[8]);
       else
 	{
+	  int addr_size = gdbarch_addr_bit (target_gdbarch) / 8;
 	  CORE_ADDR sym_addr = SYMBOL_VALUE_ADDRESS (sym);
 
 	  /* If this is a function address, return the start of code
@@ -2886,7 +2888,7 @@ remote_check_symbols (struct objfile *objfile)
 							 &current_target);
 
 	  xsnprintf (msg, get_remote_packet_size (), "qSymbol:%s:%s",
-		     paddr_nz (sym_addr), &reply[8]);
+		     phex_nz (sym_addr, addr_size), &reply[8]);
 	}
   
       putpkt (msg);
@@ -3014,6 +3016,15 @@ remote_non_stop_feature (const struct protocol_feature *feature,
   rs->non_stop_aware = (support == PACKET_ENABLE);
 }
 
+static void
+remote_cond_tracepoint_feature (const struct protocol_feature *feature,
+				       enum packet_support support,
+				       const char *value)
+{
+  struct remote_state *rs = get_remote_state ();
+  rs->cond_tracepoints = (support == PACKET_ENABLE);
+}
+
 static struct protocol_feature remote_protocol_features[] = {
   { "PacketSize", PACKET_DISABLE, remote_packet_size, -1 },
   { "qXfer:auxv:read", PACKET_DISABLE, remote_supported_packet,
@@ -3040,6 +3051,12 @@ static struct protocol_feature remote_protocol_features[] = {
     PACKET_qXfer_siginfo_read },
   { "qXfer:siginfo:write", PACKET_DISABLE, remote_supported_packet,
     PACKET_qXfer_siginfo_write },
+  { "ConditionalTracepoints", PACKET_DISABLE, remote_cond_tracepoint_feature,
+    PACKET_ConditionalTracepoints },
+  { "ReverseContinue", PACKET_DISABLE, remote_supported_packet,
+    PACKET_bc },
+  { "ReverseStep", PACKET_DISABLE, remote_supported_packet,
+    PACKET_bs },
 };
 
 static void
@@ -3790,8 +3807,10 @@ remote_resume (struct target_ops *ops,
   remote_pass_signals ();
 
   /* The vCont packet doesn't need to specify threads via Hc.  */
-  if (remote_vcont_resume (ptid, step, siggnal))
-    goto done;
+  /* No reverse support (yet) for vCont.  */
+  if (execution_direction != EXEC_REVERSE)
+    if (remote_vcont_resume (ptid, step, siggnal))
+      goto done;
 
   /* All other supported resume packets do use Hc, so set the continue
      thread.  */
@@ -3807,6 +3826,14 @@ remote_resume (struct target_ops *ops,
       if (info_verbose && siggnal != TARGET_SIGNAL_0)
 	warning (" - Can't pass signal %d to target in reverse: ignored.\n",
 		 siggnal);
+
+      if (step 
+	  && remote_protocol_packets[PACKET_bs].support == PACKET_DISABLE)
+	error (_("Remote reverse-step not supported."));
+      if (!step
+	  && remote_protocol_packets[PACKET_bc].support == PACKET_DISABLE)
+	error (_("Remote reverse-continue not supported."));
+
       strcpy (buf, step ? "bs" : "bc");
     }
   else if (siggnal != TARGET_SIGNAL_0)
@@ -3938,7 +3965,6 @@ remote_stop_ns (ptid_t ptid)
   struct remote_state *rs = get_remote_state ();
   char *p = rs->buf;
   char *endp = rs->buf + get_remote_packet_size ();
-  struct stop_reply *reply, *next;
 
   if (remote_protocol_packets[PACKET_vCont].support == PACKET_SUPPORT_UNKNOWN)
     remote_vcont_probe (rs);
@@ -4293,122 +4319,118 @@ remote_parse_stop_reply (char *buf, struct stop_reply *event)
   switch (buf[0])
     {
     case 'T':		/* Status with PC, SP, FP, ...	*/
-      {
-	gdb_byte regs[MAX_REGISTER_SIZE];
+      /* Expedited reply, containing Signal, {regno, reg} repeat.  */
+      /*  format is:  'Tssn...:r...;n...:r...;n...:r...;#cc', where
+	    ss = signal number
+	    n... = register number
+	    r... = register contents
+      */
 
-	/* Expedited reply, containing Signal, {regno, reg} repeat.  */
-	/*  format is:  'Tssn...:r...;n...:r...;n...:r...;#cc', where
-	   ss = signal number
-	   n... = register number
-	   r... = register contents
-	*/
+      p = &buf[3];	/* after Txx */
+      while (*p)
+	{
+	  char *p1;
+	  char *p_temp;
+	  int fieldsize;
+	  LONGEST pnum = 0;
 
-	p = &buf[3];	/* after Txx */
-	while (*p)
-	  {
-	    char *p1;
-	    char *p_temp;
-	    int fieldsize;
-	    LONGEST pnum = 0;
+	  /* If the packet contains a register number, save it in
+	     pnum and set p1 to point to the character following it.
+	     Otherwise p1 points to p.  */
 
-	    /* If the packet contains a register number, save it in
-	       pnum and set p1 to point to the character following it.
-	       Otherwise p1 points to p.  */
+	  /* If this packet is an awatch packet, don't parse the 'a'
+	     as a register number.  */
 
-	    /* If this packet is an awatch packet, don't parse the 'a'
-	       as a register number.  */
+	  if (strncmp (p, "awatch", strlen("awatch")) != 0)
+	    {
+	      /* Read the ``P'' register number.  */
+	      pnum = strtol (p, &p_temp, 16);
+	      p1 = p_temp;
+	    }
+	  else
+	    p1 = p;
 
-	    if (strncmp (p, "awatch", strlen("awatch")) != 0)
-	      {
-		/* Read the ``P'' register number.  */
-		pnum = strtol (p, &p_temp, 16);
-		p1 = p_temp;
-	      }
-	    else
-	      p1 = p;
-
-	    if (p1 == p)	/* No register number present here.  */
-	      {
-		p1 = strchr (p, ':');
-		if (p1 == NULL)
-		  error (_("Malformed packet(a) (missing colon): %s\n\
+	  if (p1 == p)	/* No register number present here.  */
+	    {
+	      p1 = strchr (p, ':');
+	      if (p1 == NULL)
+		error (_("Malformed packet(a) (missing colon): %s\n\
 Packet: '%s'\n"),
-			 p, buf);
-		if (strncmp (p, "thread", p1 - p) == 0)
-		  event->ptid = read_ptid (++p1, &p);
-		else if ((strncmp (p, "watch", p1 - p) == 0)
-			 || (strncmp (p, "rwatch", p1 - p) == 0)
-			 || (strncmp (p, "awatch", p1 - p) == 0))
-		  {
-		    event->stopped_by_watchpoint_p = 1;
-		    p = unpack_varlen_hex (++p1, &addr);
-		    event->watch_data_address = (CORE_ADDR) addr;
-		  }
-		else if (strncmp (p, "library", p1 - p) == 0)
-		  {
-		    p1++;
-		    p_temp = p1;
-		    while (*p_temp && *p_temp != ';')
-		      p_temp++;
+		       p, buf);
+	      if (strncmp (p, "thread", p1 - p) == 0)
+		event->ptid = read_ptid (++p1, &p);
+	      else if ((strncmp (p, "watch", p1 - p) == 0)
+		       || (strncmp (p, "rwatch", p1 - p) == 0)
+		       || (strncmp (p, "awatch", p1 - p) == 0))
+		{
+		  event->stopped_by_watchpoint_p = 1;
+		  p = unpack_varlen_hex (++p1, &addr);
+		  event->watch_data_address = (CORE_ADDR) addr;
+		}
+	      else if (strncmp (p, "library", p1 - p) == 0)
+		{
+		  p1++;
+		  p_temp = p1;
+		  while (*p_temp && *p_temp != ';')
+		    p_temp++;
 
-		    event->solibs_changed = 1;
+		  event->solibs_changed = 1;
+		  p = p_temp;
+		}
+	      else if (strncmp (p, "replaylog", p1 - p) == 0)
+		{
+		  /* NO_HISTORY event.
+		     p1 will indicate "begin" or "end", but
+		     it makes no difference for now, so ignore it.  */
+		  event->replay_event = 1;
+		  p_temp = strchr (p1 + 1, ';');
+		  if (p_temp)
 		    p = p_temp;
-		  }
-		else if (strncmp (p, "replaylog", p1 - p) == 0)
-		  {
-		    /* NO_HISTORY event.
-		       p1 will indicate "begin" or "end", but
-		       it makes no difference for now, so ignore it.  */
-		    event->replay_event = 1;
-		    p_temp = strchr (p1 + 1, ';');
-		    if (p_temp)
-		      p = p_temp;
-		  }
-		else
-		  {
-		    /* Silently skip unknown optional info.  */
-		    p_temp = strchr (p1 + 1, ';');
-		    if (p_temp)
-		      p = p_temp;
-		  }
-	      }
-	    else
-	      {
-		struct packet_reg *reg = packet_reg_from_pnum (rsa, pnum);
-		cached_reg_t cached_reg;
+		}
+	      else
+		{
+		  /* Silently skip unknown optional info.  */
+		  p_temp = strchr (p1 + 1, ';');
+		  if (p_temp)
+		    p = p_temp;
+		}
+	    }
+	  else
+	    {
+	      struct packet_reg *reg = packet_reg_from_pnum (rsa, pnum);
+	      cached_reg_t cached_reg;
 
-		p = p1;
+	      p = p1;
 
-		if (*p != ':')
-		  error (_("Malformed packet(b) (missing colon): %s\n\
+	      if (*p != ':')
+		error (_("Malformed packet(b) (missing colon): %s\n\
 Packet: '%s'\n"),
-			 p, buf);
-		++p;
+		       p, buf);
+	      ++p;
 
-		if (reg == NULL)
-		  error (_("Remote sent bad register number %s: %s\n\
+	      if (reg == NULL)
+		error (_("Remote sent bad register number %s: %s\n\
 Packet: '%s'\n"),
-			 phex_nz (pnum, 0), p, buf);
+		       phex_nz (pnum, 0), p, buf);
 
-		cached_reg.num = reg->regnum;
+	      cached_reg.num = reg->regnum;
 
-		fieldsize = hex2bin (p, cached_reg.data,
-				     register_size (target_gdbarch,
-						    reg->regnum));
-		p += 2 * fieldsize;
-		if (fieldsize < register_size (target_gdbarch,
-					       reg->regnum))
-		  warning (_("Remote reply is too short: %s"), buf);
+	      fieldsize = hex2bin (p, cached_reg.data,
+				   register_size (target_gdbarch,
+						  reg->regnum));
+	      p += 2 * fieldsize;
+	      if (fieldsize < register_size (target_gdbarch,
+					     reg->regnum))
+		warning (_("Remote reply is too short: %s"), buf);
 
-		VEC_safe_push (cached_reg_t, event->regcache, &cached_reg);
-	      }
+	      VEC_safe_push (cached_reg_t, event->regcache, &cached_reg);
+	    }
 
-	    if (*p != ';')
-	      error (_("Remote register badly formatted: %s\nhere: %s"),
-		     buf, p);
-	    ++p;
-	  }
-      }
+	  if (*p != ';')
+	    error (_("Remote register badly formatted: %s\nhere: %s"),
+		   buf, p);
+	  ++p;
+	}
       /* fall through */
     case 'S':		/* Old style status, just signal only.  */
       if (event->solibs_changed)
@@ -4524,7 +4546,6 @@ static void
 remote_get_pending_stop_replies (void)
 {
   struct remote_state *rs = get_remote_state ();
-  int ret;
 
   if (pending_stop_reply)
     {
@@ -4590,14 +4611,15 @@ process_stop_reply (struct stop_reply *stop_reply,
       /* Expedited registers.  */
       if (stop_reply->regcache)
 	{
+	  struct regcache *regcache
+	    = get_thread_arch_regcache (ptid, target_gdbarch);
 	  cached_reg_t *reg;
 	  int ix;
 
 	  for (ix = 0;
 	       VEC_iterate(cached_reg_t, stop_reply->regcache, ix, reg);
 	       ix++)
-	    regcache_raw_supply (get_thread_regcache (ptid),
-				 reg->num, reg->data);
+	    regcache_raw_supply (regcache, reg->num, reg->data);
 	  VEC_free (cached_reg_t, stop_reply->regcache);
 	}
 
@@ -4617,8 +4639,6 @@ static ptid_t
 remote_wait_ns (ptid_t ptid, struct target_waitstatus *status, int options)
 {
   struct remote_state *rs = get_remote_state ();
-  struct remote_arch_state *rsa = get_remote_arch_state ();
-  ptid_t event_ptid = null_ptid;
   struct stop_reply *stop_reply;
   int ret;
 
@@ -4677,11 +4697,8 @@ static ptid_t
 remote_wait_as (ptid_t ptid, struct target_waitstatus *status, int options)
 {
   struct remote_state *rs = get_remote_state ();
-  struct remote_arch_state *rsa = get_remote_arch_state ();
   ptid_t event_ptid = null_ptid;
-  ULONGEST addr;
-  int solibs_changed = 0;
-  char *buf, *p;
+  char *buf;
   struct stop_reply *stop_reply;
 
  again:
@@ -4856,7 +4873,8 @@ fetch_register_using_p (struct regcache *regcache, struct packet_reg *reg)
   *p++ = 'p';
   p += hexnumstr (p, reg->pnum);
   *p++ = '\0';
-  remote_send (&rs->buf, &rs->buf_size);
+  putpkt (rs->buf);
+  getpkt (&rs->buf, &rs->buf_size, 0);
 
   buf = rs->buf;
 
@@ -4867,8 +4885,10 @@ fetch_register_using_p (struct regcache *regcache, struct packet_reg *reg)
     case PACKET_UNKNOWN:
       return 0;
     case PACKET_ERROR:
-      error (_("Could not fetch register \"%s\""),
-	     gdbarch_register_name (get_regcache_arch (regcache), reg->regnum));
+      error (_("Could not fetch register \"%s\"; remote failure reply '%s'"),
+	     gdbarch_register_name (get_regcache_arch (regcache), 
+				    reg->regnum), 
+	     buf);
     }
 
   /* If this register is unfetchable, tell the regcache.  */
@@ -4899,9 +4919,7 @@ static int
 send_g_packet (void)
 {
   struct remote_state *rs = get_remote_state ();
-  int i, buf_len;
-  char *p;
-  char *regs;
+  int buf_len;
 
   sprintf (rs->buf, "g");
   remote_send (&rs->buf, &rs->buf_size);
@@ -5032,7 +5050,6 @@ static void
 remote_fetch_registers (struct target_ops *ops,
 			struct regcache *regcache, int regnum)
 {
-  struct remote_state *rs = get_remote_state ();
   struct remote_arch_state *rsa = get_remote_arch_state ();
   int i;
 
@@ -5104,11 +5121,11 @@ remote_prepare_to_store (struct regcache *regcache)
    packet was not recognized.  */
 
 static int
-store_register_using_P (const struct regcache *regcache, struct packet_reg *reg)
+store_register_using_P (const struct regcache *regcache, 
+			struct packet_reg *reg)
 {
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct remote_state *rs = get_remote_state ();
-  struct remote_arch_state *rsa = get_remote_arch_state ();
   /* Try storing a single register.  */
   char *buf = rs->buf;
   gdb_byte regp[MAX_REGISTER_SIZE];
@@ -5124,15 +5141,16 @@ store_register_using_P (const struct regcache *regcache, struct packet_reg *reg)
   p = buf + strlen (buf);
   regcache_raw_collect (regcache, reg->regnum, regp);
   bin2hex (regp, p, register_size (gdbarch, reg->regnum));
-  remote_send (&rs->buf, &rs->buf_size);
+  putpkt (rs->buf);
+  getpkt (&rs->buf, &rs->buf_size, 0);
 
   switch (packet_ok (rs->buf, &remote_protocol_packets[PACKET_P]))
     {
     case PACKET_OK:
       return 1;
     case PACKET_ERROR:
-      error (_("Could not write register \"%s\""),
-	     gdbarch_register_name (gdbarch, reg->regnum));
+      error (_("Could not write register \"%s\"; remote failure reply '%s'"),
+	     gdbarch_register_name (gdbarch, reg->regnum), rs->buf);
     case PACKET_UNKNOWN:
       return 0;
     default:
@@ -5172,7 +5190,11 @@ store_registers_using_G (const struct regcache *regcache)
   /* remote_prepare_to_store insures that rsa->sizeof_g_packet gets
      updated.  */
   bin2hex (regs, p, rsa->sizeof_g_packet);
-  remote_send (&rs->buf, &rs->buf_size);
+  putpkt (rs->buf);
+  getpkt (&rs->buf, &rs->buf_size, 0);
+  if (packet_check_result (rs->buf) == PACKET_ERROR)
+    error (_("Could not write registers; remote failure reply '%s'"), 
+	   rs->buf);
 }
 
 /* Store register REGNUM, or all registers if REGNUM == -1, from the contents
@@ -5182,7 +5204,6 @@ static void
 remote_store_registers (struct target_ops *ops,
 			struct regcache *regcache, int regnum)
 {
-  struct remote_state *rs = get_remote_state ();
   struct remote_arch_state *rsa = get_remote_arch_state ();
   int i;
 
@@ -5818,6 +5839,7 @@ static void
 remote_flash_erase (struct target_ops *ops,
                     ULONGEST address, LONGEST length)
 {
+  int addr_size = gdbarch_addr_bit (target_gdbarch) / 8;
   int saved_remote_timeout = remote_timeout;
   enum packet_result ret;
 
@@ -5826,7 +5848,7 @@ remote_flash_erase (struct target_ops *ops,
   remote_timeout = remote_flash_timeout;
 
   ret = remote_send_printf ("vFlashErase:%s,%s",
-			    paddr (address),
+			    phex (address, addr_size),
 			    phex (length, 4));
   switch (ret)
     {
@@ -5944,13 +5966,12 @@ escape_buffer (const char *buf, int n)
   struct cleanup *old_chain;
   struct ui_file *stb;
   char *str;
-  long length;
 
   stb = mem_fileopen ();
   old_chain = make_cleanup_ui_file_delete (stb);
 
   fputstrn_unfiltered (buf, n, 0, stb);
-  str = ui_file_xstrdup (stb, &length);
+  str = ui_file_xstrdup (stb, NULL);
   do_cleanups (old_chain);
   return str;
 }
@@ -6672,7 +6693,6 @@ static int
 extended_remote_run (char *args)
 {
   struct remote_state *rs = get_remote_state ();
-  char *p;
   int len;
 
   /* If the user has disabled vRun support, or we have detected that
@@ -6792,7 +6812,8 @@ extended_remote_create_inferior (struct target_ops *ops,
    which don't, we insert a traditional memory breakpoint.  */
 
 static int
-remote_insert_breakpoint (struct bp_target_info *bp_tgt)
+remote_insert_breakpoint (struct gdbarch *gdbarch,
+			  struct bp_target_info *bp_tgt)
 {
   /* Try the "Z" s/w breakpoint packet if it is not already disabled.
      If it succeeds, then set the support to PACKET_ENABLE.  If it
@@ -6806,7 +6827,7 @@ remote_insert_breakpoint (struct bp_target_info *bp_tgt)
       char *p;
       int bpsize;
 
-      gdbarch_breakpoint_from_pc (target_gdbarch, &addr, &bpsize);
+      gdbarch_breakpoint_from_pc (gdbarch, &addr, &bpsize);
 
       rs = get_remote_state ();
       p = rs->buf;
@@ -6834,15 +6855,15 @@ remote_insert_breakpoint (struct bp_target_info *bp_tgt)
 	}
     }
 
-  return memory_insert_breakpoint (bp_tgt);
+  return memory_insert_breakpoint (gdbarch, bp_tgt);
 }
 
 static int
-remote_remove_breakpoint (struct bp_target_info *bp_tgt)
+remote_remove_breakpoint (struct gdbarch *gdbarch,
+			  struct bp_target_info *bp_tgt)
 {
   CORE_ADDR addr = bp_tgt->placed_address;
   struct remote_state *rs = get_remote_state ();
-  int bp_size;
 
   if (remote_protocol_packets[PACKET_Z0].support != PACKET_DISABLE)
     {
@@ -6862,7 +6883,7 @@ remote_remove_breakpoint (struct bp_target_info *bp_tgt)
       return (rs->buf[0] == 'E');
     }
 
-  return memory_remove_breakpoint (bp_tgt);
+  return memory_remove_breakpoint (gdbarch, bp_tgt);
 }
 
 static int
@@ -6998,7 +7019,8 @@ remote_stopped_data_address (struct target_ops *target, CORE_ADDR *addr_p)
 
 
 static int
-remote_insert_hw_breakpoint (struct bp_target_info *bp_tgt)
+remote_insert_hw_breakpoint (struct gdbarch *gdbarch,
+			     struct bp_target_info *bp_tgt)
 {
   CORE_ADDR addr;
   struct remote_state *rs;
@@ -7008,7 +7030,7 @@ remote_insert_hw_breakpoint (struct bp_target_info *bp_tgt)
      instruction, even though we aren't inserting one ourselves.  */
 
   gdbarch_breakpoint_from_pc
-    (target_gdbarch, &bp_tgt->placed_address, &bp_tgt->placed_size);
+    (gdbarch, &bp_tgt->placed_address, &bp_tgt->placed_size);
 
   if (remote_protocol_packets[PACKET_Z1].support == PACKET_DISABLE)
     return -1;
@@ -7041,7 +7063,8 @@ remote_insert_hw_breakpoint (struct bp_target_info *bp_tgt)
 
 
 static int
-remote_remove_hw_breakpoint (struct bp_target_info *bp_tgt)
+remote_remove_hw_breakpoint (struct gdbarch *gdbarch,
+			     struct bp_target_info *bp_tgt)
 {
   CORE_ADDR addr;
   struct remote_state *rs = get_remote_state ();
@@ -7165,16 +7188,18 @@ compare_sections_command (char *args, int from_tty)
 
       getpkt (&rs->buf, &rs->buf_size, 0);
       if (rs->buf[0] == 'E')
-	error (_("target memory fault, section %s, range 0x%s -- 0x%s"),
-	       sectname, paddr (lma), paddr (lma + size));
+	error (_("target memory fault, section %s, range %s -- %s"), sectname,
+	       paddress (target_gdbarch, lma),
+	       paddress (target_gdbarch, lma + size));
       if (rs->buf[0] != 'C')
 	error (_("remote target does not support this operation"));
 
       for (target_crc = 0, tmp = &rs->buf[1]; *tmp; tmp++)
 	target_crc = target_crc * 16 + fromhex (*tmp);
 
-      printf_filtered ("Section %s, range 0x%s -- 0x%s: ",
-		       sectname, paddr (lma), paddr (lma + size));
+      printf_filtered ("Section %s, range %s -- %s: ", sectname,
+		       paddress (target_gdbarch, lma),
+		       paddress (target_gdbarch, lma + size));
       if (host_crc == target_crc)
 	printf_filtered ("matched.\n");
       else
@@ -7204,7 +7229,6 @@ remote_write_qxfer (struct target_ops *ops, const char *object_name,
 {
   int i, buf_len;
   ULONGEST n;
-  gdb_byte *wbuf;
   struct remote_state *rs = get_remote_state ();
   int max_size = get_memory_write_packet_size (); 
 
@@ -7249,7 +7273,6 @@ remote_read_qxfer (struct target_ops *ops, const char *object_name,
   static ULONGEST finished_offset;
 
   struct remote_state *rs = get_remote_state ();
-  unsigned int total = 0;
   LONGEST i, n, packet_len;
 
   if (packet->support == PACKET_DISABLE)
@@ -7494,6 +7517,7 @@ remote_search_memory (struct target_ops* ops,
 		      const gdb_byte *pattern, ULONGEST pattern_len,
 		      CORE_ADDR *found_addrp)
 {
+  int addr_size = gdbarch_addr_bit (target_gdbarch) / 8;
   struct remote_state *rs = get_remote_state ();
   int max_size = get_memory_write_packet_size ();
   struct packet_config *packet =
@@ -7532,7 +7556,7 @@ remote_search_memory (struct target_ops* ops,
   /* Insert header.  */
   i = snprintf (rs->buf, max_size, 
 		"qSearch:memory:%s;%s;",
-		paddr_nz (start_addr),
+		phex_nz (start_addr, addr_size),
 		phex_nz (search_space_len, sizeof (search_space_len)));
   max_size -= (i + 1);
 
@@ -7829,26 +7853,39 @@ remote_pid_to_str (struct target_ops *ops, ptid_t ptid)
   static char buf[64];
   struct remote_state *rs = get_remote_state ();
 
-  if (ptid_equal (magic_null_ptid, ptid))
+  if (ptid_is_pid (ptid))
     {
-      xsnprintf (buf, sizeof buf, "Thread <main>");
-      return buf;
-    }
-  else if (remote_multi_process_p (rs)
-	   && ptid_get_tid (ptid) != 0 && ptid_get_pid (ptid) != 0)
-    {
-      xsnprintf (buf, sizeof buf, "Thread %d.%ld",
-		 ptid_get_pid (ptid), ptid_get_tid (ptid));
-      return buf;
-    }
-  else if (ptid_get_tid (ptid) != 0)
-    {
-      xsnprintf (buf, sizeof buf, "Thread %ld",
-		 ptid_get_tid (ptid));
-      return buf;
-    }
+      /* Printing an inferior target id.  */
 
-  return normal_pid_to_str (ptid);
+      /* When multi-process extensions are off, there's no way in the
+	 remote protocol to know the remote process id, if there's any
+	 at all.  There's one exception --- when we're connected with
+	 target extended-remote, and we manually attached to a process
+	 with "attach PID".  We don't record anywhere a flag that
+	 allows us to distinguish that case from the case of
+	 connecting with extended-remote and the stub already being
+	 attached to a process, and reporting yes to qAttached, hence
+	 no smart special casing here.  */
+      if (!remote_multi_process_p (rs))
+	{
+	  xsnprintf (buf, sizeof buf, "Remote target");
+	  return buf;
+	}
+
+      return normal_pid_to_str (ptid);
+    }
+  else
+    {
+      if (ptid_equal (magic_null_ptid, ptid))
+	xsnprintf (buf, sizeof buf, "Thread <main>");
+      else if (remote_multi_process_p (rs))
+	xsnprintf (buf, sizeof buf, "Thread %d.%ld",
+		   ptid_get_pid (ptid), ptid_get_tid (ptid));
+      else
+	xsnprintf (buf, sizeof buf, "Thread %ld",
+		   ptid_get_tid (ptid));
+      return buf;
+    }
 }
 
 /* Get the address of the thread local variable in OBJFILE which is
@@ -8579,7 +8616,7 @@ void
 remote_file_get (const char *remote_file, const char *local_file, int from_tty)
 {
   struct cleanup *back_to, *close_cleanup;
-  int retcode, fd, remote_errno, bytes, io_size;
+  int fd, remote_errno, bytes, io_size;
   FILE *file;
   gdb_byte *buffer;
   ULONGEST offset;
@@ -8709,12 +8746,14 @@ remote_command (char *args, int from_tty)
   help_list (remote_cmdlist, "remote ", -1, gdb_stdout);
 }
 
-static int remote_target_can_reverse = 1;
-
 static int
 remote_can_execute_reverse (void)
 {
-  return remote_target_can_reverse;
+  if (remote_protocol_packets[PACKET_bs].support == PACKET_ENABLE
+      || remote_protocol_packets[PACKET_bc].support == PACKET_ENABLE)
+    return 1;
+  else
+    return 0;
 }
 
 static int
@@ -8728,6 +8767,13 @@ remote_supports_multi_process (void)
 {
   struct remote_state *rs = get_remote_state ();
   return remote_multi_process_p (rs);
+}
+
+int
+remote_supports_cond_tracepoints (void)
+{
+  struct remote_state *rs = get_remote_state ();
+  return rs->cond_tracepoints;
 }
 
 static void
@@ -9137,6 +9183,12 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
 			 "qGetTLSAddr", "get-thread-local-storage-address",
 			 0);
 
+  add_packet_config_cmd (&remote_protocol_packets[PACKET_bc],
+			 "bc", "reverse-continue", 0);
+
+  add_packet_config_cmd (&remote_protocol_packets[PACKET_bs],
+			 "bs", "reverse-step", 0);
+
   add_packet_config_cmd (&remote_protocol_packets[PACKET_qSupported],
 			 "qSupported", "supported-packets", 0);
 
@@ -9172,6 +9224,9 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
 
   add_packet_config_cmd (&remote_protocol_packets[PACKET_qAttached],
 			 "qAttached", "query-attached", 0);
+
+  add_packet_config_cmd (&remote_protocol_packets[PACKET_ConditionalTracepoints],
+			 "ConditionalTracepoints", "conditional-tracepoints", 0);
 
   /* Keep the old ``set remote Z-packet ...'' working.  Each individual
      Z sub-packet has its own set and show commands, but users may

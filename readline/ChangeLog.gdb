@@ -1,3 +1,16 @@
+2009-08-22  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* configure: Regenerate.
+
+	* configure.in: m4_include toplevel config/override.m4.
+	* configure: Regenerate.
+
+2009-07-30  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* Makefile.in (datarootdir): New variable.
+	* doc/Makefile.in (datarootdir): New variable.
+	* shlib/Makefile.in (datarootdir): New variable.
+
 2009-04-17  Carlos O'Donell  <carlos@codesourcery.com>
 
 	* Makefile.in: Add html target.  Add dummy install-html and

@@ -142,7 +142,7 @@ value_arg_coerce (struct gdbarch *gdbarch, struct value *arg,
 
   /* Perform any Ada-specific coercion first.  */
   if (current_language->la_language == language_ada)
-    arg = ada_convert_actual (arg, type, sp);
+    arg = ada_convert_actual (arg, type, gdbarch, sp);
 
   /* Force the value to the target if we will need its address.  At
      this point, we could allocate arguments on the stack instead of
@@ -231,6 +231,7 @@ CORE_ADDR
 find_function_addr (struct value *function, struct type **retval_type)
 {
   struct type *ftype = check_typedef (value_type (function));
+  struct gdbarch *gdbarch = get_type_arch (ftype);
   enum type_code code = TYPE_CODE (ftype);
   struct type *value_type = NULL;
   CORE_ADDR funaddr;
@@ -251,8 +252,7 @@ find_function_addr (struct value *function, struct type **retval_type)
       if (TYPE_CODE (ftype) == TYPE_CODE_FUNC
 	  || TYPE_CODE (ftype) == TYPE_CODE_METHOD)
 	{
-	  funaddr = gdbarch_convert_from_func_ptr_addr (current_gdbarch,
-							funaddr,
+	  funaddr = gdbarch_convert_from_func_ptr_addr (gdbarch, funaddr,
 							&current_target);
 	  value_type = TYPE_TARGET_TYPE (ftype);
 	}
@@ -273,8 +273,7 @@ find_function_addr (struct value *function, struct type **retval_type)
 	      CORE_ADDR nfunaddr;
 	      funaddr = value_as_address (value_addr (function));
 	      nfunaddr = funaddr;
-	      funaddr = gdbarch_convert_from_func_ptr_addr (current_gdbarch,
-							    funaddr,
+	      funaddr = gdbarch_convert_from_func_ptr_addr (gdbarch, funaddr,
 							    &current_target);
 	      if (funaddr != nfunaddr)
 		found_descriptor = 1;
@@ -289,7 +288,7 @@ find_function_addr (struct value *function, struct type **retval_type)
 
   if (retval_type != NULL)
     *retval_type = value_type;
-  return funaddr + gdbarch_deprecated_function_start_offset (current_gdbarch);
+  return funaddr + gdbarch_deprecated_function_start_offset (gdbarch);
 }
 
 /* For CALL_DUMMY_ON_STACK, push a breakpoint sequence that the called
@@ -562,7 +561,7 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
 
       /* Tell the target specific argument pushing routine not to
 	 expect a value.  */
-      target_values_type = builtin_type_void;
+      target_values_type = builtin_type (gdbarch)->builtin_void;
     }
   else
     {
@@ -593,11 +592,6 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
 
 	real_pc = funaddr;
 	dummy_addr = entry_point_address ();
-	/* Make certain that the address points at real code, and not a
-	   function descriptor.  */
-	dummy_addr = gdbarch_convert_from_func_ptr_addr (gdbarch,
-							 dummy_addr,
-							 &current_target);
 	/* A call dummy always consists of just a single breakpoint, so
 	   its address is the same as the address of the dummy.  */
 	bp_addr = dummy_addr;
@@ -615,14 +609,16 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
 	sym = lookup_minimal_symbol ("__CALL_DUMMY_ADDRESS", NULL, NULL);
 	real_pc = funaddr;
 	if (sym)
-	  dummy_addr = SYMBOL_VALUE_ADDRESS (sym);
+	  {
+	    dummy_addr = SYMBOL_VALUE_ADDRESS (sym);
+	    /* Make certain that the address points at real code, and not
+	       a function descriptor.  */
+	    dummy_addr = gdbarch_convert_from_func_ptr_addr (gdbarch,
+							     dummy_addr,
+							     &current_target);
+	  }
 	else
 	  dummy_addr = entry_point_address ();
-	/* Make certain that the address points at real code, and not
-	   a function descriptor.  */
-	dummy_addr = gdbarch_convert_from_func_ptr_addr (gdbarch,
-							 dummy_addr,
-							 &current_target);
 	/* A call dummy always consists of just a single breakpoint,
 	   so it's address is the same as the address of the dummy.  */
 	bp_addr = dummy_addr;
@@ -739,7 +735,7 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
     /* Sanity.  The exact same SP value is returned by
        PUSH_DUMMY_CALL, saved as the dummy-frame TOS, and used by
        dummy_id to form the frame ID's stack address.  */
-    bpt = set_momentary_breakpoint (sal, dummy_id, bp_call_dummy);
+    bpt = set_momentary_breakpoint (gdbarch, sal, dummy_id, bp_call_dummy);
     bpt->disposition = disp_del;
   }
 
@@ -761,7 +757,7 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
 							   NULL, NULL);
        if (tm != NULL)
 	   terminate_bp = set_momentary_breakpoint_at_pc
-	     (SYMBOL_VALUE_ADDRESS (tm),  bp_breakpoint);
+	     (gdbarch, SYMBOL_VALUE_ADDRESS (tm),  bp_breakpoint);
      }
 
   /* Everything's ready, push all the info needed to restore the

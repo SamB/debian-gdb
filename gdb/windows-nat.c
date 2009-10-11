@@ -1289,8 +1289,8 @@ ctrl_c_handler (DWORD event_type)
 {
   const int attach_flag = current_inferior ()->attach_flag;
 
-  /* Only handle Ctrl-C event.  Ignore others.  */
-  if (event_type != CTRL_C_EVENT)
+  /* Only handle Ctrl-C and Ctrl-Break events.  Ignore others.  */
+  if (event_type != CTRL_C_EVENT && event_type != CTRL_BREAK_EVENT)
     return FALSE;
 
   /* If the inferior and the debugger share the same console, do nothing as
@@ -2082,7 +2082,7 @@ windows_xfer_shared_libraries (struct target_ops *ops,
   obstack_grow_str (&obstack, "<library-list>\n");
   for (so = solib_start.next; so; so = so->next)
     windows_xfer_shared_library (so->so_name, (CORE_ADDR) (uintptr_t) so->lm_info->load_addr,
-				 &obstack);
+				 target_gdbarch, &obstack);
   obstack_grow_str0 (&obstack, "</library-list>\n");
 
   buf = obstack_finish (&obstack);

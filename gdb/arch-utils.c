@@ -51,8 +51,8 @@ simple_displaced_step_copy_insn (struct gdbarch *gdbarch,
 
   if (debug_displaced)
     {
-      fprintf_unfiltered (gdb_stdlog, "displaced: copy 0x%s->0x%s: ",
-                          paddr_nz (from), paddr_nz (to));
+      fprintf_unfiltered (gdb_stdlog, "displaced: copy %s->%s: ",
+                          paddress (gdbarch, from), paddress (gdbarch, to));
       displaced_step_dump_bytes (gdb_stdlog, buf, len);
     }
 
@@ -67,6 +67,12 @@ simple_displaced_step_free_closure (struct gdbarch *gdbarch,
   xfree (closure);
 }
 
+int
+default_displaced_step_hw_singlestep (struct gdbarch *gdbarch,
+				      struct displaced_step_closure *closure)
+{
+  return !gdbarch_software_single_step_p (gdbarch);
+}
 
 CORE_ADDR
 displaced_step_at_entry_point (struct gdbarch *gdbarch)
@@ -75,10 +81,6 @@ displaced_step_at_entry_point (struct gdbarch *gdbarch)
   int bp_len;
 
   addr = entry_point_address ();
-
-  /* Make certain that the address points at real code, and not a
-     function descriptor.  */
-  addr = gdbarch_convert_from_func_ptr_addr (gdbarch, addr, &current_target);
 
   /* Inferior calls also use the entry point as a breakpoint location.
      We don't want displaced stepping to interfere with those
@@ -118,7 +120,8 @@ generic_skip_solib_resolver (struct gdbarch *gdbarch, CORE_ADDR pc)
 }
 
 int
-generic_in_solib_return_trampoline (CORE_ADDR pc, char *name)
+generic_in_solib_return_trampoline (struct gdbarch *gdbarch,
+				    CORE_ADDR pc, char *name)
 {
   return 0;
 }
@@ -260,10 +263,7 @@ static const char *set_endian_string;
 enum bfd_endian
 selected_byte_order (void)
 {
-  if (target_byte_order_user != BFD_ENDIAN_UNKNOWN)
-    return gdbarch_byte_order (current_gdbarch);
-  else
-    return BFD_ENDIAN_UNKNOWN;
+  return target_byte_order_user;
 }
 
 /* Called by ``show endian''.  */
@@ -273,14 +273,14 @@ show_endian (struct ui_file *file, int from_tty, struct cmd_list_element *c,
 	     const char *value)
 {
   if (target_byte_order_user == BFD_ENDIAN_UNKNOWN)
-    if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+    if (gdbarch_byte_order (get_current_arch ()) == BFD_ENDIAN_BIG)
       fprintf_unfiltered (file, _("The target endianness is set automatically "
 				  "(currently big endian)\n"));
     else
       fprintf_unfiltered (file, _("The target endianness is set automatically "
 			   "(currently little endian)\n"));
   else
-    if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+    if (target_byte_order_user == BFD_ENDIAN_BIG)
       fprintf_unfiltered (file,
 			  _("The target is assumed to be big endian\n"));
     else
@@ -326,15 +326,24 @@ set_endian (char *ignore_args, int from_tty, struct cmd_list_element *c)
 }
 
 /* Given SELECTED, a currently selected BFD architecture, and
-   FROM_TARGET, a BFD architecture reported by the target description,
-   return what architecture to use.  Either may be NULL; if both are
-   specified, we use the more specific.  If the two are obviously
-   incompatible, warn the user.  */
+   TARGET_DESC, the current target description, return what
+   architecture to use.
+
+   SELECTED may be NULL, in which case we return the architecture
+   associated with TARGET_DESC.  If SELECTED specifies a variant
+   of the architecture associtated with TARGET_DESC, return the
+   more specific of the two.
+
+   If SELECTED is a different architecture, but it is accepted as
+   compatible by the target, we can use the target architecture.
+
+   If SELECTED is obviously incompatible, warn the user.  */
 
 static const struct bfd_arch_info *
-choose_architecture_for_target (const struct bfd_arch_info *selected,
-				const struct bfd_arch_info *from_target)
+choose_architecture_for_target (const struct target_desc *target_desc,
+				const struct bfd_arch_info *selected)
 {
+  const struct bfd_arch_info *from_target = tdesc_architecture (target_desc);
   const struct bfd_arch_info *compat1, *compat2;
 
   if (selected == NULL)
@@ -364,6 +373,11 @@ choose_architecture_for_target (const struct bfd_arch_info *selected,
 
   if (compat1 == NULL && compat2 == NULL)
     {
+      /* BFD considers the architectures incompatible.  Check our target
+	 description whether it accepts SELECTED as compatible anyway.  */
+      if (tdesc_compatible_p (target_desc, selected))
+	return from_target;
+
       warning (_("Selected architecture %s is not compatible "
 		 "with reported target architecture %s"),
 	       selected->printable_name, from_target->printable_name);
@@ -418,14 +432,13 @@ static void
 show_architecture (struct ui_file *file, int from_tty,
 		   struct cmd_list_element *c, const char *value)
 {
-  const char *arch;
-  arch = gdbarch_bfd_arch_info (current_gdbarch)->printable_name;
   if (target_architecture_user == NULL)
     fprintf_filtered (file, _("\
-The target architecture is set automatically (currently %s)\n"), arch);
+The target architecture is set automatically (currently %s)\n"),
+		gdbarch_bfd_arch_info (get_current_arch ())->printable_name);
   else
     fprintf_filtered (file, _("\
-The target architecture is assumed to be %s\n"), arch);
+The target architecture is assumed to be %s\n"), set_architecture_string);
 }
 
 
@@ -507,7 +520,7 @@ gdbarch_update_p (struct gdbarch_info info)
 			"New architecture %s (%s) selected\n",
 			host_address_to_string (new_gdbarch),
 			gdbarch_bfd_arch_info (new_gdbarch)->printable_name);
-  deprecated_current_gdbarch_select_hack (new_gdbarch);
+  deprecated_target_gdbarch_select_hack (new_gdbarch);
 
   return 1;
 }
@@ -540,7 +553,7 @@ set_gdbarch_from_file (bfd *abfd)
 
   if (gdbarch == NULL)
     error (_("Architecture of file not recognized."));
-  deprecated_current_gdbarch_select_hack (gdbarch);
+  deprecated_target_gdbarch_select_hack (gdbarch);
 }
 
 /* Initialize the current architecture.  Update the ``set
@@ -692,7 +705,7 @@ gdbarch_info_fill (struct gdbarch_info *info)
   /* From the target.  */
   if (info->target_desc != NULL)
     info->bfd_arch_info = choose_architecture_for_target
-      (info->bfd_arch_info, tdesc_architecture (info->target_desc));
+			   (info->target_desc, info->bfd_arch_info);
   /* From the default.  */
   if (info->bfd_arch_info == NULL)
     info->bfd_arch_info = default_bfd_arch;
@@ -713,11 +726,35 @@ gdbarch_info_fill (struct gdbarch_info *info)
   info->byte_order_for_code = info->byte_order;
 
   /* "(gdb) set osabi ...".  Handled by gdbarch_lookup_osabi.  */
+  /* From the manual override, or from file.  */
   if (info->osabi == GDB_OSABI_UNINITIALIZED)
     info->osabi = gdbarch_lookup_osabi (info->abfd);
+  /* From the target.  */
+  if (info->osabi == GDB_OSABI_UNKNOWN && info->target_desc != NULL)
+    info->osabi = tdesc_osabi (info->target_desc);
+  /* From the configured default.  */
+#ifdef GDB_OSABI_DEFAULT
+  if (info->osabi == GDB_OSABI_UNKNOWN)
+    info->osabi = GDB_OSABI_DEFAULT;
+#endif
 
   /* Must have at least filled in the architecture.  */
   gdb_assert (info->bfd_arch_info != NULL);
+}
+
+/* Return "current" architecture.  If the target is running, this is the
+   architecture of the selected frame.  Otherwise, the "current" architecture
+   defaults to the target architecture.
+
+   This function should normally be called solely by the command interpreter
+   routines to determine the architecture to execute a command in.  */
+struct gdbarch *
+get_current_arch (void)
+{
+  if (has_stack_frames ())
+    return get_frame_arch (get_selected_frame (NULL));
+  else
+    return target_gdbarch;
 }
 
 /* */

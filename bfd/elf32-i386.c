@@ -1,6 +1,6 @@
 /* Intel 80386/80486-specific support for 32-bit ELF
    Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
+   2003, 2004, 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -704,8 +704,8 @@ elf_i386_link_hash_newfunc (struct bfd_hash_entry *entry,
      subclass.  */
   if (entry == NULL)
     {
-      entry = bfd_hash_allocate (table,
-				 sizeof (struct elf_i386_link_hash_entry));
+      entry = (struct bfd_hash_entry *)
+          bfd_hash_allocate (table, sizeof (struct elf_i386_link_hash_entry));
       if (entry == NULL)
 	return entry;
     }
@@ -802,7 +802,7 @@ elf_i386_link_hash_table_create (bfd *abfd)
   struct elf_i386_link_hash_table *ret;
   bfd_size_type amt = sizeof (struct elf_i386_link_hash_table);
 
-  ret = bfd_malloc (amt);
+  ret = (struct elf_i386_link_hash_table *) bfd_malloc (amt);
   if (ret == NULL)
     return NULL;
 
@@ -1164,7 +1164,7 @@ elf_i386_tls_transition (struct bfd_link_info *info, bfd *abfd,
     case R_386_TLS_IE_32:
     case R_386_TLS_IE:
     case R_386_TLS_GOTIE:
-      if (!info->shared)
+      if (info->executable)
 	{
 	  if (h == NULL)
 	    to_type = R_386_TLS_LE_32;
@@ -1180,7 +1180,7 @@ elf_i386_tls_transition (struct bfd_link_info *info, bfd *abfd,
 	{
 	  unsigned int new_to_type = to_type;
 
-	  if (!info->shared
+	  if (info->executable
 	      && h != NULL
 	      && h->dynindx == -1
 	      && (tls_type & GOT_TLS_IE))
@@ -1206,7 +1206,7 @@ elf_i386_tls_transition (struct bfd_link_info *info, bfd *abfd,
       break;
 
     case R_386_TLS_LDM:
-      if (!info->shared)
+      if (info->executable)
 	to_type = R_386_TLS_LE_32;
       break;
 
@@ -1366,6 +1366,7 @@ elf_i386_check_relocs (bfd *abfd,
 	    {
 	      /* It is referenced by a non-shared object. */
 	      h->ref_regular = 1;
+	      h->needs_plt = 1;
  
 	      /* STT_GNU_IFUNC symbol must go through PLT.  */
 	      h->plt.refcount += 1;
@@ -1459,7 +1460,7 @@ elf_i386_check_relocs (bfd *abfd,
 	case R_386_TLS_IE_32:
 	case R_386_TLS_IE:
 	case R_386_TLS_GOTIE:
-	  if (info->shared)
+	  if (!info->executable)
 	    info->flags |= DF_STATIC_TLS;
 	  /* Fall through */
 
@@ -1510,7 +1511,8 @@ elf_i386_check_relocs (bfd *abfd,
 		    size = symtab_hdr->sh_info;
 		    size *= (sizeof (bfd_signed_vma)
 			     + sizeof (bfd_vma) + sizeof(char));
-		    local_got_refcounts = bfd_zalloc (abfd, size);
+		    local_got_refcounts = (bfd_signed_vma *)
+                        bfd_zalloc (abfd, size);
 		    if (local_got_refcounts == NULL)
 		      return FALSE;
 		    elf_local_got_refcounts (abfd) = local_got_refcounts;
@@ -1577,7 +1579,7 @@ elf_i386_check_relocs (bfd *abfd,
 
 	case R_386_TLS_LE_32:
 	case R_386_TLS_LE:
-	  if (!info->shared)
+	  if (info->executable)
 	    break;
 	  info->flags |= DF_STATIC_TLS;
 	  /* Fall through */
@@ -1686,7 +1688,8 @@ elf_i386_check_relocs (bfd *abfd,
 	      if (p == NULL || p->sec != sec)
 		{
 		  bfd_size_type amt = sizeof *p;
-		  p = bfd_alloc (htab->elf.dynobj, amt);
+		  p = (struct elf_dyn_relocs *) bfd_alloc (htab->elf.dynobj,
+                                                           amt);
 		  if (p == NULL)
 		    return FALSE;
 		  p->next = *head;
@@ -2115,7 +2118,7 @@ elf_i386_allocate_dynrelocs (struct elf_link_hash_entry *h, void *inf)
   /* If R_386_TLS_{IE_32,IE,GOTIE} symbol is now local to the binary,
      make it a R_386_TLS_LE_32 requiring no TLS entry.  */
   if (h->got.refcount > 0
-      && !info->shared
+      && info->executable
       && h->dynindx == -1
       && (elf_i386_hash_entry(h)->tls_type & GOT_TLS_IE))
     h->got.offset = (bfd_vma) -1;
@@ -2558,7 +2561,7 @@ elf_i386_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
 	 section's contents are written out.  This should not happen,
 	 but this way if it does, we get a R_386_NONE reloc instead
 	 of garbage.  */
-      s->contents = bfd_zalloc (dynobj, s->size);
+      s->contents = (unsigned char *) bfd_zalloc (dynobj, s->size);
       if (s->contents == NULL)
 	return FALSE;
     }
@@ -2890,7 +2893,8 @@ elf_i386_relocate_section (bfd *output_bfd,
 		  break;
 		}
 	    }
-	  else if (ELF32_ST_TYPE (sym->st_info) == STT_GNU_IFUNC)
+	  else if (!info->relocatable
+		   && ELF32_ST_TYPE (sym->st_info) == STT_GNU_IFUNC)
 	    {
 	      /* Relocate against local STT_GNU_IFUNC symbol.  */
 	      h = elf_i386_get_local_sym_hash (htab, input_bfd,
@@ -3364,7 +3368,7 @@ elf_i386_relocate_section (bfd *output_bfd,
 	  break;
 
 	case R_386_TLS_IE:
-	  if (info->shared)
+	  if (!info->executable)
 	    {
 	      Elf_Internal_Rela outrel;
 	      bfd_byte *loc;
@@ -3930,7 +3934,7 @@ elf_i386_relocate_section (bfd *output_bfd,
 
 	case R_386_TLS_LE_32:
 	case R_386_TLS_LE:
-	  if (info->shared)
+	  if (!info->executable)
 	    {
 	      Elf_Internal_Rela outrel;
 	      asection *sreloc;

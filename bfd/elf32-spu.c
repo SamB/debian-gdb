@@ -88,6 +88,9 @@ static reloc_howto_type elf_howto_table[] = {
   HOWTO (R_SPU_PPU64,      0, 4, 64, FALSE,  0, complain_overflow_dont,
 	 bfd_elf_generic_reloc, "SPU_PPU64",
 	 FALSE, 0, -1, FALSE),
+  HOWTO (R_SPU_ADD_PIC,      0, 0, 0, FALSE,  0, complain_overflow_dont,
+	 bfd_elf_generic_reloc, "SPU_ADD_PIC",
+	 FALSE, 0, 0x00000000, FALSE),
 };
 
 static struct bfd_elf_special_section const spu_elf_special_sections[] = {
@@ -135,6 +138,8 @@ spu_elf_bfd_to_reloc_type (bfd_reloc_code_real_type code)
       return R_SPU_PPU32;
     case BFD_RELOC_SPU_PPU64:
       return R_SPU_PPU64;
+    case BFD_RELOC_SPU_ADD_PIC:
+      return R_SPU_ADD_PIC;
     }
 }
 
@@ -338,6 +343,9 @@ struct spu_link_hash_table
   int extra_stack_space;
   /* Count of overlay stubs needed in non-overlay area.  */
   unsigned int non_ovly_stub;
+
+  /* Pointer to the fixup section */
+  asection *sfixup;
 
   /* Set on error.  */
   unsigned int stub_err : 1;
@@ -553,6 +561,7 @@ get_sym_h (struct elf_link_hash_entry **hp,
 bfd_boolean
 spu_elf_create_sections (struct bfd_link_info *info)
 {
+  struct spu_link_hash_table *htab = spu_hash_table (info);
   bfd *ibfd;
 
   for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link_next)
@@ -593,6 +602,19 @@ spu_elf_create_sections (struct bfd_link_info *info)
       memcpy (data + 12 + ((sizeof (SPU_PLUGIN_NAME) + 3) & -4),
 	      bfd_get_filename (info->output_bfd), name_len);
       s->contents = data;
+    }
+
+  if (htab->params->emit_fixups)
+    {
+      asection *s;
+      flagword flags;
+      ibfd = info->input_bfds;
+      flags = SEC_LOAD | SEC_ALLOC | SEC_READONLY | SEC_HAS_CONTENTS
+	      | SEC_IN_MEMORY;
+      s = bfd_make_section_anyway_with_flags (ibfd, ".fixup", flags);
+      if (s == NULL || !bfd_set_section_alignment (ibfd, s, 2))
+	return FALSE;
+      htab->sfixup = s;
     }
 
   return TRUE;
@@ -1627,7 +1649,7 @@ process_stubs (struct bfd_link_info *info, bfd_boolean build)
 }
 
 /* Allocate space for overlay call and return stubs.
-   Return 0 on error, 1 if no stubs, 2 otherwise.  */
+   Return 0 on error, 1 if no overlays, 2 otherwise.  */
 
 int
 spu_elf_size_stubs (struct bfd_link_info *info)
@@ -1647,39 +1669,39 @@ spu_elf_size_stubs (struct bfd_link_info *info)
   if (htab->stub_err)
     return 0;
 
-  if (htab->stub_count == NULL)
-    return 1;
-
   ibfd = info->input_bfds;
-  amt = (htab->num_overlays + 1) * sizeof (*htab->stub_sec);
-  htab->stub_sec = bfd_zmalloc (amt);
-  if (htab->stub_sec == NULL)
-    return 0;
-
-  flags = (SEC_ALLOC | SEC_LOAD | SEC_CODE | SEC_READONLY
-	   | SEC_HAS_CONTENTS | SEC_IN_MEMORY);
-  stub = bfd_make_section_anyway_with_flags (ibfd, ".stub", flags);
-  htab->stub_sec[0] = stub;
-  if (stub == NULL
-      || !bfd_set_section_alignment (ibfd, stub,
-				     ovl_stub_size_log2 (htab->params)))
-    return 0;
-  stub->size = htab->stub_count[0] * ovl_stub_size (htab->params);
-  if (htab->params->ovly_flavour == ovly_soft_icache)
-    /* Extra space for linked list entries.  */
-    stub->size += htab->stub_count[0] * 16;
-
-  for (i = 0; i < htab->num_overlays; ++i)
+  if (htab->stub_count != NULL)
     {
-      asection *osec = htab->ovl_sec[i];
-      unsigned int ovl = spu_elf_section_data (osec)->u.o.ovl_index;
+      amt = (htab->num_overlays + 1) * sizeof (*htab->stub_sec);
+      htab->stub_sec = bfd_zmalloc (amt);
+      if (htab->stub_sec == NULL)
+	return 0;
+
+      flags = (SEC_ALLOC | SEC_LOAD | SEC_CODE | SEC_READONLY
+	       | SEC_HAS_CONTENTS | SEC_IN_MEMORY);
       stub = bfd_make_section_anyway_with_flags (ibfd, ".stub", flags);
-      htab->stub_sec[ovl] = stub;
+      htab->stub_sec[0] = stub;
       if (stub == NULL
 	  || !bfd_set_section_alignment (ibfd, stub,
 					 ovl_stub_size_log2 (htab->params)))
 	return 0;
-      stub->size = htab->stub_count[ovl] * ovl_stub_size (htab->params);
+      stub->size = htab->stub_count[0] * ovl_stub_size (htab->params);
+      if (htab->params->ovly_flavour == ovly_soft_icache)
+	/* Extra space for linked list entries.  */
+	stub->size += htab->stub_count[0] * 16;
+
+      for (i = 0; i < htab->num_overlays; ++i)
+	{
+	  asection *osec = htab->ovl_sec[i];
+	  unsigned int ovl = spu_elf_section_data (osec)->u.o.ovl_index;
+	  stub = bfd_make_section_anyway_with_flags (ibfd, ".stub", flags);
+	  htab->stub_sec[ovl] = stub;
+	  if (stub == NULL
+	      || !bfd_set_section_alignment (ibfd, stub,
+					     ovl_stub_size_log2 (htab->params)))
+	    return 0;
+	  stub->size = htab->stub_count[ovl] * ovl_stub_size (htab->params);
+	}
     }
 
   if (htab->params->ovly_flavour == ovly_soft_icache)
@@ -1707,6 +1729,8 @@ spu_elf_size_stubs (struct bfd_link_info *info)
 
       htab->init->size = 16;
     }
+  else if (htab->stub_count == NULL)
+    return 1;
   else
     {
       /* htab->ovtab consists of two arrays.
@@ -1750,29 +1774,32 @@ spu_elf_place_overlay_data (struct bfd_link_info *info)
 {
   struct spu_link_hash_table *htab = spu_hash_table (info);
   unsigned int i;
-  const char *ovout;
 
-  if (htab->stub_count == NULL)
-    return;
-
-  (*htab->params->place_spu_section) (htab->stub_sec[0], NULL, ".text");
-
-  for (i = 0; i < htab->num_overlays; ++i)
+  if (htab->stub_sec != NULL)
     {
-      asection *osec = htab->ovl_sec[i];
-      unsigned int ovl = spu_elf_section_data (osec)->u.o.ovl_index;
-      (*htab->params->place_spu_section) (htab->stub_sec[ovl], osec, NULL);
+      (*htab->params->place_spu_section) (htab->stub_sec[0], NULL, ".text");
+
+      for (i = 0; i < htab->num_overlays; ++i)
+	{
+	  asection *osec = htab->ovl_sec[i];
+	  unsigned int ovl = spu_elf_section_data (osec)->u.o.ovl_index;
+	  (*htab->params->place_spu_section) (htab->stub_sec[ovl], osec, NULL);
+	}
     }
 
   if (htab->params->ovly_flavour == ovly_soft_icache)
     (*htab->params->place_spu_section) (htab->init, NULL, ".ovl.init");
 
-  ovout = ".data";
-  if (htab->params->ovly_flavour == ovly_soft_icache)
-    ovout = ".bss";
-  (*htab->params->place_spu_section) (htab->ovtab, NULL, ovout);
+  if (htab->ovtab != NULL)
+    {
+      const char *ovout = ".data";
+      if (htab->params->ovly_flavour == ovly_soft_icache)
+	ovout = ".bss";
+      (*htab->params->place_spu_section) (htab->ovtab, NULL, ovout);
+    }
 
-  (*htab->params->place_spu_section) (htab->toe, NULL, ".toe");
+  if (htab->toe != NULL)
+    (*htab->params->place_spu_section) (htab->toe, NULL, ".toe");
 }
 
 /* Functions to handle embedded spu_ovl.o object.  */
@@ -1883,63 +1910,63 @@ spu_elf_build_stubs (struct bfd_link_info *info)
   bfd *obfd;
   unsigned int i;
 
-  if (htab->stub_count == NULL)
-    return TRUE;
-
-  for (i = 0; i <= htab->num_overlays; i++)
-    if (htab->stub_sec[i]->size != 0)
-      {
-	htab->stub_sec[i]->contents = bfd_zalloc (htab->stub_sec[i]->owner,
-						  htab->stub_sec[i]->size);
-	if (htab->stub_sec[i]->contents == NULL)
-	  return FALSE;
-	htab->stub_sec[i]->rawsize = htab->stub_sec[i]->size;
-	htab->stub_sec[i]->size = 0;
-      }
-
-  for (i = 0; i < 2; i++)
+  if (htab->num_overlays != 0)
     {
-      h = htab->ovly_entry[i];
-      BFD_ASSERT (h != NULL);
-
-      if ((h->root.type == bfd_link_hash_defined
-	   || h->root.type == bfd_link_hash_defweak)
-	  && h->def_regular)
+      for (i = 0; i < 2; i++)
 	{
-	  s = h->root.u.def.section->output_section;
-	  if (spu_elf_section_data (s)->u.o.ovl_index)
+	  h = htab->ovly_entry[i];
+	  if (h != NULL
+	      && (h->root.type == bfd_link_hash_defined
+		  || h->root.type == bfd_link_hash_defweak)
+	      && h->def_regular)
 	    {
-	      (*_bfd_error_handler) (_("%s in overlay section"),
-				     h->root.root.string);
-	      bfd_set_error (bfd_error_bad_value);
-	      return FALSE;
+	      s = h->root.u.def.section->output_section;
+	      if (spu_elf_section_data (s)->u.o.ovl_index)
+		{
+		  (*_bfd_error_handler) (_("%s in overlay section"),
+					 h->root.root.string);
+		  bfd_set_error (bfd_error_bad_value);
+		  return FALSE;
+		}
 	    }
 	}
-      else
-	BFD_ASSERT (0);
     }
 
-  /* Fill in all the stubs.  */
-  process_stubs (info, TRUE);
-  if (!htab->stub_err)
-    elf_link_hash_traverse (&htab->elf, build_spuear_stubs, info);
-
-  if (htab->stub_err)
+  if (htab->stub_sec != NULL)
     {
-      (*_bfd_error_handler) (_("overlay stub relocation overflow"));
-      bfd_set_error (bfd_error_bad_value);
-      return FALSE;
-    }
+      for (i = 0; i <= htab->num_overlays; i++)
+	if (htab->stub_sec[i]->size != 0)
+	  {
+	    htab->stub_sec[i]->contents = bfd_zalloc (htab->stub_sec[i]->owner,
+						      htab->stub_sec[i]->size);
+	    if (htab->stub_sec[i]->contents == NULL)
+	      return FALSE;
+	    htab->stub_sec[i]->rawsize = htab->stub_sec[i]->size;
+	    htab->stub_sec[i]->size = 0;
+	  }
 
-  for (i = 0; i <= htab->num_overlays; i++)
-    {
-      if (htab->stub_sec[i]->size != htab->stub_sec[i]->rawsize)
+      /* Fill in all the stubs.  */
+      process_stubs (info, TRUE);
+      if (!htab->stub_err)
+	elf_link_hash_traverse (&htab->elf, build_spuear_stubs, info);
+
+      if (htab->stub_err)
 	{
-	  (*_bfd_error_handler)  (_("stubs don't match calculated size"));
+	  (*_bfd_error_handler) (_("overlay stub relocation overflow"));
 	  bfd_set_error (bfd_error_bad_value);
 	  return FALSE;
 	}
-      htab->stub_sec[i]->rawsize = 0;
+
+      for (i = 0; i <= htab->num_overlays; i++)
+	{
+	  if (htab->stub_sec[i]->size != htab->stub_sec[i]->rawsize)
+	    {
+	      (*_bfd_error_handler)  (_("stubs don't match calculated size"));
+	      bfd_set_error (bfd_error_bad_value);
+	      return FALSE;
+	    }
+	  htab->stub_sec[i]->rawsize = 0;
+	}
     }
 
   if (htab->ovtab == NULL || htab->ovtab->size == 0)
@@ -2785,6 +2812,7 @@ mark_functions_via_relocs (asection *sec,
 	return FALSE;
       callee->is_tail = !is_call;
       callee->is_pasted = FALSE;
+      callee->broken_cycle = FALSE;
       callee->priority = priority;
       callee->count = 1;
       if (callee->fun->last_caller != sec)
@@ -2878,6 +2906,8 @@ pasted_function (asection *sec)
 	      callee->fun = fun;
 	      callee->is_tail = TRUE;
 	      callee->is_pasted = TRUE;
+	      callee->broken_cycle = FALSE;
+	      callee->priority = 0;
 	      callee->count = 1;
 	      if (!insert_callee (fun_start, callee))
 		free (callee);
@@ -4364,12 +4394,12 @@ spu_elf_auto_overlay (struct bfd_link_info *info)
   ovlynum = 0;
   while (base < count)
     {
-      unsigned int size = 0;
+      unsigned int size = 0, rosize = 0, roalign = 0;
 
       for (i = base; i < count; i++)
 	{
-	  asection *sec;
-	  unsigned int tmp;
+	  asection *sec, *rosec;
+	  unsigned int tmp, rotmp;
 	  unsigned int num_stubs;
 	  struct call_info *call, *pasty;
 	  struct _spu_elf_section_data *sec_data;
@@ -4379,10 +4409,16 @@ spu_elf_auto_overlay (struct bfd_link_info *info)
 	  /* See whether we can add this section to the current
 	     overlay without overflowing our overlay buffer.  */
 	  sec = ovly_sections[2 * i];
-	  tmp = size + sec->size;
-	  if (ovly_sections[2 * i + 1])
-	    tmp += ovly_sections[2 * i + 1]->size;
-	  if (tmp > overlay_size)
+	  tmp = align_power (size, sec->alignment_power) + sec->size;
+	  rotmp = rosize;
+	  rosec = ovly_sections[2 * i + 1];
+	  if (rosec != NULL)
+	    {
+	      rotmp = align_power (rotmp, rosec->alignment_power) + rosec->size;
+	      if (roalign < rosec->alignment_power)
+		roalign = rosec->alignment_power;
+	    }
+	  if (align_power (tmp, roalign) + rotmp > overlay_size)
 	    break;
 	  if (sec->segment_mark)
 	    {
@@ -4392,15 +4428,22 @@ spu_elf_auto_overlay (struct bfd_link_info *info)
 	      while (pasty != NULL)
 		{
 		  struct function_info *call_fun = pasty->fun;
-		  tmp += call_fun->sec->size;
+		  tmp = (align_power (tmp, call_fun->sec->alignment_power)
+			 + call_fun->sec->size);
 		  if (call_fun->rodata)
-		    tmp += call_fun->rodata->size;
+		    {
+		      rotmp = (align_power (rotmp,
+					    call_fun->rodata->alignment_power)
+			       + call_fun->rodata->size);
+		      if (roalign < rosec->alignment_power)
+			roalign = rosec->alignment_power;
+		    }
 		  for (pasty = call_fun->call_list; pasty; pasty = pasty->next)
 		    if (pasty->is_pasted)
 		      break;
 		}
 	    }
-	  if (tmp > overlay_size)
+	  if (align_power (tmp, roalign) + rotmp > overlay_size)
 	    break;
 
 	  /* If we add this section, we might need new overlay call
@@ -4457,10 +4500,11 @@ spu_elf_auto_overlay (struct bfd_link_info *info)
 	  if (htab->params->ovly_flavour == ovly_soft_icache
 	      && num_stubs > htab->params->max_branch)
 	    break;
-	  if (tmp + num_stubs * ovl_stub_size (htab->params)
-	      > overlay_size)
+	  if (align_power (tmp, roalign) + rotmp
+	      + num_stubs * ovl_stub_size (htab->params) > overlay_size)
 	    break;
 	  size = tmp;
+	  rosize = rotmp;
 	}
 
       if (i == base)
@@ -4691,6 +4735,48 @@ spu_elf_count_relocs (struct bfd_link_info *info, asection *sec)
   return count;
 }
 
+/* Functions for adding fixup records to .fixup */
+
+#define FIXUP_RECORD_SIZE 4
+
+#define FIXUP_PUT(output_bfd,htab,index,addr) \
+	  bfd_put_32 (output_bfd, addr, \
+		      htab->sfixup->contents + FIXUP_RECORD_SIZE * (index))
+#define FIXUP_GET(output_bfd,htab,index) \
+	  bfd_get_32 (output_bfd, \
+		      htab->sfixup->contents + FIXUP_RECORD_SIZE * (index))
+
+/* Store OFFSET in .fixup.  This assumes it will be called with an
+   increasing OFFSET.  When this OFFSET fits with the last base offset,
+   it just sets a bit, otherwise it adds a new fixup record.  */
+static void
+spu_elf_emit_fixup (bfd * output_bfd, struct bfd_link_info *info,
+		    bfd_vma offset)
+{
+  struct spu_link_hash_table *htab = spu_hash_table (info);
+  asection *sfixup = htab->sfixup;
+  bfd_vma qaddr = offset & ~(bfd_vma) 15;
+  bfd_vma bit = ((bfd_vma) 8) >> ((offset & 15) >> 2);
+  if (sfixup->reloc_count == 0)
+    {
+      FIXUP_PUT (output_bfd, htab, 0, qaddr | bit);
+      sfixup->reloc_count++;
+    }
+  else
+    {
+      bfd_vma base = FIXUP_GET (output_bfd, htab, sfixup->reloc_count - 1);
+      if (qaddr != (base & ~(bfd_vma) 15))
+	{
+	  if ((sfixup->reloc_count + 1) * FIXUP_RECORD_SIZE > sfixup->size)
+	    (*_bfd_error_handler) (_("fatal error while creating .fixup"));
+	  FIXUP_PUT (output_bfd, htab, sfixup->reloc_count, qaddr | bit);
+	  sfixup->reloc_count++;
+	}
+      else
+	FIXUP_PUT (output_bfd, htab, sfixup->reloc_count - 1, base | bit);
+    }
+}
+
 /* Apply RELOCS to CONTENTS of INPUT_SECTION from INPUT_BFD.  */
 
 static int
@@ -4819,6 +4905,17 @@ spu_elf_relocate_section (bfd *output_bfd,
       if (info->relocatable)
 	continue;
 
+      /* Change "a rt,ra,rb" to "ai rt,ra,0". */
+      if (r_type == R_SPU_ADD_PIC
+	  && h != NULL
+	  && !(h->def_regular || ELF_COMMON_DEF_P (h)))
+	{
+	  bfd_byte *loc = contents + rel->r_offset;
+	  loc[0] = 0x1c; 
+	  loc[1] = 0x00; 
+	  loc[2] &= 0x3f;
+	}
+
       is_ea_sym = (ea != NULL
 		   && sec != NULL
 		   && sec->output_section == ea);
@@ -4871,6 +4968,16 @@ spu_elf_relocate_section (bfd *output_bfd,
 		  relocation += set_id << 18;
 		}
 	    }
+	}
+
+      if (htab->params->emit_fixups && !info->relocatable
+	  && (input_section->flags & SEC_ALLOC) != 0
+	  && r_type == R_SPU_ADDR32)
+	{
+	  bfd_vma offset;
+	  offset = rel->r_offset + input_section->output_section->vma
+		   + input_section->output_offset;
+	  spu_elf_emit_fixup (output_bfd, info, offset);
 	}
 
       if (unresolved_reloc)
@@ -5265,6 +5372,72 @@ spu_elf_modify_program_headers (bfd *abfd, struct bfd_link_info *info)
 	phdr[i].p_memsz += adjust;
       }
 
+  return TRUE;
+}
+
+bfd_boolean
+spu_elf_size_sections (bfd * output_bfd, struct bfd_link_info *info)
+{
+  struct spu_link_hash_table *htab = spu_hash_table (info);
+  if (htab->params->emit_fixups)
+    {
+      asection *sfixup = htab->sfixup;
+      int fixup_count = 0;
+      bfd *ibfd;
+      size_t size;
+
+      for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link_next)
+	{
+	  asection *isec;
+
+	  if (bfd_get_flavour (ibfd) != bfd_target_elf_flavour)
+	    continue;
+
+	  /* Walk over each section attached to the input bfd.  */
+	  for (isec = ibfd->sections; isec != NULL; isec = isec->next)
+	    {
+	      Elf_Internal_Rela *internal_relocs, *irelaend, *irela;
+	      bfd_vma base_end;
+
+	      /* If there aren't any relocs, then there's nothing more
+	         to do.  */
+	      if ((isec->flags & SEC_RELOC) == 0
+		  || isec->reloc_count == 0)
+		continue;
+
+	      /* Get the relocs.  */
+	      internal_relocs =
+		_bfd_elf_link_read_relocs (ibfd, isec, NULL, NULL,
+					   info->keep_memory);
+	      if (internal_relocs == NULL)
+		return FALSE;
+
+	      /* 1 quadword can contain up to 4 R_SPU_ADDR32
+	         relocations.  They are stored in a single word by
+	         saving the upper 28 bits of the address and setting the
+	         lower 4 bits to a bit mask of the words that have the
+	         relocation.  BASE_END keeps track of the next quadword. */
+	      irela = internal_relocs;
+	      irelaend = irela + isec->reloc_count;
+	      base_end = 0;
+	      for (; irela < irelaend; irela++)
+		if (ELF32_R_TYPE (irela->r_info) == R_SPU_ADDR32
+		    && irela->r_offset >= base_end)
+		  {
+		    base_end = (irela->r_offset & ~(bfd_vma) 15) + 16;
+		    fixup_count++;
+		  }
+	    }
+	}
+
+      /* We always have a NULL fixup as a sentinel */
+      size = (fixup_count + 1) * FIXUP_RECORD_SIZE;
+      if (!bfd_set_section_size (output_bfd, sfixup, size))
+	return FALSE;
+      sfixup->contents = (bfd_byte *) bfd_zalloc (info->input_bfds, size);
+      if (sfixup->contents == NULL)
+	return FALSE;
+    }
   return TRUE;
 }
 

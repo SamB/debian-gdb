@@ -104,14 +104,22 @@ struct gdbarch_tdep
   int sc_sp_offset;
 
   /* ISA-specific data types.  */
+  struct type *i386_eflags_type;
+  struct type *i386_mxcsr_type;
   struct type *i386_mmx_type;
   struct type *i386_sse_type;
+  struct type *i387_ext_type;
 
   /* Process record/replay target.  */
+  /* The map for registers because the AMD64's registers order
+     in GDB is not same as I386 instructions.  */
+  const int *record_regmap;
   /* Parse intx80 args.  */
   int (*i386_intx80_record) (struct regcache *regcache);
   /* Parse sysenter args.  */
   int (*i386_sysenter_record) (struct regcache *regcache);
+  /* Parse syscall args.  */
+  int (*i386_syscall_record) (struct regcache *regcache);
 };
 
 /* Floating-point registers.  */
@@ -148,6 +156,36 @@ enum i386_regnum
   I386_ST0_REGNUM		/* %st(0) */
 };
 
+/* Register numbers of RECORD_REGMAP.  */
+
+enum record_i386_regnum
+{
+  X86_RECORD_REAX_REGNUM,
+  X86_RECORD_RECX_REGNUM,
+  X86_RECORD_REDX_REGNUM,
+  X86_RECORD_REBX_REGNUM,
+  X86_RECORD_RESP_REGNUM,
+  X86_RECORD_REBP_REGNUM,
+  X86_RECORD_RESI_REGNUM,
+  X86_RECORD_REDI_REGNUM,
+  X86_RECORD_R8_REGNUM,
+  X86_RECORD_R9_REGNUM,
+  X86_RECORD_R10_REGNUM,
+  X86_RECORD_R11_REGNUM,
+  X86_RECORD_R12_REGNUM,
+  X86_RECORD_R13_REGNUM,
+  X86_RECORD_R14_REGNUM,
+  X86_RECORD_R15_REGNUM,
+  X86_RECORD_REIP_REGNUM,
+  X86_RECORD_EFLAGS_REGNUM,
+  X86_RECORD_CS_REGNUM,
+  X86_RECORD_SS_REGNUM,
+  X86_RECORD_DS_REGNUM,
+  X86_RECORD_ES_REGNUM,
+  X86_RECORD_FS_REGNUM,
+  X86_RECORD_GS_REGNUM,
+};
+
 #define I386_NUM_GREGS	16
 #define I386_NUM_FREGS	16
 #define I386_NUM_XREGS  9
@@ -159,11 +197,11 @@ enum i386_regnum
 #define I386_MAX_REGISTER_SIZE	16
 
 /* Types for i386-specific registers.  */
-extern struct type *i386_eflags_type;
-extern struct type *i386_mxcsr_type;
-
+extern struct type *i386_eflags_type (struct gdbarch *gdbarch);
+extern struct type *i386_mxcsr_type (struct gdbarch *gdbarch);
 extern struct type *i386_mmx_type (struct gdbarch *gdbarch);
 extern struct type *i386_sse_type (struct gdbarch *gdbarch);
+extern struct type *i387_ext_type (struct gdbarch *gdbarch);
 
 /* Segment selectors.  */
 #define I386_SEL_RPL	0x0003  /* Requester's Privilege Level mask.  */
@@ -175,7 +213,8 @@ extern struct type *i386_sse_type (struct gdbarch *gdbarch);
 #define I386_MAX_INSN_LEN (16)
 
 /* Functions exported from i386-tdep.c.  */
-extern CORE_ADDR i386_pe_skip_trampoline_code (CORE_ADDR pc, char *name);
+extern CORE_ADDR i386_pe_skip_trampoline_code (struct frame_info *frame,
+					       CORE_ADDR pc, char *name);
 extern CORE_ADDR i386_skip_main_prologue (struct gdbarch *gdbarch, CORE_ADDR pc);
 
 /* Return whether the THIS_FRAME corresponds to a sigtramp routine.  */

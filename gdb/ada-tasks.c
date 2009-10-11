@@ -548,7 +548,8 @@ read_atcb (CORE_ADDR task_id, struct ada_task_info *task_info)
         ada_coerce_to_simple_array_ptr (value_field (tcb_value,
                                                      fieldno.entry_calls));
       entry_calls_value_element =
-        value_subscript (entry_calls_value, atc_nesting_level_value);
+        value_subscript (entry_calls_value,
+			 value_as_long (atc_nesting_level_value));
       called_task_fieldno =
         ada_get_field_index (value_type (entry_calls_value_element),
                              "called_task", 0);
@@ -751,7 +752,8 @@ info_task (char *taskno_str, int from_tty)
   task_info = VEC_index (ada_task_info_s, task_list, taskno - 1);
 
   /* Print the Ada task ID.  */
-  printf_filtered (_("Ada Task: %s\n"), paddr_nz (task_info->task_id));
+  printf_filtered (_("Ada Task: %s\n"),
+		   paddress (target_gdbarch, task_info->task_id));
 
   /* Print the name of the task.  */
   if (task_info->name[0] != '\0')

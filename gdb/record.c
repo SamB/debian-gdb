@@ -32,14 +32,16 @@
 #define RECORD_IS_REPLAY \
      (record_list->next || execution_direction == EXEC_REVERSE)
 
-/* These are the core struct of record function.
+/* These are the core structs of the process record functionality.
 
-   An record_entry is a record of the value change of a register
+   A record_entry is a record of the value change of a register
    ("record_reg") or a part of memory ("record_mem").  And each
-   instruction must has a struct record_entry ("record_end") that points out this
-   is the last struct record_entry of this instruction.
+   instruction must have a struct record_entry ("record_end") that
+   indicates that this is the last struct record_entry of this
+   instruction.
 
-   Each struct record_entry is linked to "record_list" by "prev" and "next". */
+   Each struct record_entry is linked to "record_list" by "prev" and
+   "next" pointers.  */
 
 struct record_reg_entry
 {
@@ -51,7 +53,15 @@ struct record_mem_entry
 {
   CORE_ADDR addr;
   int len;
+  /* Set this flag if target memory for this entry
+     can no longer be accessed.  */
+  int mem_entry_not_accessible;
   gdb_byte *val;
+};
+
+struct record_end_entry
+{
+  enum target_signal sigval;
 };
 
 enum record_type
@@ -72,6 +82,8 @@ struct record_entry
     struct record_reg_entry reg;
     /* mem */
     struct record_mem_entry mem;
+    /* end */
+    struct record_end_entry end;
   } u;
 };
 
@@ -112,8 +124,10 @@ static LONGEST (*record_beneath_to_xfer_partial) (struct target_ops *ops,
 						  const gdb_byte *writebuf,
 						  ULONGEST offset,
 						  LONGEST len);
-static int (*record_beneath_to_insert_breakpoint) (struct bp_target_info *);
-static int (*record_beneath_to_remove_breakpoint) (struct bp_target_info *);
+static int (*record_beneath_to_insert_breakpoint) (struct gdbarch *,
+						   struct bp_target_info *);
+static int (*record_beneath_to_remove_breakpoint) (struct gdbarch *,
+						   struct bp_target_info *);
 
 static void
 record_list_release (struct record_entry *rec)
@@ -152,7 +166,7 @@ record_list_release_next (void)
   while (tmp)
     {
       rec = tmp->next;
-      if (tmp->type == record_reg)
+      if (tmp->type == record_end)
 	record_insn_num--;
       else if (tmp->type == record_reg)
 	xfree (tmp->u.reg.val);
@@ -259,9 +273,9 @@ record_arch_list_add_mem (CORE_ADDR addr, int len)
 
   if (record_debug > 1)
     fprintf_unfiltered (gdb_stdlog,
-			"Process record: add mem addr = 0x%s len = %d to "
+			"Process record: add mem addr = %s len = %d to "
 			"record list.\n",
-			paddr_nz (addr), len);
+			paddress (target_gdbarch, addr), len);
 
   if (!addr)
     return 0;
@@ -273,14 +287,15 @@ record_arch_list_add_mem (CORE_ADDR addr, int len)
   rec->type = record_mem;
   rec->u.mem.addr = addr;
   rec->u.mem.len = len;
+  rec->u.mem.mem_entry_not_accessible = 0;
 
   if (target_read_memory (addr, rec->u.mem.val, len))
     {
       if (record_debug)
 	fprintf_unfiltered (gdb_stdlog,
 			    "Process record: error reading memory at "
-			    "addr = 0x%s len = %d.\n",
-			    paddr_nz (addr), len);
+			    "addr = %s len = %d.\n",
+			    paddress (target_gdbarch, addr), len);
       xfree (rec->u.mem.val);
       xfree (rec);
       return -1;
@@ -306,6 +321,7 @@ record_arch_list_add_end (void)
   rec->prev = NULL;
   rec->next = NULL;
   rec->type = record_end;
+  rec->u.end.sigval = TARGET_SIGNAL_0;
 
   record_arch_list_add (rec);
 
@@ -352,11 +368,17 @@ record_message_cleanups (void *ignore)
   record_list_release (record_arch_list_tail);
 }
 
+struct record_message_args {
+  struct regcache *regcache;
+  enum target_signal signal;
+};
+
 static int
 record_message (void *args)
 {
   int ret;
-  struct regcache *regcache = args;
+  struct record_message_args *myargs = args;
+  struct gdbarch *gdbarch = get_regcache_arch (myargs->regcache);
   struct cleanup *old_cleanups = make_cleanup (record_message_cleanups, 0);
 
   record_arch_list_head = NULL;
@@ -365,9 +387,44 @@ record_message (void *args)
   /* Check record_insn_num.  */
   record_check_insn_num (1);
 
-  ret = gdbarch_process_record (get_regcache_arch (regcache),
-				regcache,
-				regcache_read_pc (regcache));
+  /* If gdb sends a signal value to target_resume,
+     save it in the 'end' field of the previous instruction.
+
+     Maybe process record should record what really happened,
+     rather than what gdb pretends has happened.
+
+     So if Linux delivered the signal to the child process during
+     the record mode, we will record it and deliver it again in
+     the replay mode.
+
+     If user says "ignore this signal" during the record mode, then
+     it will be ignored again during the replay mode (no matter if
+     the user says something different, like "deliver this signal"
+     during the replay mode).
+
+     User should understand that nothing he does during the replay
+     mode will change the behavior of the child.  If he tries,
+     then that is a user error.
+
+     But we should still deliver the signal to gdb during the replay,
+     if we delivered it during the recording.  Therefore we should
+     record the signal during record_wait, not record_resume.  */
+  if (record_list != &record_first)    /* FIXME better way to check */
+    {
+      gdb_assert (record_list->type == record_end);
+      record_list->u.end.sigval = myargs->signal;
+    }
+
+  if (myargs->signal == TARGET_SIGNAL_0
+      || !gdbarch_process_record_signal_p (gdbarch))
+    ret = gdbarch_process_record (gdbarch,
+				  myargs->regcache,
+				  regcache_read_pc (myargs->regcache));
+  else
+    ret = gdbarch_process_record_signal (gdbarch,
+					 myargs->regcache,
+					 myargs->signal);
+
   if (ret > 0)
     error (_("Process record: inferior program stopped."));
   if (ret < 0)
@@ -388,9 +445,14 @@ record_message (void *args)
 }
 
 static int
-do_record_message (struct regcache *regcache)
+do_record_message (struct regcache *regcache,
+		   enum target_signal signal)
 {
-  return catch_errors (record_message, regcache, NULL, RETURN_MASK_ALL);
+  struct record_message_args args;
+
+  args.regcache = regcache;
+  args.signal = signal;
+  return catch_errors (record_message, &args, NULL, RETURN_MASK_ALL);
 }
 
 /* Set to 1 if record_store_registers and record_xfer_partial
@@ -434,12 +496,8 @@ record_open (char *name, int from_tty)
 
   /* Check if record target is already running.  */
   if (current_target.to_stratum == record_stratum)
-    {
-      if (!nquery
-	  (_("Process record target already running, do you want to delete "
-	     "the old record log?")))
-	return;
-    }
+     error (_("Process record target already running.  Use \"record stop\" to "
+ 	     "stop record target first."));
 
   /*Reset the beneath function pointers.  */
   record_beneath_to_resume = NULL;
@@ -508,19 +566,17 @@ record_close (int quitting)
 }
 
 static int record_resume_step = 0;
-static enum target_signal record_resume_siggnal;
 static int record_resume_error;
 
 static void
 record_resume (struct target_ops *ops, ptid_t ptid, int step,
-               enum target_signal siggnal)
+               enum target_signal signal)
 {
   record_resume_step = step;
-  record_resume_siggnal = siggnal;
 
   if (!RECORD_IS_REPLAY)
     {
-      if (do_record_message (get_current_regcache ()))
+      if (do_record_message (get_current_regcache (), signal))
         {
           record_resume_error = 0;
         }
@@ -530,7 +586,7 @@ record_resume (struct target_ops *ops, ptid_t ptid, int step,
           return;
         }
       record_beneath_to_resume (record_beneath_to_resume_ops, ptid, 1,
-                                siggnal);
+                                signal);
     }
 }
 
@@ -592,7 +648,7 @@ record_wait (struct target_ops *ops,
 	{
 	  /* This is a single step.  */
 	  return record_beneath_to_wait (record_beneath_to_wait_ops,
-					 ptid, status, 0);
+					 ptid, status, options);
 	}
       else
 	{
@@ -603,17 +659,18 @@ record_wait (struct target_ops *ops,
 	  while (1)
 	    {
 	      ret = record_beneath_to_wait (record_beneath_to_wait_ops,
-					    ptid, status, 0);
+					    ptid, status, options);
 
+	      /* Is this a SIGTRAP?  */
 	      if (status->kind == TARGET_WAITKIND_STOPPED
 		  && status->value.sig == TARGET_SIGNAL_TRAP)
 		{
-		  /* Check if there is a breakpoint.  */
+		  /* Yes -- check if there is a breakpoint.  */
 		  registers_changed ();
 		  tmp_pc = regcache_read_pc (get_current_regcache ());
 		  if (breakpoint_inserted_here_p (tmp_pc))
 		    {
-		      /* There is a breakpoint.  */
+		      /* There is a breakpoint.  GDB will want to stop.  */
 		      CORE_ADDR decr_pc_after_break =
 			gdbarch_decr_pc_after_break
 			(get_regcache_arch (get_current_regcache ()));
@@ -625,14 +682,18 @@ record_wait (struct target_ops *ops,
 		    }
 		  else
 		    {
-		      /* There is not a breakpoint.  */
-		      if (!do_record_message (get_current_regcache ()))
+		      /* There is not a breakpoint, and gdb is not
+		         stepping, therefore gdb will not stop.
+			 Therefore we will not return to gdb.
+		         Record the insn and resume.  */
+		      if (!do_record_message (get_current_regcache (),
+					      TARGET_SIGNAL_0))
 			{
                           break;
 			}
 		      record_beneath_to_resume (record_beneath_to_resume_ops,
 						ptid, 1,
-						record_resume_siggnal);
+						TARGET_SIGNAL_0);
 		      continue;
 		    }
 		}
@@ -647,6 +708,7 @@ record_wait (struct target_ops *ops,
   else
     {
       struct regcache *regcache = get_current_regcache ();
+      struct gdbarch *gdbarch = get_regcache_arch (regcache);
       int continue_flag = 1;
       int first_record_end = 1;
       struct cleanup *old_cleanups = make_cleanup (record_wait_cleanups, 0);
@@ -662,14 +724,13 @@ record_wait (struct target_ops *ops,
 	    {
 	      if (record_debug)
 		fprintf_unfiltered (gdb_stdlog,
-				    "Process record: break at 0x%s.\n",
-				    paddr_nz (tmp_pc));
-	      if (gdbarch_decr_pc_after_break (get_regcache_arch (regcache))
+				    "Process record: break at %s.\n",
+				    paddress (gdbarch, tmp_pc));
+	      if (gdbarch_decr_pc_after_break (gdbarch)
 		  && !record_resume_step)
 		regcache_write_pc (regcache,
 				   tmp_pc +
-				   gdbarch_decr_pc_after_break
-				   (get_regcache_arch (regcache)));
+				   gdbarch_decr_pc_after_break (gdbarch));
 	      goto replay_out;
 	    }
 	}
@@ -725,32 +786,55 @@ record_wait (struct target_ops *ops,
 	  else if (record_list->type == record_mem)
 	    {
 	      /* mem */
-	      gdb_byte *mem = alloca (record_list->u.mem.len);
-	      if (record_debug > 1)
-		fprintf_unfiltered (gdb_stdlog,
-				    "Process record: record_mem %s to "
-				    "inferior addr = 0x%s len = %d.\n",
-				    host_address_to_string (record_list),
-				    paddr_nz (record_list->u.mem.addr),
-				    record_list->u.mem.len);
+	      /* Nothing to do if the entry is flagged not_accessible.  */
+	      if (!record_list->u.mem.mem_entry_not_accessible)
+		{
+		  gdb_byte *mem = alloca (record_list->u.mem.len);
+		  if (record_debug > 1)
+		    fprintf_unfiltered (gdb_stdlog,
+				        "Process record: record_mem %s to "
+				        "inferior addr = %s len = %d.\n",
+				        host_address_to_string (record_list),
+				        paddress (gdbarch,
+					          record_list->u.mem.addr),
+				        record_list->u.mem.len);
 
-	      if (target_read_memory
-		  (record_list->u.mem.addr, mem, record_list->u.mem.len))
-		error (_("Process record: error reading memory at "
-			 "addr = 0x%s len = %d."),
-		       paddr_nz (record_list->u.mem.addr),
-		       record_list->u.mem.len);
-
-	      if (target_write_memory
-		  (record_list->u.mem.addr, record_list->u.mem.val,
-		   record_list->u.mem.len))
-		error (_
-		       ("Process record: error writing memory at "
-			"addr = 0x%s len = %d."),
-		       paddr_nz (record_list->u.mem.addr),
-		       record_list->u.mem.len);
-
-	      memcpy (record_list->u.mem.val, mem, record_list->u.mem.len);
+		  if (target_read_memory (record_list->u.mem.addr, mem,
+		                          record_list->u.mem.len))
+	            {
+		      if (execution_direction != EXEC_REVERSE)
+		        error (_("Process record: error reading memory at "
+			         "addr = %s len = %d."),
+		               paddress (gdbarch, record_list->u.mem.addr),
+		               record_list->u.mem.len);
+		      else
+			/* Read failed -- 
+			   flag entry as not_accessible.  */
+		        record_list->u.mem.mem_entry_not_accessible = 1;
+		    }
+		  else
+		    {
+		      if (target_write_memory (record_list->u.mem.addr,
+			                       record_list->u.mem.val,
+		                               record_list->u.mem.len))
+	                {
+			  if (execution_direction != EXEC_REVERSE)
+			    error (_("Process record: error writing memory at "
+			             "addr = %s len = %d."),
+		                   paddress (gdbarch, record_list->u.mem.addr),
+		                   record_list->u.mem.len);
+			  else
+			    /* Write failed -- 
+			       flag entry as not_accessible.  */
+			    record_list->u.mem.mem_entry_not_accessible = 1;
+			}
+		      else
+		        {
+			  memcpy (record_list->u.mem.val, mem,
+				  record_list->u.mem.len);
+			}
+		    }
+		}
 	    }
 	  else
 	    {
@@ -788,17 +872,20 @@ record_wait (struct target_ops *ops,
 		      if (record_debug)
 			fprintf_unfiltered (gdb_stdlog,
 					    "Process record: break "
-					    "at 0x%s.\n",
-					    paddr_nz (tmp_pc));
-		      if (gdbarch_decr_pc_after_break (get_regcache_arch (regcache))
+					    "at %s.\n",
+					    paddress (gdbarch, tmp_pc));
+		      if (gdbarch_decr_pc_after_break (gdbarch)
 			  && execution_direction == EXEC_FORWARD
 			  && !record_resume_step)
 			regcache_write_pc (regcache,
 					   tmp_pc +
-					   gdbarch_decr_pc_after_break
-					   (get_regcache_arch (regcache)));
+					   gdbarch_decr_pc_after_break (gdbarch));
 		      continue_flag = 0;
 		    }
+		  /* Check target signal */
+		  if (record_list->u.end.sigval != TARGET_SIGNAL_0)
+		    /* FIXME: better way to check */
+		    continue_flag = 0;
 		}
 	    }
 
@@ -823,6 +910,9 @@ record_wait (struct target_ops *ops,
 replay_out:
       if (record_get_sig)
 	status->value.sig = TARGET_SIGNAL_INT;
+      else if (record_list->u.end.sigval != TARGET_SIGNAL_0)
+	/* FIXME: better way to check */
+	status->value.sig = record_list->u.end.sigval;
       else
 	status->value.sig = TARGET_SIGNAL_TRAP;
 
@@ -931,20 +1021,19 @@ record_store_registers (struct target_ops *ops, struct regcache *regcache,
       if (RECORD_IS_REPLAY)
 	{
 	  int n;
-	  struct cleanup *old_cleanups;
 
 	  /* Let user choose if he wants to write register or not.  */
 	  if (regno < 0)
 	    n =
-	      nquery (_("Because GDB is in replay mode, changing the "
-			"value of a register will make the execution "
-			"log unusable from this point onward.  "
-			"Change all registers?"));
+	      query (_("Because GDB is in replay mode, changing the "
+		       "value of a register will make the execution "
+		       "log unusable from this point onward.  "
+		       "Change all registers?"));
 	  else
 	    n =
-	      nquery (_("Because GDB is in replay mode, changing the value "
-			"of a register will make the execution log unusable "
-			"from this point onward.  Change register %s?"),
+	      query (_("Because GDB is in replay mode, changing the value "
+		       "of a register will make the execution log unusable "
+		       "from this point onward.  Change register %s?"),
 		      gdbarch_register_name (get_regcache_arch (regcache),
 					       regno));
 
@@ -992,11 +1081,11 @@ record_xfer_partial (struct target_ops *ops, enum target_object object,
       if (RECORD_IS_REPLAY)
 	{
 	  /* Let user choose if he wants to write memory or not.  */
-	  if (!nquery (_("Because GDB is in replay mode, writing to memory "
-		         "will make the execution log unusable from this "
-		         "point onward.  Write memory at address 0x%s?"),
-		       paddr_nz (offset)))
-	    return -1;
+	  if (!query (_("Because GDB is in replay mode, writing to memory "
+		        "will make the execution log unusable from this "
+		        "point onward.  Write memory at address %s?"),
+		       paddress (target_gdbarch, offset)))
+	    error (_("Process record canceled the operation."));
 
 	  /* Destroy the record from here forward.  */
 	  record_list_release_next ();
@@ -1046,12 +1135,13 @@ record_xfer_partial (struct target_ops *ops, enum target_object object,
    nor when recording.  */
 
 static int
-record_insert_breakpoint (struct bp_target_info *bp_tgt)
+record_insert_breakpoint (struct gdbarch *gdbarch,
+			  struct bp_target_info *bp_tgt)
 {
   if (!RECORD_IS_REPLAY)
     {
       struct cleanup *old_cleanups = record_gdb_operation_disable_set ();
-      int ret = record_beneath_to_insert_breakpoint (bp_tgt);
+      int ret = record_beneath_to_insert_breakpoint (gdbarch, bp_tgt);
 
       do_cleanups (old_cleanups);
 
@@ -1062,12 +1152,13 @@ record_insert_breakpoint (struct bp_target_info *bp_tgt)
 }
 
 static int
-record_remove_breakpoint (struct bp_target_info *bp_tgt)
+record_remove_breakpoint (struct gdbarch *gdbarch,
+			  struct bp_target_info *bp_tgt)
 {
   if (!RECORD_IS_REPLAY)
     {
       struct cleanup *old_cleanups = record_gdb_operation_disable_set ();
-      int ret = record_beneath_to_remove_breakpoint (bp_tgt);
+      int ret = record_beneath_to_remove_breakpoint (gdbarch, bp_tgt);
 
       do_cleanups (old_cleanups);
 
@@ -1154,9 +1245,9 @@ cmd_record_stop (char *args, int from_tty)
 {
   if (current_target.to_stratum == record_stratum)
     {
-      if (!record_list || !from_tty || query (_("Delete recorded log and "
-	                                        "stop recording?")))
-	unpush_target (&record_ops);
+      unpush_target (&record_ops);
+      printf_unfiltered (_("Process record is stoped and all execution "
+                           "log is deleted.\n"));
     }
   else
     printf_unfiltered (_("Process record is not started.\n"));
@@ -1261,15 +1352,15 @@ _initialize_record (void)
 
   /* Record instructions number limit command.  */
   add_setshow_boolean_cmd ("stop-at-limit", no_class,
-			    &record_stop_at_limit, _("\
+			   &record_stop_at_limit, _("\
 Set whether record/replay stops when record/replay buffer becomes full."), _("\
 Show whether record/replay stops when record/replay buffer becomes full."), _("\
 Default is ON.\n\
 When ON, if the record/replay buffer becomes full, ask user what to do.\n\
 When OFF, if the record/replay buffer becomes full,\n\
 delete the oldest recorded instruction to make room for each new one."),
-			    NULL, NULL,
-                            &set_record_cmdlist, &show_record_cmdlist);
+			   NULL, NULL,
+			   &set_record_cmdlist, &show_record_cmdlist);
   add_setshow_zinteger_cmd ("insn-number-max", no_class,
 			    &record_insn_max_num,
 			    _("Set record/replay buffer limit."),
@@ -1279,6 +1370,6 @@ record/replay buffer.  Zero means unlimited.  Default is 200000."),
 			    set_record_insn_max_num,
 			    NULL, &set_record_cmdlist, &show_record_cmdlist);
   add_cmd ("insn-number", class_obscure, show_record_insn_number,
-	    _("Show the current number of instructions in the "
-	      "record/replay buffer."), &info_record_cmdlist);
+	   _("Show the current number of instructions in the "
+	     "record/replay buffer."), &info_record_cmdlist);
 }
