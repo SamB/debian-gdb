@@ -1,3 +1,19 @@
+gdb (7.0.1-1) unstable; urgency=low
+
+  * New upstream release.
+  * Avoid hardcoded "debian" in the binary using lsb_release (from
+    Matthias Klose).
+  * Use DEB_MAKE_ENVVARS for 64-bit builds also (from Matthias Klose).
+  * Build depend on gcj-jdk | gcj (from Matthias Klose).
+  * Add gdb-source package (Closes: #550755).
+  * Move gdbserver into its own package (Closes: #562651).
+  * Add gdb-minimal package (Closes: #560786).
+  * Update to Standards-Version: 3.8.3.
+  * Package /usr/share/gdb.
+  * Switch to 3.0 (quilt) source package format.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sat, 30 Jan 2010 15:16:35 -0500
+
 gdb (7.0-1) unstable; urgency=low
 
   * New upstream release (Closes: #550567).

@@ -7,9 +7,17 @@ gdb/
 	* config.in: Regenerate.
 	* configure: Regenerate.
 
---- a/gdb/configure.ac
-+++ b/gdb/configure.ac
-@@ -536,6 +536,21 @@ if test "$with_system_readline" = yes; then
+---
+ gdb/config.in    |    3 ++
+ gdb/configure    |   63 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ gdb/configure.ac |   15 +++++++++++++
+ 3 files changed, 81 insertions(+)
+
+Index: gdb-7.0.1/gdb/configure.ac
+===================================================================
+--- gdb-7.0.1.orig/gdb/configure.ac	2010-01-30 16:23:17.000000000 -0500
++++ gdb-7.0.1/gdb/configure.ac	2010-01-30 16:24:39.000000000 -0500
+@@ -534,6 +534,21 @@ if test "$with_system_readline" = yes; t
    READLINE=-lreadline
    READLINE_DEPS=
    READLINE_CFLAGS=
@@ -31,9 +39,11 @@ gdb/
  else
    READLINE='$(READLINE_DIR)/libreadline.a'
    READLINE_DEPS='$(READLINE)'
---- a/gdb/config.in
-+++ b/gdb/config.in
-@@ -790,6 +790,9 @@
+Index: gdb-7.0.1/gdb/config.in
+===================================================================
+--- gdb-7.0.1.orig/gdb/config.in	2010-01-30 16:23:17.000000000 -0500
++++ gdb-7.0.1/gdb/config.in	2010-01-30 16:24:39.000000000 -0500
+@@ -792,6 +792,9 @@
  /* Define to `int' if <sys/types.h> does not define. */
  #undef pid_t
  
@@ -43,9 +53,11 @@ gdb/
  /* Define to the equivalent of the C99 'restrict' keyword, or to
     nothing if this is not supported.  Do not define if restrict is
     supported directly.  */
---- a/gdb/configure
-+++ b/gdb/configure
-@@ -10763,6 +10763,69 @@ if test "$with_system_readline" = yes; then
+Index: gdb-7.0.1/gdb/configure
+===================================================================
+--- gdb-7.0.1.orig/gdb/configure	2010-01-30 16:23:17.000000000 -0500
++++ gdb-7.0.1/gdb/configure	2010-01-30 16:24:39.000000000 -0500
+@@ -8431,6 +8431,69 @@ if test "$with_system_readline" = yes; t
    READLINE=-lreadline
    READLINE_DEPS=
    READLINE_CFLAGS=
@@ -115,5 +127,3 @@ gdb/
  else
    READLINE='$(READLINE_DIR)/libreadline.a'
    READLINE_DEPS='$(READLINE)'
-
-

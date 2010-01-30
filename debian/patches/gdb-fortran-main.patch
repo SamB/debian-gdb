@@ -20,11 +20,11 @@ might disturb the debugging.  But I am not sure how much it is.
  gdb/testsuite/gdb.fortran/lang.exp |   40 +++++++++++++++++++++++++++++++++++++
  2 files changed, 46 insertions(+), 2 deletions(-)
 
-Index: gdb-6.8.50.20090628/gdb/symtab.c
+Index: gdb-7.0.1/gdb/symtab.c
 ===================================================================
---- gdb-6.8.50.20090628.orig/gdb/symtab.c	2009-06-27 20:20:21.000000000 -0400
-+++ gdb-6.8.50.20090628/gdb/symtab.c	2009-07-03 18:45:11.000000000 -0400
-@@ -4532,8 +4532,12 @@ find_main_name (void)
+--- gdb-7.0.1.orig/gdb/symtab.c	2010-01-30 16:23:17.000000000 -0500
++++ gdb-7.0.1/gdb/symtab.c	2010-01-30 16:24:37.000000000 -0500
+@@ -4534,8 +4534,12 @@ find_main_name (void)
      }
  
    /* The languages above didn't identify the name of the main procedure.
@@ -39,10 +39,10 @@ Index: gdb-6.8.50.20090628/gdb/symtab.c
  }
  
  char *
-Index: gdb-6.8.50.20090628/gdb/testsuite/gdb.fortran/lang.exp
+Index: gdb-7.0.1/gdb/testsuite/gdb.fortran/lang.exp
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ gdb-6.8.50.20090628/gdb/testsuite/gdb.fortran/lang.exp	2009-07-03 18:45:11.000000000 -0400
++++ gdb-7.0.1/gdb/testsuite/gdb.fortran/lang.exp	2010-01-30 16:24:37.000000000 -0500
 @@ -0,0 +1,40 @@
 +# Copyright 2005 Free Software Foundation, Inc.
 +

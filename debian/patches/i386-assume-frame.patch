@@ -7,10 +7,10 @@
  gdb/i386-tdep.c |    4 +++-
  1 file changed, 3 insertions(+), 1 deletion(-)
 
-Index: gdb-7.0/gdb/i386-tdep.c
+Index: gdb-7.0.1/gdb/i386-tdep.c
 ===================================================================
---- gdb-7.0.orig/gdb/i386-tdep.c	2009-09-28 03:20:45.000000000 -0400
-+++ gdb-7.0/gdb/i386-tdep.c	2009-10-11 17:27:01.000000000 -0400
+--- gdb-7.0.1.orig/gdb/i386-tdep.c	2010-01-30 16:23:17.000000000 -0500
++++ gdb-7.0.1/gdb/i386-tdep.c	2010-01-30 16:24:38.000000000 -0500
 @@ -1394,12 +1394,14 @@ i386_frame_cache (struct frame_info *thi
  	  /* This will be added back below.  */
  	  cache->saved_regs[I386_EIP_REGNUM] -= cache->base;

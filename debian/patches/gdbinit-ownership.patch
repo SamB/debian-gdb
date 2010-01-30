@@ -6,11 +6,11 @@ several problems with the implementation.  It needs to be revisited.
  gdb/main.c         |    4 ++--
  2 files changed, 42 insertions(+), 6 deletions(-)
 
-Index: gdb-6.8.50.20090628/gdb/cli/cli-cmds.c
+Index: gdb-7.0.1/gdb/cli/cli-cmds.c
 ===================================================================
---- gdb-6.8.50.20090628.orig/gdb/cli/cli-cmds.c	2009-06-27 20:20:21.000000000 -0400
-+++ gdb-6.8.50.20090628/gdb/cli/cli-cmds.c	2009-07-03 18:44:51.000000000 -0400
-@@ -36,6 +36,7 @@
+--- gdb-7.0.1.orig/gdb/cli/cli-cmds.c	2010-01-30 16:23:17.000000000 -0500
++++ gdb-7.0.1/gdb/cli/cli-cmds.c	2010-01-30 16:24:35.000000000 -0500
+@@ -37,6 +37,7 @@
  #include "objfiles.h"
  #include "source.h"
  #include "disasm.h"
@@ -18,7 +18,7 @@ Index: gdb-6.8.50.20090628/gdb/cli/cli-cmds.c
  
  #include "ui-out.h"
  
-@@ -432,6 +433,10 @@ cd_command (char *dir, int from_tty)
+@@ -437,6 +438,10 @@ cd_command (char *dir, int from_tty)
      pwd_command ((char *) 0, 1);
  }
  
@@ -29,7 +29,7 @@ Index: gdb-6.8.50.20090628/gdb/cli/cli-cmds.c
  void
  source_script (char *file, int from_tty)
  {
-@@ -441,9 +446,7 @@ source_script (char *file, int from_tty)
+@@ -446,9 +451,7 @@ source_script (char *file, int from_tty)
    int fd;
  
    if (file == NULL || *file == 0)
@@ -40,7 +40,7 @@ Index: gdb-6.8.50.20090628/gdb/cli/cli-cmds.c
  
    file = tilde_expand (file);
    old_cleanups = make_cleanup (xfree, file);
-@@ -462,7 +465,7 @@ source_script (char *file, int from_tty)
+@@ -467,7 +470,7 @@ source_script (char *file, int from_tty)
  
    if (fd == -1)
      {
@@ -49,7 +49,7 @@ Index: gdb-6.8.50.20090628/gdb/cli/cli-cmds.c
  	perror_with_name (file);
        else
  	{
-@@ -472,6 +475,39 @@ source_script (char *file, int from_tty)
+@@ -477,6 +480,39 @@ source_script (char *file, int from_tty)
      }
  
    stream = fdopen (fd, FOPEN_RT);
@@ -89,10 +89,10 @@ Index: gdb-6.8.50.20090628/gdb/cli/cli-cmds.c
    script_from_file (stream, file);
  
    do_cleanups (old_cleanups);
-Index: gdb-6.8.50.20090628/gdb/main.c
+Index: gdb-7.0.1/gdb/main.c
 ===================================================================
---- gdb-6.8.50.20090628.orig/gdb/main.c	2009-06-27 20:20:21.000000000 -0400
-+++ gdb-6.8.50.20090628/gdb/main.c	2009-07-03 18:43:51.000000000 -0400
+--- gdb-7.0.1.orig/gdb/main.c	2010-01-30 16:23:17.000000000 -0500
++++ gdb-7.0.1/gdb/main.c	2010-01-30 16:24:35.000000000 -0500
 @@ -781,7 +781,7 @@ Excess command line arguments ignored. (
       debugging or what directory you are in.  */
  
