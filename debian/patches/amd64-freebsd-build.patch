@@ -1,0 +1,30 @@
+From Petr Salinger in Bug#561924:
+
+Hi,
+
+the current version fails to build on GNU/kFreeBSD with 8.x kernel 
+headers.
+
+The FreeBSD 8.0 kernel does not have segment registers in pcb anymore.
+To solve current FTBFS please just use patch bellow.
+
+Sorry for the inconvenience.
+
+
+---
+ gdb/amd64fbsd-nat.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Index: gdb-7.0.1/gdb/amd64fbsd-nat.c
+===================================================================
+--- gdb-7.0.1.orig/gdb/amd64fbsd-nat.c	2010-02-02 15:35:25.000000000 -0500
++++ gdb-7.0.1/gdb/amd64fbsd-nat.c	2010-02-02 15:38:02.000000000 -0500
+@@ -124,7 +124,7 @@ amd64fbsd_supply_pcb (struct regcache *r
+   regcache_raw_supply (regcache, 13, &pcb->pcb_r13);
+   regcache_raw_supply (regcache, 14, &pcb->pcb_r14);
+   regcache_raw_supply (regcache, 15, &pcb->pcb_r15);
+-#if (__FreeBSD_version <  800075)
++#if (__FreeBSD_version < 800000) &&  (__FreeBSD_kernel_version < 800000)
+   regcache_raw_supply (regcache, AMD64_DS_REGNUM, &pcb->pcb_ds);
+   regcache_raw_supply (regcache, AMD64_ES_REGNUM, &pcb->pcb_es);
+   regcache_raw_supply (regcache, AMD64_FS_REGNUM, &pcb->pcb_fs);

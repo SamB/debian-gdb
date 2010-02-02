@@ -47,6 +47,7 @@ Package: gdbserver
 Architecture: amd64 armel i386 ia64 mips mipsel powerpc s390
 Section: devel
 Depends: ${shlibs:Depends}, ${misc:Depends}
+Replaces: gdb (<< 7.0.1-1)
 Description: The GNU Debugger (remote server)
  GDB is a source-level debugger, capable of breaking programs at
  any specific line, displaying variable values, and determining

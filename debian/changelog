@@ -1,3 +1,10 @@
+gdb (7.0.1-2) unstable; urgency=low
+
+  * Add Replaces to the new gdbserver package (Closes: #567925, #568018).
+  * Add patch to fix FreeBSD build (Closes: #561924).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Tue, 02 Feb 2010 14:59:41 -0500
+
 gdb (7.0.1-1) unstable; urgency=low
 
   * New upstream release.

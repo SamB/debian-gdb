@@ -8,3 +8,4 @@ man-page-args.patch
 i386-assume-frame.patch
 gdb-readline-6.0.patch
 man-page-order.patch
+amd64-freebsd-build.patch
