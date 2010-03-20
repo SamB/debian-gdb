@@ -218,6 +218,8 @@ binary-post-install/gdb64 ::
 	install -d debian/gdb64/usr/bin
 	install -s -m 755 $(BUILDDIR64)/gdb/gdb debian/gdb64/usr/bin/gdb64
 	dh_link -pgdb64 usr/share/man/man1/gdb.1 usr/share/man/man1/gdb64.1
+	rm -rf debian/gdb64/usr/share/doc/gdb64
+	ln -s gdb debian/gdb64/usr/share/doc/gdb64
 
 binary-post-install/gdb-minimal ::
 	install -d debian/gdb-minimal/usr/bin
@@ -236,6 +238,8 @@ binary-post-install/libgdb-dev ::
 	if test -e $(DEB_BUILDDIR)/sim/*/libsim.a; then \
 	  install -m 644 $(DEB_BUILDDIR)/sim/*/libsim.a debian/libgdb-dev/usr/lib/; \
 	fi
+	rm -rf debian/libgdb-dev/usr/share/doc/libgdb-dev
+	ln -s gdb debian/libgdb-dev/usr/share/doc/libgdb-dev
 
 binary-post-install/gdb-source ::
 	install -d debian/gdb-source/usr/src
@@ -245,6 +249,8 @@ binary-post-install/gdb-source ::
 	cd $(dir $(BUILDDIRSOURCE)) \
 	  && tar -cjf $(shell pwd)/debian/gdb-source/usr/src/gdb.tar.bz2 \
 	     $(notdir $(BUILDDIRSOURCE))
+	rm -rf debian/gdb-source/usr/share/doc/gdb-source
+	ln -s gdb debian/gdb-source/usr/share/doc/gdb-source
 
 debian/control:: debian/control.in $(CROSS_FORCE)
 	cat debian/control.in \
@@ -257,6 +263,9 @@ ifeq ($(DEB_CROSS),yes)
 	cp debian/gdb.install debian/gdb$(TS).install
 endif
 
+# The default changelog is the top level one, which is useless.
+DEB_INSTALL_CHANGELOGS_ALL =
+
 DEB_INSTALL_DOCS_gdb$(TS) = gdb/NEWS gdb/README gdb/doc/refcard.tex \
 	$(DEB_BUILDDIR)/gdb/doc/refcard.dvi \
 	$(DEB_BUILDDIR)/gdb/doc/refcard.ps
@@ -265,8 +274,11 @@ ifneq ($(DEB_CROSS),yes)
 DEB_INSTALL_MANPAGES_gdb$(TS) = debian/gcore.1
 endif
 
-DEB_INSTALL_DOCS_libgdb-dev = gdb/NEWS gdb/README
-DEB_INSTALL_CHANGELOGS_libgdb-dev = gdb/ChangeLog
+DEB_INSTALL_DOCS_gdbserver = gdb/gdbserver/README
+DEB_INSTALL_CHANGELOGS_gdbserver = -XChangeLog
+
+DEB_INSTALL_DOCS_gdb-minimal = $(DEB_INSTALL_DOCS_gdb$(TS))
+DEB_INSTALL_CHANGELOGS_gdb-minimal = -XChangeLog
 
 .PHONY: FORCE
 FORCE:

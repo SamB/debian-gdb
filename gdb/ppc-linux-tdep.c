@@ -1,7 +1,7 @@
 /* Target-dependent code for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -516,25 +516,25 @@ ppc64_standard_linkage1_target (struct frame_info *frame,
 
 static struct core_regset_section ppc_linux_vsx_regset_sections[] =
 {
-  { ".reg", 268 },
-  { ".reg2", 264 },
-  { ".reg-ppc-vmx", 544 },
-  { ".reg-ppc-vsx", 256 },
+  { ".reg", 268, "general-purpose" },
+  { ".reg2", 264, "floating-point" },
+  { ".reg-ppc-vmx", 544, "ppc Altivec" },
+  { ".reg-ppc-vsx", 256, "POWER7 VSX" },
   { NULL, 0}
 };
 
 static struct core_regset_section ppc_linux_vmx_regset_sections[] =
 {
-  { ".reg", 268 },
-  { ".reg2", 264 },
-  { ".reg-ppc-vmx", 544 },
+  { ".reg", 268, "general-purpose" },
+  { ".reg2", 264, "floating-point" },
+  { ".reg-ppc-vmx", 544, "ppc Altivec" },
   { NULL, 0}
 };
 
 static struct core_regset_section ppc_linux_fp_regset_sections[] =
 {
-  { ".reg", 268 },
-  { ".reg2", 264 },
+  { ".reg", 268, "general-purpose" },
+  { ".reg2", 264, "floating-point" },
   { NULL, 0}
 };
 
@@ -1421,7 +1421,8 @@ ppu2spu_sniffer (const struct frame_unwind *self,
 	  struct ppu2spu_cache *cache
 	    = FRAME_OBSTACK_CALLOC (1, struct ppu2spu_cache);
 
-	  struct regcache *regcache = regcache_xmalloc (data.gdbarch);
+	  struct address_space *aspace = get_frame_address_space (this_frame);
+	  struct regcache *regcache = regcache_xmalloc (data.gdbarch, aspace);
 	  struct cleanup *cleanups = make_cleanup_regcache_xfree (regcache);
 	  regcache_save (regcache, ppu2spu_unwind_register, &data);
 	  discard_cleanups (cleanups);

@@ -3,7 +3,7 @@
 # Architecture commands for GDB, the GNU debugger.
 #
 # Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
-# 2008, 2009 Free Software Foundation, Inc.
+# 2008, 2009, 2010 Free Software Foundation, Inc.
 #
 # This file is part of GDB.
 #
@@ -22,8 +22,8 @@
 
 # Make certain that the script is not running in an internationalized
 # environment.
-LANG=c ; export LANG
-LC_ALL=c ; export LC_ALL
+LANG=C ; export LANG
+LC_ALL=C ; export LC_ALL
 
 
 compare_new ()
@@ -486,6 +486,10 @@ m:CORE_ADDR:skip_prologue:CORE_ADDR ip:ip:0:0
 M:CORE_ADDR:skip_main_prologue:CORE_ADDR ip:ip
 f:int:inner_than:CORE_ADDR lhs, CORE_ADDR rhs:lhs, rhs:0:0
 m:const gdb_byte *:breakpoint_from_pc:CORE_ADDR *pcptr, int *lenptr:pcptr, lenptr::0:
+# Return the adjusted address and kind to use for Z0/Z1 packets.
+# KIND is usually the memory length of the breakpoint, but may have a
+# different target-specific meaning.
+m:void:remote_breakpoint_from_pc:CORE_ADDR *pcptr, int *kindptr:pcptr, kindptr:0:default_remote_breakpoint_from_pc::0
 M:CORE_ADDR:adjust_breakpoint_address:CORE_ADDR bpaddr:bpaddr
 m:int:memory_insert_breakpoint:struct bp_target_info *bp_tgt:bp_tgt:0:default_memory_insert_breakpoint::0
 m:int:memory_remove_breakpoint:struct bp_target_info *bp_tgt:bp_tgt:0:default_memory_remove_breakpoint::0
@@ -756,6 +760,15 @@ v:int:has_global_solist:::0:0::0
 # visible to all address spaces automatically.  For such cases,
 # this property should be set to true.
 v:int:has_global_breakpoints:::0:0::0
+
+# True if inferiors share an address space (e.g., uClinux).
+m:int:has_shared_address_space:void:::default_has_shared_address_space::0
+
+# True if a fast tracepoint can be set at an address.
+m:int:fast_tracepoint_valid_at:CORE_ADDR addr, int *isize, char **msg:addr, isize, msg::default_fast_tracepoint_valid_at::0
+
+# Not NULL if a target has additonal field for qSupported.
+v:const char *:qsupported:::0:0::0:gdbarch->qsupported
 EOF
 }
 
@@ -808,8 +821,8 @@ cat <<EOF
 
 /* Dynamic architecture support for GDB, the GNU debugger.
 
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
-   Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+   2007, 2008, 2009 Free Software Foundation, Inc.
 
    This file is part of GDB.
 

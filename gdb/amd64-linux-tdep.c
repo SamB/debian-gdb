@@ -1,6 +1,6 @@
 /* Target-dependent code for GNU/Linux x86-64.
 
-   Copyright (C) 2001, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Copyright (C) 2001, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
    Contributed by Jiri Smid, SuSE Labs.
 
@@ -262,7 +262,7 @@ amd64_linux_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
     return (group == system_reggroup
             || group == save_reggroup
             || group == restore_reggroup);
-  return default_register_reggroup_p (gdbarch, regnum, group);
+  return i386_register_reggroup_p (gdbarch, regnum, group);
 }
 
 /* Set the program counter for process PTID to PC.  */

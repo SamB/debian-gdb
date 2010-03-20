@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2008, 2009 Free Software Foundation, Inc.
+   Copyright 2008, 2009, 2010 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -53,6 +53,8 @@ main (int argc, char *argv[])
   PTR x = &s;
   char st[17] = "divide et impera";
   char nullst[17] = "divide\0et\0impera";
+  const char *sptr = "pointer";
+  const char *embed = "embedded x\201\202\203\204";
   int a[3] = {1,2,3};
   int *p = a;
   int i = 2;

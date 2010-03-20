@@ -2,7 +2,7 @@
 
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
    1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008,
-   2009 Free Software Foundation, Inc.
+   2009, 2010 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -30,6 +30,7 @@
 #include "value.h"
 #include "completer.h"
 #include "cp-abi.h"
+#include "cp-support.h"
 #include "parser-defs.h"
 #include "block.h"
 #include "objc-lang.h"
@@ -185,7 +186,7 @@ total_number_of_methods (struct type *type)
   int count;
 
   CHECK_TYPEDEF (type);
-  if (TYPE_CPLUS_SPECIFIC (type) == NULL)
+  if (! HAVE_CPLUS_STRUCT (type))
     return 0;
   count = TYPE_NFN_FIELDS_TOTAL (type);
 
@@ -312,7 +313,10 @@ add_matching_methods (int method_counter, struct type *t,
 				   NULL, VAR_DOMAIN,
 				   language,
 				   (int *) NULL);
-      if (sym_arr[i1])
+      /* See PR10966.  Remove check on symbol domain and class when
+	 we stop using (bad) linkage names on constructors.  */
+      if (sym_arr[i1] && (SYMBOL_DOMAIN (sym_arr[i1]) == VAR_DOMAIN
+			  && SYMBOL_CLASS (sym_arr[i1]) == LOC_BLOCK))
 	i1++;
       else
 	{
@@ -697,6 +701,8 @@ decode_line_1 (char **argptr, int funfirstline, struct symtab *default_symtab,
   int is_quote_enclosed;
   int is_objc_method = 0;
   char *saved_arg = *argptr;
+  /* If IS_QUOTED, the end of the quoted bit.  */
+  char *end_quote = NULL;
 
   if (not_found_ptr)
     *not_found_ptr = 0;
@@ -716,6 +722,8 @@ decode_line_1 (char **argptr, int funfirstline, struct symtab *default_symtab,
   */
 
   set_flags (*argptr, &is_quoted, &paren_pointer);
+  if (is_quoted)
+    end_quote = skip_quoted (*argptr);
 
   /* Check to see if it's a multipart linespec (with colons or
      periods).  */
@@ -746,13 +754,13 @@ decode_line_1 (char **argptr, int funfirstline, struct symtab *default_symtab,
       return values;
   }
 
+  if (is_quoted)
+    *argptr = *argptr + 1;
+
   /* Does it look like there actually were two parts?  */
 
-  if ((p[0] == ':' || p[0] == '.') && paren_pointer == NULL)
+  if (p[0] == ':' || p[0] == '.')
     {
-      if (is_quoted)
-	*argptr = *argptr + 1;
-      
       /* Is it a C++ or Java compound data structure?
 	 The check on p[1] == ':' is capturing the case of "::",
 	 since p[0]==':' was checked above.  
@@ -761,14 +769,30 @@ decode_line_1 (char **argptr, int funfirstline, struct symtab *default_symtab,
 	 can return now. */
 	
       if (p[0] == '.' || p[1] == ':')
-	return decode_compound (argptr, funfirstline, canonical,
-				saved_arg, p, not_found_ptr);
+	{
+	  if (paren_pointer == NULL)
+	    return decode_compound (argptr, funfirstline, canonical,
+				    saved_arg, p, not_found_ptr);
+	  /* Otherwise, fall through to decode_variable below.  */
+	}
+      else
+	{
+	  /* No, the first part is a filename; set file_symtab to be that file's
+	     symtab.  Also, move argptr past the filename.  */
 
-      /* No, the first part is a filename; set file_symtab to be that file's
-	 symtab.  Also, move argptr past the filename.  */
+	  file_symtab = symtab_from_filename (argptr, p, is_quote_enclosed,
+					      not_found_ptr);
 
-      file_symtab = symtab_from_filename (argptr, p, is_quote_enclosed, 
-		      			  not_found_ptr);
+	  /* Check for single quotes on the non-filename part.  */
+	  if (!is_quoted)
+	    {
+	      is_quoted = (**argptr
+			   && strchr (get_gdb_completer_quote_characters (),
+				      **argptr) != NULL);
+	      if (is_quoted)
+		end_quote = skip_quoted (*argptr);
+	    }
+	}
     }
 #if 0
   /* No one really seems to know why this was added. It certainly
@@ -828,7 +852,7 @@ decode_line_1 (char **argptr, int funfirstline, struct symtab *default_symtab,
     p = skip_quoted (*argptr + (((*argptr)[1] == '$') ? 2 : 1));
   else if (is_quoted)
     {
-      p = skip_quoted (*argptr);
+      p = end_quote;
       if (p[-1] != '\'')
 	error (_("Unmatched single quote."));
     }
@@ -861,6 +885,8 @@ decode_line_1 (char **argptr, int funfirstline, struct symtab *default_symtab,
       copy[p - *argptr - 1] = '\0';
       copy++;
     }
+  else if (is_quoted)
+    copy[p - *argptr - 1] = '\0';
   while (*p == ' ' || *p == '\t')
     p++;
   *argptr = p;
@@ -1171,11 +1197,19 @@ decode_objc (char **argptr, int funfirstline, struct symtab *file_symtab,
 	}
       else
 	{
-	  /* The only match was a non-debuggable symbol.  */
-	  values.sals[0].symtab = NULL;
-	  values.sals[0].line = 0;
-	  values.sals[0].end = 0;
-	  values.sals[0].pc = SYMBOL_VALUE_ADDRESS (sym_arr[0]);
+	  /* The only match was a non-debuggable symbol, which might point
+	     to a function descriptor; resolve it to the actual code address
+	     instead.  */
+	  struct minimal_symbol *msymbol = (struct minimal_symbol *)sym_arr[0];
+	  struct objfile *objfile = msymbol_objfile (msymbol);
+	  struct gdbarch *gdbarch = get_objfile_arch (objfile);
+	  CORE_ADDR pc = SYMBOL_VALUE_ADDRESS (msymbol);
+
+	  pc = gdbarch_convert_from_func_ptr_addr (gdbarch, pc,
+						   &current_target);
+
+	  init_sal (&values.sals[0]);
+	  values.sals[0].pc = pc;
 	}
       return values;
     }
@@ -1257,6 +1291,9 @@ decode_compound (char **argptr, int funfirstline, char ***canonical,
       /* Move pointer ahead to next double-colon.  */
       while (*p && (p[0] != ' ') && (p[0] != '\t') && (p[0] != '\''))
 	{
+	  if (current_language->la_language == language_cplus)
+	    p += cp_validate_operator (p);
+
 	  if (p[0] == '<')
 	    {
 	      temp_end = find_template_name_end (p);
@@ -1334,6 +1371,15 @@ decode_compound (char **argptr, int funfirstline, char ***canonical,
 	  while (*p && *p != ' ' && *p != '\t' && *p != ',' && *p != ':')
 	    p++;
 	  /* At this point p->"".  String ended.  */
+	  /* Nope, C++ operators could have spaces in them
+	     ("foo::operator <" or "foo::operator delete []").
+	     I apologize, this is a bit hacky...  */
+	  if (current_language->la_language == language_cplus
+	      && *p == ' ' && p - 8 - *argptr + 1 > 0)
+	    {
+	      /* The above loop has already swallowed "operator".  */
+	      p += cp_validate_operator (p - 8) - 8;
+	    }
 	}
 
       /* Allocate our own copy of the substring between argptr and
@@ -1407,6 +1453,7 @@ lookup_prefix_sym (char **argptr, char *p)
 {
   char *p1;
   char *copy;
+  struct symbol *sym;
 
   /* Extract the class name.  */
   p1 = p;
@@ -1425,7 +1472,26 @@ lookup_prefix_sym (char **argptr, char *p)
   /* At this point p1->"::inA::fun", p->"inA::fun" copy->"AAA",
      argptr->"inA::fun" */
 
-  return lookup_symbol (copy, 0, STRUCT_DOMAIN, 0);
+  sym = lookup_symbol (copy, 0, STRUCT_DOMAIN, 0);
+  if (sym == NULL)
+    {
+      /* Typedefs are in VAR_DOMAIN so the above symbol lookup will
+	 fail when the user attempts to lookup a method of a class
+	 via a typedef'd name (NOT via the class's name, which is already
+	 handled in symbol_matches_domain).  So try the lookup again
+	 using VAR_DOMAIN (where typedefs live) and double-check that we
+	 found a struct/class type.  */
+      struct symbol *s = lookup_symbol (copy, 0, VAR_DOMAIN, 0);
+      if (s != NULL)
+	{
+	  struct type *t = SYMBOL_TYPE (s);
+	  CHECK_TYPEDEF (t);
+	  if (TYPE_CODE (t) == TYPE_CODE_STRUCT)
+	    return s;
+	}
+    }
+
+  return sym;
 }
 
 /* This finds the method COPY in the class whose type is T and whose
@@ -1474,26 +1540,16 @@ find_method (int funfirstline, char ***canonical, char *saved_arg,
     }
   else
     {
-      char *tmp;
-
-      if (is_operator_name (copy))
-	{
-	  tmp = (char *) alloca (strlen (copy + 3) + 9);
-	  strcpy (tmp, "operator ");
-	  strcat (tmp, copy + 3);
-	}
-      else
-	tmp = copy;
       if (not_found_ptr)
         *not_found_ptr = 1;
-      if (tmp[0] == '~')
+      if (copy[0] == '~')
 	cplusplus_error (saved_arg,
 			 "the class `%s' does not have destructor defined\n",
 			 SYMBOL_PRINT_NAME (sym_class));
       else
 	cplusplus_error (saved_arg,
 			 "the class %s does not have any method named %s\n",
-			 SYMBOL_PRINT_NAME (sym_class), tmp);
+			 SYMBOL_PRINT_NAME (sym_class), copy);
     }
 }
 
@@ -1573,6 +1629,8 @@ decode_all_digits (char **argptr, struct symtab *default_symtab,
 
   init_sal (&val);
 
+  val.pspace = current_program_space;
+
   /* This is where we need to make sure that we have good defaults.
      We must guarantee that this section of code is never executed
      when we are called with just a function name, since
@@ -1624,6 +1682,7 @@ decode_all_digits (char **argptr, struct symtab *default_symtab,
   if (val.symtab == 0)
     val.symtab = file_symtab;
 
+  val.pspace = SYMTAB_PSPACE (val.symtab);
   val.pc = 0;
   values.sals = (struct symtab_and_line *)
     xmalloc (sizeof (struct symtab_and_line));
@@ -1695,6 +1754,7 @@ decode_dollar (char *copy, int funfirstline, struct symtab *default_symtab,
   val.symtab = file_symtab ? file_symtab : default_symtab;
   val.line = valx;
   val.pc = 0;
+  val.pspace = current_program_space;
 
   values.sals = (struct symtab_and_line *) xmalloc (sizeof val);
   values.sals[0] = val;

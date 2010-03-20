@@ -7,13 +7,13 @@ place; the generic mourn inferior should do this, perhaps.
  gdb/linux-thread-db.c |    3 +++
  1 file changed, 3 insertions(+)
 
-Index: gdb-7.0.1/gdb/linux-thread-db.c
+Index: gdb-7.1/gdb/linux-thread-db.c
 ===================================================================
---- gdb-7.0.1.orig/gdb/linux-thread-db.c	2010-01-30 16:23:17.000000000 -0500
-+++ gdb-7.0.1/gdb/linux-thread-db.c	2010-01-30 16:24:37.000000000 -0500
-@@ -1281,6 +1281,9 @@ thread_db_mourn_inferior (struct target_
- 
-   target_beneath->to_mourn_inferior (target_beneath);
+--- gdb-7.1.orig/gdb/linux-thread-db.c
++++ gdb-7.1/gdb/linux-thread-db.c
+@@ -1280,6 +1280,9 @@ thread_db_mourn_inferior (struct target_
+      the inferior, so that we don't try to uninsert them.  */
+   remove_thread_event_breakpoints ();
  
 +  /* Destroy thread info; it's no longer valid.  */
 +  init_thread_list ();

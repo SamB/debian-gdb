@@ -1,7 +1,7 @@
 /* Definitions for reading symbol files into GDB.
 
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2007, 2008, 2009
+   2000, 2001, 2002, 2003, 2004, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -80,6 +80,8 @@ struct section_addr_info
   {
     CORE_ADDR addr;
     char *name;
+
+    /* SECTINDEX must be valid for associated BFD if ADDR is not zero.  */
     int sectindex;
   } other[1];
 };
@@ -132,11 +134,10 @@ struct sym_fns
 
   void (*sym_init) (struct objfile *);
 
-  /* sym_read (objfile, mainline) Reads a symbol file into a psymtab
+  /* sym_read (objfile, symfile_flags) Reads a symbol file into a psymtab
      (or possibly a symtab).  OBJFILE is the objfile struct for the
-     file we are reading.  MAINLINE is 1 if this is the main symbol
-     table being read, and 0 if a secondary symbol file (e.g. shared
-     library or dynamically loaded file) is being read.  */
+     file we are reading.  SYMFILE_FLAGS are the flags passed to
+     symbol_file_add & co.  */
 
   void (*sym_read) (struct objfile *, int);
 
@@ -164,7 +165,14 @@ struct sym_fns
   /* This function should read the linetable from the objfile when
      the line table cannot be read while processing the debugging
      information.  */
+
   void (*sym_read_linetable) (void);
+
+  /* Relocate the contents of a debug section SECTP.  The
+     contents are stored in BUF if it is non-NULL, or returned in a
+     malloc'd buffer otherwise.  */
+
+  bfd_byte *(*sym_relocate) (struct objfile *, asection *sectp, bfd_byte *buf);
 
   /* Finds the next struct sym_fns.  They are allocated and
      initialized in whatever module implements the functions pointed
@@ -174,6 +182,16 @@ struct sym_fns
   struct sym_fns *next;
 
 };
+
+extern struct section_addr_info *
+	   build_section_addr_info_from_objfile (const struct objfile *objfile);
+
+extern void relative_addr_info_to_section_offsets
+  (struct section_offsets *section_offsets, int num_sections,
+   struct section_addr_info *addrs);
+
+extern void addr_info_make_relative (struct section_addr_info *addrs,
+				     bfd *abfd);
 
 /* The default version of sym_fns.sym_offsets for readers that don't
    do anything special.  */
@@ -186,6 +204,12 @@ extern void default_symfile_offsets (struct objfile *objfile,
 
 extern struct symfile_segment_data *default_symfile_segments (bfd *abfd);
 
+/* The default version of sym_fns.sym_relocate for readers that don't
+   do anything special.  */
+
+extern bfd_byte *default_symfile_relocate (struct objfile *objfile,
+                                           asection *sectp, bfd_byte *buf);
+
 extern void extend_psymbol_list (struct psymbol_allocation_list *,
 				 struct objfile *);
 
@@ -194,7 +218,7 @@ extern void extend_psymbol_list (struct psymbol_allocation_list *,
 /* #include "demangle.h" */
 
 extern const
-struct partial_symbol *add_psymbol_to_list (char *, int, domain_enum,
+struct partial_symbol *add_psymbol_to_list (char *, int, int, domain_enum,
 					    enum address_class,
 					    struct psymbol_allocation_list *,
 					    long, CORE_ADDR,
@@ -205,8 +229,6 @@ extern void init_psymbol_list (struct objfile *, int);
 extern void sort_pst_symbols (struct partial_symtab *);
 
 extern struct symtab *allocate_symtab (char *, struct objfile *);
-
-extern int free_named_symtabs (char *);
 
 extern void add_symtab_fns (struct sym_fns *);
 
@@ -239,15 +261,14 @@ extern struct objfile *symbol_file_add_from_bfd (bfd *, int,
                                                  struct section_addr_info *,
                                                  int);
 
+extern void symbol_file_add_separate (bfd *, int, struct objfile *);
+
+extern char *find_separate_debug_file_by_debuglink (struct objfile *);
+
 /* Create a new section_addr_info, with room for NUM_SECTIONS.  */
 
 extern struct section_addr_info *alloc_section_addr_info (size_t
 							  num_sections);
-
-/* Return a freshly allocated copy of ADDRS.  The section names, if
-   any, are also freshly allocated copies of those in ADDRS.  */
-extern struct section_addr_info *(copy_section_addr_info 
-                                  (struct section_addr_info *addrs));
 
 /* Build (allocate and populate) a section_addr_info struct from an
    existing section table.  */
@@ -266,7 +287,7 @@ extern void free_section_addr_info (struct section_addr_info *);
 
 extern struct partial_symtab *start_psymtab_common (struct objfile *,
 						    struct section_offsets *,
-						    char *, CORE_ADDR,
+						    const char *, CORE_ADDR,
 						    struct partial_symbol **,
 						    struct partial_symbol **);
 
@@ -309,13 +330,16 @@ extern int auto_solib_limit;
 
 extern void set_initial_language (void);
 
-extern struct partial_symtab *allocate_psymtab (char *, struct objfile *);
+extern struct partial_symtab *allocate_psymtab (const char *,
+						struct objfile *);
 
 extern void discard_psymtab (struct partial_symtab *);
 
 extern void find_lowest_section (bfd *, asection *, void *);
 
 extern bfd *symfile_bfd_open (char *);
+
+extern bfd *bfd_open_maybe_remote (const char *);
 
 extern int get_section_index (struct objfile *, char *);
 
@@ -365,8 +389,8 @@ extern void symbol_file_clear (int from_tty);
 /* Default overlay update function.  */
 extern void simple_overlay_update (struct obj_section *);
 
-extern bfd_byte *symfile_relocate_debug_section (bfd *abfd, asection *sectp,
-						 bfd_byte * buf);
+extern bfd_byte *symfile_relocate_debug_section (struct objfile *, asection *,
+						 bfd_byte *);
 
 extern int symfile_map_offsets_to_segments (bfd *,
 					    struct symfile_segment_data *,
@@ -379,7 +403,7 @@ void free_symfile_segment_data (struct symfile_segment_data *data);
 
 extern int dwarf2_has_info (struct objfile *);
 
-extern void dwarf2_build_psymtabs (struct objfile *, int);
+extern void dwarf2_build_psymtabs (struct objfile *);
 extern void dwarf2_build_frame_info (struct objfile *);
 
 void dwarf2_free_objfile (struct objfile *);

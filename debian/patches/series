@@ -5,7 +5,5 @@ gdb-pascal-support.patch
 gdb-fortran-main.patch 
 linux-clear-thread-list.patch
 man-page-args.patch
-i386-assume-frame.patch
-gdb-readline-6.0.patch
 man-page-order.patch
-amd64-freebsd-build.patch
+tui-no-gdbarch.patch

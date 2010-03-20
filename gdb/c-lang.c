@@ -1,7 +1,7 @@
 /* C language support routines for GDB, the GNU debugger.
 
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2002, 2003,
-   2004, 2005, 2007, 2008, 2009 Free Software Foundation, Inc.
+   2004, 2005, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -52,17 +52,17 @@ charset_for_string_type (enum c_string_type str_type,
     case C_WIDE_STRING:
       return target_wide_charset (byte_order);
     case C_STRING_16:
-      /* FIXME: UCS-2 is not always correct.  */
+      /* FIXME: UTF-16 is not always correct.  */
       if (byte_order == BFD_ENDIAN_BIG)
-	return "UCS-2BE";
+	return "UTF-16BE";
       else
-	return "UCS-2LE";
+	return "UTF-16LE";
     case C_STRING_32:
-      /* FIXME: UCS-4 is not always correct.  */
+      /* FIXME: UTF-32 is not always correct.  */
       if (byte_order == BFD_ENDIAN_BIG)
-	return "UCS-4BE";
+	return "UTF-32BE";
       else
-	return "UCS-4LE";
+	return "UTF-32LE";
     }
   internal_error (__FILE__, __LINE__, "unhandled c_string_type");
 }
@@ -369,7 +369,7 @@ c_printchar (int c, struct type *type, struct ui_file *stream)
 
 void
 c_printstr (struct ui_file *stream, struct type *type, const gdb_byte *string,
-	    unsigned int length, int force_ellipses,
+	    unsigned int length, const char *user_encoding, int force_ellipses,
 	    const struct value_print_options *options)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (get_type_arch (type));
@@ -381,6 +381,7 @@ c_printstr (struct ui_file *stream, struct type *type, const gdb_byte *string,
   struct obstack wchar_buf, output;
   struct cleanup *cleanup;
   enum c_string_type str_type;
+  const char *type_encoding;
   const char *encoding;
   struct wchar_iterator *iter;
   int finished = 0;
@@ -395,7 +396,7 @@ c_printstr (struct ui_file *stream, struct type *type, const gdb_byte *string,
 				    width, byte_order) == 0))
     length--;
 
-  str_type = classify_type (type, byte_order, &encoding) & ~C_CHAR;
+  str_type = classify_type (type, byte_order, &type_encoding) & ~C_CHAR;
   switch (str_type)
     {
     case C_STRING:
@@ -410,6 +411,8 @@ c_printstr (struct ui_file *stream, struct type *type, const gdb_byte *string,
       fputs_filtered ("U", stream);
       break;
     }
+
+  encoding = (user_encoding && *user_encoding) ? user_encoding : type_encoding;
 
   if (length == 0)
     {
@@ -618,7 +621,7 @@ c_printstr (struct ui_file *stream, struct type *type, const gdb_byte *string,
 
 void
 c_get_string (struct value *value, gdb_byte **buffer, int *length,
-	      const char **charset)
+	      struct type **char_type, const char **charset)
 {
   int err, width;
   unsigned int fetchlimit;
@@ -626,6 +629,7 @@ c_get_string (struct value *value, gdb_byte **buffer, int *length,
   struct type *element_type = TYPE_TARGET_TYPE (type);
   int req_length = *length;
   enum bfd_endian byte_order = gdbarch_byte_order (get_type_arch (type));
+  enum c_string_type kind;
 
   if (element_type == NULL)
     goto error;
@@ -652,13 +656,11 @@ c_get_string (struct value *value, gdb_byte **buffer, int *length,
     /* We work only with arrays and pointers.  */
     goto error;
 
-  element_type = check_typedef (element_type);
-  if (TYPE_CODE (element_type) != TYPE_CODE_INT
-      && TYPE_CODE (element_type) != TYPE_CODE_CHAR)
-    /* If the elements are not integers or characters, we don't consider it
-       a string.  */
+  if (! c_textual_element_type (element_type, 0))
     goto error;
-
+  kind = classify_type (element_type,
+			gdbarch_byte_order (get_type_arch (element_type)),
+			charset);
   width = TYPE_LENGTH (element_type);
 
   /* If the string lives in GDB's memory instead of the inferior's, then we
@@ -717,7 +719,7 @@ c_get_string (struct value *value, gdb_byte **buffer, int *length,
   if (*length != 0)
      *length = *length / width;
 
-  *charset = target_charset ();
+  *char_type = element_type;
 
   return;
 
@@ -763,7 +765,7 @@ convert_ucn (char *p, char *limit, const char *dest_charset,
       result >>= 8;
     }
 
-  convert_between_encodings ("UCS-4BE", dest_charset, data, 4, 4, output,
+  convert_between_encodings ("UTF-32BE", dest_charset, data, 4, 4, output,
 			     translit_none);
 
   return p;

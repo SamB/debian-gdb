@@ -8,11 +8,11 @@ submitted.
  gdb/valops.c     |    4 +++-
  2 files changed, 4 insertions(+), 2 deletions(-)
 
-Index: gdb-7.0.1/gdb/valops.c
+Index: gdb-7.1/gdb/valops.c
 ===================================================================
---- gdb-7.0.1.orig/gdb/valops.c	2010-01-30 16:24:26.000000000 -0500
-+++ gdb-7.0.1/gdb/valops.c	2010-01-30 16:24:32.000000000 -0500
-@@ -2522,8 +2522,10 @@ check_field (struct type *type, const ch
+--- gdb-7.1.orig/gdb/valops.c
++++ gdb-7.1/gdb/valops.c
+@@ -2800,8 +2800,10 @@ check_field (struct type *type, const ch
  	return 1;
      }
  
@@ -24,13 +24,13 @@ Index: gdb-7.0.1/gdb/valops.c
        return 1;
  
    return 0;
-Index: gdb-7.0.1/gdb/dwarf2read.c
+Index: gdb-7.1/gdb/dwarf2read.c
 ===================================================================
---- gdb-7.0.1.orig/gdb/dwarf2read.c	2010-01-30 16:24:26.000000000 -0500
-+++ gdb-7.0.1/gdb/dwarf2read.c	2010-01-30 16:24:32.000000000 -0500
-@@ -2716,8 +2716,8 @@ guess_structure_name (struct partial_die
+--- gdb-7.1.orig/gdb/dwarf2read.c
++++ gdb-7.1/gdb/dwarf2read.c
+@@ -2768,8 +2768,8 @@ guess_structure_name (struct partial_die
  				    strlen (actual_class_name),
- 				    &cu->comp_unit_obstack);
+ 				    &cu->objfile->objfile_obstack);
  		  xfree (actual_class_name);
 +		  break;
  		}

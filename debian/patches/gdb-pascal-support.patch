@@ -9,11 +9,11 @@ not much left of this.
  gdb/dwarf2read.c |    3 ++-
  1 file changed, 2 insertions(+), 1 deletion(-)
 
-Index: gdb-7.0.1/gdb/dwarf2read.c
+Index: gdb-7.1/gdb/dwarf2read.c
 ===================================================================
---- gdb-7.0.1.orig/gdb/dwarf2read.c	2010-01-30 16:24:32.000000000 -0500
-+++ gdb-7.0.1/gdb/dwarf2read.c	2010-01-30 16:24:36.000000000 -0500
-@@ -8858,7 +8858,8 @@ determine_prefix (struct die_info *die, 
+--- gdb-7.1.orig/gdb/dwarf2read.c
++++ gdb-7.1/gdb/dwarf2read.c
+@@ -8984,7 +8984,8 @@ determine_prefix (struct die_info *die,
    struct type *parent_type;
  
    if (cu->language != language_cplus

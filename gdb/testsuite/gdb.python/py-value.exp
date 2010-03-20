@@ -1,4 +1,4 @@
-# Copyright (C) 2008, 2009 Free Software Foundation, Inc.
+# Copyright (C) 2008, 2009, 2010 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -227,7 +227,9 @@ proc test_value_in_inferior {} {
   gdb_py_test_silent_cmd "python arg0 = argv.dereference ()" "dereference value" 1
 
   # Check that the dereferenced value is sane
-  gdb_test "python print arg0" "0x.*$testfile\"" "verify dereferenced value"
+  if { ! [target_info exists noargs] } {
+    gdb_test "python print arg0" "0x.*$testfile\"" "verify dereferenced value"
+  }
 
   # Smoke-test is_optimized_out attribute
   gdb_test "python print 'result =', arg0.is_optimized_out" "= False" "Test is_optimized_out attribute"
@@ -254,6 +256,19 @@ proc test_value_in_inferior {} {
   gdb_py_test_silent_cmd "python nullst = nullst.string (length = 9)" "get string beyond null" 1
   gdb_test "python print repr(nullst)" "u'divide\\\\x00et'"
 }
+
+proc test_lazy_strings {} {
+
+  global hex
+
+  gdb_test "print sptr" "\"pointer\""
+  gdb_py_test_silent_cmd "python sptr = gdb.history (0)" "Get value from history" 1
+
+  gdb_py_test_silent_cmd "python lstr = sptr.lazy_string()" "Aquire lazy string" 1
+  gdb_test "python print lstr.type" "const char \*." "Test type name equality"
+  gdb_test "python print sptr.type" "const char \*." "Test type name equality"
+}
+
 
 # A few objfile tests.
 proc test_objfiles {} {
@@ -361,6 +376,17 @@ proc test_subscript_regression {lang} {
  gdb_test "python print marray\[1\]\[2\]" "o." "Test multiple subscript"
 }
 
+# A few tests of gdb.parse_and_eval.
+proc test_parse_and_eval {} {
+  gdb_test "python print gdb.parse_and_eval ('23')" "23" \
+    "parse_and_eval constant test"
+  gdb_test "python print gdb.parse_and_eval ('5 + 7')" "12" \
+    "parse_and_eval simple expression test"
+  gdb_test "python print type(gdb.parse_and_eval ('5 + 7'))" \
+    ".type 'gdb.Value'."\
+    "parse_and_eval type test"
+}
+
 # Start with a fresh gdb.
 
 gdb_exit
@@ -381,6 +407,7 @@ test_value_numeric_ops
 test_value_boolean
 test_value_compare
 test_objfiles
+test_parse_and_eval
 
 # The following tests require execution.
 
@@ -390,6 +417,7 @@ if ![runto_main] then {
 }
 
 test_value_in_inferior
+test_lazy_strings
 test_value_after_death
 
 # The following test recompiles the binary to test either C or C++

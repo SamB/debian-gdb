@@ -1,5 +1,5 @@
 # Copyright (C) 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-# 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+# 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
 # Free Software Foundation, Inc.
 
 # This file is part of GDB.
@@ -270,6 +270,7 @@ SUBDIR_PYTHON_OBS = \
 	py-cmd.o \
 	py-frame.o \
 	py-function.o \
+	py-lazy-string.o \
 	py-objfile.o \
 	py-prettyprint.o \
 	py-type.o \
@@ -280,6 +281,7 @@ SUBDIR_PYTHON_SRCS = \
 	python/py-cmd.c \
 	python/py-frame.c \
 	python/py-function.c \
+	python/py-lazy-string.c \
 	python/py-objfile.c \
 	python/py-prettyprint.c \
 	python/py-type.c \
@@ -444,7 +446,8 @@ RUNTESTFLAGS=
 
 # XML files to build in to GDB.
 XMLFILES = $(srcdir)/features/gdb-target.dtd $(srcdir)/features/xinclude.dtd \
-	$(srcdir)/features/library-list.dtd $(srcdir)/features/osdata.dtd
+	$(srcdir)/features/library-list.dtd $(srcdir)/features/osdata.dtd \
+	$(srcdir)/features/threads.dtd
 
 # This is ser-unix.o for any system which supports a v7/BSD/SYSV/POSIX
 # interface to the serial port.  Hopefully if get ported to OS/2, VMS,
@@ -501,6 +504,7 @@ ALL_TARGET_OBS = \
 	m68kbsd-tdep.o m68klinux-tdep.o m68k-tdep.o \
 	m88k-tdep.o \
 	mep-tdep.o \
+	microblaze-tdep.o microblaze-linux-tdep.o \
 	mips-irix-tdep.o mips-linux-tdep.o \
 	mipsnbsd-tdep.o mips-tdep.o \
 	mn10300-linux-tdep.o mn10300-tdep.o \
@@ -643,7 +647,8 @@ SFILES = ada-exp.y ada-lang.c ada-typeprint.c ada-valprint.c ada-tasks.c \
 	cp-name-parser.y \
 	dbxread.c demangle.c dictionary.c disasm.c doublest.c dummy-frame.c \
 	dwarf2expr.c dwarf2loc.c dwarf2read.c dwarf2-frame.c \
-	elfread.c environ.c eval.c event-loop.c event-top.c expprint.c \
+	elfread.c environ.c eval.c event-loop.c event-top.c \
+	exceptions.c expprint.c \
 	f-exp.y f-lang.c f-typeprint.c f-valprint.c findcmd.c findvar.c \
 	frame.c frame-base.c frame-unwind.c \
 	gdbarch.c arch-utils.c gdbtypes.c gnu-v2-abi.c gnu-v3-abi.c \
@@ -660,6 +665,7 @@ SFILES = ada-exp.y ada-lang.c ada-typeprint.c ada-valprint.c ada-tasks.c \
 	objc-exp.y objc-lang.c \
 	objfiles.c osabi.c observer.c osdata.c \
 	p-exp.y p-lang.c p-typeprint.c p-valprint.c parse.c printcmd.c \
+	progspace.c \
 	prologue-value.c \
 	regcache.c reggroups.c remote.c remote-fileio.c reverse.c \
 	scm-exp.c scm-lang.c scm-valprint.c \
@@ -679,7 +685,7 @@ SFILES = ada-exp.y ada-lang.c ada-typeprint.c ada-valprint.c ada-tasks.c \
 	wrapper.c \
 	xml-tdesc.c xml-support.c \
 	inferior.c gdb_usleep.c \
-	record.c \
+	record.c gcore.c \
 	jit.c \
 	xml-syscall.c \
 
@@ -700,7 +706,7 @@ osf-share/cma_errors.h osf-share/cma_tcb_defs.h osf-share/cma_attr.h \
 osf-share/cma_stack_int.h osf-share/cma_init.h \
 osf-share/cma_deb_core.h osf-share/AT386/cma_thread_io.h \
 osf-share/cma_sched.h proc-utils.h arm-tdep.h ax-gdb.h ppcnbsd-tdep.h \
-cli-out.h gdb_expat.h breakpoint.h infcall.h obsd-tdep.h gnu-v2-abi.h \
+cli-out.h gdb_expat.h breakpoint.h infcall.h obsd-tdep.h \
 exec.h m32r-tdep.h osabi.h gdbcore.h solib-som.h \
 i386bsd-nat.h xml-support.h xml-tdesc.h alphabsd-tdep.h gdb_obstack.h \
 ia64-tdep.h ada-lang.h varobj.h frv-tdep.h nto-tdep.h serial.h \
@@ -721,7 +727,7 @@ f-lang.h dwarf2loc.h value.h sparc-tdep.h defs.h target-descriptions.h \
 objfiles.h vec.h disasm.h mips-tdep.h ser-base.h \
 gdb_curses.h bfd-target.h memattr.h inferior.h ax.h dummy-frame.h \
 inflow.h fbsd-nat.h libunwind-frame.h completer.h inf-ttrace.h \
-solib-target.h shnbsd-tdep.h gdb_vfork.h alpha-tdep.h dwarf2expr.h \
+solib-target.h gdb_vfork.h alpha-tdep.h dwarf2expr.h \
 m2-lang.h stack.h charset.h addrmap.h command.h solist.h source.h \
 target.h prologue-value.h cp-abi.h tui/tui-hooks.h tui/tui.h \
 tui/tui-file.h tui/tui-command.h tui/tui-disasm.h tui/tui-wingeneral.h \
@@ -750,7 +756,7 @@ config/rs6000/nm-rs6000.h top.h bsd-kvm.h gdb-stabs.h reggroups.h \
 annotate.h sim-regno.h dictionary.h dfp.h main.h frame-unwind.h	\
 remote-fileio.h i386-linux-tdep.h vax-tdep.h objc-lang.h \
 sentinel-frame.h bcache.h symfile.h windows-tdep.h linux-tdep.h \
-gdb_usleep.h jit.h xml-syscall.h ada-operator.inc
+gdb_usleep.h jit.h xml-syscall.h ada-operator.inc microblaze-tdep.h
 
 # Header files that already have srcdir in them, or which are in objdir.
 
@@ -832,8 +838,8 @@ COMMON_OBS = $(DEPFILES) $(CONFIG_OBS) $(YYOBJ) \
 	solib.o solib-null.o \
 	prologue-value.o memory-map.o xml-support.o xml-syscall.o \
 	target-descriptions.o target-memory.o xml-tdesc.o xml-builtin.o \
-	inferior.o osdata.o gdb_usleep.o record.o \
-	jit.o
+	inferior.o osdata.o gdb_usleep.o record.o gcore.o \
+	jit.o progspace.o
 
 # Definitions for the syscall's XML files and dir
 XML_SYSCALLS_DIR = syscalls/
@@ -1434,6 +1440,7 @@ ALLDEPFILES = \
 	m68kbsd-nat.c m68kbsd-tdep.c \
 	m68klinux-nat.c m68klinux-tdep.c \
 	m88k-tdep.c m88kbsd-nat.c \
+	microblaze-tdep.c microblaze-linux-tdep.c \
 	mingw-hdep.c \
 	mips-linux-nat.c mips-linux-tdep.c \
 	mips-irix-tdep.c \
@@ -1973,6 +1980,10 @@ py-frame.o: $(srcdir)/python/py-frame.c
 
 py-function.o: $(srcdir)/python/py-function.c
 	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/py-function.c
+	$(POSTCOMPILE)
+
+py-lazy-string.o: $(srcdir)/python/py-lazy-string.c
+	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/py-lazy-string.c
 	$(POSTCOMPILE)
 
 py-objfile.o: $(srcdir)/python/py-objfile.c

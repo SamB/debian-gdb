@@ -1,3 +1,22 @@
+gdb (7.1-1) unstable; urgency=low
+
+  * New upstream release, including:
+    - PIE support (Closes: #346409).
+    - C++ improvements, including static_cast<> et al, namespace imports,
+      and bug fixes in printing virtual base classes.
+    - Multi-program debugging.  One GDB can now debug multiple programs
+      at the same time.
+    - Python scripting improvements, including gdb.parse_and_eval.
+    - Updated MIPS Linux signal frame layout (Closes: #570875).
+    - No internal error stepping over _dl_debug_state (Closes: #569551).
+  * Update to Standards-Version: 3.8.4 (no changes required).
+  * Include more relevant (and smaller) docs in the gdbserver package
+    (Closes: #571132).
+  * Do not duplicate documentation in gdb64, gdb-source, and libgdb-dev.
+  * Fix crash when switching into TUI mode (Closes: #568489).
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sat, 20 Mar 2010 01:21:29 -0400
+
 gdb (7.0.1-2) unstable; urgency=low
 
   * Add Replaces to the new gdbserver package (Closes: #567925, #568018).

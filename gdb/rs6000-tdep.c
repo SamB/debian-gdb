@@ -1,8 +1,8 @@
 /* Target-dependent code for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
-   Free Software Foundation, Inc.
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
+   2010 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -1084,6 +1084,7 @@ int
 ppc_deal_with_atomic_sequence (struct frame_info *frame)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
+  struct address_space *aspace = get_frame_address_space (frame);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   CORE_ADDR pc = get_frame_pc (frame);
   CORE_ADDR breaks[2] = {-1, -1};
@@ -1157,7 +1158,7 @@ ppc_deal_with_atomic_sequence (struct frame_info *frame)
 
   /* Effectively inserts the breakpoints.  */
   for (index = 0; index <= last_breakpoint; index++)
-    insert_single_step_breakpoint (gdbarch, breaks[index]);
+    insert_single_step_breakpoint (gdbarch, aspace, breaks[index]);
 
   return 1;
 }

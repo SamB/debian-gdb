@@ -2,7 +2,7 @@ Source: gdb
 Maintainer: Daniel Jacobowitz <dan@debian.org>
 Section: devel
 Priority: optional
-Standards-Version: 3.8.3
+Standards-Version: 3.8.4
 Build-Depends: autoconf, libtool, texinfo (>= 4.7-2.2), texlive-base, libncurses5-dev, libreadline-dev, bison, gettext, debhelper (>= 7), dejagnu, gcj-jdk | gcj, gobjc, mig [@gnu@], cdbs (>= 0.4.17), libkvm-dev [@kfreebsd@], type-handling (>= 0.2.1), libunwind7-dev [ia64], flex | flex-old, libexpat1-dev, g++-multilib [i386 powerpc s390 sparc], lib64readline6-dev [i386 powerpc s390 sparc], python-dev, zlib1g-dev, procps, lsb-release, bzip2
 
 Package: gdb@TS@
@@ -61,7 +61,7 @@ Description: The GNU Debugger (remote server)
 Package: libgdb-dev
 Architecture: any
 Section: libdevel
-Depends: ${shlibs:Depends}, ${misc:Depends}, binutils-dev, libexpat1-dev, python-dev, zlib1g-dev, libncurses5-dev, libreadline-dev
+Depends: ${shlibs:Depends}, ${misc:Depends}, binutils-dev, libexpat1-dev, python-dev, zlib1g-dev, libncurses5-dev, libreadline-dev, gdb
 Priority: extra
 Description: The GNU Debugger (libgdb.a)
  GDB is a source-level debugger, capable of breaking programs at
@@ -77,7 +77,7 @@ Description: The GNU Debugger (libgdb.a)
 Package: gdb-source
 Architecture: all
 Section: devel
-Depends: ${misc:Depends}
+Depends: ${misc:Depends}, gdb
 Description: The GNU Debugger (source)
  GDB is a source-level debugger, capable of breaking programs at
  any specific line, displaying variable values, and determining
