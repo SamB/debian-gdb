@@ -7,3 +7,4 @@ linux-clear-thread-list.patch
 man-page-args.patch
 man-page-order.patch
 tui-no-gdbarch.patch
+renesas-sh-native-support.patch

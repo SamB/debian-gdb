@@ -1,3 +1,9 @@
+gdb (7.1-1+sh4) unreleased; urgency=low
+
+  * sh4 support.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Thu, 25 Mar 2010 05:47:37 +0000
+
 gdb (7.1-1) unstable; urgency=low
 
   * New upstream release, including:
