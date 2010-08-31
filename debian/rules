@@ -260,7 +260,8 @@ debian/control:: debian/control.in $(CROSS_FORCE)
 		> debian/control
 ifeq ($(DEB_CROSS),yes)
 	sed -i "/Package: gdb64/,\$$ d" debian/control
-	cp debian/gdb.install debian/gdb$(TS).install
+	sed "s+/gdb+/$(TP)gdb+g; s+usr/share/$(TP)gdb+usr/share/gdb+g" \
+		debian/gdb.install > debian/gdb$(TS).install
 endif
 
 # The default changelog is the top level one, which is useless.

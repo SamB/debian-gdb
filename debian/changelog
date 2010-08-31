@@ -1,8 +1,10 @@
-gdb (7.1-1+sh4) unreleased; urgency=low
+gdb (7.1-2) unstable; urgency=low
 
-  * sh4 support.
+  * Add sanitize-gdb.sh and README.source to source package (used to create
+    tarballs).
+  * Fix cross-gdb build.  Patch from Hector Oron.  (Closes: #575923).
 
- -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Thu, 25 Mar 2010 05:47:37 +0000
+ -- Daniel Jacobowitz <dan@debian.org>  Tue, 31 Aug 2010 10:57:57 -0400
 
 gdb (7.1-1) unstable; urgency=low
 
