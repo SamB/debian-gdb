@@ -1,3 +1,21 @@
+gdb (7.2-1) unstable; urgency=low
+
+  * New upstream release, including:
+    - C++ improvements including argument-dependent lookup, improved
+      user-defined operator support, and static const member evaluation.
+    - Expanded Python API.
+    - Tracepoint improvements, including x86 gdbserver support for tracepoints
+      and static tracepoints.
+    - Observer mode support.  You can attach to a program in observer mode
+      and GDB will not allow you to modify the program's state at all.
+    - x86 byte and half-word register names, and 32-bit register named
+      on 64-bit targets.
+    - The "eval" command for the GDB CLI.
+    - "save breakpoints" to save breakpoints between sessions.
+    - Improved hardware breakpoint support for PowerPC.
+
+ -- Daniel Jacobowitz <dan@debian.org>  Sun, 05 Sep 2010 10:05:31 -0400
+
 gdb (7.1-2) unstable; urgency=low
 
   * Add sanitize-gdb.sh and README.source to source package (used to create
