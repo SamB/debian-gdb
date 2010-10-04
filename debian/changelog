@@ -1,3 +1,9 @@
+gdb (7.2-1+armhf) unreleased; urgency=low
+
+  * Added armhf 
+
+ -- Konstantinos Margaritis <markos@genesi-usa.com>  Mon, 04 Oct 2010 10:15:11 +0000
+
 gdb (7.2-1) unstable; urgency=low
 
   * New upstream release, including:
