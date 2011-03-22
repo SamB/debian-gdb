@@ -1,9 +1,9 @@
-gdb (7.2-1+armhf.1) unreleased; urgency=low
+gdb (7.2-1+rhurd.1) unreleased; urgency=low
 
-  * Add support for arm-*-*eabi* triplet:
-    - Update configure.ac and config.guess
+  * Apply Thomas' patch fixed by Svante.
+    http://lists.debian.org/debian-hurd/2011/03/msg00134.html
 
- -- Hector Oron <zumbi@debian.org>  Tue, 10 May 2011 22:47:31 +0000
+ -- Samuel Thibault <sthibault@debian.org>  Tue, 22 Mar 2011 10:22:26 +0000
 
 gdb (7.2-1) unstable; urgency=low
 

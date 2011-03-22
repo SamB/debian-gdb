@@ -1,0 +1,212 @@
+Description: Upstream changes introduced in version 7.2-1+hurd.1
+ This patch has been created by dpkg-source during the package build.
+ Here's the last changelog entry, hopefully it gives details on why
+ those changes were made:
+ .
+ gdb (7.2-1+hurd.1) unreleased; urgency=low
+ .
+   * Apply Thomas' patch fixed by Svante.
+     http://lists.debian.org/debian-hurd/2011/03/msg00134.html
+ .
+ The person named in the Author field signed this changelog entry.
+Author: Samuel Thibault <sthibault@debian.org>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout http://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: <vendor|upstream|other>, <url of original patch>
+Bug: <url in upstream bugtracker>
+Bug-Debian: http://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: <no|not-needed|url proving that it has been forwarded>
+Reviewed-By: <name and email of someone who approved the patch>
+Last-Update: <YYYY-MM-DD>
+
+--- gdb-7.2.orig/gdb/configure.ac
++++ gdb-7.2/gdb/configure.ac
+@@ -425,6 +425,10 @@ AC_SEARCH_LIBS(gethostbyname, nsl)
+ # Some systems (e.g. Solaris) have `socketpair' in libsocket.
+ AC_SEARCH_LIBS(socketpair, socket)
+ 
++# Needed to link properly for GNU/Hurd
++AC_SEARCH_LIBS(mach_port_destroy, machuser)
++AC_SEARCH_LIBS(proc_getmsgport, hurduser)
++
+ # Link in zlib if we can.  This allows us to read compressed debug sections.
+ AM_ZLIB
+ 
+--- gdb-7.2.orig/gdb/thread.c
++++ gdb-7.2/gdb/thread.c
+@@ -61,7 +61,7 @@ static int thread_alive (struct thread_i
+ static void info_threads_command (char *, int);
+ static void thread_apply_command (char *, int);
+ static void restore_current_thread (ptid_t);
+-static void prune_threads (void);
++void prune_threads (void);
+ 
+ /* Frontend view of the thread state.  Possible extensions: stepping,
+    finishing, until(ling),...  */
+@@ -518,7 +518,7 @@ thread_alive (struct thread_info *tp)
+   return 1;
+ }
+ 
+-static void
++void
+ prune_threads (void)
+ {
+   struct thread_info *tp, *next;
+--- gdb-7.2.orig/gdb/configure
++++ gdb-7.2/gdb/configure
+@@ -9173,6 +9173,118 @@ if test "$ac_res" != no; then :
+ 
+ fi
+ 
++# Needed to link properly for GNU/Hurd
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing mach_po
++rt_destroy" >&5
++$as_echo_n "checking for library containing mach_port_destroy... " >&6; }
++if test "${ac_cv_search_mach_port_destroy+set}" = set; then :
++  $as_echo_n "(cached) " >&6
++else
++  ac_func_search_save_LIBS=$LIBS
++cat confdefs.h - <<_ACEOF >conftest.$ac_ext
++/* end confdefs.h.  */
++
++/* Override any GCC internal prototype to avoid an error.
++   Use char because int might match the return type of a GCC
++   builtin and then its argument prototype would still apply.  */
++#ifdef __cplusplus
++extern "C"
++#endif
++char mach_port_destroy ();
++int
++main ()
++{
++return mach_port_destroy ();
++  ;
++  return 0;
++}
++_ACEOF
++for ac_lib in '' machuser; do
++  if test -z "$ac_lib"; then
++    ac_res="none required"
++  else
++    ac_res=-l$ac_lib
++    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
++  fi
++  if ac_fn_c_try_link "$LINENO"; then :
++  ac_cv_search_mach_port_destroy=$ac_res
++fi
++rm -f core conftest.err conftest.$ac_objext \
++    conftest$ac_exeext
++  if test "${ac_cv_search_mach_port_destroy+set}" = set; then :
++  break
++fi
++done
++if test "${ac_cv_search_mach_port_destroy+set}" = set; then :
++
++else
++  ac_cv_search_mach_port_destroy=no
++fi
++rm conftest.$ac_ext
++LIBS=$ac_func_search_save_LIBS
++fi
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_mach_port_destroy" >&5
++$as_echo "$ac_cv_search_mach_port_destroy" >&6; }
++ac_res=$ac_cv_search_mach_port_destroy
++if test "$ac_res" != no; then :
++  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
++
++fi
++
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing proc_getmsgport" >&5
++$as_echo_n "checking for library containing proc_getmsgport... " >&6; }
++if test "${ac_cv_search_proc_getmsgport+set}" = set; then :
++  $as_echo_n "(cached) " >&6
++else
++  ac_func_search_save_LIBS=$LIBS
++cat confdefs.h - <<_ACEOF >conftest.$ac_ext
++/* end confdefs.h.  */
++/* Override any GCC internal prototype to avoid an error.
++   Use char because int might match the return type of a GCC
++   builtin and then its argument prototype would still apply.  */
++#ifdef __cplusplus
++extern "C"
++#endif
++char proc_getmsgport ();
++int
++main ()
++{
++return proc_getmsgport ();
++  ;
++  return 0;
++}
++_ACEOF
++for ac_lib in '' hurduser; do
++  if test -z "$ac_lib"; then
++    ac_res="none required"
++  else
++    ac_res=-l$ac_lib
++    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
++  fi
++  if ac_fn_c_try_link "$LINENO"; then :
++  ac_cv_search_proc_getmsgport=$ac_res
++fi
++rm -f core conftest.err conftest.$ac_objext \
++    conftest$ac_exeext
++  if test "${ac_cv_search_proc_getmsgport+set}" = set; then :
++  break
++fi
++done
++if test "${ac_cv_search_proc_getmsgport+set}" = set; then :
++
++else
++  ac_cv_search_proc_getmsgport=no
++fi
++rm conftest.$ac_ext
++LIBS=$ac_func_search_save_LIBS
++fi
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_proc_getmsgport" >&5
++$as_echo "$ac_cv_search_proc_getmsgport" >&6; }
++ac_res=$ac_cv_search_proc_getmsgport
++if test "$ac_res" != no; then :
++  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
++
++fi
+ 
+ # Link in zlib if we can.  This allows us to read compressed debug sections.
+ 
+--- gdb-7.2.orig/gdb/gnu-nat.c
++++ gdb-7.2/gdb/gnu-nat.c
+@@ -75,6 +75,8 @@
+ #include "exc_request_U.h"
+ #include "msg_U.h"
+ 
++extern void prune_threads (void);
++
+ static process_t proc_server = MACH_PORT_NULL;
+ 
+ /* If we've sent a proc_wait_request to the proc server, the pid of the
+@@ -1578,8 +1580,8 @@ rewait:
+ 	  if (--inf->pending_execs == 0)
+ 	    /* We're done!  */
+ 	    {
++	      prune_threads ();	/* Get rid of the old shell threads */
+ #if 0				/* do we need this? */
+-	      prune_threads (1);	/* Get rid of the old shell threads */
+ 	      renumber_threads (0);	/* Give our threads reasonable names. */
+ #endif
+ 	    }
+@@ -2137,6 +2139,10 @@ gnu_create_inferior (struct target_ops *
+     inf_steal_exc_ports (inf);
+   else
+     inf_restore_exc_ports (inf);
++
++#if 0
++  prune_threads ();
++#endif
+ }
+ 
+ 
