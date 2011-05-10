@@ -5,3 +5,4 @@ gdb-fortran-main.patch
 linux-clear-thread-list.patch
 man-page-args.patch
 man-page-order.patch
+debian-changes-7.2-1+armhf.1

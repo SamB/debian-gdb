@@ -1,8 +1,9 @@
-gdb (7.2-1+armhf) unreleased; urgency=low
+gdb (7.2-1+armhf.1) unreleased; urgency=low
 
-  * Added armhf 
+  * Add support for arm-*-*eabi* triplet:
+    - Update configure.ac and config.guess
 
- -- Konstantinos Margaritis <markos@genesi-usa.com>  Mon, 04 Oct 2010 10:15:11 +0000
+ -- Hector Oron <zumbi@debian.org>  Tue, 10 May 2011 22:47:31 +0000
 
 gdb (7.2-1) unstable; urgency=low
 
