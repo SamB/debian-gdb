@@ -1,0 +1,64 @@
+Description: Upstream changes introduced in version 7.3.50~cvs20110627-1
+ This patch has been created by dpkg-source during the package build.
+ Here's the last changelog entry, hopefully it gives details on why
+ those changes were made:
+ .
+ gdb (7.3.50~cvs20110627-1) experimental; urgency=low
+ .
+   * Upstream pre-release based on CVS date 20110627.
+   * Drop Daniel Jacobowitz as Maintainer.
+       - Thanks for all this years.
+   * Add myself as Maintainer.
+   * Bump standards version.
+   * Add local-option for unapply-patches.
+   * Add prelink build depend, needed for tests run.
+ .
+ The person named in the Author field signed this changelog entry.
+Author: Hector Oron <zumbi@debian.org>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout http://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: <vendor|upstream|other>, <url of original patch>
+Bug: <url in upstream bugtracker>
+Bug-Debian: http://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: <no|not-needed|url proving that it has been forwarded>
+Reviewed-By: <name and email of someone who approved the patch>
+Last-Update: <YYYY-MM-DD>
+
+--- gdb-7.3.50~cvs20110627.orig/gdb/main.c
++++ gdb-7.3.50~cvs20110627/gdb/main.c
+@@ -815,7 +815,7 @@ captured_main (void *data)
+      debugging or what directory you are in.  */
+ 
+   if (home_gdbinit && !inhibit_gdbinit)
+-    catch_command_errors (source_script, home_gdbinit, 0, RETURN_MASK_ALL);
++    catch_command_errors (source_script, home_gdbinit, -1, RETURN_MASK_ALL);
+ 
+   /* Now perform all the actions indicated by the arguments.  */
+   if (cdarg != NULL)
+@@ -894,7 +894,7 @@ captured_main (void *data)
+   /* Read the .gdbinit file in the current directory, *if* it isn't
+      the same as the $HOME/.gdbinit file (it should exist, also).  */
+   if (local_gdbinit && !inhibit_gdbinit)
+-    catch_command_errors (source_script, local_gdbinit, 0, RETURN_MASK_ALL);
++    catch_command_errors (source_script, local_gdbinit, -1, RETURN_MASK_ALL);
+ 
+   /* Now that all .gdbinit's have been read and all -d options have been
+      processed, we can read any scripts mentioned in SYMARG.
+--- gdb-7.3.50~cvs20110627.orig/gdb/cli/cli-cmds.c
++++ gdb-7.3.50~cvs20110627/gdb/cli/cli-cmds.c
+@@ -1423,6 +1423,10 @@ show_max_user_call_depth (struct ui_file
+ }
+ 
+ 
++/* Load a GDB command file whose name is given in ARGS.  FROM_TTY may
++   be -1, in which case we are loading a gdbinit file; in that case,
++   be paranoid about unsafe files.  */
++
+ void
+ init_cli_cmds (void)
+ {

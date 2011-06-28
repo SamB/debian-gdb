@@ -1,5 +1,6 @@
 /* Serial port emulation using sockets.
-   Copyright (C) 1998, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+   Copyright (C) 1998, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Cygnus Solutions.
 
 This program is free software; you can redistribute it and/or modify
@@ -174,12 +175,12 @@ dv_sockser_init (SIM_DESC sd)
     }
 
   sockaddr.sin_family = PF_INET;
-  sockaddr.sin_port = htons(port);
+  sockaddr.sin_port = htons (port);
   memcpy (&sockaddr.sin_addr.s_addr, hostent->h_addr,
 	  sizeof (struct in_addr));
 
   tmp = 1;
-  if (setsockopt (sockser_listen_fd, SOL_SOCKET, SO_REUSEADDR, (void*)& tmp, sizeof(tmp)) < 0)
+  if (setsockopt (sockser_listen_fd, SOL_SOCKET, SO_REUSEADDR, (void*)& tmp, sizeof (tmp)) < 0)
     {
       sim_io_eprintf (sd, "sockser init: unable to set SO_REUSEADDR: %s\n",
 		      strerror (errno));
@@ -346,13 +347,14 @@ dv_sockser_status (SIM_DESC sd)
 }
 
 int
-dv_sockser_write (SIM_DESC sd, unsigned char c)
+dv_sockser_write_buffer (SIM_DESC sd, const unsigned char *buffer,
+			 unsigned nr_bytes)
 {
   int n;
 
   if (! connected_p (sd))
     return -1;
-  n = write (sockser_fd, &c, 1);
+  n = write (sockser_fd, buffer, nr_bytes);
   if (n == -1)
     {
       if (errno == EPIPE)
@@ -362,9 +364,15 @@ dv_sockser_write (SIM_DESC sd, unsigned char c)
 	}
       return -1;
     }
-  if (n != 1)
+  if (n != nr_bytes)
     return -1;
-  return 1;
+  return nr_bytes;
+}
+
+int
+dv_sockser_write (SIM_DESC sd, unsigned char c)
+{
+  return dv_sockser_write_buffer (sd, &c, 1);
 }
 
 int

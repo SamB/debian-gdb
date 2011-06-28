@@ -1,9 +1,14 @@
-gdb (7.2-1+rhurd.1) unreleased; urgency=low
+gdb (7.3.50~cvs20110627-1) experimental; urgency=low
 
-  * Apply Thomas' patch fixed by Svante.
-    http://lists.debian.org/debian-hurd/2011/03/msg00134.html
+  * Upstream pre-release based on CVS date 20110627.
+  * Drop Daniel Jacobowitz as Maintainer.
+      - Thanks for all this years. 
+  * Add myself as Maintainer.
+  * Bump standards version.
+  * Add local-option for unapply-patches.
+  * Add prelink build depend, needed for tests run. 
 
- -- Samuel Thibault <sthibault@debian.org>  Tue, 22 Mar 2011 10:22:26 +0000
+ -- Hector Oron <zumbi@debian.org>  Tue, 28 Jun 2011 10:30:52 +0100
 
 gdb (7.2-1) unstable; urgency=low
 

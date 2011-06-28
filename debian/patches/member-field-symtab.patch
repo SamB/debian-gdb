@@ -8,11 +8,11 @@ longer be necessary.
  gdb/valops.c |    4 +++-
  1 file changed, 3 insertions(+), 1 deletion(-)
 
-Index: gdb-7.2/gdb/valops.c
+Index: gdb-7.3.50~cvs20110627/gdb/valops.c
 ===================================================================
---- gdb-7.2.orig/gdb/valops.c	2010-06-28 16:35:52.000000000 -0400
-+++ gdb-7.2/gdb/valops.c	2010-09-05 10:14:36.000000000 -0400
-@@ -2963,8 +2963,10 @@ check_field (struct type *type, const ch
+--- gdb-7.3.50~cvs20110627.orig/gdb/valops.c	2011-06-28 00:08:28.227103791 +0100
++++ gdb-7.3.50~cvs20110627/gdb/valops.c	2011-06-28 00:08:33.547103817 +0100
+@@ -3153,8 +3153,10 @@
  	return 1;
      }
  

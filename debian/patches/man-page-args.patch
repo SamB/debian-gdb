@@ -2,11 +2,11 @@
  gdb/gdb.1 |   27 ++++++++++++++++++++++++++-
  1 file changed, 26 insertions(+), 1 deletion(-)
 
-Index: gdb-7.0.1/gdb/gdb.1
+Index: gdb-7.3.50~cvs20110627/gdb/gdb.1
 ===================================================================
---- gdb-7.0.1.orig/gdb/gdb.1	2010-01-30 16:23:17.000000000 -0500
-+++ gdb-7.0.1/gdb/gdb.1	2010-01-30 16:24:38.000000000 -0500
-@@ -39,10 +39,25 @@ gdb \- The GNU Debugger
+--- gdb-7.3.50~cvs20110627.orig/gdb/gdb.1	2011-06-27 22:30:05.455103105 +0100
++++ gdb-7.3.50~cvs20110627/gdb/gdb.1	2011-06-28 00:16:13.267103856 +0100
+@@ -39,10 +39,25 @@
  .I dir\c
  \&\|]
  .RB "[\|" \c
@@ -33,7 +33,7 @@ Index: gdb-7.0.1/gdb/gdb.1
  .ad b
  .SH DESCRIPTION
  The purpose of a debugger such as GDB is to allow you to see what is
-@@ -352,6 +367,16 @@ interface used by GDB for remote debuggi
+@@ -352,6 +367,16 @@
  Run using \c
  .I device\c
  \& for your program's standard input and output.

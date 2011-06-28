@@ -1,6 +1,6 @@
 /* BFD back-end for HP PA-RISC ELF files.
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1999, 2000, 2001,
-   2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
 
    Original code by
@@ -335,15 +335,6 @@ struct elf32_hppa_link_hash_table
 
 #define eh_name(eh) \
   (eh ? eh->root.root.string : "<undef>")
-
-/* Override the generic function because we want to mark our BFDs.  */
-
-static bfd_boolean
-elf32_hppa_mkobject (bfd *abfd)
-{
-  return bfd_elf_allocate_object (abfd, sizeof (struct elf_obj_tdata),
-				  HPPA32_ELF_DATA);
-}
 
 /* Assorted hash table functions.  */
 
@@ -1736,7 +1727,7 @@ elf32_hppa_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
 	elf_tdata (abfd)->core_signal = bfd_get_16 (abfd, note->descdata + 12);
 
 	/* pr_pid */
-	elf_tdata (abfd)->core_pid = bfd_get_32 (abfd, note->descdata + 24);
+	elf_tdata (abfd)->core_lwpid = bfd_get_32 (abfd, note->descdata + 24);
 
 	/* pr_reg */
 	offset = 72;
@@ -1947,9 +1938,6 @@ allocate_plt_static (struct elf_link_hash_entry *eh, void *inf)
   if (eh->root.type == bfd_link_hash_indirect)
     return TRUE;
 
-  if (eh->root.type == bfd_link_hash_warning)
-    eh = (struct elf_link_hash_entry *) eh->root.u.i.link;
-
   info = (struct bfd_link_info *) inf;
   hh = hppa_elf_hash_entry (eh);
   htab = hppa_link_hash_table (info);
@@ -2016,9 +2004,6 @@ allocate_dynrelocs (struct elf_link_hash_entry *eh, void *inf)
 
   if (eh->root.type == bfd_link_hash_indirect)
     return TRUE;
-
-  if (eh->root.type == bfd_link_hash_warning)
-    eh = (struct elf_link_hash_entry *) eh->root.u.i.link;
 
   info = inf;
   htab = hppa_link_hash_table (info);
@@ -2179,9 +2164,6 @@ static bfd_boolean
 clobber_millicode_symbols (struct elf_link_hash_entry *eh,
 			   struct bfd_link_info *info)
 {
-  if (eh->root.type == bfd_link_hash_warning)
-    eh = (struct elf_link_hash_entry *) eh->root.u.i.link;
-
   if (eh->type == STT_PARISC_MILLI
       && !eh->forced_local)
     {
@@ -2197,9 +2179,6 @@ readonly_dynrelocs (struct elf_link_hash_entry *eh, void *inf)
 {
   struct elf32_hppa_link_hash_entry *hh;
   struct elf32_hppa_dyn_reloc_entry *hdh_p;
-
-  if (eh->root.type == bfd_link_hash_warning)
-    eh = (struct elf_link_hash_entry *) eh->root.u.i.link;
 
   hh = hppa_elf_hash_entry (eh);
   for (hdh_p = hh->dyn_relocs; hdh_p != NULL; hdh_p = hdh_p->hdh_next)
@@ -3750,17 +3729,10 @@ elf32_hppa_relocate_section (bfd *output_bfd,
 	}
 
       if (sym_sec != NULL && elf_discarded_section (sym_sec))
-	{
-	  /* For relocs against symbols from removed linkonce
-	     sections, or sections discarded by a linker script,
-	     we just want the section contents zeroed.  Avoid any
-	     special processing.  */
-	  _bfd_clear_contents (elf_hppa_howto_table + r_type, input_bfd,
-			       contents + rela->r_offset);
-	  rela->r_info = 0;
-	  rela->r_addend = 0;
-	  continue;
-	}
+	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
+					 rela, relend,
+					 elf_hppa_howto_table + r_type,
+					 contents);
 
       if (info->relocatable)
 	continue;
@@ -4481,7 +4453,7 @@ static enum elf_reloc_type_class
 elf32_hppa_reloc_type_class (const Elf_Internal_Rela *rela)
 {
   /* Handle TLS relocs first; we don't want them to be marked
-     relative by the "if (ELF32_R_SYM (rela->r_info) == 0)"
+     relative by the "if (ELF32_R_SYM (rela->r_info) == STN_UNDEF)"
      check below.  */
   switch ((int) ELF32_R_TYPE (rela->r_info))
     {
@@ -4491,7 +4463,7 @@ elf32_hppa_reloc_type_class (const Elf_Internal_Rela *rela)
         return reloc_class_normal;
     }
 
-  if (ELF32_R_SYM (rela->r_info) == 0)
+  if (ELF32_R_SYM (rela->r_info) == STN_UNDEF)
     return reloc_class_relative;
 
   switch ((int) ELF32_R_TYPE (rela->r_info))
@@ -4514,12 +4486,19 @@ elf32_hppa_finish_dynamic_sections (bfd *output_bfd,
   bfd *dynobj;
   struct elf32_hppa_link_hash_table *htab;
   asection *sdyn;
+  asection * sgot;
 
   htab = hppa_link_hash_table (info);
   if (htab == NULL)
     return FALSE;
 
   dynobj = htab->etab.dynobj;
+
+  sgot = htab->sgot;
+  /* A broken linker script might have discarded the dynamic sections.
+     Catch this here so that we do not seg-fault later on.  */
+  if (sgot != NULL && bfd_is_abs_section (sgot->output_section))
+    return FALSE;
 
   sdyn = bfd_get_section_by_name (dynobj, ".dynamic");
 
@@ -4585,19 +4564,19 @@ elf32_hppa_finish_dynamic_sections (bfd *output_bfd,
 	}
     }
 
-  if (htab->sgot != NULL && htab->sgot->size != 0)
+  if (sgot != NULL && sgot->size != 0)
     {
       /* Fill in the first entry in the global offset table.
 	 We use it to point to our dynamic section, if we have one.  */
       bfd_put_32 (output_bfd,
 		  sdyn ? sdyn->output_section->vma + sdyn->output_offset : 0,
-		  htab->sgot->contents);
+		  sgot->contents);
 
       /* The second entry is reserved for use by the dynamic linker.  */
-      memset (htab->sgot->contents + GOT_ENTRY_SIZE, 0, GOT_ENTRY_SIZE);
+      memset (sgot->contents + GOT_ENTRY_SIZE, 0, GOT_ENTRY_SIZE);
 
       /* Set .got entry size.  */
-      elf_section_data (htab->sgot->output_section)
+      elf_section_data (sgot->output_section)
 	->this_hdr.sh_entsize = GOT_ENTRY_SIZE;
     }
 
@@ -4617,8 +4596,8 @@ elf32_hppa_finish_dynamic_sections (bfd *output_bfd,
 	  if ((htab->splt->output_offset
 	       + htab->splt->output_section->vma
 	       + htab->splt->size)
-	      != (htab->sgot->output_offset
-		  + htab->sgot->output_section->vma))
+	      != (sgot->output_offset
+		  + sgot->output_section->vma))
 	    {
 	      (*_bfd_error_handler)
 		(_(".got section not immediately after .plt section"));
@@ -4649,7 +4628,6 @@ elf32_hppa_elf_get_symbol_type (Elf_Internal_Sym *elf_sym, int type)
 #define elf_info_to_howto_rel		     elf_hppa_info_to_howto_rel
 
 /* Stuff for the BFD linker.  */
-#define bfd_elf32_mkobject		     elf32_hppa_mkobject
 #define bfd_elf32_bfd_final_link	     elf32_hppa_final_link
 #define bfd_elf32_bfd_link_hash_table_create elf32_hppa_link_hash_table_create
 #define bfd_elf32_bfd_link_hash_table_free   elf32_hppa_link_hash_table_free
@@ -4687,6 +4665,7 @@ elf32_hppa_elf_get_symbol_type (Elf_Internal_Sym *elf_sym, int type)
 #define TARGET_BIG_SYM		bfd_elf32_hppa_vec
 #define TARGET_BIG_NAME		"elf32-hppa"
 #define ELF_ARCH		bfd_arch_hppa
+#define ELF_TARGET_ID		HPPA32_ELF_DATA
 #define ELF_MACHINE_CODE	EM_PARISC
 #define ELF_MAXPAGESIZE		0x1000
 #define ELF_OSABI		ELFOSABI_HPUX

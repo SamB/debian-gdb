@@ -1,5 +1,5 @@
 /* Mach-O support for BFD.
-   Copyright 1999, 2000, 2001, 2002, 2005, 2007, 2008, 2009, 2010
+   Copyright 1999, 2000, 2001, 2002, 2005, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -58,6 +58,7 @@
 #define bfd_mach_o_bfd_define_common_symbol           bfd_generic_define_common_symbol
 #define bfd_mach_o_bfd_copy_private_header_data       _bfd_generic_bfd_copy_private_header_data
 #define bfd_mach_o_core_file_matches_executable_p     generic_core_file_matches_executable_p
+#define bfd_mach_o_core_file_pid                      _bfd_nocore_core_file_pid
 
 #define bfd_mach_o_get_dynamic_symtab_upper_bound     bfd_mach_o_get_symtab_upper_bound
 #define bfd_mach_o_canonicalize_dynamic_symtab	      bfd_mach_o_canonicalize_symtab
@@ -117,6 +118,7 @@ const bfd_target TARGET_NAME =
   '_',				/* symbol_leading_char.  */
   ' ',				/* ar_pad_char.  */
   16,				/* ar_max_namelen.  */
+  0,				/* match priority.  */
 
 #if TARGET_BIG_ENDIAN
   bfd_getb64, bfd_getb_signed_64, bfd_putb64,

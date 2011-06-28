@@ -1,3 +1,12 @@
+2011-06-20  Nick Clifton  <nickc@redhat.com>
+
+	* am33.igen (sub Rm,Rn,Rd): Fix computation of carry flag.
+
+2011-01-11  Andrew Burgess  <aburgess@broadcom.com>
+
+	* interp.c (sim_store_register): Update return value to
+	match new API.
+
 2010-04-19  Mike Frysinger  <vapier@gentoo.org>
 
 	* dv-mn103ser.c (sockser_addr, USE_SOCKSER_P): Delete

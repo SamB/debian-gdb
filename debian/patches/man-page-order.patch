@@ -8,11 +8,11 @@ Signed-off-by: Jari Aalto <jari.aalto@cante.net>
  gdb/gdb.1 |  148 +++++++++++++++++++++++++-------------------------------------
  1 file changed, 60 insertions(+), 88 deletions(-)
 
-Index: gdb-7.0.1/gdb/gdb.1
+Index: gdb-7.3.50~cvs20110627/gdb/gdb.1
 ===================================================================
---- gdb-7.0.1.orig/gdb/gdb.1	2010-01-30 16:24:38.000000000 -0500
-+++ gdb-7.0.1/gdb/gdb.1	2010-01-30 16:24:40.000000000 -0500
-@@ -220,90 +220,11 @@ in sequential order.  The order makes a 
+--- gdb-7.3.50~cvs20110627.orig/gdb/gdb.1	2011-06-28 00:16:13.267103856 +0100
++++ gdb-7.3.50~cvs20110627/gdb/gdb.1	2011-06-28 00:16:17.791104170 +0100
+@@ -220,90 +220,11 @@
  `\|\c
  .B \-x\c
  \&\|' option is used.
@@ -106,7 +106,7 @@ Index: gdb-7.0.1/gdb/gdb.1
  
  .TP
  .B \-batch
-@@ -331,6 +252,12 @@ Program\ exited\ normally.
+@@ -331,6 +252,12 @@
  terminates) is not issued when running in batch mode.
  
  .TP
@@ -119,7 +119,7 @@ Index: gdb-7.0.1/gdb/gdb.1
  .BI "\-cd=" "directory"\c
  \&
  Run GDB using \c
-@@ -339,9 +266,21 @@ Run GDB using \c
+@@ -339,9 +266,21 @@
  instead of the current directory.
  
  .TP
@@ -143,7 +143,7 @@ Index: gdb-7.0.1/gdb/gdb.1
  Emacs sets this option when it runs GDB as a subprocess.  It tells GDB
  to output the full file name and line number in a standard,
  recognizable fashion each time a stack frame is displayed (which
-@@ -356,10 +295,34 @@ Emacs-to-GDB interface program uses the 
+@@ -356,10 +295,34 @@
  a signal to display the source code for the frame.
  
  .TP
@@ -182,7 +182,7 @@ Index: gdb-7.0.1/gdb/gdb.1
  
  .TP
  .BI "\-tty=" "device"\c
-@@ -379,6 +342,15 @@ Pass \c
+@@ -379,6 +342,15 @@
  Run GDB using a text (console) user interface.
  .PP
  
