@@ -241,6 +241,7 @@ typedef union YYSTYPE {
     int *ivec;
   } YYSTYPE;
 /* Line 191 of yacc.c.  */
+#line 245 "jv-exp.c.tmp"
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
 # define YYSTYPE_IS_TRIVIAL 1
@@ -256,6 +257,7 @@ static int parse_number (char *, int, int, YYSTYPE *);
 
 
 /* Line 214 of yacc.c.  */
+#line 261 "jv-exp.c.tmp"
 
 #if ! defined (yyoverflow) || YYERROR_VERBOSE
 
@@ -1844,6 +1846,7 @@ yyreduce:
     }
 
 /* Line 1000 of yacc.c.  */
+#line 1850 "jv-exp.c.tmp"
 
   yyvsp -= yylen;
   yyssp -= yylen;

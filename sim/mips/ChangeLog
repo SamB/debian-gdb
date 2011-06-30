@@ -1,3 +1,59 @@
+2005-07-08  Ian Lance Taylor  <ian@airs.com>
+
+	* tconfig.in (SIM_QUIET_NAN_NEGATED): Define.
+
+2005-06-16  David Ung  <davidu@mips.com>
+            Nigel Stephens  <nigel@mips.com>
+
+        * mips.igen: New mips16e model and include m16e.igen.
+        (check_u64): Add mips16e tag.
+        * m16e.igen: New file for MIPS16e instructions.
+        * configure.ac (mipsisa32*-*-*, mipsisa32r2*-*-*, mipsisa64*-*-*,
+        mipsisa64r2*-*-*): Change sim_gen to M16, add mips16 and mips16e
+        models.
+        * configure: Regenerate.
+
+2005-05-26  David Ung  <davidu@mips.com>
+ 
+ 	* mips.igen (mips32r2, mips64r2): New ISA models.  Add new model
+	tags to all instructions which are applicable to the new ISAs.
+ 	(do_ror, do_dror, ROR, RORV, DROR, DROR32, DRORV): Add, moved from
+	vr.igen.
+ 	* mips3264r2.igen: New file for MIPS 32/64 revision 2 specific
+ 	instructions. 
+ 	* vr.igen (do_ror, do_dror, ROR, RORV, DROR, DROR32, DRORV): Move
+	to mips.igen.
+ 	* configure.ac (mipsisa32r2*-*-*, mipsisa64r2*-*-*): Add new targets.
+	* configure: Regenerate.
+ 
+2005-03-23  Mark Kettenis  <kettenis@gnu.org>
+
+	* configure: Regenerate.
+
+2005-01-14  Andrew Cagney  <cagney@gnu.org>
+
+	* configure.ac: Sinclude aclocal.m4 before common.m4.  Add
+	explicit call to AC_CONFIG_HEADER.
+	* configure: Regenerate.
+
+2005-01-12  Andrew Cagney  <cagney@gnu.org>
+
+	* configure.ac: Update to use ../common/common.m4.
+	* configure: Re-generate.
+
+2005-01-11  Andrew Cagney  <cagney@localhost.localdomain>
+
+	* configure: Regenerated to track ../common/aclocal.m4 changes.
+
+2005-01-07  Andrew Cagney  <cagney@gnu.org>
+
+	* configure.ac: Rename configure.in, require autoconf 2.59.
+	* configure: Re-generate.
+
+2004-12-08  Hans-Peter Nilsson  <hp@axis.com>
+
+	* configure: Regenerate for ../common/aclocal.m4 update.
+
 2004-09-24  Monika Chaddha  <monika@acmet.com>
 	
 	Committed by Andrew Cagney.

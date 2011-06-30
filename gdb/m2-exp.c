@@ -275,6 +275,7 @@ typedef union YYSTYPE {
     int *ivec;
   } YYSTYPE;
 /* Line 191 of yacc.c.  */
+#line 279 "m2-exp.c.tmp"
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
 # define YYSTYPE_IS_TRIVIAL 1
@@ -286,6 +287,7 @@ typedef union YYSTYPE {
 
 
 /* Line 214 of yacc.c.  */
+#line 291 "m2-exp.c.tmp"
 
 #if ! defined (yyoverflow) || YYERROR_VERBOSE
 
@@ -1931,6 +1933,7 @@ yyreduce:
     }
 
 /* Line 1000 of yacc.c.  */
+#line 1937 "m2-exp.c.tmp"
 
   yyvsp -= yylen;
   yyssp -= yylen;

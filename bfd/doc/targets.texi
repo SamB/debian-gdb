@@ -178,7 +178,7 @@ typedef struct bfd_target
   unsigned short ar_max_namelen;
 
   /* Entries for byte swapping for data. These are different from the
-     other entry points, since they don't take a BFD asthe first argument.
+     other entry points, since they don't take a BFD as the first argument.
      Certain other handlers could do the same.  */
   bfd_uint64_t   (*bfd_getx64) (const void *);
   bfd_int64_t    (*bfd_getx_signed_64) (const void *);
@@ -242,6 +242,7 @@ BFD_JUMP_TABLE macros.
 #define BFD_JUMP_TABLE_COPY(NAME) \
   NAME##_bfd_copy_private_bfd_data, \
   NAME##_bfd_merge_private_bfd_data, \
+  _bfd_generic_init_private_section_data, \
   NAME##_bfd_copy_private_section_data, \
   NAME##_bfd_copy_private_symbol_data, \
   NAME##_bfd_copy_private_header_data, \
@@ -254,6 +255,12 @@ BFD_JUMP_TABLE macros.
   /* Called to merge BFD general private data from one object file
      to a common output file when linking.  */
   bfd_boolean (*_bfd_merge_private_bfd_data) (bfd *, bfd *);
+  /* Called to initialize BFD private section data from one object file
+     to another.  */
+#define bfd_init_private_section_data(ibfd, isec, obfd, osec, link_info) \
+  BFD_SEND (obfd, _bfd_init_private_section_data, (ibfd, isec, obfd, osec, link_info))
+  bfd_boolean (*_bfd_init_private_section_data)
+    (bfd *, sec_ptr, bfd *, sec_ptr, struct bfd_link_info *);
   /* Called to copy BFD private section data from one object file
      to another.  */
   bfd_boolean (*_bfd_copy_private_section_data)
@@ -320,6 +327,8 @@ BFD_JUMP_TABLE macros.
   NAME##_bfd_is_target_special_symbol, \
   NAME##_get_lineno, \
   NAME##_find_nearest_line, \
+  _bfd_generic_find_line, \
+  NAME##_find_inliner_info, \
   NAME##_bfd_make_debug_symbol, \
   NAME##_read_minisymbols, \
   NAME##_minisymbol_to_symbol
@@ -341,6 +350,11 @@ BFD_JUMP_TABLE macros.
   bfd_boolean (*_bfd_find_nearest_line)
     (bfd *, struct bfd_section *, struct bfd_symbol **, bfd_vma,
      const char **, const char **, unsigned int *);
+  bfd_boolean (*_bfd_find_line)
+    (bfd *, struct bfd_symbol **, struct bfd_symbol *,
+     const char **, unsigned int *);
+  bfd_boolean (*_bfd_find_inliner_info)
+    (bfd *, const char **, const char **, unsigned int *);
  /* Back-door to allow format-aware applications to create debug symbols
     while using BFD for everything else.  Currently used by the assembler
     when creating COFF files.  */
@@ -391,6 +405,7 @@ BFD_JUMP_TABLE macros.
   NAME##_bfd_link_split_section, \
   NAME##_bfd_gc_sections, \
   NAME##_bfd_merge_sections, \
+  _bfd_generic_match_sections_by_type, \
   NAME##_bfd_is_group_section, \
   NAME##_bfd_discard_group, \
   NAME##_section_already_linked \
@@ -429,6 +444,12 @@ BFD_JUMP_TABLE macros.
 
   /* Attempt to merge SEC_MERGE sections.  */
   bfd_boolean (*_bfd_merge_sections) (bfd *, struct bfd_link_info *);
+
+#define bfd_match_sections_by_type(abfd, asec, bbfd, bsec) \
+  BFD_SEND (abfd, _bfd_match_sections_by_type, (abfd, asec, bbfd, bsec))
+  /* Return TRUE if 2 section types are compatible.  */
+  bfd_boolean (*_bfd_match_sections_by_type)
+    (bfd *, const asection *, bfd *, const asection *);
 
   /* Is this section a member of a group?  */
   bfd_boolean (*_bfd_is_group_section) (bfd *, const struct bfd_section *);

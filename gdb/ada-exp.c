@@ -292,6 +292,7 @@ typedef union YYSTYPE {
 
   } YYSTYPE;
 /* Line 191 of yacc.c.  */
+#line 296 "ada-exp.c.tmp"
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
 # define YYSTYPE_IS_TRIVIAL 1
@@ -303,6 +304,7 @@ typedef union YYSTYPE {
 
 
 /* Line 214 of yacc.c.  */
+#line 308 "ada-exp.c.tmp"
 
 #if ! defined (yyoverflow) || YYERROR_VERBOSE
 
@@ -2039,6 +2041,7 @@ yyreduce:
     }
 
 /* Line 1000 of yacc.c.  */
+#line 2045 "ada-exp.c.tmp"
 
   yyvsp -= yylen;
   yyssp -= yylen;

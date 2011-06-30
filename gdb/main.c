@@ -1,8 +1,8 @@
 /* Top level stuff for GDB, the GNU debugger.
 
    Copyright 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free Software
-   Foundation, Inc.
+   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -28,6 +28,7 @@
 #include "symfile.h"
 #include "gdbcore.h"
 
+#include "exceptions.h"
 #include "getopt.h"
 
 #include <sys/types.h>
@@ -71,6 +72,15 @@ struct ui_file *gdb_stdin;
 struct ui_file *gdb_stdtargin;
 struct ui_file *gdb_stdtarg;
 struct ui_file *gdb_stdtargerr;
+
+/* Support for the --batch-silent option.  */
+int batch_silent = 0;
+
+/* Support for --return-child-result option.
+   Set the default to -1 to return error in the case
+   that the program does not run or does not complete.  */
+int return_child_result = 0;
+int return_child_result_value = -1;
 
 /* Whether to enable writing into executable and core files */
 extern int write_files;
@@ -128,7 +138,13 @@ captured_main (void *data)
   static int print_version;
 
   /* Pointers to all arguments of --command option.  */
-  char **cmdarg;
+  struct cmdarg {
+    enum {
+      CMDARG_FILE,
+      CMDARG_COMMAND
+    } type;
+    char *string;
+  } *cmdarg;
   /* Allocated size of cmdarg.  */
   int cmdsize;
   /* Number of elements of cmdarg used.  */
@@ -142,7 +158,7 @@ captured_main (void *data)
   int ndir;
 
   struct stat homebuf, cwdbuf;
-  char *homedir, *homeinit;
+  char *homedir;
 
   int i;
 
@@ -168,7 +184,7 @@ captured_main (void *data)
 #endif
 
   cmdsize = 1;
-  cmdarg = (char **) xmalloc (cmdsize * sizeof (*cmdarg));
+  cmdarg = (struct cmdarg *) xmalloc (cmdsize * sizeof (*cmdarg));
   ncmd = 0;
   dirsize = 1;
   dirarg = (char **) xmalloc (dirsize * sizeof (*dirarg));
@@ -189,9 +205,6 @@ captured_main (void *data)
   gdb_stdin = stdio_fileopen (stdin);
   gdb_stdtargerr = gdb_stderr;	/* for moment */
   gdb_stdtargin = gdb_stdin;	/* for moment */
-
-  /* initialize error() */
-  error_init ();
 
   /* Set the sysroot path.  */
 #ifdef TARGET_SYSTEM_ROOT_RELOCATABLE
@@ -256,6 +269,7 @@ captured_main (void *data)
       {"silent", no_argument, &quiet, 1},
       {"nx", no_argument, &inhibit_gdbinit, 1},
       {"n", no_argument, &inhibit_gdbinit, 1},
+      {"batch-silent", no_argument, 0, 'B'},
       {"batch", no_argument, &batch, 1},
       {"epoch", no_argument, &epoch_interface, 1},
 
@@ -277,8 +291,10 @@ captured_main (void *data)
       {"pid", required_argument, 0, 'p'},
       {"p", required_argument, 0, 'p'},
       {"command", required_argument, 0, 'x'},
+      {"eval-command", required_argument, 0, 'X'},
       {"version", no_argument, &print_version, 1},
       {"x", required_argument, 0, 'x'},
+      {"ex", required_argument, 0, 'X'},
 #ifdef GDBTK
       {"tclcommand", required_argument, 0, 'z'},
       {"enable-external-editor", no_argument, 0, 'y'},
@@ -300,6 +316,8 @@ captured_main (void *data)
       {"statistics", no_argument, 0, OPT_STATISTICS},
       {"write", no_argument, &write_files, 1},
       {"args", no_argument, &set_args, 1},
+     {"l", required_argument, 0, 'l'},
+      {"return-child-result", no_argument, &return_child_result, 1},
       {0, no_argument, 0, 0}
     };
 
@@ -372,13 +390,28 @@ captured_main (void *data)
 	    corearg = optarg;
 	    break;
 	  case 'x':
-	    cmdarg[ncmd++] = optarg;
+	    cmdarg[ncmd].type = CMDARG_FILE;
+	    cmdarg[ncmd++].string = optarg;
 	    if (ncmd >= cmdsize)
 	      {
 		cmdsize *= 2;
-		cmdarg = (char **) xrealloc ((char *) cmdarg,
-					     cmdsize * sizeof (*cmdarg));
+		cmdarg = xrealloc ((char *) cmdarg,
+				   cmdsize * sizeof (*cmdarg));
 	      }
+	    break;
+	  case 'X':
+	    cmdarg[ncmd].type = CMDARG_COMMAND;
+	    cmdarg[ncmd++].string = optarg;
+	    if (ncmd >= cmdsize)
+	      {
+		cmdsize *= 2;
+		cmdarg = xrealloc ((char *) cmdarg,
+				   cmdsize * sizeof (*cmdarg));
+	      }
+	    break;
+	  case 'B':
+	    batch = batch_silent = 1;
+	    gdb_stdout = ui_file_new();
 	    break;
 #ifdef GDBTK
 	  case 'z':
@@ -516,7 +549,7 @@ extern int gdbtk_test (char *);
   }
 
   /* Initialize all files.  Give the interpreter a chance to take
-     control of the console via the deprecated_init_ui_hook().  */
+     control of the console via the deprecated_init_ui_hook ().  */
   gdb_init (argv[0]);
 
   /* Do these (and anything which might call wrap_here or *_filtered)
@@ -562,7 +595,7 @@ extern int gdbtk_test (char *);
     /* Find it.  */
     struct interp *interp = interp_lookup (interpreter_p);
     if (interp == NULL)
-      error ("Interpreter `%s' unrecognized", interpreter_p);
+      error (_("Interpreter `%s' unrecognized"), interpreter_p);
     /* Install it.  */
     if (!interp_set (interp))
       {
@@ -601,11 +634,7 @@ extern int gdbtk_test (char *);
   homedir = getenv ("HOME");
   if (homedir)
     {
-      homeinit = (char *) alloca (strlen (homedir) +
-				  strlen (gdbinit) + 10);
-      strcpy (homeinit, homedir);
-      strcat (homeinit, "/");
-      strcat (homeinit, gdbinit);
+      char *homeinit = xstrprintf ("%s/%s", homedir, gdbinit);
 
       if (!inhibit_gdbinit)
 	{
@@ -623,6 +652,7 @@ extern int gdbtk_test (char *);
       stat (homeinit, &homebuf);
       stat (gdbinit, &cwdbuf);	/* We'll only need this if
 				   homedir was set.  */
+      xfree (homeinit);
     }
 
   /* Now perform all the actions indicated by the arguments.  */
@@ -717,7 +747,12 @@ extern int gdbtk_test (char *);
 	  do_cleanups (ALL_CLEANUPS);
 	}
 #endif
-      catch_command_errors (source_command, cmdarg[i], !batch, RETURN_MASK_ALL);
+      if (cmdarg[i].type == CMDARG_FILE)
+        catch_command_errors (source_command, cmdarg[i].string,
+			      !batch, RETURN_MASK_ALL);
+      else  /* cmdarg[i].type == CMDARG_COMMAND */
+        catch_command_errors (execute_command, cmdarg[i].string,
+			      !batch, RETURN_MASK_ALL);
     }
   xfree (cmdarg);
 
@@ -726,15 +761,8 @@ extern int gdbtk_test (char *);
 
   if (batch)
     {
-      if (attach_flag)
-	/* Either there was a problem executing the command in the
-	   batch file aborted early, or the batch file forgot to do an
-	   explicit detach.  Explicitly detach the inferior ensuring
-	   that there are no zombies.  */
-	target_detach (NULL, 0);
-      
       /* We have hit the end of the batch file.  */
-      exit (0);
+      quit_force (NULL, 0);
     }
 
   /* Do any host- or target-specific hacks.  This is used for i960 targets
@@ -772,9 +800,9 @@ extern int gdbtk_test (char *);
       if (!SET_TOP_LEVEL ())
 	{
 	  do_cleanups (ALL_CLEANUPS);	/* Do complete cleanup */
-	  /* GUIs generally have their own command loop, mainloop, or whatever.
-	     This is a good place to gain control because many error
-	     conditions will end up here via longjmp(). */
+	  /* GUIs generally have their own command loop, mainloop, or
+	     whatever.  This is a good place to gain control because
+	     many error conditions will end up here via longjmp().  */
 	  if (deprecated_command_loop_hook)
 	    deprecated_command_loop_hook ();
 	  else
@@ -831,13 +859,17 @@ Options:\n\n\
   --args             Arguments after executable-file are passed to inferior\n\
 "), stream);
   fputs_unfiltered (_("\
-  --[no]async        Enable (disable) asynchronous version of CLI\n\
-"), stream);
-  fputs_unfiltered (_("\
   -b BAUDRATE        Set serial port baud rate used for remote debugging.\n\
   --batch            Exit after processing options.\n\
+  --batch-silent     As for --batch, but suppress all gdb stdout output.\n\
+  --return-child-result\n\
+                     GDB exit code will be the child's exit code.\n\
   --cd=DIR           Change current directory to DIR.\n\
-  --command=FILE     Execute GDB commands from FILE.\n\
+  --command=FILE, -x Execute GDB commands from FILE.\n\
+  --eval-command=COMMAND, -ex\n\
+                     Execute a single GDB command.\n\
+                     May be used multiple times and in conjunction\n\
+                     with --command.\n\
   --core=COREFILE    Analyze the core dump COREFILE.\n\
   --pid=PID          Attach to running process PID.\n\
 "), stream);
@@ -854,7 +886,7 @@ Options:\n\n\
                      Select a specific interpreter / user interface\n\
 "), stream);
   fputs_unfiltered (_("\
-  --mapped           Use mapped symbol files if supported on this system.\n\
+  -l TIMEOUT         Set timeout in seconds for remote debugging.\n\
   --nw		     Do not use a window interface.\n\
   --nx               Do not read "), stream);
   fputs_unfiltered (gdbinit, stream);

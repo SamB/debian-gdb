@@ -247,6 +247,7 @@ typedef union YYSTYPE {
     int *ivec;
   } YYSTYPE;
 /* Line 191 of yacc.c.  */
+#line 251 "p-exp.c.tmp"
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
 # define YYSTYPE_IS_TRIVIAL 1
@@ -269,6 +270,7 @@ static int search_field;
 
 
 /* Line 214 of yacc.c.  */
+#line 274 "p-exp.c.tmp"
 
 #if ! defined (yyoverflow) || YYERROR_VERBOSE
 
@@ -1635,7 +1637,7 @@ yyreduce:
 			  /* we need type of this */
 			  this_val = value_of_this (0); 
 			  if (this_val)
-			    this_type = this_val->type;
+			    this_type = value_type (this_val);
 			  else
 			    this_type = NULL;
 			  if (this_type)
@@ -1789,7 +1791,7 @@ yyreduce:
 			      /* we need type of this */
 			      this_val = value_of_this (0); 
 			      if (this_val)
-				this_type = this_val->type;
+				this_type = value_type (this_val);
 			      else
 				this_type = NULL;
 			      if (this_type)
@@ -1872,6 +1874,7 @@ yyreduce:
     }
 
 /* Line 1000 of yacc.c.  */
+#line 1878 "p-exp.c.tmp"
 
   yyvsp -= yylen;
   yyssp -= yylen;

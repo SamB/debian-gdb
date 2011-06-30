@@ -1,6 +1,9 @@
 @section Core files
 
 
+@subsection Core file functions
+
+
 @strong{Description}@*
 These are functions pertaining to core files.
 

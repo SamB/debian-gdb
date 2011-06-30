@@ -1,5 +1,5 @@
-This is gdbint.info, produced by makeinfo version 4.7 from
-./gdbint.texinfo.
+This is gdbint.info, produced by makeinfo version 4.8 from
+../.././gdb/doc/gdbint.texinfo.
 
 INFO-DIR-SECTION Software development
 START-INFO-DIR-ENTRY
@@ -7,10 +7,10 @@ START-INFO-DIR-ENTRY
 END-INFO-DIR-ENTRY
 
    This file documents the internals of the GNU debugger GDB.
-Copyright
-1990,1991,1992,1993,1994,1996,1998,1999,2000,2001,2002,2003,2004
-Free Software Foundation, Inc.  Contributed by Cygnus Solutions.
-Written by John Gilmore.  Second Edition by Stan Shebs.
+Copyright 1990, 1991, 1992, 1993, 1994, 1996, 1998, 1999, 2000, 2001,
+2002, 2003, 2004, 2005    Free Software Foundation, Inc.  Contributed
+by Cygnus Solutions.  Written by John Gilmore.  Second Edition by Stan
+Shebs.
 
    Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.1 or
@@ -335,6 +335,17 @@ the program being debugged and test the value of the watched
 expression(s) after each instruction.  The rest of this section is
 mostly irrelevant for software watchpoints.
 
+   When the inferior stops, GDB tries to establish, among other
+possible reasons, whether it stopped due to a watchpoint being hit.
+For a data-write watchpoint, it does so by evaluating, for each
+watchpoint, the expression whose value is being watched, and testing
+whether the watched value has changed.  For data-read and data-access
+watchpoints, GDB needs the target to supply a primitive that returns
+the address of the data that was accessed or read (see the description
+of `target_stopped_data_address' below): if this primitive returns a
+valid address, GDB infers that a watchpoint triggered if it watches an
+expression whose evaluation uses that address.
+
    GDB uses several macros and primitives to support hardware
 watchpoints:
 
@@ -360,18 +371,6 @@ watchpoints:
      region whose size is SIZE.  GDB only uses this macro as a
      fall-back, in case `TARGET_REGION_OK_FOR_HW_WATCHPOINT' is not
      defined.
-
-`TARGET_DISABLE_HW_WATCHPOINTS (PID)'
-     Disables watchpoints in the process identified by PID.  This is
-     used, e.g., on HP-UX which provides operations to disable and
-     enable the page-level memory protection that implements hardware
-     watchpoints on that platform.
-
-`TARGET_ENABLE_HW_WATCHPOINTS (PID)'
-     Enables watchpoints in the process identified by PID.  This is
-     used, e.g., on HP-UX which provides operations to disable and
-     enable the page-level memory protection that implements hardware
-     watchpoints on that platform.
 
 `target_insert_watchpoint (ADDR, LEN, TYPE)'
 `target_remove_watchpoint (ADDR, LEN, TYPE)'
@@ -402,7 +401,11 @@ watchpoints:
 `target_stopped_data_address (ADDR_P)'
      If the inferior has some watchpoint that triggered, place the
      address associated with the watchpoint at the location pointed to
-     by ADDR_P and return non-zero.  Otherwise, return zero.
+     by ADDR_P and return non-zero.  Otherwise, return zero.  Note that
+     this primitive is used by GDB only on targets that support
+     data-read or data-access type watchpoints, so targets that have
+     support only for data-write watchpoints need not implement these
+     primitives.
 
 `HAVE_STEPPABLE_WATCHPOINT'
      If defined to a non-zero value, it is not necessary to disable a
@@ -422,7 +425,17 @@ watchpoints:
 
 `STOPPED_BY_WATCHPOINT (WAIT_STATUS)'
      Return non-zero if stopped by a watchpoint.  WAIT_STATUS is of the
-     type `struct target_waitstatus', defined by `target.h'.
+     type `struct target_waitstatus', defined by `target.h'.  Normally,
+     this macro is defined to invoke the function pointed to by the
+     `to_stopped_by_watchpoint' member of the structure (of the type
+     `target_ops', defined on `target.h') that describes the
+     target-specific operations; `to_stopped_by_watchpoint' ignores the
+     WAIT_STATUS argument.
+
+     GDB does not require the non-zero value returned by
+     `STOPPED_BY_WATCHPOINT' to be 100% correct, so if a target cannot
+     determine for sure whether the inferior stopped due to a
+     watchpoint, it could return non-zero "just in case".
 
 3.8.1 x86 Watchpoints
 ---------------------
@@ -4800,29 +4813,46 @@ of the following forms:
 
 MAJOR.MINOR
 MAJOR.MINOR.PATCHLEVEL
-     an official release (e.g., 6.0 or 6.0.1)
+     an official release (e.g., 6.2 or 6.2.1)
 
-MAJOR.MINOR.PATCHLEVEL_YYYYMMDD
-     a snapshot (e.g., 6.0.50_20020630)
+MAJOR.MINOR.PATCHLEVEL.YYYYMMDD
+     a snapshot taken at YYYY-MM-DD-gmt (e.g., 6.1.50.20020302,
+     6.1.90.20020304, or 6.1.0.20020308)
 
-MAJOR.MINOR.PATCHLEVEL_YYYY-MM-DD-cvs
-     a CVS check out (e.g., 6.0.90_2004-02-30-cvs)
+MAJOR.MINOR.PATCHLEVEL.YYYYMMDD-cvs
+     a CVS check out drawn on YYYY-MM-DD (e.g., 6.1.50.20020302-cvs,
+     6.1.90.20020304-cvs, or 6.1.0.20020308-cvs)
 
-MAJOR.MINOR.PATCHLEVEL_YYYYMMDD (VENDOR)
+MAJOR.MINOR.PATCHLEVEL.YYYYMMDD (VENDOR)
      a vendor specific release of GDB, that while based on
-     MAJOR.MINOR.PATCHLEVEL_YYYYMMDD, may contain additional changes
+     MAJOR.MINOR.PATCHLEVEL.YYYYMMDD, may include additional changes
 
    GDB's mainline uses the MAJOR and MINOR version numbers from the
-most recent release branch, with a PATCHLEVEL of 50.  As each new
-release branch is created, the mainline MAJOR and MINOR version numbers
-are accordingly updated.
+most recent release branch, with a PATCHLEVEL of 50.  At the time each
+new release branch is created, the mainline's MAJOR and MINOR version
+numbers are updated.
 
-   GDB's release branch uses a similar, but slightly more complicated
-scheme.  When the branch is first cut, the mainline's PATCHLEVEL is
-changed to .90.  As draft releases are drawn from the branch, the
-PATCHLEVEL is incremented.  Once the first release (MAJOR.MINOR) has
-been made, the version prefix is updated to MAJOR.MINOR.0.90.  Follow
-on releases have an incremented PATCHLEVEL.
+   GDB's release branch is similar.  When the branch is cut, the
+PATCHLEVEL is changed from 50 to 90.  As draft releases are drawn from
+the branch, the PATCHLEVEL is incremented.  Once the first release
+(MAJOR.MINOR) has been made, the PATCHLEVEL is set to 0 and updates
+have an incremented PATCHLEVEL.
+
+   For snapshots, and CVS check outs, it is also possible to identify
+the CVS origin:
+
+MAJOR.MINOR.50.YYYYMMDD
+     drawn from the HEAD of mainline CVS (e.g., 6.1.50.20020302)
+
+MAJOR.MINOR.90.YYYYMMDD
+MAJOR.MINOR.91.YYYYMMDD ...
+     drawn from a release branch prior to the release (e.g.,
+     6.1.90.20020304)
+
+MAJOR.MINOR.0.YYYYMMDD
+MAJOR.MINOR.1.YYYYMMDD ...
+     drawn from a release branch after the release (e.g.,
+     6.2.0.20020308)
 
    If the previous GDB version is 6.1 and the current version is 6.2,
 then, substituting 6 for MAJOR and 1 or 2 for MINOR, here's an
@@ -4830,34 +4860,34 @@ illustration of a typical sequence:
 
           <HEAD>
              |
-     6.1.50_2002-03-02-cvs
+     6.1.50.20020302-cvs
              |
-             +---------------------------.
+             +--------------------------.
              |                    <gdb_6_2-branch>
-             |                           |
-     6.2.50_2002-03-03-cvs        6.1.90 (draft #1)
-             |                           |
-     6.2.50_2002-03-04-cvs        6.1.90_2002-03-04-cvs
-             |                           |
-     6.2.50_2002-03-05-cvs        6.1.91 (draft #2)
-             |                           |
-     6.2.50_2002-03-06-cvs        6.1.91_2002-03-06-cvs
-             |                           |
-     6.2.50_2002-03-07-cvs        6.2 (release)
              |                          |
-     6.2.50_2002-03-08-cvs        6.2.0.90_2002-03-08-cvs
+     6.2.50.20020303-cvs        6.1.90 (draft #1)
              |                          |
-     6.2.50_2002-03-09-cvs        6.2.1 (update)
-             |                           |
-     6.2.50_2002-03-10-cvs         <branch closed>
+     6.2.50.20020304-cvs        6.1.90.20020304-cvs
+             |                          |
+     6.2.50.20020305-cvs        6.1.91 (draft #2)
+             |                          |
+     6.2.50.20020306-cvs        6.1.91.20020306-cvs
+             |                          |
+     6.2.50.20020307-cvs        6.2 (release)
+             |                          |
+     6.2.50.20020308-cvs        6.2.0.20020308-cvs
+             |                          |
+     6.2.50.20020309-cvs        6.2.1 (update)
+             |                          |
+     6.2.50.20020310-cvs         <branch closed>
              |
-     6.2.50_2002-03-11-cvs
+     6.2.50.20020311-cvs
              |
-             +---------------------------.
+             +--------------------------.
              |                     <gdb_6_3-branch>
-             |                           |
-     6.3.50_2002-03-12-cvs        6.2.90 (draft #1)
-             |                           |
+             |                          |
+     6.3.50.20020312-cvs        6.2.90 (draft #1)
+             |                          |
 
 15.2 Release Branches
 =====================
@@ -4928,7 +4958,7 @@ _a branch shall contain the entire GDB module_
 _a branch shall be branded using `version.in'_
      The file `gdb/version.in' shall be modified so that it identifies
      the branch OWNER and branch NAME, e.g.,
-     `6.2.50_20030303_owner_name' or `6.2 (Owner Name)'.
+     `6.2.50.20030303_owner_name' or `6.2 (Owner Name)'.
 
 
 15.4.2 Tags
@@ -6049,6 +6079,12 @@ emitted.
  -- Function: void target_changed (struct target_ops *TARGET)
      The target's register contents have changed.
 
+ -- Function: void executable_changed (void *UNUSED_ARGS)
+     The executable being debugged by GDB has changed: The user decided
+     to debug a different program, or the program he was debugging has
+     been modified since being loaded by the debugger (by being
+     recompiled, for instance).
+
  -- Function: void inferior_created (struct target_ops *OBJFILE, int
           FROM_TTY)
      GDB has just connected to an inferior.  For `run', GDB calls this
@@ -6057,8 +6093,13 @@ emitted.
      immediately after connecting to the inferior, and before any
      information on the inferior has been printed.
 
+ -- Function: void solib_loaded (struct so_list *SOLIB)
+     The shared library specified by SOLIB has been loaded.  Note that
+     when GDB calls this observer, the library's symbols probably
+     haven't been loaded yet.
+
  -- Function: void solib_unloaded (struct so_list *SOLIB)
-     The specified shared library has been discovered to be unloaded.
+     The shared library specified by SOLIB has been unloaded.
 
 
 File: gdbint.info,  Node: GNU Free Documentation License,  Next: Index,  Prev: GDB Observers,  Up: Top

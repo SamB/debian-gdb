@@ -267,6 +267,7 @@ typedef union YYSTYPE {
     int *ivec;
   } YYSTYPE;
 /* Line 191 of yacc.c.  */
+#line 271 "objc-exp.c.tmp"
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
 # define YYSTYPE_IS_TRIVIAL 1
@@ -283,6 +284,7 @@ parse_number PARAMS ((char *, int, int, YYSTYPE *));
 
 
 /* Line 214 of yacc.c.  */
+#line 288 "objc-exp.c.tmp"
 
 #if ! defined (yyoverflow) || YYERROR_VERBOSE
 
@@ -2420,6 +2422,7 @@ yyreduce:
     }
 
 /* Line 1000 of yacc.c.  */
+#line 2426 "objc-exp.c.tmp"
 
   yyvsp -= yylen;
   yyssp -= yylen;
