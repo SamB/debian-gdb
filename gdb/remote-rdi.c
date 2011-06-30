@@ -66,8 +66,6 @@ static void arm_rdi_fetch_registers (int regno);
 static void arm_rdi_resume (ptid_t pid, int step,
                             enum target_signal siggnal);
 
-static int arm_rdi_start_remote (char *dummy);
-
 static void arm_rdi_open (char *name, int from_tty);
 
 static void arm_rdi_create_inferior (char *exec_file, char *args, char **env);
@@ -76,21 +74,11 @@ static void arm_rdi_close (int quitting);
 
 static void arm_rdi_store_registers (int regno);
 
-static void arm_rdi_mourn (void);
-
-static void arm_rdi_send (char *buf);
-
 static ptid_t arm_rdi_wait (ptid_t ptid, struct target_waitstatus *status);
 
 static void arm_rdi_kill (void);
 
 static void arm_rdi_detach (char *args, int from_tty);
-
-static void arm_rdi_interrupt (int signo);
-
-static void arm_rdi_interrupt_twice (int signo);
-
-static void interrupt_query (void);
 
 static int arm_rdi_insert_breakpoint (CORE_ADDR, char *);
 
@@ -134,19 +122,10 @@ static struct local_bp_list_entry
   }
  *local_bp_list;
 
-
-/* Stub for catch_errors.  */
-
-static int
-arm_rdi_start_remote (char *dummy)
-{
-  return 1;
-}
-
 /* Helper callbacks for the "host interface" structure.  RDI functions call
    these to forward output from the target system and so forth.  */
 
-void
+static void
 voiddummy (void *dummy)
 {
   fprintf_unfiltered (gdb_stdout, "void dummy\n");
@@ -483,29 +462,6 @@ arm_rdi_resume (ptid_t ptid, int step, enum target_signal siggnal)
     }
 }
 
-/* Send ^C to target to halt it.  Target will respond, and send us a
-   packet.  */
-
-static void
-arm_rdi_interrupt (int signo)
-{
-}
-
-static void (*ofunc) ();
-
-/* The user typed ^C twice.  */
-static void
-arm_rdi_interrupt_twice (int signo)
-{
-}
-
-/* Ask the user what to do when an interrupt is received.  */
-
-static void
-interrupt_query (void)
-{
-}
-
 /* Wait until the remote machine stops, then return, storing status in
    STATUS just as `wait' would.  Returns "pid" (though it's not clear
    what, if anything, that means in the case of this target).  */
@@ -524,7 +480,6 @@ arm_rdi_wait (ptid_t ptid, struct target_waitstatus *status)
 
 /* Read the remote registers into the block REGS.  */
 
-/* ARGSUSED */
 static void
 arm_rdi_fetch_registers (int regno)
 {
@@ -598,7 +553,7 @@ arm_rdi_store_registers (int regno)
     }
   else
     {
-      read_register_gen (regno, (char *) rawreg);
+      deprecated_read_register_gen (regno, (char *) rawreg);
       /* RDI manipulates data in host byte order, so convert now. */
       store_unsigned_integer (rawerreg, 4, rawreg[0]);
 
@@ -624,7 +579,6 @@ arm_rdi_store_registers (int regno)
    if SHOULD_WRITE is nonzero.  Returns length of data written or
    read; 0 for error.  TARGET is unused.  */
 
-/* ARGSUSED */
 static int
 arm_rdi_xfer_memory (CORE_ADDR memaddr, char *myaddr, int len,
 		     int should_write, struct mem_attrib *attrib,
@@ -1009,6 +963,8 @@ rdilogenable_command (char *args, int from_tty)
 		     "              try y or n\n", args);
 }
 
+extern initialize_file_ftype _initialize_remote_rdi; /* -Wmissing-prototypes */
+
 void
 _initialize_remote_rdi (void)
 {
@@ -1023,46 +979,48 @@ _initialize_remote_rdi (void)
 
   c = add_cmd ("rdilogfile", class_maintenance,
 	       rdilogfile_command,
-	       "Set filename for ADP packet log.\n\
-This file is used to log Angel Debugger Protocol packets.\n\
-With a single argument, sets the logfile name to that value.\n\
-Without an argument, shows the current logfile name.\n\
-See also: rdilogenable\n",
-	   &maintenancelist);
+	       "Set filename for ADP packet log.\n"
+	       "This file is used to log Angel Debugger Protocol packets.\n"
+	       "With a single argument, sets the logfile name to that value.\n"
+	       "Without an argument, shows the current logfile name.\n"
+	       "See also: rdilogenable\n",
+	       &maintenancelist);
   set_cmd_completer (c, filename_completer);
 
   add_cmd ("rdilogenable", class_maintenance,
 	   rdilogenable_command,
-	   "Set enable logging of ADP packets.\n\
-This will log ADP packets exchanged between gdb and the\n\
-rdi target device.\n\
-An argument of 1,t,true,y,yes will enable.\n\
-An argument of 0,f,false,n,no will disabled.\n\
-Withough an argument, it will display current state.\n",
+	   "Set enable logging of ADP packets.\n"
+	   "This will log ADP packets exchanged between gdb and the\n"
+	   "rdi target device.\n"
+	   "An argument of 1, t, true, y or yes will enable.\n"
+	   "An argument of 0, f, false, n or no will disabled.\n"
+	   "Withough an argument, it will display current state.\n",
 	   &maintenancelist);
 
-  add_show_from_set
-    (add_set_boolean_cmd ("rdiromatzero", no_class, &rom_at_zero,
-			  "Set target has ROM at addr 0.\n\
-A true value disables vector catching, false enables vector catching.\n\
-This is evaluated at the time the 'target rdi' command is executed\n",
-			  &setlist),
-     &showlist);
+  add_setshow_boolean_cmd
+    ("rdiromatzero", no_class, &rom_at_zero,
+     "Set target has ROM at addr 0.\n"
+     "A true value disables vector catching, false enables vector catching.\n"
+     "This is evaluated at the time the 'target rdi' command is executed\n",
+     "Show if target has ROM at addr 0.\n",
+     NULL, NULL,
+     &setlist, &showlist);
 
-  add_show_from_set
-    (add_set_boolean_cmd ("rdiheartbeat", no_class, &rdi_heartbeat,
-			  "Set enable for ADP heartbeat packets.\n\
-I don't know why you would want this. If you enable them,\n\
-it will confuse ARM and EPI JTAG interface boxes as well\n\
-as the Angel Monitor.\n",
-			  &setlist),
-     &showlist);
+  add_setshow_boolean_cmd
+    ("rdiheartbeat", no_class, &rdi_heartbeat,
+     "Set enable for ADP heartbeat packets.\n"
+     "I don't know why you would want this. If you enable them,\n"
+     "it will confuse ARM and EPI JTAG interface boxes as well\n"
+     "as the Angel Monitor.\n",
+     "Show enable for ADP heartbeat packets.\n",
+     NULL, NULL,
+     &setlist, &showlist);
 }
 
 /* A little dummy to make linking with the library succeed. */
 
-int
-Fail (void)
+void
+Fail (const char *ignored, ...)
 {
-  return 0;
+  
 }

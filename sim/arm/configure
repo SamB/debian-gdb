@@ -3534,7 +3534,10 @@ fi
 done
 
 
-COPRO=armcopro.o
+COPRO="armcopro.o maverick.o iwmmxt.o"
+
+
+
 
 
 trap '' 1 2 15

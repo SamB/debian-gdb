@@ -1,4 +1,4 @@
-#   Copyright 1997, 1998, 1999, 2000 Free Software Foundation, Inc.
+#   Copyright 1997, 1998, 1999, 2000, 2004 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -65,12 +65,20 @@ if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}.o" object {debug
 if {$gcc_compiled == 0} {
     if [istarget "hppa*-hp-hpux*"] then {
 	set additional_flags "additional_flags=+z"
+    } elseif { [istarget "mips-sgi-irix*"] } {
+	# Disable SGI compiler's implicit -Dsgi
+	set additional_flags "additional_flags=-Usgi"
     } else {
 	# don't know what the compiler is...
 	set additional_flags ""
     }
 } else {
-    set additional_flags "additional_flags=-fpic"
+    if { ([istarget "powerpc*-*-aix*"]
+       || [istarget "rs6000*-*-aix*"]) } {
+	set additional_flags ""
+    } else {
+	set additional_flags "additional_flags=-fpic"
+    }
 }
 
 if {[gdb_compile "${srcdir}/${subdir}/${libfile}1.c" "${objdir}/${subdir}/${libfile}1.o" object [list debug $additional_flags]] != ""} {
@@ -93,7 +101,17 @@ if [istarget "hppa*-*-hpux*"] {
 	gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
     }
 }
-if {[gdb_compile "${objdir}/${subdir}/${testfile}.o ${objdir}/${subdir}/${libfile}1.sl ${objdir}/${subdir}/${libfile}2.sl" "${binfile}" executable {debug}] != ""} {
+
+if { ($gcc_compiled 
+      &&  ([istarget "powerpc*-*-aix*"]
+	|| [istarget "rs6000*-*-aix*"] )) } {
+    set additional_flags "additional_flags=-L${objdir}/${subdir}"
+} elseif { [istarget "mips-sgi-irix*"] } {
+    set additional_flags "additional_flags=-rpath ${objdir}/${subdir}"
+} else {
+    set additional_flags ""
+}
+if {[gdb_compile "${objdir}/${subdir}/${testfile}.o ${objdir}/${subdir}/${libfile}1.sl ${objdir}/${subdir}/${libfile}2.sl" "${binfile}" executable [list debug $additional_flags]] != ""} {
      gdb_suppress_entire_file "Testcase compile failed, so all tests in this file will automatically fail."
 }
 
@@ -221,18 +239,27 @@ gdb_expect {
 
 #step -return
     send_gdb "step\n"
+    # A step at this point will either take us entirely out of
+    # the function or into the function's epilogue.  The exact
+    # behavior will differ depending upon upon whether or not
+    # the compiler emits line number information for the epilogue.
     gdb_expect {
-        -re ".*\\\}.*$gdb_prompt $" { pass "step inside shr2 (shlib func)"}
-        -re ".*$gdb_prompt $" { fail "step inside shr2 (shlib func)" }
-        timeout { fail "step inside shr2 (shlib func) (timeout)" }
-    }
-    
-    send_gdb "step\n"
-    gdb_expect {
-        -re "main \\(\\) at.*g = mainshr1\\(g\\);.*$gdb_prompt $" { pass "step out of shr2 to main"}
-        -re ".*$gdb_prompt $" { fail "step out of shr2 to main" }
+        -re "main \\(\\) at.*g = mainshr1\\(g\\);.*$gdb_prompt $" { 
+	    pass "step out of shr2 to main"
+	}
+        -re ".*\\\}.*$gdb_prompt $" {
+	    pass "step out of shr2 to main (stopped in shr2 epilogue)"
+	    send_gdb "step\n"
+	    gdb_expect {
+		-re "main \\(\\) at.*g = mainshr1\\(g\\);.*$gdb_prompt $" { pass "step out of shr2 epilogue to main"}
+		-re ".*$gdb_prompt $" { fail "step out of shr2 epilogue to main" }
+		timeout { fail "step out of shr2 epilogue to main (timeout)" }
+	    }
+	}
+        -re ".*$gdb_prompt $" { fail "step out of shr2" }
         timeout { fail "step out of shr2 to main (timeout)" }
     }
+    
 
 #print mainshr1(1)
 send_gdb "print mainshr1(1)\n"
@@ -264,7 +291,7 @@ send_gdb "set width 0\n" ; gdb_expect -re "$gdb_prompt $"
 
 # PR's 16495, 18213
 # test that we can re-set breakpoints in shared libraries
-gdb_test "break shr1" "Breakpoint 1.*" "set bp in shared library"
+gdb_breakpoint "shr1"
 
 # FIXME: should not send "run" explicitly.  Non-portable.
 

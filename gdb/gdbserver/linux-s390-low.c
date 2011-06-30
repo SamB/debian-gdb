@@ -27,9 +27,9 @@
 
 #include <asm/ptrace.h>
 
-int num_regs = 67;
+#define s390_num_regs 51
 
-int regmap[] = {
+static int s390_regmap[] = {
   PT_PSWMASK, PT_PSWADDR,
 
   PT_GPR0, PT_GPR1, PT_GPR2, PT_GPR3,
@@ -42,14 +42,9 @@ int regmap[] = {
   PT_ACR8, PT_ACR9, PT_ACR10, PT_ACR11,
   PT_ACR12, PT_ACR13, PT_ACR14, PT_ACR15,
 
-  -1, -1, -1, -1,
-  -1, -1, -1, -1,
-  -1, PT_CR_9, PT_CR_10, PT_CR_11,
-  -1, -1, -1, -1,
-  
   PT_FPC,
 
-#ifdef PT_FPR0_HI
+#ifndef __s390x__
   PT_FPR0_HI, PT_FPR1_HI, PT_FPR2_HI, PT_FPR3_HI,
   PT_FPR4_HI, PT_FPR5_HI, PT_FPR6_HI, PT_FPR7_HI,
   PT_FPR8_HI, PT_FPR9_HI, PT_FPR10_HI, PT_FPR11_HI,
@@ -62,20 +57,27 @@ int regmap[] = {
 #endif
 };
 
-int
-cannot_fetch_register (int regno)
+static int
+s390_cannot_fetch_register (int regno)
 {
-  if (regmap[regno] == -1)
+  if (s390_regmap[regno] == -1)
     return 1;
 
   return 0;
 }
 
-int
-cannot_store_register (int regno)
+static int
+s390_cannot_store_register (int regno)
 {
-  if (regmap[regno] == -1)
+  if (s390_regmap[regno] == -1)
     return 1;
 
   return 0;
 }
+
+struct linux_target_ops the_low_target = {
+  s390_num_regs,
+  s390_regmap,
+  s390_cannot_fetch_register,
+  s390_cannot_store_register,
+};

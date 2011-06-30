@@ -1,7 +1,8 @@
 /* IBM RS/6000 native-dependent code for GDB, the GNU debugger.
-   Copyright 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2001, 2002
-   Free Software Foundation, Inc.
+
+   Copyright 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996,
+   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free Software
+   Foundation, Inc.
 
    This file is part of GDB.
 
@@ -32,6 +33,9 @@
 #include "gdb-stabs.h"
 #include "regcache.h"
 #include "arch-utils.h"
+#include "language.h"		/* for local_hex_string().  */
+#include "ppc-tdep.h"
+#include "exec.h"
 
 #include <sys/ptrace.h>
 #include <sys/reg.h>
@@ -69,7 +73,7 @@
 #ifndef ARCH3264
 # define ARCH64() 0
 #else
-# define ARCH64() (REGISTER_RAW_SIZE (0) == 8)
+# define ARCH64() (DEPRECATED_REGISTER_RAW_SIZE (0) == 8)
 #endif
 
 /* Union of 32-bit and 64-bit ".reg" core file sections. */
@@ -125,8 +129,6 @@ typedef union {
 
 extern struct vmap *map_vmap (bfd * bf, bfd * arch);
 
-extern struct target_ops exec_ops;
-
 static void vmap_exec (void);
 
 static void vmap_ldinfo (LdInfo *);
@@ -141,21 +143,45 @@ static void fetch_core_registers (char *, unsigned int, int, CORE_ADDR);
 
 static void exec_one_dummy_insn (void);
 
-extern void
-fixup_breakpoints (CORE_ADDR low, CORE_ADDR high, CORE_ADDR delta);
+extern void fixup_breakpoints (CORE_ADDR low, CORE_ADDR high, CORE_ADDR delta);
 
-/* Conversion from gdb-to-system special purpose register numbers. */
+/* Given REGNO, a gdb register number, return the corresponding
+   number suitable for use as a ptrace() parameter.  Return -1 if
+   there's no suitable mapping.  Also, set the int pointed to by
+   ISFLOAT to indicate whether REGNO is a floating point register.  */
 
-static int special_regs[] =
+static int
+regmap (int regno, int *isfloat)
 {
-  IAR,				/* PC_REGNUM    */
-  MSR,				/* PS_REGNUM    */
-  CR,				/* CR_REGNUM    */
-  LR,				/* LR_REGNUM    */
-  CTR,				/* CTR_REGNUM   */
-  XER,				/* XER_REGNUM   */
-  MQ				/* MQ_REGNUM    */
-};
+  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+
+  *isfloat = 0;
+  if (tdep->ppc_gp0_regnum <= regno && regno <= tdep->ppc_gplast_regnum)
+    return regno;
+  else if (FP0_REGNUM <= regno && regno <= FPLAST_REGNUM)
+    {
+      *isfloat = 1;
+      return regno - FP0_REGNUM + FPR0;
+    }
+  else if (regno == PC_REGNUM)
+    return IAR;
+  else if (regno == tdep->ppc_ps_regnum)
+    return MSR;
+  else if (regno == tdep->ppc_cr_regnum)
+    return CR;
+  else if (regno == tdep->ppc_lr_regnum)
+    return LR;
+  else if (regno == tdep->ppc_ctr_regnum)
+    return CTR;
+  else if (regno == tdep->ppc_xer_regnum)
+    return XER;
+  else if (regno == tdep->ppc_fpscr_regnum)
+    return FPSCR;
+  else if (tdep->ppc_mq_regnum >= 0 && regno == tdep->ppc_mq_regnum)
+    return MQ;
+  else
+    return -1;
+}
 
 /* Call ptrace(REQ, ID, ADDR, DATA, BUF). */
 
@@ -192,36 +218,31 @@ rs6000_ptrace64 (int req, int id, long long addr, int data, int *buf)
 static void
 fetch_register (int regno)
 {
-  int *addr = (int *) &registers[REGISTER_BYTE (regno)];
-  int nr;
+  int addr[MAX_REGISTER_SIZE];
+  int nr, isfloat;
 
   /* Retrieved values may be -1, so infer errors from errno. */
   errno = 0;
 
+  nr = regmap (regno, &isfloat);
+
   /* Floating-point registers. */
-  if (regno >= FP0_REGNUM && regno <= FPLAST_REGNUM)
-    {
-      nr = regno - FP0_REGNUM + FPR0;
-      rs6000_ptrace32 (PT_READ_FPR, PIDGET (inferior_ptid), addr, nr, 0);
-    }
+  if (isfloat)
+    rs6000_ptrace32 (PT_READ_FPR, PIDGET (inferior_ptid), addr, nr, 0);
 
   /* Bogus register number. */
-  else if (regno > LAST_UISA_SP_REGNUM)
+  else if (nr < 0)
     {
       if (regno >= NUM_REGS)
 	fprintf_unfiltered (gdb_stderr,
 			    "gdb error: register no %d not implemented.\n",
 			    regno);
+      return;
     }
 
   /* Fixed-point registers. */
   else
     {
-      if (regno >= FIRST_UISA_SP_REGNUM)
-	nr = special_regs[regno - FIRST_UISA_SP_REGNUM];
-      else
-	nr = regno;
-
       if (!ARCH64 ())
 	*addr = rs6000_ptrace32 (PT_READ_GPR, PIDGET (inferior_ptid), (int *)nr, 0, 0);
       else
@@ -230,7 +251,7 @@ fetch_register (int regno)
 	     even if the register is really only 32 bits. */
 	  long long buf;
 	  rs6000_ptrace64 (PT_READ_GPR, PIDGET (inferior_ptid), nr, 0, (int *)&buf);
-	  if (REGISTER_RAW_SIZE (regno) == 8)
+	  if (DEPRECATED_REGISTER_RAW_SIZE (regno) == 8)
 	    memcpy (addr, &buf, 8);
 	  else
 	    *addr = buf;
@@ -238,7 +259,7 @@ fetch_register (int regno)
     }
 
   if (!errno)
-    register_valid[regno] = 1;
+    supply_register (regno, (char *) addr);
   else
     {
 #if 0
@@ -254,21 +275,23 @@ fetch_register (int regno)
 static void
 store_register (int regno)
 {
-  int *addr = (int *) &registers[REGISTER_BYTE (regno)];
-  int nr;
+  int addr[MAX_REGISTER_SIZE];
+  int nr, isfloat;
+
+  /* Fetch the register's value from the register cache.  */
+  regcache_collect (regno, addr);
 
   /* -1 can be a successful return value, so infer errors from errno. */
   errno = 0;
 
+  nr = regmap (regno, &isfloat);
+
   /* Floating-point registers. */
-  if (regno >= FP0_REGNUM && regno <= FPLAST_REGNUM)
-    {
-      nr = regno - FP0_REGNUM + FPR0;
-      rs6000_ptrace32 (PT_WRITE_FPR, PIDGET (inferior_ptid), addr, nr, 0);
-    }
+  if (isfloat)
+    rs6000_ptrace32 (PT_WRITE_FPR, PIDGET (inferior_ptid), addr, nr, 0);
 
   /* Bogus register number. */
-  else if (regno > LAST_UISA_SP_REGNUM)
+  else if (nr < 0)
     {
       if (regno >= NUM_REGS)
 	fprintf_unfiltered (gdb_stderr,
@@ -287,11 +310,9 @@ store_register (int regno)
 	   (%sp). */
 	exec_one_dummy_insn ();
 
-      if (regno >= FIRST_UISA_SP_REGNUM)
-	nr = special_regs[regno - FIRST_UISA_SP_REGNUM];
-      else
-	nr = regno;
-
+      /* The PT_WRITE_GPR operation is rather odd.  For 32-bit inferiors,
+         the register's value is passed by value, but for 64-bit inferiors,
+	 the address of a buffer containing the value is passed.  */
       if (!ARCH64 ())
 	rs6000_ptrace32 (PT_WRITE_GPR, PIDGET (inferior_ptid), (int *)nr, *addr, 0);
       else
@@ -299,7 +320,7 @@ store_register (int regno)
 	  /* PT_WRITE_GPR requires the buffer parameter to point to an 8-byte
 	     area, even if the register is really only 32 bits. */
 	  long long buf;
-	  if (REGISTER_RAW_SIZE (regno) == 8)
+	  if (DEPRECATED_REGISTER_RAW_SIZE (regno) == 8)
 	    memcpy (&buf, addr, 8);
 	  else
 	    buf = *addr;
@@ -325,17 +346,30 @@ fetch_inferior_registers (int regno)
 
   else
     {
-      /* read 32 general purpose registers. */
-      for (regno = 0; regno < 32; regno++)
-	fetch_register (regno);
+      struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
 
-      /* read general purpose floating point registers. */
+      /* Read 32 general purpose registers.  */
+      for (regno = tdep->ppc_gp0_regnum;
+           regno <= tdep->ppc_gplast_regnum;
+	   regno++)
+	{
+	  fetch_register (regno);
+	}
+
+      /* Read general purpose floating point registers.  */
       for (regno = FP0_REGNUM; regno <= FPLAST_REGNUM; regno++)
 	fetch_register (regno);
 
-      /* read special registers. */
-      for (regno = FIRST_UISA_SP_REGNUM; regno <= LAST_UISA_SP_REGNUM; regno++)
-	fetch_register (regno);
+      /* Read special registers.  */
+      fetch_register (PC_REGNUM);
+      fetch_register (tdep->ppc_ps_regnum);
+      fetch_register (tdep->ppc_cr_regnum);
+      fetch_register (tdep->ppc_lr_regnum);
+      fetch_register (tdep->ppc_ctr_regnum);
+      fetch_register (tdep->ppc_xer_regnum);
+      fetch_register (tdep->ppc_fpscr_regnum);
+      if (tdep->ppc_mq_regnum >= 0)
+	fetch_register (tdep->ppc_mq_regnum);
     }
 }
 
@@ -351,18 +385,30 @@ store_inferior_registers (int regno)
 
   else
     {
-      /* write general purpose registers first! */
-      for (regno = GPR0; regno <= GPR31; regno++)
-	store_register (regno);
+      struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
 
-      /* write floating point registers now. */
+      /* Write general purpose registers first.  */
+      for (regno = tdep->ppc_gp0_regnum;
+           regno <= tdep->ppc_gplast_regnum;
+	   regno++)
+	{
+	  store_register (regno);
+	}
+
+      /* Write floating point registers.  */
       for (regno = FP0_REGNUM; regno <= FPLAST_REGNUM; regno++)
 	store_register (regno);
 
-      /* write special registers. */
-
-      for (regno = FIRST_UISA_SP_REGNUM; regno <= LAST_UISA_SP_REGNUM; regno++)
-	store_register (regno);
+      /* Write special registers.  */
+      store_register (PC_REGNUM);
+      store_register (tdep->ppc_ps_regnum);
+      store_register (tdep->ppc_cr_regnum);
+      store_register (tdep->ppc_lr_regnum);
+      store_register (tdep->ppc_ctr_regnum);
+      store_register (tdep->ppc_xer_regnum);
+      store_register (tdep->ppc_fpscr_regnum);
+      if (tdep->ppc_mq_regnum >= 0)
+	store_register (tdep->ppc_mq_regnum);
     }
 }
 
@@ -439,7 +485,8 @@ child_xfer_memory (CORE_ADDR memaddr, char *myaddr, int len,
 
       /* Fetch trailing memory needed for alignment. */
       if (addr + count * sizeof (int) > memaddr + len)
-	if (!read_word (addr, buf + count - 1, arch64))
+	if (!read_word (addr + (count - 1) * sizeof (int),
+                        buf + count - 1, arch64))
 	  return 0;
 
       /* Copy supplied data into memory buffer. */
@@ -514,9 +561,8 @@ fetch_core_registers (char *core_reg_sect, unsigned core_reg_size,
 		      int which, CORE_ADDR reg_addr)
 {
   CoreRegs *regs;
-  double *fprs;
-  int arch64, i, size;
-  void *gprs, *sprs[7];
+  int regi;
+  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch); 
 
   if (which != 0)
     {
@@ -526,45 +572,43 @@ fetch_core_registers (char *core_reg_sect, unsigned core_reg_size,
       return;
     }
 
-  arch64 = ARCH64 ();
   regs = (CoreRegs *) core_reg_sect;
 
-  /* Retrieve register pointers. */
+  /* Put the register values from the core file section in the regcache.  */
 
-  if (arch64)
+  if (ARCH64 ())
     {
-      gprs = regs->r64.gpr;
-      fprs = regs->r64.fpr;
-      sprs[0] = &regs->r64.iar;
-      sprs[1] = &regs->r64.msr;
-      sprs[2] = &regs->r64.cr;
-      sprs[3] = &regs->r64.lr;
-      sprs[4] = &regs->r64.ctr;
-      sprs[5] = &regs->r64.xer;
+      for (regi = 0; regi < 32; regi++)
+        supply_register (regi, (char *) &regs->r64.gpr[regi]);
+
+      for (regi = 0; regi < 32; regi++)
+	supply_register (FP0_REGNUM + regi, (char *) &regs->r64.fpr[regi]);
+
+      supply_register (PC_REGNUM, (char *) &regs->r64.iar);
+      supply_register (tdep->ppc_ps_regnum, (char *) &regs->r64.msr);
+      supply_register (tdep->ppc_cr_regnum, (char *) &regs->r64.cr);
+      supply_register (tdep->ppc_lr_regnum, (char *) &regs->r64.lr);
+      supply_register (tdep->ppc_ctr_regnum, (char *) &regs->r64.ctr);
+      supply_register (tdep->ppc_xer_regnum, (char *) &regs->r64.xer);
+      supply_register (tdep->ppc_fpscr_regnum, (char *) &regs->r64.fpscr);
     }
   else
     {
-      gprs = regs->r32.gpr;
-      fprs = regs->r32.fpr;
-      sprs[0] = &regs->r32.iar;
-      sprs[1] = &regs->r32.msr;
-      sprs[2] = &regs->r32.cr;
-      sprs[3] = &regs->r32.lr;
-      sprs[4] = &regs->r32.ctr;
-      sprs[5] = &regs->r32.xer;
-      sprs[6] = &regs->r32.mq;
-    }
+      for (regi = 0; regi < 32; regi++)
+        supply_register (regi, (char *) &regs->r32.gpr[regi]);
 
-  /* Copy from pointers to registers[]. */
+      for (regi = 0; regi < 32; regi++)
+	supply_register (FP0_REGNUM + regi, (char *) &regs->r32.fpr[regi]);
 
-  memcpy (registers, gprs, 32 * (arch64 ? 8 : 4));
-  memcpy (registers + REGISTER_BYTE (FP0_REGNUM), fprs, 32 * 8);
-  for (i = FIRST_UISA_SP_REGNUM; i <= LAST_UISA_SP_REGNUM; i++)
-    {
-      size = REGISTER_RAW_SIZE (i);
-      if (size)
-	memcpy (registers + REGISTER_BYTE (i),
-		sprs[i - FIRST_UISA_SP_REGNUM], size);
+      supply_register (PC_REGNUM, (char *) &regs->r32.iar);
+      supply_register (tdep->ppc_ps_regnum, (char *) &regs->r32.msr);
+      supply_register (tdep->ppc_cr_regnum, (char *) &regs->r32.cr);
+      supply_register (tdep->ppc_lr_regnum, (char *) &regs->r32.lr);
+      supply_register (tdep->ppc_ctr_regnum, (char *) &regs->r32.ctr);
+      supply_register (tdep->ppc_xer_regnum, (char *) &regs->r32.xer);
+      supply_register (tdep->ppc_fpscr_regnum, (char *) &regs->r32.fpscr);
+      if (tdep->ppc_mq_regnum >= 0)
+	supply_register (tdep->ppc_mq_regnum, (char *) &regs->r32.mq);
     }
 }
 
@@ -602,7 +646,7 @@ vmap_secs (struct vmap *vp, LdInfo *ldi, int arch64)
 static void
 vmap_symtab (struct vmap *vp)
 {
-  register struct objfile *objfile;
+  struct objfile *objfile;
   struct section_offsets *new_offsets;
   int i;
 
@@ -620,7 +664,9 @@ vmap_symtab (struct vmap *vp)
     /* If symbols are not yet loaded, offsets are not yet valid. */
     return;
 
-  new_offsets = (struct section_offsets *) alloca (SIZEOF_SECTION_OFFSETS);
+  new_offsets =
+    (struct section_offsets *)
+    alloca (SIZEOF_N_SECTION_OFFSETS (objfile->num_sections));
 
   for (i = 0; i < objfile->num_sections; ++i)
     new_offsets->offsets[i] = ANOFFSET (objfile->section_offsets, i);
@@ -641,7 +687,7 @@ objfile_symbol_add (void *arg)
 {
   struct objfile *obj = (struct objfile *) arg;
 
-  syms_from_objfile (obj, NULL, 0, 0);
+  syms_from_objfile (obj, NULL, 0, 0, 0, 0);
   new_symfile_objfile (obj, 0, 0);
   return 1;
 }
@@ -674,7 +720,7 @@ static struct vmap *
 add_vmap (LdInfo *ldi)
 {
   bfd *abfd, *last;
-  register char *mem, *objname, *filename;
+  char *mem, *objname, *filename;
   struct objfile *obj;
   struct vmap *vp;
   int fd;
@@ -713,7 +759,7 @@ add_vmap (LdInfo *ldi)
       last = 0;
       /* FIXME??? am I tossing BFDs?  bfd? */
       while ((last = bfd_openr_next_archived_file (abfd, last)))
-	if (STREQ (mem, last->filename))
+	if (DEPRECATED_STREQ (mem, last->filename))
 	  break;
 
       if (!last)
@@ -757,7 +803,7 @@ static void
 vmap_ldinfo (LdInfo *ldi)
 {
   struct stat ii, vi;
-  register struct vmap *vp;
+  struct vmap *vp;
   int got_one, retried;
   int got_exec_file = 0;
   uint next;
@@ -797,8 +843,8 @@ vmap_ldinfo (LdInfo *ldi)
 
 	  /* The filenames are not always sufficient to match on. */
 
-	  if ((name[0] == '/' && !STREQ (name, vp->name))
-	      || (memb[0] && !STREQ (memb, vp->member)))
+	  if ((name[0] == '/' && !DEPRECATED_STREQ (name, vp->name))
+	      || (memb[0] && !DEPRECATED_STREQ (memb, vp->member)))
 	    continue;
 
 	  /* See if we are referring to the same file.
@@ -831,6 +877,11 @@ vmap_ldinfo (LdInfo *ldi)
 
 	  /* relocate symbol table(s). */
 	  vmap_symtab (vp);
+
+	  /* Announce new object files.  Doing this after symbol relocation
+	     makes aix-thread.c's job easier. */
+	  if (target_new_objfile_hook && vp->objfile)
+	    target_new_objfile_hook (vp->objfile);
 
 	  /* There may be more, so we don't break out of the loop.  */
 	}
@@ -890,17 +941,17 @@ vmap_exec (void)
 
   for (i = 0; &exec_ops.to_sections[i] < exec_ops.to_sections_end; i++)
     {
-      if (STREQ (".text", exec_ops.to_sections[i].the_bfd_section->name))
+      if (DEPRECATED_STREQ (".text", exec_ops.to_sections[i].the_bfd_section->name))
 	{
 	  exec_ops.to_sections[i].addr += vmap->tstart - vmap->tvma;
 	  exec_ops.to_sections[i].endaddr += vmap->tstart - vmap->tvma;
 	}
-      else if (STREQ (".data", exec_ops.to_sections[i].the_bfd_section->name))
+      else if (DEPRECATED_STREQ (".data", exec_ops.to_sections[i].the_bfd_section->name))
 	{
 	  exec_ops.to_sections[i].addr += vmap->dstart - vmap->dvma;
 	  exec_ops.to_sections[i].endaddr += vmap->dstart - vmap->dvma;
 	}
-      else if (STREQ (".bss", exec_ops.to_sections[i].the_bfd_section->name))
+      else if (DEPRECATED_STREQ (".bss", exec_ops.to_sections[i].the_bfd_section->name))
 	{
 	  exec_ops.to_sections[i].addr += vmap->dstart - vmap->dvma;
 	  exec_ops.to_sections[i].endaddr += vmap->dstart - vmap->dvma;
@@ -951,6 +1002,7 @@ set_host_arch (int pid)
 
   gdbarch_info_init (&info);
   info.bfd_arch_info = bfd_get_arch_info (&abfd);
+  info.abfd = exec_bfd;
 
   if (!gdbarch_update_p (info))
     {
@@ -1016,7 +1068,7 @@ xcoff_relocate_symtab (unsigned int pid)
 void
 xcoff_relocate_core (struct target_ops *target)
 {
-  sec_ptr ldinfo_sec;
+  struct bfd_section *ldinfo_sec;
   int offset = 0;
   LdInfo *ldi;
   struct vmap *vp;
@@ -1109,6 +1161,9 @@ xcoff_relocate_core (struct target_ops *target)
 	}
 
       vmap_symtab (vp);
+
+      if (target_new_objfile_hook && vp != vmap && vp->objfile)
+	target_new_objfile_hook (vp->objfile);
     }
   while (LDI_NEXT (ldi, arch64) != 0);
   vmap_exec ();
@@ -1143,7 +1198,7 @@ find_toc_address (CORE_ADDR pc)
 					      : vp->objfile);
 	}
     }
-  error ("Unable to find TOC entry for pc 0x%x\n", pc);
+  error ("Unable to find TOC entry for pc %s\n", local_hex_string (pc));
 }
 
 /* Register that we are able to handle rs6000 core file formats. */

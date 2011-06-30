@@ -1,4 +1,4 @@
-# Copyright 1999, 2000 Free Software Foundation, Inc.
+# Copyright 1999, 2000, 2002, 2003, 2004 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -123,7 +123,26 @@ proc mi_gdb_start { } {
 	return 1;
     }
     gdb_expect {
-	-re ".*$mi_gdb_prompt$" {
+	-re "~\"GNU.*\r\n~\".*$mi_gdb_prompt$" {
+	    # We have a new format mi startup prompt.  If we are
+	    # running mi1, then this is an error as we should be
+	    # using the old-style prompt.
+	    if { $MIFLAGS == "-i=mi1" } {
+	        perror "(mi startup) Got unexpected new mi prompt."
+	        remote_close host;
+	        return -1;
+	    }
+	    verbose "GDB initialized."
+	}
+	-re "\[^~\].*$mi_gdb_prompt$" {
+	    # We have an old format mi startup prompt.  If we are
+	    # not running mi1, then this is an error as we should be
+	    # using the new-style prompt.
+	    if { $MIFLAGS != "-i=mi1" } {
+	        perror "(mi startup) Got unexpected old mi prompt."
+	        remote_close host;
+	        return -1;
+	    }
 	    verbose "GDB initialized."
 	}
 	-re ".*$gdb_prompt $" {
@@ -193,7 +212,7 @@ proc mi_delete_breakpoints {} {
 	 -re ".*102-break-delete\r\n102\\\^done\r\n$mi_gdb_prompt$" {
             # This happens if there were no breakpoints
 	 }
-	 timeout { perror "Delete all breakpoints in delete_breakpoints (timeout)" ; return }
+	 timeout { perror "Delete all breakpoints in mi_delete_breakpoints (timeout)" ; return }
     }
 
 # The correct output is not "No breakpoints or watchpoints." but an
@@ -215,6 +234,7 @@ proc mi_delete_breakpoints {} {
 
 proc mi_gdb_reinitialize_dir { subdir } {
     global mi_gdb_prompt
+    global MIFLAGS
 
     global suppress_flag
     if { $suppress_flag } {
@@ -225,8 +245,9 @@ proc mi_gdb_reinitialize_dir { subdir } {
 	return "";
     }
 
-    send_gdb "104-environment-directory\n"
-    gdb_expect 60 {
+    if { $MIFLAGS == "-i=mi1" } {
+      send_gdb "104-environment-directory\n"
+      gdb_expect 60 {
 	-re ".*Reinitialize source path to empty.*y or n. " {
             warning "Got confirmation prompt for dir reinitialization."
 	    send_gdb "y\n"
@@ -237,6 +258,14 @@ proc mi_gdb_reinitialize_dir { subdir } {
 	}
 	-re "$mi_gdb_prompt$" {}
         timeout {error "Dir reinitialization failed (timeout)"}
+      }
+    } else {
+      send_gdb "104-environment-directory -r\n"
+      gdb_expect 60 {
+	-re "104\\\^done,source-path=.*\r\n$mi_gdb_prompt$" {}
+	-re "$mi_gdb_prompt$" {}
+        timeout {error "Dir reinitialization failed (timeout)"}
+      }
     }
 
     send_gdb "105-environment-directory $subdir\n"
@@ -244,7 +273,7 @@ proc mi_gdb_reinitialize_dir { subdir } {
 	-re "Source directories searched.*$mi_gdb_prompt$" {
 	    verbose "Dir set to $subdir"
 	}
-	-re "105\\\^done\r\n$mi_gdb_prompt$" {
+	-re "105\\\^done.*\r\n$mi_gdb_prompt$" {
             # FIXME: We return just the prompt for now.
 	    verbose "Dir set to $subdir"
 	    # perror "Dir \"$subdir\" failed."
@@ -252,28 +281,94 @@ proc mi_gdb_reinitialize_dir { subdir } {
     }
 }
 
+# Send GDB the "target" command.
+# FIXME: Some of these patterns are not appropriate for MI.  Based on
+# config/monitor.exp:gdb_target_command.
+proc mi_gdb_target_cmd { targetname serialport } {
+    global mi_gdb_prompt
+
+    for {set i 1} {$i <= 3} {incr i} {
+	send_gdb "47-target-select $targetname $serialport\n"
+	gdb_expect 60 {
+	    -re "47\\^connected.*$mi_gdb_prompt$" {
+		verbose "Set target to $targetname";
+		return 0;
+	    }
+	    -re "Couldn't establish connection to remote.*$mi_gdb_prompt$" {
+		verbose "Connection failed";
+	    }
+	    -re "Remote MIPS debugging.*$mi_gdb_prompt$" {
+		verbose "Set target to $targetname";
+		return 0;
+	    }
+	    -re "Remote debugging using .*$serialport.*$mi_gdb_prompt$" {
+		verbose "Set target to $targetname";
+		return 0;
+	    }
+	    -re "Remote target $targetname connected to.*$mi_gdb_prompt$" {
+		verbose "Set target to $targetname";
+		return 0;
+	    }
+	    -re "Connected to.*$mi_gdb_prompt$" { 
+		verbose "Set target to $targetname";
+		return 0;
+	    }
+	    -re "Ending remote.*$mi_gdb_prompt$" { }
+	    -re "Connection refused.*$mi_gdb_prompt$" {
+		verbose "Connection refused by remote target.  Pausing, and trying again."
+		sleep 5
+		continue
+	    }
+	    -re "Timeout reading from remote system.*$mi_gdb_prompt$" {
+		verbose "Got timeout error from gdb.";
+	    }
+	    timeout {
+		send_gdb "";
+		break
+	    }
+	}
+    }
+    return 1
+}
+
 #
-# load a file into the debugger.
+# load a file into the debugger (file command only).
 # return a -1 if anything goes wrong.
 #
-proc mi_gdb_load { arg } {
+proc mi_gdb_file_cmd { arg } {
     global verbose
     global loadpath
     global loadfile
     global GDB
     global mi_gdb_prompt
+    global last_mi_gdb_file
+    global last_mi_remote_file
     upvar timeout timeout
 
-    # ``gdb_unload''
+    if { $arg == "" } {
+	set arg $last_mi_gdb_file;
+    } else {
+	set last_mi_gdb_file $arg
+	if { [ info exists last_mi_remote_file ] } {
+	    unset last_mi_remote_file
+	}
+    }
 
-    # ``gdb_file_cmd''
+    if [is_remote host] {
+	set arg [remote_download host $arg];
+	if { $arg == "" } {
+	    error "download failed"
+	    return -1;
+	}
+    }
+
 # FIXME: Several of these patterns are only acceptable for console
 # output.  Queries are an error for mi.
     send_gdb "105-file-exec-and-symbols $arg\n"
     gdb_expect 120 {
         -re "Reading symbols from.*done.*$mi_gdb_prompt$" {
             verbose "\t\tLoaded $arg into the $GDB"
-            # All OK
+            return 0
         }
         -re "has no symbol-table.*$mi_gdb_prompt$" {
             perror "$arg wasn't compiled with \"-g\""
@@ -302,14 +397,15 @@ proc mi_gdb_load { arg } {
             return -1
         }
         -re "105-file-exec-and-symbols .*\r\n105\\\^done\r\n$mi_gdb_prompt$" {
-            # We are just giving the prompt back for now
-	    # All OK
-            }
+            # We (MI) are just giving the prompt back for now, instead of giving
+	    # some acknowledgement.
+	    return 0
+	}
         timeout {
             perror "couldn't load $arg into $GDB (timed out)."
             return -1
         }
-        eof {
+	eof {
             # This is an attempt to detect a core dump, but seems not to
             # work.  Perhaps we need to match .* followed by eof, in which
             # gdb_expect does not seem to have a way to do that.
@@ -317,9 +413,46 @@ proc mi_gdb_load { arg } {
             return -1
         }
     }
-    
+}
+
+#
+# load a file into the debugger.
+# return a -1 if anything goes wrong.
+#
+proc mi_gdb_load { arg } {
+    global verbose
+    global loadpath
+    global loadfile
+    global GDB
+    global mi_gdb_prompt
+    upvar timeout timeout
+
+    # ``gdb_unload''
+    if { $arg != "" } {
+	mi_gdb_file_cmd $arg
+    }
+
     # ``load''
-    if { [info procs send_target_sid] != "" } {
+    if { [info procs gdbserver_gdb_load] != "" } {
+	global last_mi_gdb_file
+	global last_mi_remote_file
+
+	if { ! [info exists last_mi_remote_file] } {
+	    if [is_remote target] {
+		set last_mi_remote_file [remote_download target $arg]
+	    } else {
+		set last_mi_remote_file $last_mi_gdb_file
+	    }
+	}
+
+	set res [gdbserver_gdb_load $last_mi_remote_file]
+	set protocol [lindex $res 0]
+	set gdbport [lindex $res 1]
+
+	if { [mi_gdb_target_cmd $protocol $gdbport] != 0 } {
+	    return -1
+	}
+    } elseif { [info procs send_target_sid] != "" } {
 	# For SID, things get complex
 	send_target_sid
 	gdb_expect 60 {
@@ -359,6 +492,26 @@ proc mi_gdb_load { arg } {
 		return -1
 	    }
 	}
+    } elseif { [target_info gdb_protocol] == "remote" } {
+	# remote targets
+	send_gdb "target [target_info gdb_protocol] [target_info netport]\n"
+	gdb_expect 60 {
+	    -re "\\^done,.*$mi_gdb_prompt$" {
+	    }
+	    timeout {
+		perror "Unable to connect to remote target"
+		return -1
+	    }
+	}
+	send_gdb "48-target-download\n"
+	gdb_expect 10 {
+	    -re "48\\^done.*$mi_gdb_prompt$" {
+	    }
+	    timeout {
+		perror "Unable to download to remote target"
+		return -1
+	    }
+	}
     }
     return 0
 }
@@ -382,7 +535,7 @@ proc mi_gdb_load { arg } {
 proc mi_gdb_test { args } {
     global verbose
     global mi_gdb_prompt
-    global GDB
+    global GDB expect_out
     upvar timeout timeout
 
     if [llength $args]>2 then {
@@ -471,6 +624,12 @@ proc mi_gdb_test { args } {
 	    gdb_start
 	    set result -1
 	}
+	 -re "\[\r\n\]*($pattern)\[\r\n\]+$mi_gdb_prompt\[ \]*$" {
+	    if ![string match "" $message] then {
+		pass "$message"
+	    }
+	    set result 0
+	}
 	 -re "(${question_string})$" {
 	    send_gdb "$response_string\n";
 	    exp_continue;
@@ -485,26 +644,20 @@ proc mi_gdb_test { args } {
             fail "$message"
 	    set result 1
 	}
-	 -re "\[\r\n\]*($pattern)\[\r\n\]+$mi_gdb_prompt\[ \]*$" {
-	    if ![string match "" $message] then {
-		pass "$message"
-	    }
-	    set result 0
-	}
 	 -re "Program exited with code \[0-9\]+.*$mi_gdb_prompt\[ \]*$" {
 	    if ![string match "" $message] then {
-		set errmsg "$message: the program exited"
+		set errmsg "$message (the program exited)"
 	    } else {
-		set errmsg "$command: the program exited"
+		set errmsg "$command (the program exited)"
 	    }
 	    fail "$errmsg"
 	    return -1
 	}
 	 -re "The program is not being run.*$mi_gdb_prompt\[ \]*$" {
 	    if ![string match "" $message] then {
-		set errmsg "$message: the program is no longer running"
+		set errmsg "$message (the program is no longer running)"
 	    } else {
-		set errmsg "$command: the program is no longer running"
+		set errmsg "$command (the program is no longer running)"
 	    }
 	    fail "$errmsg"
 	    return -1
@@ -580,7 +733,7 @@ proc mi_run_cmd {args} {
 	    }
 	    send_gdb "000-exec-continue\n";
 	    gdb_expect 60 {
-		-re "Continu\[^\r\n\]*\[\r\n\]" {}
+		-re "000\\^running\[\r\n\]+$mi_gdb_prompt$" {}
 		default {}
 	    }
 	    return;
@@ -621,81 +774,78 @@ proc mi_run_to_main { } {
 	return -1
     }
 
-    global mi_gdb_prompt
-    global hex
-    global decimal
     global srcdir
     global subdir
     global binfile
     global srcfile
 
-    set test "mi run-to-main"
     mi_delete_breakpoints
     mi_gdb_reinitialize_dir $srcdir/$subdir
     mi_gdb_load ${binfile}
 
-    mi_gdb_test "200-break-insert main" \
-	    "200\\^done,bkpt=\{number=\"1\",type=\"breakpoint\",disp=\"keep\",enabled=\"y\",addr=\"$hex\",func=\"main\",file=\".*\",line=\"\[0-9\]*\",times=\"0\"\}" \
-	    "breakpoint at main"
+    mi_runto main
+}
 
-    mi_run_cmd
-    gdb_expect {
-	-re "000\\*stopped,reason=\"breakpoint-hit\",bkptno=\"1\",thread-id=\"$decimal\",frame=\{addr=\"$hex\",func=\"main\",args=\(\\\[\\\]\|\{\}\),file=\".*\",line=\"\[0-9\]*\"\}\r\n$mi_gdb_prompt$" {
-	    pass "$test"
-	    return 0
-	}
-	-re ".*$mi_gdb_prompt$" {
-	    fail "$test (2)"
-	}
-	timeout {
-	    fail "$test (timeout)"
-	    return -1
-	}
+
+# Just like gdb's "runto" proc, it will run the target to a given
+# function.  The big difference here between mi_runto and mi_execute_to
+# is that mi_execute_to must have the inferior running already.  This
+# proc will (like gdb's runto) (re)start the inferior, too.
+#
+# FUNC is the linespec of the place to stop (it inserts a breakpoint here).
+# It returns:
+#   -1  if test suppressed, failed, timedout
+#    0  if test passed
+
+proc mi_runto {func} {
+  global suppress_flag
+  if { $suppress_flag } {
+    return -1
+  }
+
+  global mi_gdb_prompt expect_out
+  global hex decimal
+
+  set test "mi runto $func"
+  mi_gdb_test "200-break-insert $func" \
+    "200\\^done,bkpt=\{number=\"\[0-9\]+\",type=\"breakpoint\",disp=\"keep\",enabled=\"y\",addr=\"$hex\",func=\"$func\",file=\".*\",line=\"\[0-9\]*\",times=\"0\"\}" \
+    "breakpoint at $func"
+
+  if {![regexp {number="[0-9]+"} $expect_out(buffer) str]
+      || ![scan $str {number="%d"} bkptno]} {
+    set bkptno {[0-9]+}
+  }
+
+  mi_run_cmd
+  gdb_expect {
+    -re ".*000\\*stopped,reason=\"breakpoint-hit\",bkptno=\"$bkptno\",thread-id=\"$decimal\",frame=\{addr=\"$hex\",func=\"$func\",args=\(\\\[.*\\\]\|\{.*\}\),file=\".*\",line=\"\[0-9\]*\"\}\r\n$mi_gdb_prompt$" {
+      pass "$test"
+      return 0
     }
+    -re ".*$mi_gdb_prompt$" {
+      fail "$test (2)"
+    }
+    timeout {
+      fail "$test (timeout)"
+      return -1
+    }
+  }
 }
 
 
 # Next to the next statement
+# For return values, see mi_execute_to_helper
 
 proc mi_next { test } {
-    global suppress_flag
-    if { $suppress_flag } {
-	return -1
-    }
-    global mi_gdb_prompt
-    send_gdb "220-exec-next\n"
-    gdb_expect {
-	-re "220\\^running\r\n${mi_gdb_prompt}220\\*stopped,reason=\"end-stepping-range\",thread-id=\"$decimal\",frame=\{addr=\"$hex\",func=\".*\",args=\[\\\[\{].*[\\\]\}\],file=\".*\",line=\"\[0-9\]*\"\}\r\n$mi_gdb_prompt$" {
-	    pass "$test"
-	    return 0
-	}
-	timeout {
-	    fail "$test"
-	    return -1
-	}
-    }
+  return [mi_next_to {.*} {.*} {.*} {.*} $test]
 }
 
 
 # Step to the next statement
+# For return values, see mi_execute_to_helper
 
 proc mi_step { test } {
-    global suppress_flag
-    if { $suppress_flag } {
-	return -1
-    }
-    global mi_gdb_prompt
-    send_gdb "220-exec-step\n"
-    gdb_expect {
-	-re "220\\^running\r\n${mi_gdb_prompt}220\\*stopped,reason=\"end-stepping-range\",thread-id=\"$decimal\",frame=\{addr=\"$hex\",func=\".*\",args=\[\\\[\{\].*\[\\\]\}\],file=\".*\",line=\"\[0-9\]*\"\}\r\n$mi_gdb_prompt$" {
-	    pass "$test"
-	    return 0
-	}
-	timeout {
-	    fail "$test"
-	    return -1
-	}
-    }
+  return [mi_step_to {.*} {.*} {.*} {.*} $test]
 }
 
 # cmd should not include the number or newline (i.e. "exec-step 3", not
@@ -704,7 +854,7 @@ proc mi_step { test } {
 # Can not match -re ".*\r\n${mi_gdb_prompt}", because of false positives
 # after the first prompt is printed.
 
-proc mi_run_to_helper { cmd reason func args file line extra test } {
+proc mi_execute_to_helper { cmd reason func args file line extra test } {
     global suppress_flag
     if { $suppress_flag } {
 	return -1
@@ -714,11 +864,11 @@ proc mi_run_to_helper { cmd reason func args file line extra test } {
     global decimal
     send_gdb "220-$cmd\n"
     gdb_expect {
-	-re "220\\^running\r\n${mi_gdb_prompt}220\\*stopped,reason=\"$reason\",thread-id=\"$decimal\",frame=\{addr=\"$hex\",func=\"$func\",args=$args,file=\".*$file\",line=\"$line\"\}$extra\r\n$mi_gdb_prompt$" {
+	-re ".*220\\^running\r\n${mi_gdb_prompt}.*220\\*stopped,reason=\"$reason\",thread-id=\"$decimal\",frame=\{addr=\"$hex\",func=\"$func\",args=$args,file=\".*$file\",line=\"$line\"\}$extra\r\n$mi_gdb_prompt$" {
 	    pass "$test"
 	    return 0
 	}
-	-re "220\\^running\r\n${mi_gdb_prompt}220\\*stopped,reason=\"$reason\",thread-id=\"$decimal\",frame=\{addr=\"$hex\",func=\".*\",args=\[\\\[\{\].*\[\\\]\}\],file=\".*\",line=\"\[0-9\]*\"\}.*\r\n$mi_gdb_prompt$" {
+	-re ".*220\\^running\r\n${mi_gdb_prompt}.*220\\*stopped,reason=\"$reason\",thread-id=\"$decimal\",frame=\{addr=\"$hex\",func=\".*\",args=\[\\\[\{\].*\[\\\]\}\],file=\".*\",line=\"\[0-9\]*\"\}.*\r\n$mi_gdb_prompt$" {
 	    fail "$test (stopped at wrong place)"
 	    return -1
 	}
@@ -733,56 +883,56 @@ proc mi_run_to_helper { cmd reason func args file line extra test } {
     }
 }
 
-proc mi_run_to { cmd reason func args file line extra test } {
-    mi_run_to_helper "$cmd" "$reason" "$func" "\\\[$args\\\]" \
+proc mi_execute_to { cmd reason func args file line extra test } {
+    mi_execute_to_helper "$cmd" "$reason" "$func" "\\\[$args\\\]" \
 	"$file" "$line" "$extra" "$test"
 }
 
 proc mi_next_to { func args file line test } {
-    mi_run_to "exec-next" "end-stepping-range" "$func" "$args" \
+    mi_execute_to "exec-next" "end-stepping-range" "$func" "$args" \
 	"$file" "$line" "" "$test"
 }
 
 proc mi_step_to { func args file line test } {
-    mi_run_to "exec-step" "end-stepping-range" "$func" "$args" \
+    mi_execute_to "exec-step" "end-stepping-range" "$func" "$args" \
 	"$file" "$line" "" "$test"
 }
 
 proc mi_finish_to { func args file line result ret test } {
-    mi_run_to "exec-finish" "function-finished" "$func" "$args" \
+    mi_execute_to "exec-finish" "function-finished" "$func" "$args" \
 	"$file" "$line" \
 	",gdb-result-var=\"$result\",return-value=\"$ret\"" \
 	"$test"
 }
 
 proc mi_continue_to { bkptno func args file line test } {
-    mi_run_to "exec-continue" "breakpoint-hit\",bkptno=\"$bkptno" \
+    mi_execute_to "exec-continue" "breakpoint-hit\",bkptno=\"$bkptno" \
 	"$func" "$args" "$file" "$line" "" "$test"
 }
 
-proc mi0_run_to { cmd reason func args file line extra test } {
-    mi_run_to_helper "$cmd" "$reason" "$func" "\{$args\}" \
+proc mi0_execute_to { cmd reason func args file line extra test } {
+    mi_execute_to_helper "$cmd" "$reason" "$func" "\{$args\}" \
 	"$file" "$line" "$extra" "$test"
 }
 
 proc mi0_next_to { func args file line test } {
-    mi0_run_to "exec-next" "end-stepping-range" "$func" "$args" \
+    mi0_execute_to "exec-next" "end-stepping-range" "$func" "$args" \
 	"$file" "$line" "" "$test"
 }
 
 proc mi0_step_to { func args file line test } {
-    mi0_run_to "exec-step" "end-stepping-range" "$func" "$args" \
+    mi0_execute_to "exec-step" "end-stepping-range" "$func" "$args" \
 	"$file" "$line" "" "$test"
 }
 
 proc mi0_finish_to { func args file line result ret test } {
-    mi0_run_to "exec-finish" "function-finished" "$func" "$args" \
+    mi0_execute_to "exec-finish" "function-finished" "$func" "$args" \
 	"$file" "$line" \
 	",gdb-result-var=\"$result\",return-value=\"$ret\"" \
 	"$test"
 }
 
 proc mi0_continue_to { bkptno func args file line test } {
-    mi0_run_to "exec-continue" "breakpoint-hit\",bkptno=\"$bkptno" \
+    mi0_execute_to "exec-continue" "breakpoint-hit\",bkptno=\"$bkptno" \
 	"$func" "$args" "$file" "$line" "" "$test"
 }

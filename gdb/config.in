@@ -41,6 +41,9 @@
 /* Define to `int' if <sys/types.h> doesn't define.  */
 #undef pid_t
 
+/* Define if you need to in order for stat and other things to work.  */
+#undef _POSIX_SOURCE
+
 /* Define as the return type of signal handlers (int or void).  */
 #undef RETSIGTYPE
 
@@ -68,11 +71,16 @@
 /* Define vfork as fork if vfork does not work.  */
 #undef vfork
 
-/* Define if compiling on Solaris 7. */
-#undef _MSE_INT_H
+/* Enable GNU extensions on systems that have them.  */
+#ifndef _GNU_SOURCE
+# undef _GNU_SOURCE
+#endif
 
 /* Define if your struct reg has r_fs.  */
 #undef HAVE_STRUCT_REG_R_FS
+
+/* Define if your struct stat has st_blocks.  */
+#undef HAVE_STRUCT_STAT_ST_BLOCKS
 
 /* Define if your struct reg has r_gs.  */
 #undef HAVE_STRUCT_REG_R_GS
@@ -92,6 +100,9 @@
 
 /* Define if <sys/link.h> has struct link_map32 */
 #undef HAVE_STRUCT_LINK_MAP32
+
+/* Define if <sys/link.h> has link_map32 (solaris sparc-64 target) */
+#undef _SYSCALL32
 
 /* Define if the prfpregset_t type is broken. */
 #undef PRFPREGSET_T_BROKEN
@@ -125,22 +136,9 @@
 /* Define if you have HPUX threads */
 #undef HAVE_HPUX_THREAD_SUPPORT
 
-/* Define if you want to use the memory mapped malloc package (mmalloc). */
-#undef USE_MMALLOC
-
-/* Define if the runtime uses a routine from mmalloc before gdb has a chance
-   to initialize mmalloc, and we want to force checking to be used anyway.
-   This may cause spurious memory corruption messages if the runtime tries
-   to explicitly deallocate that memory when gdb calls exit. */
-#undef MMCHECK_FORCE
-
 /* Define if <proc_service.h> on solaris uses int instead of
    size_t, and assorted other type changes. */
 #undef PROC_SERVICE_IS_OLD
-
-/* If you want to specify a default CPU variant, define this to be its
-   name, as a C string.  */
-#undef TARGET_CPU_DEFAULT
 
 /* Define if the simulator is being linked in.  */
 #undef WITH_SIM
@@ -163,17 +161,8 @@
 /* Define if <sys/ptrace.h> defines the PT_GETXMMREGS request.  */
 #undef HAVE_PT_GETXMMREGS
 
-/* Define if gnu-regex.c included with GDB should be used. */
-#undef USE_INCLUDED_REGEX
-
-/* BFD's default architecture. */
-#undef DEFAULT_BFD_ARCH
-
-/* BFD's default target vector. */
-#undef DEFAULT_BFD_VEC
-
-/* Multi-arch enabled. */
-#undef GDB_MULTI_ARCH
+/* Define if libunwind library is being used.  */
+#undef HAVE_LIBUNWIND
 
 /* hostfile */
 #undef GDB_XM_FILE
@@ -193,14 +182,8 @@
 /* Define if you have the __argz_stringify function.  */
 #undef HAVE___ARGZ_STRINGIFY
 
-/* Define if you have the bcopy function.  */
-#undef HAVE_BCOPY
-
-/* Define if you have the btowc function.  */
-#undef HAVE_BTOWC
-
-/* Define if you have the bzero function.  */
-#undef HAVE_BZERO
+/* Define if you have the _mcleanup function.  */
+#undef HAVE__MCLEANUP
 
 /* Define if you have the canonicalize_file_name function.  */
 #undef HAVE_CANONICALIZE_FILE_NAME
@@ -214,14 +197,17 @@
 /* Define if you have the getpagesize function.  */
 #undef HAVE_GETPAGESIZE
 
-/* Define if you have the isascii function.  */
-#undef HAVE_ISASCII
+/* Define if you have the monstartup function.  */
+#undef HAVE_MONSTARTUP
 
 /* Define if you have the munmap function.  */
 #undef HAVE_MUNMAP
 
 /* Define if you have the poll function.  */
 #undef HAVE_POLL
+
+/* Define if you have the pread64 function.  */
+#undef HAVE_PREAD64
 
 /* Define if you have the putenv function.  */
 #undef HAVE_PUTENV
@@ -265,11 +251,11 @@
 /* Define if you have the strchr function.  */
 #undef HAVE_STRCHR
 
+/* Define if you have the syscall function.  */
+#undef HAVE_SYSCALL
+
 /* Define if you have the <argz.h> header file.  */
 #undef HAVE_ARGZ_H
-
-/* Define if you have the <asm/debugreg.h> header file.  */
-#undef HAVE_ASM_DEBUGREG_H
 
 /* Define if you have the <ctype.h> header file.  */
 #undef HAVE_CTYPE_H
@@ -280,6 +266,12 @@
 /* Define if you have the <dirent.h> header file.  */
 #undef HAVE_DIRENT_H
 
+/* Define if you have the <libunwind-ia64.h> header file.  */
+#undef HAVE_LIBUNWIND_IA64_H
+
+/* Define if you have the <libunwind.h> header file.  */
+#undef HAVE_LIBUNWIND_H
+
 /* Define if you have the <limits.h> header file.  */
 #undef HAVE_LIMITS_H
 
@@ -288,6 +280,9 @@
 
 /* Define if you have the <locale.h> header file.  */
 #undef HAVE_LOCALE_H
+
+/* Define if you have the <machine/reg.h> header file.  */
+#undef HAVE_MACHINE_REG_H
 
 /* Define if you have the <malloc.h> header file.  */
 #undef HAVE_MALLOC_H
@@ -306,9 +301,6 @@
 
 /* Define if you have the <nlist.h> header file.  */
 #undef HAVE_NLIST_H
-
-/* Define if you have the <objlist.h> header file.  */
-#undef HAVE_OBJLIST_H
 
 /* Define if you have the <poll.h> header file.  */
 #undef HAVE_POLL_H
@@ -333,6 +325,9 @@
 
 /* Define if you have the <string.h> header file.  */
 #undef HAVE_STRING_H
+
+/* Define if you have the <strings.h> header file.  */
+#undef HAVE_STRINGS_H
 
 /* Define if you have the <sys/debugreg.h> header file.  */
 #undef HAVE_SYS_DEBUGREG_H
@@ -360,6 +355,9 @@
 
 /* Define if you have the <sys/poll.h> header file.  */
 #undef HAVE_SYS_POLL_H
+
+/* Define if you have the <sys/proc.h> header file.  */
+#undef HAVE_SYS_PROC_H
 
 /* Define if you have the <sys/procfs.h> header file.  */
 #undef HAVE_SYS_PROCFS_H
@@ -406,20 +404,11 @@
 /* Define if you have the <wait.h> header file.  */
 #undef HAVE_WAIT_H
 
-/* Define if you have the <wchar.h> header file.  */
-#undef HAVE_WCHAR_H
-
-/* Define if you have the <wctype.h> header file.  */
-#undef HAVE_WCTYPE_H
-
 /* Define if you have the dl library (-ldl).  */
 #undef HAVE_LIBDL
 
 /* Define if you have the m library (-lm).  */
 #undef HAVE_LIBM
-
-/* Define if you have the socket library (-lsocket).  */
-#undef HAVE_LIBSOCKET
 
 /* Define if you have the w library (-lw).  */
 #undef HAVE_LIBW
@@ -436,8 +425,39 @@
 /* Define as 1 if you have gettext and don't want to use GNU gettext. */
 #undef HAVE_GETTEXT
 
+/* Name of this package.  */
+#undef PACKAGE
+
+/* Global directory for separate debug files.  */
+#undef DEBUGDIR
+
+/* Define to BFD's default architecture.  */
+#undef DEFAULT_BFD_ARCH
+
+/* Define to BFD's default target vector.  */
+#undef DEFAULT_BFD_VEC
+
+/* Define to 1 if your system has the _etext variable.  */
+#undef HAVE__ETEXT
+
+/* Define to 1 to avoid a clash between <widec.h> and <wchar.h> on
+   Solaris 2.[78] when using GCC.  */
+#undef _MSE_INT_H
+
+/* Define to 1 if we found this declaration otherwise define to 0. */
+#undef HAVE_DECL_GETOPT
+
 /* Define if sigsetjmp is available.  */
 #undef HAVE_SIGSETJMP
+
+/* Define to 1 if the regex included in libiberty should be used. */
+#undef USE_INCLUDED_REGEX
+
+/* Define to 1 if your system has struct reg in <machine/reg.h>. */
+#undef HAVE_STRUCT_REG
+
+/* Define if <stdint.h> provides the uintptr_t type. */
+#undef HAVE_UINTPTR_T
 
 /* Define if malloc is not declared in system header files. */
 #undef NEED_DECLARATION_MALLOC
@@ -501,4 +521,22 @@
 
 /* Define if <sys/procfs.h> has pr_siginfo64_t. */
 #undef HAVE_PR_SIGINFO64_T
+
+/* Define if <thread_db.h> has the TD_NOTALLOC error code. */
+#undef THREAD_DB_HAS_TD_NOTALLOC
+
+/* Define if we can use the tkill syscall. */
+#undef HAVE_TKILL_SYSCALL
+
+/* Define to the default OS ABI for this configuration. */
+#undef GDB_OSABI_DEFAULT
+
+/* Define to be a string naming the default host character set. */
+#undef GDB_DEFAULT_HOST_CHARSET
+
+/* Define if you have the iconv() function. */
+#undef HAVE_ICONV
+
+/* Define as const if the declaration of iconv() needs const. */
+#undef ICONV_CONST
 

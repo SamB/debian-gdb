@@ -62,6 +62,7 @@
 #include "gdbcore.h"
 #include "gdbthread.h"
 #include "gdb_assert.h"
+#include "gdb_obstack.h"
 
 #include "gnu-nat.h"
 
@@ -97,12 +98,12 @@ void inf_validate_procs (struct inf *inf);
 void inf_steal_exc_ports (struct inf *inf);
 void inf_restore_exc_ports (struct inf *inf);
 struct proc *inf_tid_to_proc (struct inf *inf, int tid);
-inline void inf_set_threads_resume_sc (struct inf *inf,
-				       struct proc *run_thread,
-				       int run_others);
-inline int inf_set_threads_resume_sc_for_signal_thread (struct inf *inf);
-inline void inf_suspend (struct inf *inf);
-inline void inf_resume (struct inf *inf);
+void inf_set_threads_resume_sc (struct inf *inf,
+				struct proc *run_thread,
+				int run_others);
+int inf_set_threads_resume_sc_for_signal_thread (struct inf *inf);
+void inf_suspend (struct inf *inf);
+void inf_resume (struct inf *inf);
 void inf_set_step_thread (struct inf *inf, struct proc *proc);
 void inf_detach (struct inf *inf);
 void inf_attach (struct inf *inf, int pid);
@@ -1023,7 +1024,7 @@ inf_validate_procs (struct inf *inf)
     /* The current thread we're considering. */
     struct proc *thread = inf->threads;
 
-    bzero (matched, sizeof (matched));
+    memset (matched, 0, sizeof (matched));
 
     while (thread)
       {
@@ -1076,7 +1077,7 @@ inf_validate_procs (struct inf *inf)
 
 
 /* Makes sure that INF's thread list is synced with the actual process.  */
-inline int
+int
 inf_update_procs (struct inf *inf)
 {
   if (!inf->task)
@@ -1089,7 +1090,7 @@ inf_update_procs (struct inf *inf)
 /* Sets the resume_sc of each thread in inf.  That of RUN_THREAD is set to 0,
    and others are set to their run_sc if RUN_OTHERS is true, and otherwise
    their pause_sc.  */
-inline void
+void
 inf_set_threads_resume_sc (struct inf *inf,
 			   struct proc *run_thread, int run_others)
 {
@@ -1107,7 +1108,7 @@ inf_set_threads_resume_sc (struct inf *inf,
 
 /* Cause INF to continue execution immediately; individual threads may still
    be suspended (but their suspend counts will be updated).  */
-inline void
+void
 inf_resume (struct inf *inf)
 {
   struct proc *thread;
@@ -1132,7 +1133,7 @@ inf_resume (struct inf *inf)
 
 /* Cause INF to stop execution immediately; individual threads may still
    be running.  */
-inline void
+void
 inf_suspend (struct inf *inf)
 {
   struct proc *thread;
@@ -1178,7 +1179,7 @@ inf_set_step_thread (struct inf *inf, struct proc *thread)
 /* Set up the thread resume_sc's so that only the signal thread is running
    (plus whatever other thread are set to always run).  Returns true if we
    did so, or false if we can't find a signal thread.  */
-inline int
+int
 inf_set_threads_resume_sc_for_signal_thread (struct inf *inf)
 {
   if (inf->signal_thread)
@@ -1759,31 +1760,31 @@ ill_rpc (char *fun)
 error_t
 do_mach_notify_no_senders (mach_port_t notify, mach_port_mscount_t count)
 {
-  return ill_rpc (__FUNCTION__);
+  return ill_rpc ("do_mach_notify_no_senders");
 }
 
 error_t
 do_mach_notify_port_deleted (mach_port_t notify, mach_port_t name)
 {
-  return ill_rpc (__FUNCTION__);
+  return ill_rpc ("do_mach_notify_port_deleted");
 }
 
 error_t
 do_mach_notify_msg_accepted (mach_port_t notify, mach_port_t name)
 {
-  return ill_rpc (__FUNCTION__);
+  return ill_rpc ("do_mach_notify_msg_accepted");
 }
 
 error_t
 do_mach_notify_port_destroyed (mach_port_t notify, mach_port_t name)
 {
-  return ill_rpc (__FUNCTION__);
+  return ill_rpc ("do_mach_notify_port_destroyed");
 }
 
 error_t
 do_mach_notify_send_once (mach_port_t notify)
 {
-  return ill_rpc (__FUNCTION__);
+  return ill_rpc ("do_mach_notify_send_once");
 }
 
 
@@ -1845,13 +1846,13 @@ error_t
 S_proc_setmsgport_reply (mach_port_t reply, error_t err,
 			 mach_port_t old_msg_port)
 {
-  return ill_rpc (__FUNCTION__);
+  return ill_rpc ("S_proc_setmsgport_reply");
 }
 
 error_t
 S_proc_getmsgport_reply (mach_port_t reply, error_t err, mach_port_t msg_port)
 {
-  return ill_rpc (__FUNCTION__);
+  return ill_rpc ("S_proc_getmsgport_reply");
 }
 
 
@@ -1890,7 +1891,7 @@ S_msg_sig_post_untraced_reply (mach_port_t reply, error_t err)
 error_t
 S_msg_sig_post_reply (mach_port_t reply, error_t err)
 {
-  return ill_rpc (__FUNCTION__);
+  return ill_rpc ("S_msg_sig_post_reply");
 }
 
 
@@ -2458,13 +2459,94 @@ gnu_xfer_memory (CORE_ADDR memaddr, char *myaddr, int len, int write,
   else
     {
       inf_debug (current_inferior, "%s %p[%d] %s %p",
-		 write ? "writing" : "reading", memaddr, len,
+		 write ? "writing" : "reading", (void *) memaddr, len,
 		 write ? "<--" : "-->", myaddr);
       if (write)
 	return gnu_write_inferior (task, memaddr, myaddr, len);
       else
 	return gnu_read_inferior (task, memaddr, myaddr, len);
     }
+}
+
+/* Call FUNC on each memory region in the task.  */
+static int
+gnu_find_memory_regions (int (*func) (CORE_ADDR,
+				      unsigned long,
+				      int, int, int,
+				      void *),
+			 void *data)
+{
+  error_t err;
+  task_t task;
+  vm_address_t region_address, last_region_address, last_region_end;
+  vm_prot_t last_protection;
+
+  if (current_inferior == 0 || current_inferior->task == 0)
+    return 0;
+  task = current_inferior->task->port;
+  if (task == MACH_PORT_NULL)
+    return 0;
+
+  region_address = last_region_address = last_region_end = VM_MIN_ADDRESS;
+  last_protection = VM_PROT_NONE;
+  while (region_address < VM_MAX_ADDRESS)
+    {
+      vm_prot_t protection;
+      vm_prot_t max_protection;
+      vm_inherit_t inheritance;
+      boolean_t shared;
+      mach_port_t object_name;
+      vm_offset_t offset;
+      vm_size_t region_length = VM_MAX_ADDRESS - region_address;
+      vm_address_t old_address = region_address;
+
+      err = vm_region (task,
+		       &region_address,
+		       &region_length,
+		       &protection,
+		       &max_protection,
+		       &inheritance,
+		       &shared,
+		       &object_name,
+		       &offset);
+      if (err == KERN_NO_SPACE)
+	break;
+      if (err != KERN_SUCCESS)
+	{
+	  warning ("vm_region failed: %s", mach_error_string (err));
+	  return -1;
+	}
+
+      if (protection == last_protection && region_address == last_region_end)
+	/* This region is contiguous with and indistinguishable from
+	   the previous one, so we just extend that one.  */
+	last_region_end = region_address += region_length;
+      else
+	{
+	  /* This region is distinct from the last one we saw, so report
+	     that previous one.  */
+	  if (last_protection != VM_PROT_NONE)
+	    (*func) (last_region_address,
+		     last_region_end - last_region_address,
+		     last_protection & VM_PROT_READ,
+		     last_protection & VM_PROT_WRITE,
+		     last_protection & VM_PROT_EXECUTE,
+		     data);
+	  last_region_address = region_address;
+	  last_region_end = region_address += region_length;
+	  last_protection = protection;
+	}
+    }
+
+  /* Report the final region.  */
+  if (last_region_end > last_region_address && last_protection != VM_PROT_NONE)
+    (*func) (last_region_address, last_region_end - last_region_address,
+	     last_protection & VM_PROT_READ,
+	     last_protection & VM_PROT_WRITE,
+	     last_protection & VM_PROT_EXECUTE,
+	     data);
+
+  return 0;
 }
 
 
@@ -2511,67 +2593,37 @@ init_gnu_ops (void)
   gnu_ops.to_longname = "GNU Hurd process"; /* to_longname */
   gnu_ops.to_doc = "GNU Hurd process";	/* to_doc */
   gnu_ops.to_open = gnu_open;		/* to_open */
-  gnu_ops.to_close = 0;			/* to_close */
   gnu_ops.to_attach = gnu_attach;	/* to_attach */
-  gnu_ops.to_post_attach = NULL;
-  gnu_ops.to_require_attach = NULL;	/* to_require_attach */
   gnu_ops.to_detach = gnu_detach;	/* to_detach */
-  gnu_ops.to_require_detach = NULL;	/* to_require_detach */
   gnu_ops.to_resume = gnu_resume;	/* to_resume */
   gnu_ops.to_wait = gnu_wait;		/* to_wait */
-  gnu_ops.to_post_wait = NULL;		/* to_post_wait */
   gnu_ops.to_fetch_registers = gnu_fetch_registers;    /* to_fetch_registers */
   gnu_ops.to_store_registers = gnu_store_registers;    /* to_store_registers */
   gnu_ops.to_prepare_to_store = gnu_prepare_to_store; /* to_prepare_to_store */
   gnu_ops.to_xfer_memory = gnu_xfer_memory; /* to_xfer_memory */
-  gnu_ops.to_files_info = 0;		/* to_files_info */
+  gnu_ops.to_find_memory_regions = gnu_find_memory_regions;
   gnu_ops.to_insert_breakpoint = memory_insert_breakpoint;
   gnu_ops.to_remove_breakpoint = memory_remove_breakpoint;
   gnu_ops.to_terminal_init = gnu_terminal_init_inferior;
   gnu_ops.to_terminal_inferior = terminal_inferior;
   gnu_ops.to_terminal_ours_for_output = terminal_ours_for_output;
+  gnu_ops.to_terminal_save_ours = terminal_save_ours;
   gnu_ops.to_terminal_ours = terminal_ours;
   gnu_ops.to_terminal_info = child_terminal_info;
   gnu_ops.to_kill = gnu_kill_inferior;	/* to_kill */
-  gnu_ops.to_load = 0;			/* to_load */
-  gnu_ops.to_lookup_symbol = 0;		/* to_lookup_symbol */
   gnu_ops.to_create_inferior = gnu_create_inferior; /* to_create_inferior */
-  gnu_ops.to_post_startup_inferior = NULL;    /* to_post_startup_inferior */
-  /* to_acknowledge_created_inferior */
-  gnu_ops.to_acknowledge_created_inferior = NULL;
-  /* to_clone_and_follow_inferior */
-  gnu_ops.to_clone_and_follow_inferior = NULL;
-  /* to_post_follow_inferior_by_clone */
-  gnu_ops.to_post_follow_inferior_by_clone = NULL;
-  gnu_ops.to_insert_fork_catchpoint = NULL;
-  gnu_ops.to_remove_fork_catchpoint = NULL;
-  gnu_ops.to_insert_vfork_catchpoint = NULL;
-  gnu_ops.to_remove_vfork_catchpoint = NULL;
-  gnu_ops.to_has_forked = NULL;		/* to_has_forked */
-  gnu_ops.to_has_vforked = NULL;	/* to_has_vforked */
-  gnu_ops.to_can_follow_vfork_prior_to_exec = NULL;
-  gnu_ops.to_post_follow_vfork = NULL;	/* to_post_follow_vfork */
-  gnu_ops.to_insert_exec_catchpoint = NULL;
-  gnu_ops.to_remove_exec_catchpoint = NULL;
-  gnu_ops.to_has_execd = NULL;
-  gnu_ops.to_reported_exec_events_per_exec_call = NULL;
-  gnu_ops.to_has_exited = NULL;
   gnu_ops.to_mourn_inferior = gnu_mourn_inferior;	/* to_mourn_inferior */
   gnu_ops.to_can_run = gnu_can_run;	/* to_can_run */
-  gnu_ops.to_notice_signals = 0;	/* to_notice_signals */
   gnu_ops.to_thread_alive = gnu_thread_alive;	/* to_thread_alive */
   gnu_ops.to_pid_to_str = gnu_pid_to_str;   /* to_pid_to_str */
   gnu_ops.to_stop = gnu_stop;	/* to_stop */
   gnu_ops.to_pid_to_exec_file = gnu_pid_to_exec_file; /* to_pid_to_exec_file */
   gnu_ops.to_stratum = process_stratum;		/* to_stratum */
-  gnu_ops.DONT_USE = 0;			/* to_next */
   gnu_ops.to_has_all_memory = 1;	/* to_has_all_memory */
   gnu_ops.to_has_memory = 1;		/* to_has_memory */
   gnu_ops.to_has_stack = 1;		/* to_has_stack */
   gnu_ops.to_has_registers = 1;		/* to_has_registers */
   gnu_ops.to_has_execution = 1;		/* to_has_execution */
-  gnu_ops.to_sections = 0;		/* sections */
-  gnu_ops.to_sections_end = 0;		/* sections_end */
   gnu_ops.to_magic = OPS_MAGIC;		/* to_magic */
 }				/* init_gnu_ops */
 

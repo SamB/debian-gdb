@@ -1,4 +1,4 @@
-/* Simulator for the Hitachi SH architecture.
+/* Simulator for the Renesas (formerly Hitachi) / SuperH Inc. SH architecture.
 
    Written by Steve Chamberlain of Cygnus Support.
    sac@cygnus.com
@@ -27,8 +27,9 @@
 
 #include "sysdep.h"
 #include "bfd.h"
-#include "callback.h"
-#include "remote-sim.h"
+#include "gdb/callback.h"
+#include "gdb/remote-sim.h"
+#include "gdb/sim-sh.h"
 
 /* This file is local - if newlib changes, then so should this.  */
 #include "syscall.h"
@@ -52,7 +53,7 @@
 #define SIGTRAP 5
 #endif
 
-extern unsigned char sh_jump_table[], sh_dsp_table[0x1000], ppi_table[];
+extern unsigned short sh_jump_table[], sh_dsp_table[0x1000], ppi_table[];
 
 int sim_write (SIM_DESC sd, SIM_ADDR addr, unsigned char *buffer, int size);
 
@@ -119,6 +120,9 @@ typedef union
 	    int re;
 	    /* sh3 */
 	    int bank[8];
+	    int dbr;		/* debug base register */
+	    int sgr;		/* saved gr15 */
+	    int ldst;		/* load/store flag (boolean) */
 	  } named;
 	int i[16];
       } cregs;
@@ -166,9 +170,8 @@ static int target_dsp;
 static int host_little_endian;
 static char **prog_argv;
 
-#if 1
 static int maskw = 0;
-#endif
+static int maskl = 0;
 
 static SIM_OPEN_KIND sim_kind;
 static char *myname;
@@ -180,15 +183,17 @@ static char *myname;
 #define R0 	saved_state.asregs.regs[0]
 #define Rn 	saved_state.asregs.regs[n]
 #define Rm 	saved_state.asregs.regs[m]
-#define UR0 	(unsigned int)(saved_state.asregs.regs[0])
-#define UR 	(unsigned int)R
-#define UR 	(unsigned int)R
+#define UR0 	(unsigned int) (saved_state.asregs.regs[0])
+#define UR 	(unsigned int) R
+#define UR 	(unsigned int) R
 #define SR0 	saved_state.asregs.regs[0]
 #define CREG(n)	(saved_state.asregs.cregs.i[(n)])
 #define GBR 	saved_state.asregs.cregs.named.gbr
 #define VBR 	saved_state.asregs.cregs.named.vbr
+#define DBR 	saved_state.asregs.cregs.named.dbr
 #define SSR	saved_state.asregs.cregs.named.ssr
 #define SPC	saved_state.asregs.cregs.named.spc
+#define SGR 	saved_state.asregs.cregs.named.sgr
 #define SREG(n)	(saved_state.asregs.sregs.i[(n)])
 #define MACH 	saved_state.asregs.sregs.named.mach
 #define MACL 	saved_state.asregs.sregs.named.macl
@@ -226,6 +231,7 @@ static char *myname;
 #define Q 	((saved_state.asregs.cregs.named.sr & SR_MASK_Q) != 0)
 #define S 	((saved_state.asregs.cregs.named.sr & SR_MASK_S) != 0)
 #define T 	((saved_state.asregs.cregs.named.sr & SR_MASK_T) != 0)
+#define LDST	((saved_state.asregs.cregs.named.ldst) != 0)
 
 #define SR_BL ((saved_state.asregs.cregs.named.sr & SR_MASK_BL) != 0)
 #define SR_RB ((saved_state.asregs.cregs.named.sr & SR_MASK_RB) != 0)
@@ -247,6 +253,7 @@ do { \
 #define SET_SR_Q(EXP) SET_SR_BIT ((EXP), SR_MASK_Q)
 #define SET_SR_S(EXP) SET_SR_BIT ((EXP), SR_MASK_S)
 #define SET_SR_T(EXP) SET_SR_BIT ((EXP), SR_MASK_T)
+#define SET_LDST(EXP) (saved_state.asregs.cregs.named.ldst = ((EXP) != 0))
 
 /* stc currently relies on being able to read SR without modifications.  */
 #define GET_SR() (saved_state.asregs.cregs.named.sr - 0)
@@ -263,9 +270,9 @@ do { \
 #define FPSCR_MASK_SZ (1 << 20)
 #define FPSCR_MASK_PR (1 << 19)
 
-#define FPSCR_FR  ((GET_FPSCR() & FPSCR_MASK_FR) != 0)
-#define FPSCR_SZ  ((GET_FPSCR() & FPSCR_MASK_SZ) != 0)
-#define FPSCR_PR  ((GET_FPSCR() & FPSCR_MASK_PR) != 0)
+#define FPSCR_FR  ((GET_FPSCR () & FPSCR_MASK_FR) != 0)
+#define FPSCR_SZ  ((GET_FPSCR () & FPSCR_MASK_SZ) != 0)
+#define FPSCR_PR  ((GET_FPSCR () & FPSCR_MASK_PR) != 0)
 
 /* Count the number of arguments in an argv.  */
 static int
@@ -323,7 +330,7 @@ void
 raise_exception (x)
      int x;
 {
-  RAISE_EXCEPTION(x);
+  RAISE_EXCEPTION (x);
 }
 
 void
@@ -398,7 +405,7 @@ do { \
 
 #ifdef PARANOID
 int valid[16];
-#define CREF(x)  if(!valid[x]) fail();
+#define CREF(x)  if (!valid[x]) fail ();
 #define CDEF(x)  valid[x] = 1;
 #define UNDEF(x) valid[x] = 0;
 #else
@@ -409,14 +416,14 @@ int valid[16];
 
 static void parse_and_set_memory_size PARAMS ((char *str));
 static int IOMEM PARAMS ((int addr, int write, int value));
-static struct loop_bounds get_loop_bounds PARAMS((int, int, unsigned char *,
-						  unsigned char *, int, int));
-static void process_wlat_addr PARAMS((int, int));
-static void process_wwat_addr PARAMS((int, int));
-static void process_wbat_addr PARAMS((int, int));
-static int process_rlat_addr PARAMS((int));
-static int process_rwat_addr PARAMS((int));
-static int process_rbat_addr PARAMS((int));
+static struct loop_bounds get_loop_bounds PARAMS ((int, int, unsigned char *,
+						   unsigned char *, int, int));
+static void process_wlat_addr PARAMS ((int, int));
+static void process_wwat_addr PARAMS ((int, int));
+static void process_wbat_addr PARAMS ((int, int));
+static int process_rlat_addr PARAMS ((int));
+static int process_rwat_addr PARAMS ((int));
+static int process_rbat_addr PARAMS ((int));
 static void INLINE wlat_fast PARAMS ((unsigned char *, int, int, int));
 static void INLINE wwat_fast PARAMS ((unsigned char *, int, int, int, int));
 static void INLINE wbat_fast PARAMS ((unsigned char *, int, int, int));
@@ -515,10 +522,10 @@ set_dr (n, exp)
       if (((n) & 1) || ((m) & 1)) \
 	RAISE_EXCEPTION (SIGILL); \
       else \
-	SET_DR(n, (DR(n) OP DR(m))); \
+	SET_DR (n, (DR (n) OP DR (m))); \
     } \
   else \
-    SET_FR(n, (FR(n) OP FR(m))); \
+    SET_FR (n, (FR (n) OP FR (m))); \
 } while (0)
 
 #define FP_UNARY(n, OP) \
@@ -528,10 +535,10 @@ set_dr (n, exp)
       if ((n) & 1) \
 	RAISE_EXCEPTION (SIGILL); \
       else \
-	SET_DR(n, (OP (DR(n)))); \
+	SET_DR (n, (OP (DR (n)))); \
     } \
   else \
-    SET_FR(n, (OP (FR(n)))); \
+    SET_FR (n, (OP (FR (n)))); \
 } while (0)
 
 #define FP_CMP(n, OP, m) \
@@ -541,10 +548,10 @@ set_dr (n, exp)
       if (((n) & 1) || ((m) & 1)) \
 	RAISE_EXCEPTION (SIGILL); \
       else \
-	SET_SR_T (DR(n) OP DR(m)); \
+	SET_SR_T (DR (n) OP DR (m)); \
     } \
   else \
-    SET_SR_T (FR(n) OP FR(m)); \
+    SET_SR_T (FR (n) OP FR (m)); \
 } while (0)
 
 static void
@@ -573,7 +580,7 @@ wlat_fast (memory, x, value, maskl)
      unsigned char *memory;
 {
   int v = value;
-  unsigned int *p = (unsigned int *)(memory + x);
+  unsigned int *p = (unsigned int *) (memory + x);
   WRITE_BUSERROR (x, maskl, v, process_wlat_addr);
   *p = v;
 }
@@ -583,7 +590,7 @@ wwat_fast (memory, x, value, maskw, endianw)
      unsigned char *memory;
 {
   int v = value;
-  unsigned short *p = (unsigned short *)(memory + (x ^ endianw));
+  unsigned short *p = (unsigned short *) (memory + (x ^ endianw));
   WRITE_BUSERROR (x, maskw, v, process_wwat_addr);
   *p = v;
 }
@@ -604,7 +611,7 @@ static int INLINE
 rlat_fast (memory, x, maskl)
      unsigned char *memory;
 {
-  unsigned int *p = (unsigned int *)(memory + x);
+  unsigned int *p = (unsigned int *) (memory + x);
   READ_BUSERROR (x, maskl, process_rlat_addr);
 
   return *p;
@@ -615,7 +622,7 @@ rwat_fast (memory, x, maskw, endianw)
      unsigned char *memory;
      int x, maskw, endianw;
 {
-  unsigned short *p = (unsigned short *)(memory + (x ^ endianw));
+  unsigned short *p = (unsigned short *) (memory + (x ^ endianw));
   READ_BUSERROR (x, maskw, process_rwat_addr);
 
   return *p;
@@ -625,7 +632,7 @@ static int INLINE
 riat_fast (insn_ptr, endianw)
      unsigned char *insn_ptr;
 {
-  unsigned short *p = (unsigned short *)((size_t) insn_ptr ^ endianw);
+  unsigned short *p = (unsigned short *) ((size_t) insn_ptr ^ endianw);
 
   return *p;
 }
@@ -648,9 +655,10 @@ rbat_fast (memory, x, maskb)
 #define WLAT(x,v) 	(wlat_fast (memory, x, v, maskl))
 #define WBAT(x,v)       (wbat_fast (memory, x, v, maskb))
 
-#define RUWAT(x)  (RWAT(x) & 0xffff)
-#define RSWAT(x)  ((short)(RWAT(x)))
-#define RSBAT(x)  (SEXT(RBAT(x)))
+#define RUWAT(x)  (RWAT (x) & 0xffff)
+#define RSWAT(x)  ((short) (RWAT (x)))
+#define RSLAT(x)  ((long) (RLAT (x)))
+#define RSBAT(x)  (SEXT (RBAT (x)))
 
 #define RDAT(x, n) (do_rdat (memory, (x), (n), (maskl)))
 static int
@@ -755,11 +763,11 @@ process_rbat_addr (addr)
 
 #define SEXT(x)     	(((x &  0xff) ^ (~0x7f))+0x80)
 #define SEXT12(x)	(((x & 0xfff) ^ 0x800) - 0x800)
-#define SEXTW(y)    	((int)((short)y))
+#define SEXTW(y)    	((int) ((short) y))
 #if 0
-#define SEXT32(x)	((int)((x & 0xffffffff) ^ 0x80000000U) - 0x7fffffff - 1)
+#define SEXT32(x)	((int) ((x & 0xffffffff) ^ 0x80000000U) - 0x7fffffff - 1)
 #else
-#define SEXT32(x)	((int)(x))
+#define SEXT32(x)	((int) (x))
 #endif
 #define SIGN32(x)	(SEXT32 (x) >> 31)
 
@@ -798,7 +806,7 @@ do { \
 
 #define L(x)   thislock = x;
 #define TL(x)  if ((x) == prevlock) stalls++;
-#define TB(x,y)  if ((x) == prevlock || (y)==prevlock) stalls++;
+#define TB(x,y)  if ((x) == prevlock || (y) == prevlock) stalls++;
 
 #endif
 
@@ -953,12 +961,14 @@ strnswap (str, len)
   while (start < end);
 }
 
-/* Simulate a monitor trap, put the result into r0 and errno into r1 */
+/* Simulate a monitor trap, put the result into r0 and errno into r1
+   return offset by which to adjust pc.  */
 
-static void
-trap (i, regs, memory, maskl, maskw, endianw)
+static int
+trap (i, regs, insn_ptr, memory, maskl, maskw, endianw)
      int i;
      int *regs;
+     unsigned char *insn_ptr;
      unsigned char *memory;
 {
   switch (i)
@@ -970,6 +980,13 @@ trap (i, regs, memory, maskl, maskw, endianw)
       raise_exception (SIGQUIT);
       break;
     case 3:			/* FIXME: for backwards compat, should be removed */
+    case 33:
+      {
+	unsigned int countp = * (unsigned int *) (insn_ptr + 4);
+
+	WLAT (countp, RLAT (countp) + 1);
+	return 6;
+      }
     case 34:
       {
 	extern int errno;
@@ -987,10 +1004,11 @@ trap (i, regs, memory, maskl, maskw, endianw)
    Besides, it's quite dangerous.  */
 #if 0
 	  case SYS_execve:
-	    regs[0] = execve (ptr (regs[5]), (char **)ptr (regs[6]), (char **)ptr (regs[7]));
+	    regs[0] = execve (ptr (regs[5]), (char **) ptr (regs[6]), 
+			      (char **) ptr (regs[7]));
 	    break;
 	  case SYS_execv:
-	    regs[0] = execve (ptr (regs[5]),(char **) ptr (regs[6]), 0);
+	    regs[0] = execve (ptr (regs[5]), (char **) ptr (regs[6]), 0);
 	    break;
 #endif
 	  case SYS_pipe:
@@ -1015,9 +1033,11 @@ trap (i, regs, memory, maskl, maskw, endianw)
 	  case SYS_write:
 	    strnswap (regs[6], regs[7]);
 	    if (regs[5] == 1)
-	      regs[0] = (int)callback->write_stdout (callback, ptr(regs[6]), regs[7]);
+	      regs[0] = (int) callback->write_stdout (callback, 
+						      ptr (regs[6]), regs[7]);
 	    else
-	      regs[0] = (int)callback->write (callback, regs[5], ptr (regs[6]), regs[7]);
+	      regs[0] = (int) callback->write (callback, regs[5], 
+					       ptr (regs[6]), regs[7]);
 	    strnswap (regs[6], regs[7]);
 	    break;
 	  case SYS_lseek:
@@ -1030,7 +1050,7 @@ trap (i, regs, memory, maskl, maskw, endianw)
 	    {
 	      int len = strswaplen (regs[5]);
 	      strnswap (regs[5], len);
-	      regs[0] = callback->open (callback,ptr (regs[5]), regs[6]);
+	      regs[0] = callback->open (callback, ptr (regs[5]), regs[6]);
 	      strnswap (regs[5], len);
 	      break;
 	    }
@@ -1141,6 +1161,17 @@ trap (i, regs, memory, maskl, maskw, endianw)
 	  case SYS_time:
 	    regs[0] = get_now ();
 	    break;
+	  case SYS_ftruncate:
+	    regs[0] = callback->ftruncate (callback, regs[5], regs[6]);
+	    break;
+	  case SYS_truncate:
+	    {
+	      int len = strswaplen (regs[5]);
+	      strnswap (regs[5], len);
+	      regs[0] = callback->truncate (callback, ptr (regs[5]), regs[6]);
+	      strnswap (regs[5], len);
+	      break;
+	    }
 	  default:
 	    regs[0] = -1;
 	    break;
@@ -1153,9 +1184,11 @@ trap (i, regs, memory, maskl, maskw, endianw)
     case 0xc3:
     case 255:
       raise_exception (SIGTRAP);
+      if (i == 0xc3)
+	return -2;
       break;
     }
-
+  return 0;
 }
 
 void
@@ -1308,11 +1341,11 @@ macw (regs, memory, n, m, endianw)
   long tempm, tempn;
   long prod, macl, sum;
 
-  tempm=RSWAT(regs[m]); regs[m]+=2;
-  tempn=RSWAT(regs[n]); regs[n]+=2;
+  tempm=RSWAT (regs[m]); regs[m]+=2;
+  tempn=RSWAT (regs[n]); regs[n]+=2;
 
   macl = MACL;
-  prod = (long)(short) tempm * (long)(short) tempn;
+  prod = (long) (short) tempm * (long) (short) tempn;
   sum = prod + macl;
   if (S)
     {
@@ -1334,6 +1367,131 @@ macw (regs, memory, n, m, endianw)
       MACH = (mach & 0x1ff) | -(mach & 0x200);
     }
   MACL = sum;
+}
+
+static void
+macl (regs, memory, n, m)
+     int *regs;
+     unsigned char *memory;
+     int m, n;
+{
+  long tempm, tempn;
+  long prod, macl, mach, sum;
+  long long ans,ansl,ansh,t;
+  unsigned long long high,low,combine;
+  union mac64
+  {
+    long m[2]; /* mach and macl*/
+    long long m64; /* 64 bit MAC */
+  }mac64;
+
+  tempm = RSLAT (regs[m]);
+  regs[m] += 4;
+
+  tempn = RSLAT (regs[n]);
+  regs[n] += 4;
+
+  mach = MACH;
+  macl = MACL;
+
+  mac64.m[0] = macl;
+  mac64.m[1] = mach;
+
+  ans = (long long) tempm * (long long) tempn; /* Multiply 32bit * 32bit */
+
+  mac64.m64 += ans; /* Accumulate   64bit + 64 bit */
+
+  macl = mac64.m[0];
+  mach = mac64.m[1];
+
+  if (S)  /* Store only 48 bits of the result */
+    {
+      if (mach < 0) /* Result is negative */
+        {
+          mach = mach & 0x0000ffff; /* Mask higher 16 bits */
+          mach |= 0xffff8000; /* Sign extend higher 16 bits */
+        }
+      else
+        mach = mach & 0x00007fff; /* Postive Result */
+    }
+
+  MACL = macl;
+  MACH = mach;
+}
+
+
+/* GET_LOOP_BOUNDS {EXTENDED}
+   These two functions compute the actual starting and ending point
+   of the repeat loop, based on the RS and RE registers (repeat start, 
+   repeat stop).  The extended version is called for LDRC, and the
+   regular version is called for SETRC.  The difference is that for
+   LDRC, the loop start and end instructions are literally the ones
+   pointed to by RS and RE -- for SETRC, they're not (see docs).  */
+
+static struct loop_bounds
+get_loop_bounds_ext (rs, re, memory, mem_end, maskw, endianw)
+     int rs, re;
+     unsigned char *memory, *mem_end;
+     int maskw, endianw;
+{
+  struct loop_bounds loop;
+
+  /* FIXME: should I verify RS < RE?  */
+  loop.start = PT2H (RS);	/* FIXME not using the params?  */
+  loop.end   = PT2H (RE & ~1);	/* Ignore bit 0 of RE.  */
+  SKIP_INSN (loop.end);
+  if (loop.end >= mem_end)
+    loop.end = PT2H (0);
+  return loop;
+}
+
+float
+fsca_s (int in, double (*f) (double))
+{
+  double rad = ldexp ((in & 0xffff), -15) * 3.141592653589793238462643383;
+  double result = (*f) (rad);
+  double error, upper, lower, frac;
+  int exp;
+
+  /* Search the value with the maximum error that is still within the
+     architectural spec.  */
+  error = ldexp (1., -21);
+  /* compensate for calculation inaccuracy by reducing error.  */
+  error = error - ldexp (1., -50);
+  upper = result + error;
+  frac = frexp (upper, &exp);
+  upper = ldexp (floor (ldexp (frac, 24)), exp - 24);
+  lower = result - error;
+  frac = frexp (lower, &exp);
+  lower = ldexp (ceil (ldexp (frac, 24)), exp - 24);
+  return abs (upper - result) >= abs (lower - result) ? upper : lower;
+}
+
+float
+fsrra_s (float in)
+{
+  double result = 1. / sqrt (in);
+  int exp;
+  double frac, upper, lower, error, eps;
+
+  /* refine result */
+  result = result - (result * result * in - 1) * 0.5 * result;
+  /* Search the value with the maximum error that is still within the
+     architectural spec.  */
+  frac = frexp (result, &exp);
+  frac = ldexp (frac, 24);
+  error = 4.0; /* 1 << 24-1-21 */
+  /* use eps to compensate for possible 1 ulp error in our 'exact' result.  */
+  eps = ldexp (1., -29);
+  upper = floor (frac + error - eps);
+  if (upper > 16777216.)
+    upper = floor ((frac + error - eps) * 0.5) * 2.;
+  lower = ceil ((frac - error + eps) * 2) * .5;
+  if (lower > 8388608.)
+    lower = ceil (frac - error + eps);
+  upper = ldexp (upper, exp - 24);
+  lower = ldexp (lower, exp - 24);
+  return upper - result >= result - lower ? upper : lower;
 }
 
 static struct loop_bounds
@@ -1375,8 +1533,7 @@ get_loop_bounds (rs, re, memory, mem_end, maskw, endianw)
   return loop;
 }
 
-static void
-ppi_insn();
+static void ppi_insn ();
 
 #include "ppi.c"
 
@@ -1412,12 +1569,14 @@ sim_size (power)
 
 static void
 init_dsp (abfd)
-     struct _bfd *abfd;
+     struct bfd *abfd;
 {
   int was_dsp = target_dsp;
   unsigned long mach = bfd_get_mach (abfd);
 
-  if (mach == bfd_mach_sh_dsp || mach == bfd_mach_sh3_dsp)
+  if (mach == bfd_mach_sh_dsp  || 
+      mach == bfd_mach_sh4al_dsp ||
+      mach == bfd_mach_sh3_dsp)
     {
       int ram_area_size, xram_start, yram_start;
       int new_select;
@@ -1432,7 +1591,7 @@ init_dsp (abfd)
 	  xram_start = 0x0800f000;
 	  ram_area_size = 0x1000;
 	}
-      if (mach == bfd_mach_sh3_dsp)
+      if (mach == bfd_mach_sh3_dsp || mach == bfd_mach_sh4al_dsp)
 	{
 	  /* SH7612:
 	     8KB each for X & Y memory;
@@ -1487,7 +1646,7 @@ init_dsp (abfd)
     {
       int i, tmp;
 
-      for (i = sizeof sh_dsp_table - 1; i >= 0; i--)
+      for (i = (sizeof sh_dsp_table / sizeof sh_dsp_table[0]) - 1; i >= 0; i--)
 	{
 	  tmp = sh_jump_table[0xf000 + i];
 	  sh_jump_table[0xf000 + i] = sh_dsp_table[i];
@@ -1500,7 +1659,7 @@ static void
 init_pointers ()
 {
   host_little_endian = 0;
-  *(char*)&host_little_endian = 1;
+  * (char*) &host_little_endian = 1;
   host_little_endian &= 1;
 
   if (saved_state.asregs.msize != 1 << sim_memory_size)
@@ -1593,7 +1752,7 @@ sim_resume (sd, step, siggnal)
   void (*prev) ();
   void (*prev_fpe) ();
 
-  register unsigned char *jump_table = sh_jump_table;
+  register unsigned short *jump_table = sh_jump_table;
 
   register int *R = &(saved_state.asregs.regs[0]);
   /*register int T;*/
@@ -1616,7 +1775,11 @@ sim_resume (sd, step, siggnal)
   memory = saved_state.asregs.memory;
   mem_end = memory + saved_state.asregs.msize;
 
-  loop = get_loop_bounds (RS, RE, memory, mem_end, maskw, endianw);
+  if (RE & 1)
+    loop = get_loop_bounds_ext (RS, RE, memory, mem_end, maskw, endianw);
+  else
+    loop = get_loop_bounds     (RS, RE, memory, mem_end, maskw, endianw);
+
   insn_ptr = PT2H (saved_state.asregs.pc);
   CHECK_INSN_PTR (insn_ptr);
 
@@ -1717,7 +1880,7 @@ sim_resume (sd, step, siggnal)
     }
   /* Check for SIGBUS due to insn fetch.  */
   else if (! saved_state.asregs.exception)
-    saved_state.asregs.exception == SIGBUS;
+    saved_state.asregs.exception = SIGBUS;
 
   saved_state.asregs.ticks += get_now () - tick_start;
   saved_state.asregs.cycles += cycles;
@@ -1787,101 +1950,125 @@ sim_store_register (sd, rn, memory, length)
   unsigned val;
 
   init_pointers ();
-  val = swap (* (int *)memory);
+  val = swap (* (int *) memory);
   switch (rn)
     {
-    case  0: case  1: case  2: case  3: case  4: case  5: case  6: case  7:
-    case  8: case  9: case 10: case 11: case 12: case 13: case 14: case 15:
+    case SIM_SH_R0_REGNUM: case SIM_SH_R1_REGNUM: case SIM_SH_R2_REGNUM:
+    case SIM_SH_R3_REGNUM: case SIM_SH_R4_REGNUM: case SIM_SH_R5_REGNUM:
+    case SIM_SH_R6_REGNUM: case SIM_SH_R7_REGNUM: case SIM_SH_R8_REGNUM:
+    case SIM_SH_R9_REGNUM: case SIM_SH_R10_REGNUM: case SIM_SH_R11_REGNUM:
+    case SIM_SH_R12_REGNUM: case SIM_SH_R13_REGNUM: case SIM_SH_R14_REGNUM:
+    case SIM_SH_R15_REGNUM:
       saved_state.asregs.regs[rn] = val;
       break;
-    case 16:
+    case SIM_SH_PC_REGNUM:
       saved_state.asregs.pc = val;
       break;
-    case 17:
+    case SIM_SH_PR_REGNUM:
       PR = val;
       break;
-    case 18:
+    case SIM_SH_GBR_REGNUM:
       GBR = val;
       break;
-    case 19:
+    case SIM_SH_VBR_REGNUM:
       VBR = val;
       break;
-    case 20:
+    case SIM_SH_MACH_REGNUM:
       MACH = val;
       break;
-    case 21:
+    case SIM_SH_MACL_REGNUM:
       MACL = val;
       break;
-    case 22:
+    case SIM_SH_SR_REGNUM:
       SET_SR (val);
       break;
-    case 23:
+    case SIM_SH_FPUL_REGNUM:
       FPUL = val;
       break;
-    case 24:
+    case SIM_SH_FPSCR_REGNUM:
       SET_FPSCR (val);
       break;
-    case 25:
-      if (target_dsp)
-	A0G = val;
-    else case 26:
-      if (target_dsp)
-	A0 = val;
-    else case 27:
-      if (target_dsp)
-	A1G = val;
-    else case 28:
-      if (target_dsp)
-	A1 = val;
-    else case 29:
-      if (target_dsp)
-	M0 = val;
-    else case 30:
-      if (target_dsp)
-	M1 = val;
-    else case 31:
-      if (target_dsp)
-	X0 = val;
-    else case 32:
-      if (target_dsp)
-	X1 = val;
-    else case 33:
-      if (target_dsp)
-	Y0 = val;
-    else case 34:
-      if (target_dsp)
-	Y1 = val;
-    else case 40:
-      if (target_dsp)
-	SET_MOD (val);
-    else case 35: case 36: case 37: case 38: case 39:
-	SET_FI (rn - 25, val);
+    case SIM_SH_FR0_REGNUM: case SIM_SH_FR1_REGNUM: case SIM_SH_FR2_REGNUM:
+    case SIM_SH_FR3_REGNUM: case SIM_SH_FR4_REGNUM: case SIM_SH_FR5_REGNUM:
+    case SIM_SH_FR6_REGNUM: case SIM_SH_FR7_REGNUM: case SIM_SH_FR8_REGNUM:
+    case SIM_SH_FR9_REGNUM: case SIM_SH_FR10_REGNUM: case SIM_SH_FR11_REGNUM:
+    case SIM_SH_FR12_REGNUM: case SIM_SH_FR13_REGNUM: case SIM_SH_FR14_REGNUM:
+    case SIM_SH_FR15_REGNUM:
+      SET_FI (rn - SIM_SH_FR0_REGNUM, val);
       break;
-    case 41:
+    case SIM_SH_DSR_REGNUM:
+      DSR = val;
+      break;
+    case SIM_SH_A0G_REGNUM:
+      A0G = val;
+      break;
+    case SIM_SH_A0_REGNUM:
+      A0 = val;
+      break;
+    case SIM_SH_A1G_REGNUM:
+      A1G = val;
+      break;
+    case SIM_SH_A1_REGNUM:
+      A1 = val;
+      break;
+    case SIM_SH_M0_REGNUM:
+      M0 = val;
+      break;
+    case SIM_SH_M1_REGNUM:
+      M1 = val;
+      break;
+    case SIM_SH_X0_REGNUM:
+      X0 = val;
+      break;
+    case SIM_SH_X1_REGNUM:
+      X1 = val;
+      break;
+    case SIM_SH_Y0_REGNUM:
+      Y0 = val;
+      break;
+    case SIM_SH_Y1_REGNUM:
+      Y1 = val;
+      break;
+    case SIM_SH_MOD_REGNUM:
+      SET_MOD (val);
+      break;
+    case SIM_SH_RS_REGNUM:
+      RS = val;
+      break;
+    case SIM_SH_RE_REGNUM:
+      RE = val;
+      break;
+    case SIM_SH_SSR_REGNUM:
       SSR = val;
       break;
-    case 42:
+    case SIM_SH_SPC_REGNUM:
       SPC = val;
       break;
     /* The rn_bank idiosyncracies are not due to hardware differences, but to
        a weird aliasing naming scheme for sh3 / sh3e / sh4.  */
-    case 43:
-      if (target_dsp)
-	RS = val;
-    else case 44:
-      if (target_dsp)
-	RE = val;
-    else case 45: case 46: case 47: case 48: case 49: case 50:
+    case SIM_SH_R0_BANK0_REGNUM: case SIM_SH_R1_BANK0_REGNUM:
+    case SIM_SH_R2_BANK0_REGNUM: case SIM_SH_R3_BANK0_REGNUM:
+    case SIM_SH_R4_BANK0_REGNUM: case SIM_SH_R5_BANK0_REGNUM:
+    case SIM_SH_R6_BANK0_REGNUM: case SIM_SH_R7_BANK0_REGNUM:
       if (SR_MD && SR_RB)
-	Rn_BANK (rn - 43) = val;
+	Rn_BANK (rn - SIM_SH_R0_BANK0_REGNUM) = val;
       else
-	saved_state.asregs.regs[rn - 43] = val;
+	saved_state.asregs.regs[rn - SIM_SH_R0_BANK0_REGNUM] = val;
       break;
-    case 51: case 52: case 53: case 54: case 55: case 56: case 57: case 58:
-      if (target_dsp || ! SR_MD || ! SR_RB)
-	SET_Rn_BANK (rn - 51, val);
+    case SIM_SH_R0_BANK1_REGNUM: case SIM_SH_R1_BANK1_REGNUM:
+    case SIM_SH_R2_BANK1_REGNUM: case SIM_SH_R3_BANK1_REGNUM:
+    case SIM_SH_R4_BANK1_REGNUM: case SIM_SH_R5_BANK1_REGNUM:
+    case SIM_SH_R6_BANK1_REGNUM: case SIM_SH_R7_BANK1_REGNUM:
+      if (SR_MD && SR_RB)
+	saved_state.asregs.regs[rn - SIM_SH_R0_BANK1_REGNUM] = val;
       else
-	saved_state.asregs.regs[rn - 51] = val;
+	Rn_BANK (rn - SIM_SH_R0_BANK1_REGNUM) = val;
+      break;
+    case SIM_SH_R0_BANK_REGNUM: case SIM_SH_R1_BANK_REGNUM:
+    case SIM_SH_R2_BANK_REGNUM: case SIM_SH_R3_BANK_REGNUM:
+    case SIM_SH_R4_BANK_REGNUM: case SIM_SH_R5_BANK_REGNUM:
+    case SIM_SH_R6_BANK_REGNUM: case SIM_SH_R7_BANK_REGNUM:
+      SET_Rn_BANK (rn - SIM_SH_R0_BANK_REGNUM, val);
       break;
     default:
       return 0;
@@ -1901,96 +2088,120 @@ sim_fetch_register (sd, rn, memory, length)
   init_pointers ();
   switch (rn)
     {
-    case  0: case  1: case  2: case  3: case  4: case  5: case  6: case  7:
-    case  8: case  9: case 10: case 11: case 12: case 13: case 14: case 15:
+    case SIM_SH_R0_REGNUM: case SIM_SH_R1_REGNUM: case SIM_SH_R2_REGNUM:
+    case SIM_SH_R3_REGNUM: case SIM_SH_R4_REGNUM: case SIM_SH_R5_REGNUM:
+    case SIM_SH_R6_REGNUM: case SIM_SH_R7_REGNUM: case SIM_SH_R8_REGNUM:
+    case SIM_SH_R9_REGNUM: case SIM_SH_R10_REGNUM: case SIM_SH_R11_REGNUM:
+    case SIM_SH_R12_REGNUM: case SIM_SH_R13_REGNUM: case SIM_SH_R14_REGNUM:
+    case SIM_SH_R15_REGNUM:
       val = saved_state.asregs.regs[rn];
       break;
-    case 16:
+    case SIM_SH_PC_REGNUM:
       val = saved_state.asregs.pc;
       break;
-    case 17:
+    case SIM_SH_PR_REGNUM:
       val = PR;
       break;
-    case 18:
+    case SIM_SH_GBR_REGNUM:
       val = GBR;
       break;
-    case 19:
+    case SIM_SH_VBR_REGNUM:
       val = VBR;
       break;
-    case 20:
+    case SIM_SH_MACH_REGNUM:
       val = MACH;
       break;
-    case 21:
+    case SIM_SH_MACL_REGNUM:
       val = MACL;
       break;
-    case 22:
+    case SIM_SH_SR_REGNUM:
       val = GET_SR ();
       break;
-    case 23:
+    case SIM_SH_FPUL_REGNUM:
       val = FPUL;
       break;
-    case 24:
+    case SIM_SH_FPSCR_REGNUM:
       val = GET_FPSCR ();
       break;
-    case 25:
-      val = target_dsp ? SEXT (A0G) : FI (0);
+    case SIM_SH_FR0_REGNUM: case SIM_SH_FR1_REGNUM: case SIM_SH_FR2_REGNUM:
+    case SIM_SH_FR3_REGNUM: case SIM_SH_FR4_REGNUM: case SIM_SH_FR5_REGNUM:
+    case SIM_SH_FR6_REGNUM: case SIM_SH_FR7_REGNUM: case SIM_SH_FR8_REGNUM:
+    case SIM_SH_FR9_REGNUM: case SIM_SH_FR10_REGNUM: case SIM_SH_FR11_REGNUM:
+    case SIM_SH_FR12_REGNUM: case SIM_SH_FR13_REGNUM: case SIM_SH_FR14_REGNUM:
+    case SIM_SH_FR15_REGNUM:
+      val = FI (rn - SIM_SH_FR0_REGNUM);
       break;
-    case 26:
-      val = target_dsp ? A0 : FI (1);
+    case SIM_SH_DSR_REGNUM:
+      val = DSR;
       break;
-    case 27:
-      val = target_dsp ? SEXT (A1G) : FI (2);
+    case SIM_SH_A0G_REGNUM:
+      val = SEXT (A0G);
       break;
-    case 28:
-      val = target_dsp ? A1 : FI (3);
+    case SIM_SH_A0_REGNUM:
+      val = A0;
       break;
-    case 29:
-      val = target_dsp ? M0 : FI (4);
+    case SIM_SH_A1G_REGNUM:
+      val = SEXT (A1G);
       break;
-    case 30:
-      val = target_dsp ? M1 : FI (5);
+    case SIM_SH_A1_REGNUM:
+      val = A1;
       break;
-    case 31:
-      val = target_dsp ? X0 : FI (6);
+    case SIM_SH_M0_REGNUM:
+      val = M0;
       break;
-    case 32:
-      val = target_dsp ? X1 : FI (7);
+    case SIM_SH_M1_REGNUM:
+      val = M1;
       break;
-    case 33:
-      val = target_dsp ? Y0 : FI (8);
+    case SIM_SH_X0_REGNUM:
+      val = X0;
       break;
-    case 34:
-      val = target_dsp ? Y1 : FI (9);
+    case SIM_SH_X1_REGNUM:
+      val = X1;
       break;
-    case 35: case 36: case 37: case 38: case 39:
-      val = FI (rn - 25);
+    case SIM_SH_Y0_REGNUM:
+      val = Y0;
       break;
-    case 40:
-      val = target_dsp ? MOD : FI (15);
+    case SIM_SH_Y1_REGNUM:
+      val = Y1;
       break;
-    case 41:
+    case SIM_SH_MOD_REGNUM:
+      val = MOD;
+      break;
+    case SIM_SH_RS_REGNUM:
+      val = RS;
+      break;
+    case SIM_SH_RE_REGNUM:
+      val = RE;
+      break;
+    case SIM_SH_SSR_REGNUM:
       val = SSR;
       break;
-    case 42:
+    case SIM_SH_SPC_REGNUM:
       val = SPC;
       break;
     /* The rn_bank idiosyncracies are not due to hardware differences, but to
        a weird aliasing naming scheme for sh3 / sh3e / sh4.  */
-    case 43:
-      if (target_dsp)
-	val = RS;
-    else case 44:
-      if (target_dsp)
-	val = RE;
-    else case 45: case 46: case 47: case 48: case 49: case 50:
-	val = (SR_MD && SR_RB
-	       ? Rn_BANK (rn - 43)
-	       : saved_state.asregs.regs[rn - 43]);
+    case SIM_SH_R0_BANK0_REGNUM: case SIM_SH_R1_BANK0_REGNUM:
+    case SIM_SH_R2_BANK0_REGNUM: case SIM_SH_R3_BANK0_REGNUM:
+    case SIM_SH_R4_BANK0_REGNUM: case SIM_SH_R5_BANK0_REGNUM:
+    case SIM_SH_R6_BANK0_REGNUM: case SIM_SH_R7_BANK0_REGNUM:
+      val = (SR_MD && SR_RB
+	     ? Rn_BANK (rn - SIM_SH_R0_BANK0_REGNUM)
+	     : saved_state.asregs.regs[rn - SIM_SH_R0_BANK0_REGNUM]);
       break;
-    case 51: case 52: case 53: case 54: case 55: case 56: case 57: case 58:
-      val = (target_dsp || ! SR_MD || ! SR_RB
-	     ? Rn_BANK (rn - 51)
-	     : saved_state.asregs.regs[rn - 51]);
+    case SIM_SH_R0_BANK1_REGNUM: case SIM_SH_R1_BANK1_REGNUM:
+    case SIM_SH_R2_BANK1_REGNUM: case SIM_SH_R3_BANK1_REGNUM:
+    case SIM_SH_R4_BANK1_REGNUM: case SIM_SH_R5_BANK1_REGNUM:
+    case SIM_SH_R6_BANK1_REGNUM: case SIM_SH_R7_BANK1_REGNUM:
+      val = (! SR_MD || ! SR_RB
+	     ? Rn_BANK (rn - SIM_SH_R0_BANK1_REGNUM)
+	     : saved_state.asregs.regs[rn - SIM_SH_R0_BANK1_REGNUM]);
+      break;
+    case SIM_SH_R0_BANK_REGNUM: case SIM_SH_R1_BANK_REGNUM:
+    case SIM_SH_R2_BANK_REGNUM: case SIM_SH_R3_BANK_REGNUM:
+    case SIM_SH_R4_BANK_REGNUM: case SIM_SH_R5_BANK_REGNUM:
+    case SIM_SH_R6_BANK_REGNUM: case SIM_SH_R7_BANK_REGNUM:
+      val = Rn_BANK (rn - SIM_SH_R0_BANK_REGNUM);
       break;
     default:
       return 0;
@@ -2031,7 +2242,8 @@ sim_info (sd, verbose)
      SIM_DESC sd;
      int verbose;
 {
-  double timetaken = (double) saved_state.asregs.ticks / (double) now_persec ();
+  double timetaken = 
+    (double) saved_state.asregs.ticks / (double) now_persec ();
   double virttime = saved_state.asregs.cycles / 36.0e6;
 
   callback->printf_filtered (callback, "\n\n# instructions executed  %10d\n", 
@@ -2080,7 +2292,7 @@ SIM_DESC
 sim_open (kind, cb, abfd, argv)
      SIM_OPEN_KIND kind;
      host_callback *cb;
-     struct _bfd *abfd;
+     struct bfd *abfd;
      char **argv;
 {
   char **p;
@@ -2179,13 +2391,13 @@ sim_load (sd, prog, abfd, from_tty)
 SIM_RC
 sim_create_inferior (sd, prog_bfd, argv, env)
      SIM_DESC sd;
-     struct _bfd *prog_bfd;
+     struct bfd *prog_bfd;
      char **argv;
      char **env;
 {
   /* Clear the registers. */
   memset (&saved_state, 0,
-	  (char*)&saved_state.asregs.end_of_registers - (char*)&saved_state);
+	  (char*) &saved_state.asregs.end_of_registers - (char*) &saved_state);
 
   /* Set the PC.  */
   if (prog_bfd != NULL)
@@ -2211,13 +2423,15 @@ sim_do_command (sd, cmd)
     }
 
   cmdsize = strlen (sms_cmd);
-  if (strncmp (cmd, sms_cmd, cmdsize) == 0 && strchr (" \t", cmd[cmdsize]) != NULL)
+  if (strncmp (cmd, sms_cmd, cmdsize) == 0 
+      && strchr (" \t", cmd[cmdsize]) != NULL)
     {
       parse_and_set_memory_size (cmd + cmdsize + 1);
     }
   else if (strcmp (cmd, "help") == 0)
     {
-      (callback->printf_filtered) (callback, "List of SH simulator commands:\n\n");
+      (callback->printf_filtered) (callback, 
+				   "List of SH simulator commands:\n\n");
       (callback->printf_filtered) (callback, "set-memory-size <n> -- Set the number of address bits to use\n");
       (callback->printf_filtered) (callback, "\n");
     }

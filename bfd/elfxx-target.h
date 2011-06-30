@@ -1,22 +1,22 @@
 /* Target definitions for NN-bit ELF
-   Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002
-   Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+   2003 Free Software Foundation, Inc.
 
-This file is part of BFD, the Binary File Descriptor library.
+   This file is part of BFD, the Binary File Descriptor library.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 /* This structure contains everything that BFD knows about a target.
    It includes things like its byte order, name, what routines to call
@@ -32,26 +32,31 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #define bfd_elfNN_get_section_contents _bfd_generic_get_section_contents
 #endif
 
-#define bfd_elfNN_canonicalize_dynamic_symtab _bfd_elf_canonicalize_dynamic_symtab
+#define bfd_elfNN_canonicalize_dynamic_symtab \
+  _bfd_elf_canonicalize_dynamic_symtab
+#ifndef bfd_elfNN_canonicalize_reloc
 #define bfd_elfNN_canonicalize_reloc	_bfd_elf_canonicalize_reloc
+#endif
 #ifndef bfd_elfNN_find_nearest_line
 #define bfd_elfNN_find_nearest_line	_bfd_elf_find_nearest_line
 #endif
 #define bfd_elfNN_read_minisymbols	_bfd_elf_read_minisymbols
 #define bfd_elfNN_minisymbol_to_symbol	_bfd_elf_minisymbol_to_symbol
-#define bfd_elfNN_get_dynamic_symtab_upper_bound _bfd_elf_get_dynamic_symtab_upper_bound
+#define bfd_elfNN_get_dynamic_symtab_upper_bound \
+  _bfd_elf_get_dynamic_symtab_upper_bound
 #define bfd_elfNN_get_lineno		_bfd_elf_get_lineno
 #ifndef bfd_elfNN_get_reloc_upper_bound
 #define bfd_elfNN_get_reloc_upper_bound _bfd_elf_get_reloc_upper_bound
 #endif
+#ifndef bfd_elfNN_get_symbol_info
 #define bfd_elfNN_get_symbol_info	_bfd_elf_get_symbol_info
-#define bfd_elfNN_get_symtab		_bfd_elf_get_symtab
-#define bfd_elfNN_get_symtab_upper_bound _bfd_elf_get_symtab_upper_bound
-#if 0 /* done in elf-bfd.h */
-#define bfd_elfNN_link_record_dynamic_symbol _bfd_elf_link_record_dynamic_symbol
 #endif
+#define bfd_elfNN_canonicalize_symtab	_bfd_elf_canonicalize_symtab
+#define bfd_elfNN_get_symtab_upper_bound _bfd_elf_get_symtab_upper_bound
 #define bfd_elfNN_make_empty_symbol	_bfd_elf_make_empty_symbol
+#ifndef bfd_elfNN_new_section_hook
 #define bfd_elfNN_new_section_hook	_bfd_elf_new_section_hook
+#endif
 #define bfd_elfNN_set_arch_mach		_bfd_elf_set_arch_mach
 #ifndef bfd_elfNN_set_section_contents
 #define bfd_elfNN_set_section_contents	_bfd_elf_set_section_contents
@@ -87,15 +92,18 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #ifndef elf_backend_want_dynbss
 #define elf_backend_want_dynbss 1
 #endif
+#ifndef elf_backend_want_p_paddr_set_to_zero
+#define elf_backend_want_p_paddr_set_to_zero 0
+#endif
 
 #define bfd_elfNN_bfd_debug_info_start	bfd_void
 #define bfd_elfNN_bfd_debug_info_end	bfd_void
 #define bfd_elfNN_bfd_debug_info_accumulate \
-  (void (*) PARAMS ((bfd*, struct sec *))) bfd_void
+  ((void (*) (bfd*, struct bfd_section *)) bfd_void)
 
 #ifndef bfd_elfNN_bfd_get_relocated_section_contents
 #define bfd_elfNN_bfd_get_relocated_section_contents \
- bfd_generic_get_relocated_section_contents
+  bfd_generic_get_relocated_section_contents
 #endif
 
 #ifndef bfd_elfNN_bfd_relax_section
@@ -126,9 +134,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
   _bfd_elf_merge_sections
 #endif
 
+#ifndef bfd_elfNN_bfd_discard_group
+#define bfd_elfNN_bfd_discard_group bfd_elf_discard_group
+#endif
+
 #ifndef bfd_elfNN_bfd_make_debug_symbol
 #define bfd_elfNN_bfd_make_debug_symbol \
-  ((asymbol *(*) PARAMS ((bfd *, void *, unsigned long))) bfd_nullvoidptr)
+  ((asymbol * (*) (bfd *, void *, unsigned long)) bfd_nullvoidptr)
 #endif
 
 #ifndef bfd_elfNN_bfd_copy_private_symbol_data
@@ -150,11 +162,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #endif
 #ifndef bfd_elfNN_bfd_merge_private_bfd_data
 #define bfd_elfNN_bfd_merge_private_bfd_data \
-  ((boolean (*) PARAMS ((bfd *, bfd *))) bfd_true)
+  ((bfd_boolean (*) (bfd *, bfd *)) bfd_true)
 #endif
 #ifndef bfd_elfNN_bfd_set_private_flags
 #define bfd_elfNN_bfd_set_private_flags \
-  ((boolean (*) PARAMS ((bfd *, flagword))) bfd_true)
+  ((bfd_boolean (*) (bfd *, flagword)) bfd_true)
 #endif
 #ifndef bfd_elfNN_bfd_is_local_label_name
 #define bfd_elfNN_bfd_is_local_label_name _bfd_elf_is_local_label_name
@@ -167,6 +179,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #ifndef bfd_elfNN_canonicalize_dynamic_reloc
 #define bfd_elfNN_canonicalize_dynamic_reloc \
   _bfd_elf_canonicalize_dynamic_reloc
+#endif
+
+#ifndef bfd_elfNN_bfd_link_hash_table_free
+#define bfd_elfNN_bfd_link_hash_table_free _bfd_generic_link_hash_table_free
 #endif
 
 #ifdef elf_backend_relocate_section
@@ -190,6 +206,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #define bfd_elfNN_bfd_final_link	_bfd_generic_final_link
 #endif
 #endif /* ! defined (elf_backend_relocate_section) */
+
+#ifndef bfd_elfNN_bfd_link_just_syms
+#define bfd_elfNN_bfd_link_just_syms	_bfd_elf_link_just_syms
+#endif
+
 #ifndef bfd_elfNN_bfd_link_split_section
 #define bfd_elfNN_bfd_link_split_section _bfd_generic_link_split_section
 #endif
@@ -232,10 +253,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #endif
 
 #ifndef elf_backend_collect
-#define elf_backend_collect false
+#define elf_backend_collect FALSE
 #endif
 #ifndef elf_backend_type_change_ok
-#define elf_backend_type_change_ok false
+#define elf_backend_type_change_ok FALSE
 #endif
 
 #ifndef elf_backend_sym_is_global
@@ -252,6 +273,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #endif
 #ifndef elf_backend_get_symbol_type
 #define elf_backend_get_symbol_type 0
+#endif
+#ifndef elf_backend_name_local_section_symbols
+#define elf_backend_name_local_section_symbols	0
 #endif
 #ifndef elf_backend_section_processing
 #define elf_backend_section_processing	0
@@ -316,11 +340,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #ifndef elf_backend_ecoff_debug_swap
 #define elf_backend_ecoff_debug_swap	0
 #endif
+#ifndef elf_backend_bfd_from_remote_memory
+#define elf_backend_bfd_from_remote_memory _bfd_elfNN_bfd_from_remote_memory
+#endif
 #ifndef elf_backend_got_header_size
 #define elf_backend_got_header_size	0
-#endif
-#ifndef elf_backend_plt_header_size
-#define elf_backend_plt_header_size	0
 #endif
 #ifndef elf_backend_post_process_headers
 #define elf_backend_post_process_headers	NULL
@@ -336,6 +360,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #endif
 #ifndef elf_backend_hide_symbol
 #define elf_backend_hide_symbol		_bfd_elf_link_hash_hide_symbol
+#endif
+#ifndef elf_backend_merge_symbol_attribute
+#define elf_backend_merge_symbol_attribute	NULL
 #endif
 #ifndef elf_backend_emit_relocs
 #define elf_backend_emit_relocs			NULL
@@ -364,8 +391,23 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #ifndef elf_backend_ignore_discarded_relocs
 #define elf_backend_ignore_discarded_relocs	NULL
 #endif
+#ifndef elf_backend_can_make_relative_eh_frame
+#define elf_backend_can_make_relative_eh_frame	_bfd_elf_can_make_relative
+#endif
+#ifndef elf_backend_can_make_lsda_relative_eh_frame
+#define elf_backend_can_make_lsda_relative_eh_frame	_bfd_elf_can_make_relative
+#endif
+#ifndef elf_backend_encode_eh_address
+#define elf_backend_encode_eh_address		_bfd_elf_encode_eh_address
+#endif
 #ifndef elf_backend_write_section
 #define elf_backend_write_section		NULL
+#endif
+#ifndef elf_backend_mips_irix_compat
+#define elf_backend_mips_irix_compat		NULL
+#endif
+#ifndef elf_backend_mips_rtype_to_howto
+#define elf_backend_mips_rtype_to_howto		NULL
 #endif
 
 /* Previously, backends could only use SHT_REL or SHT_RELA relocation
@@ -374,9 +416,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
    For backwards compatibility, we still support this usage.  */
 #ifndef USE_REL
 #define USE_REL 0
-#else
-#undef USE_REL
-#define USE_REL 1
 #endif
 
 /* Use these in new code.  */
@@ -390,6 +429,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #define elf_backend_default_use_rela_p !USE_REL
 #endif
 
+#ifndef elf_backend_rela_normal
+#define elf_backend_rela_normal 0
+#endif
+
 #ifndef ELF_MACHINE_ALT1
 #define ELF_MACHINE_ALT1 0
 #endif
@@ -400,6 +443,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #ifndef elf_backend_size_info
 #define elf_backend_size_info _bfd_elfNN_size_info
+#endif
+
+#ifndef elf_backend_special_sections
+#define elf_backend_special_sections NULL
 #endif
 
 #ifndef elf_backend_sign_extend_vma
@@ -421,6 +468,7 @@ static const struct elf_backend_data elfNN_bed =
   elf_backend_symbol_processing,
   elf_backend_symbol_table_processing,
   elf_backend_get_symbol_type,
+  elf_backend_name_local_section_symbols,
   elf_backend_section_processing,
   elf_backend_section_from_shdr,
   elf_backend_section_flags,
@@ -448,6 +496,7 @@ static const struct elf_backend_data elfNN_bed =
   elf_backend_output_arch_syms,
   elf_backend_copy_indirect_symbol,
   elf_backend_hide_symbol,
+  elf_backend_merge_symbol_attribute,
   elf_backend_emit_relocs,
   elf_backend_count_relocs,
   elf_backend_grok_prstatus,
@@ -457,19 +506,26 @@ static const struct elf_backend_data elfNN_bed =
   elf_backend_reloc_type_class,
   elf_backend_discard_info,
   elf_backend_ignore_discarded_relocs,
+  elf_backend_can_make_relative_eh_frame,
+  elf_backend_can_make_lsda_relative_eh_frame,
+  elf_backend_encode_eh_address,
   elf_backend_write_section,
+  elf_backend_mips_irix_compat,
+  elf_backend_mips_rtype_to_howto,
   elf_backend_ecoff_debug_swap,
+  elf_backend_bfd_from_remote_memory,
   ELF_MACHINE_ALT1,
   ELF_MACHINE_ALT2,
   &elf_backend_size_info,
+  elf_backend_special_sections,
   elf_backend_got_symbol_offset,
   elf_backend_got_header_size,
-  elf_backend_plt_header_size,
   elf_backend_collect,
   elf_backend_type_change_ok,
   elf_backend_may_use_rel_p,
   elf_backend_may_use_rela_p,
   elf_backend_default_use_rela_p,
+  elf_backend_rela_normal,
   elf_backend_sign_extend_vma,
   elf_backend_want_got_plt,
   elf_backend_plt_readonly,
@@ -479,7 +535,8 @@ static const struct elf_backend_data elfNN_bed =
   elf_backend_can_gc_sections,
   elf_backend_can_refcount,
   elf_backend_want_got_sym,
-  elf_backend_want_dynbss
+  elf_backend_want_dynbss,
+  elf_backend_want_p_paddr_set_to_zero
 };
 #endif
 
@@ -558,19 +615,19 @@ const bfd_target TARGET_BIG_SYM =
     bfd_elfNN_write_corefile_contents,
   },
 
-      BFD_JUMP_TABLE_GENERIC (bfd_elfNN),
-      BFD_JUMP_TABLE_COPY (bfd_elfNN),
-      BFD_JUMP_TABLE_CORE (bfd_elfNN),
+  BFD_JUMP_TABLE_GENERIC (bfd_elfNN),
+  BFD_JUMP_TABLE_COPY (bfd_elfNN),
+  BFD_JUMP_TABLE_CORE (bfd_elfNN),
 #ifdef bfd_elfNN_archive_functions
-      BFD_JUMP_TABLE_ARCHIVE (bfd_elfNN_archive),
+  BFD_JUMP_TABLE_ARCHIVE (bfd_elfNN_archive),
 #else
-      BFD_JUMP_TABLE_ARCHIVE (_bfd_archive_coff),
+  BFD_JUMP_TABLE_ARCHIVE (_bfd_archive_coff),
 #endif
-      BFD_JUMP_TABLE_SYMBOLS (bfd_elfNN),
-      BFD_JUMP_TABLE_RELOCS (bfd_elfNN),
-      BFD_JUMP_TABLE_WRITE (bfd_elfNN),
-      BFD_JUMP_TABLE_LINK (bfd_elfNN),
-      BFD_JUMP_TABLE_DYNAMIC (bfd_elfNN),
+  BFD_JUMP_TABLE_SYMBOLS (bfd_elfNN),
+  BFD_JUMP_TABLE_RELOCS (bfd_elfNN),
+  BFD_JUMP_TABLE_WRITE (bfd_elfNN),
+  BFD_JUMP_TABLE_LINK (bfd_elfNN),
+  BFD_JUMP_TABLE_DYNAMIC (bfd_elfNN),
 
   /* Alternative endian target.  */
 #ifdef TARGET_LITTLE_SYM
@@ -580,7 +637,7 @@ const bfd_target TARGET_BIG_SYM =
 #endif
 
   /* backend_data: */
-  (PTR) &elfNN_bed
+  &elfNN_bed
 };
 #endif
 
@@ -654,19 +711,19 @@ const bfd_target TARGET_LITTLE_SYM =
     bfd_elfNN_write_corefile_contents,
   },
 
-      BFD_JUMP_TABLE_GENERIC (bfd_elfNN),
-      BFD_JUMP_TABLE_COPY (bfd_elfNN),
-      BFD_JUMP_TABLE_CORE (bfd_elfNN),
+  BFD_JUMP_TABLE_GENERIC (bfd_elfNN),
+  BFD_JUMP_TABLE_COPY (bfd_elfNN),
+  BFD_JUMP_TABLE_CORE (bfd_elfNN),
 #ifdef bfd_elfNN_archive_functions
-      BFD_JUMP_TABLE_ARCHIVE (bfd_elfNN_archive),
+  BFD_JUMP_TABLE_ARCHIVE (bfd_elfNN_archive),
 #else
-      BFD_JUMP_TABLE_ARCHIVE (_bfd_archive_coff),
+  BFD_JUMP_TABLE_ARCHIVE (_bfd_archive_coff),
 #endif
-      BFD_JUMP_TABLE_SYMBOLS (bfd_elfNN),
-      BFD_JUMP_TABLE_RELOCS (bfd_elfNN),
-      BFD_JUMP_TABLE_WRITE (bfd_elfNN),
-      BFD_JUMP_TABLE_LINK (bfd_elfNN),
-      BFD_JUMP_TABLE_DYNAMIC (bfd_elfNN),
+  BFD_JUMP_TABLE_SYMBOLS (bfd_elfNN),
+  BFD_JUMP_TABLE_RELOCS (bfd_elfNN),
+  BFD_JUMP_TABLE_WRITE (bfd_elfNN),
+  BFD_JUMP_TABLE_LINK (bfd_elfNN),
+  BFD_JUMP_TABLE_DYNAMIC (bfd_elfNN),
 
   /* Alternative endian target.  */
 #ifdef TARGET_BIG_SYM
@@ -676,6 +733,6 @@ const bfd_target TARGET_LITTLE_SYM =
 #endif
 
   /* backend_data: */
-  (PTR) &elfNN_bed
+  &elfNN_bed
 };
 #endif

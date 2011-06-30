@@ -28,19 +28,10 @@
 #include <time.h>
 #include <errno.h>
 #include <string.h>
-#include <fcntl.h>
+#include "targ-vals.h"
 
-#ifndef O_RDONLY
-#define O_RDONLY 0
-#endif
-#ifndef O_WRONLY
-#define O_WRONLY 1
-#endif
-#ifndef O_RDWR
-#define O_RDWR   2
-#endif
-#ifndef O_BINARY
-#define O_BINARY 0
+#ifndef TARGET_O_BINARY
+#define TARGET_O_BINARY 0
 #endif
 
 #ifdef __STDC__
@@ -48,7 +39,7 @@
 #endif
 
 #ifdef HAVE_UNISTD_H
-#include <unistd.h>		/* For SEEK_SET etc */
+#include <unistd.h>		/* For SEEK_SET etc.  */
 #endif
 
 #ifdef __riscos
@@ -83,16 +74,15 @@ extern int _fisatty (FILE *);
 /* For RDIError_BreakpointReached.  */
 #include "dbg_rdi.h"
 
-#include "callback.h"
+#include "gdb/callback.h"
 extern host_callback *sim_callback;
 
-extern unsigned ARMul_OSInit (ARMul_State * state);
-extern void ARMul_OSExit (ARMul_State * state);
-extern unsigned ARMul_OSHandleSWI (ARMul_State * state, ARMword number);
-extern unsigned ARMul_OSException (ARMul_State * state, ARMword vector,
-				   ARMword pc);
-extern ARMword ARMul_OSLastErrorP (ARMul_State * state);
-extern ARMword ARMul_Debug (ARMul_State * state, ARMword pc, ARMword instr);
+extern unsigned ARMul_OSInit       (ARMul_State *);
+extern void     ARMul_OSExit       (ARMul_State *);
+extern unsigned ARMul_OSHandleSWI  (ARMul_State *, ARMword);
+extern unsigned ARMul_OSException  (ARMul_State *, ARMword, ARMword);
+extern ARMword  ARMul_OSLastErrorP (ARMul_State *);
+extern ARMword  ARMul_Debug        (ARMul_State *, ARMword, ARMword);
 
 #define BUFFERSIZE 4096
 #ifndef FOPEN_MAX
@@ -126,10 +116,17 @@ struct OSblock
 #define FIXCRLF(t,c) c
 #endif
 
+/* Bit mask of enabled SWI implementations.  */
+unsigned int swi_mask = -1;
+
+
 static ARMword softvectorcode[] =
 {
-  /* Basic: swi tidyexception + event; mov pc, lr;
-     ldmia r11,{r11,pc}; swi generateexception  + event.  */
+  /* Installed instructions:
+       swi    tidyexception + event;
+       mov    lr, pc;
+       ldmia  fp, {fp, pc};
+       swi    generateexception  + event.  */
   0xef000090, 0xe1a0e00f, 0xe89b8800, 0xef000080, /* Reset */
   0xef000091, 0xe1a0e00f, 0xe89b8800, 0xef000081, /* Undef */
   0xef000092, 0xe1a0e00f, 0xe89b8800, 0xef000082, /* SWI */
@@ -164,15 +161,16 @@ ARMul_OSInit (ARMul_State * state)
   
   OSptr = (struct OSblock *) state->OSptr;
   OSptr->ErrorP = 0;
-  state->Reg[13] = ADDRSUPERSTACK;	/* set up a stack for the current mode */
-  ARMul_SetReg (state, SVC32MODE, 13, ADDRSUPERSTACK);	/* and for supervisor mode */
-  ARMul_SetReg (state, ABORT32MODE, 13, ADDRSUPERSTACK);	/* and for abort 32 mode */
-  ARMul_SetReg (state, UNDEF32MODE, 13, ADDRSUPERSTACK);	/* and for undef 32 mode */
-  ARMul_SetReg (state, SYSTEMMODE, 13, ADDRSUPERSTACK);	/* and for system mode */
-  instr = 0xe59ff000 | (ADDRSOFTVECTORS - 8);	/* load pc from soft vector */
+  state->Reg[13] = ADDRSUPERSTACK;			/* Set up a stack for the current mode...  */
+  ARMul_SetReg (state, SVC32MODE,   13, ADDRSUPERSTACK);/* ...and for supervisor mode...  */
+  ARMul_SetReg (state, ABORT32MODE, 13, ADDRSUPERSTACK);/* ...and for abort 32 mode...  */
+  ARMul_SetReg (state, UNDEF32MODE, 13, ADDRSUPERSTACK);/* ...and for undef 32 mode...  */
+  ARMul_SetReg (state, SYSTEMMODE,  13, ADDRSUPERSTACK);/* ...and for system mode.  */
+  instr = 0xe59ff000 | (ADDRSOFTVECTORS - 8);		/* Load pc from soft vector */
   
   for (i = ARMul_ResetV; i <= ARMFIQV; i += 4)
-    ARMul_WriteWord (state, i, instr);	/* write hardware vectors */
+    /* Write hardware vectors.  */
+    ARMul_WriteWord (state, i, instr);
   
   SWI_vector_installed = 0;
 
@@ -196,16 +194,23 @@ ARMul_OSInit (ARMul_State * state)
 
 /* #ifndef ASIM */
 
-  /* install fpe */
-  for (i = 0; i < fpesize; i += 4)	/* copy the code */
+  /* Install FPE.  */
+  for (i = 0; i < fpesize; i += 4)
+    /* Copy the code.  */
     ARMul_WriteWord (state, FPESTART + i, fpecode[i >> 2]);
 
+  /* Scan backwards from the end of the code.  */
   for (i = FPESTART + fpesize;; i -= 4)
-    {				/* reverse the error strings */
+    {
+      /* When we reach the marker value, break out of
+	 the loop, leaving i pointing at the maker.  */
       if ((j = ARMul_ReadWord (state, i)) == 0xffffffff)
 	break;
+
+      /* If necessary, reverse the error strings.  */
       if (state->bigendSig && j < 0x80000000)
-	{			/* it's part of the string so swap it */
+	{
+	  /* It's part of the string so swap it.  */
 	  j = ((j >> 0x18) & 0x000000ff) |
 	    ((j >> 0x08) & 0x0000ff00) |
 	    ((j << 0x08) & 0x00ff0000) | ((j << 0x18) & 0xff000000);
@@ -213,15 +218,21 @@ ARMul_OSInit (ARMul_State * state)
 	}
     }
 
-  ARMul_WriteWord (state, FPEOLDVECT, ARMul_ReadWord (state, 4));	/* copy old illegal instr vector */
-  ARMul_WriteWord (state, 4, FPENEWVECT (ARMul_ReadWord (state, i - 4)));	/* install new vector */
+  /* Copy old illegal instr vector.  */
+  ARMul_WriteWord (state, FPEOLDVECT, ARMul_ReadWord (state, ARMUndefinedInstrV));
+  /* Install new vector.  */
+  ARMul_WriteWord (state, ARMUndefinedInstrV, FPENEWVECT (ARMul_ReadWord (state, i - 4)));
   ARMul_ConsolePrint (state, ", FPE");
 
 /* #endif  ASIM */
 #endif /* VALIDATE */
 #endif /* NOOS */
 
-  return TRUE;
+  /* Intel do not want DEMON SWI support.  */
+   if (state->is_XScale)
+    swi_mask = SWI_MASK_ANGEL;
+
+   return TRUE;
 }
 
 void
@@ -240,18 +251,18 @@ ARMword ARMul_OSLastErrorP (ARMul_State * state)
 
 static int translate_open_mode[] =
 {
-  O_RDONLY,			/* "r"   */
-  O_RDONLY + O_BINARY,		/* "rb"  */
-  O_RDWR,			/* "r+"  */
-  O_RDWR + O_BINARY,		/* "r+b" */
-  O_WRONLY + O_CREAT + O_TRUNC,	/* "w"   */
-  O_WRONLY + O_BINARY + O_CREAT + O_TRUNC,	/* "wb"  */
-  O_RDWR + O_CREAT + O_TRUNC,	/* "w+"  */
-  O_RDWR + O_BINARY + O_CREAT + O_TRUNC,	/* "w+b" */
-  O_WRONLY + O_APPEND + O_CREAT,	/* "a"   */
-  O_WRONLY + O_BINARY + O_APPEND + O_CREAT,	/* "ab"  */
-  O_RDWR + O_APPEND + O_CREAT,	/* "a+"  */
-  O_RDWR + O_BINARY + O_APPEND + O_CREAT	/* "a+b" */
+  TARGET_O_RDONLY,		/* "r"   */
+  TARGET_O_RDONLY + TARGET_O_BINARY,	/* "rb"  */
+  TARGET_O_RDWR,		/* "r+"  */
+  TARGET_O_RDWR + TARGET_O_BINARY,		/* "r+b" */
+  TARGET_O_WRONLY + TARGET_O_CREAT + TARGET_O_TRUNC,	/* "w"   */
+  TARGET_O_WRONLY + TARGET_O_BINARY + TARGET_O_CREAT + TARGET_O_TRUNC,	/* "wb"  */
+  TARGET_O_RDWR + TARGET_O_CREAT + TARGET_O_TRUNC,	/* "w+"  */
+  TARGET_O_RDWR + TARGET_O_BINARY + TARGET_O_CREAT + TARGET_O_TRUNC,	/* "w+b" */
+  TARGET_O_WRONLY + TARGET_O_APPEND + TARGET_O_CREAT,	/* "a"   */
+  TARGET_O_WRONLY + TARGET_O_BINARY + TARGET_O_APPEND + TARGET_O_CREAT,	/* "ab"  */
+  TARGET_O_RDWR + TARGET_O_APPEND + TARGET_O_CREAT,	/* "a+"  */
+  TARGET_O_RDWR + TARGET_O_BINARY + TARGET_O_APPEND + TARGET_O_CREAT	/* "a+b" */
 };
 
 static void
@@ -261,7 +272,13 @@ SWIWrite0 (ARMul_State * state, ARMword addr)
   struct OSblock *OSptr = (struct OSblock *) state->OSptr;
 
   while ((temp = ARMul_SafeReadByte (state, addr++)) != 0)
-    (void) sim_callback->write_stdout (sim_callback, (char *) &temp, 1);
+    {
+      char buffer = temp;
+      /* Note - we cannot just cast 'temp' to a (char *) here,
+	 since on a big-endian host the byte value will end
+	 up in the wrong place and a nul character will be printed.  */
+      (void) sim_callback->write_stdout (sim_callback, & buffer, 1);
+    }
 
   OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
 }
@@ -299,7 +316,7 @@ SWIopen (ARMul_State * state, ARMword name, ARMword SWIflags)
   /* Filename ":tt" is special: it denotes stdin/out.  */
   if (strcmp (dummy, ":tt") == 0)
     {
-      if (flags == O_RDONLY)	/* opening tty "r" */
+      if (flags == TARGET_O_RDONLY) /* opening tty "r" */
 	state->Reg[0] = 0;	/* stdin */
       else
 	state->Reg[0] = 1;	/* stdout */
@@ -321,8 +338,10 @@ SWIread (ARMul_State * state, ARMword f, ARMword ptr, ARMword len)
 
   if (local == NULL)
     {
-      sim_callback->printf_filtered (sim_callback, "sim: Unable to read 0x%ulx bytes - out of memory\n",
-	       len);
+      sim_callback->printf_filtered
+	(sim_callback,
+	 "sim: Unable to read 0x%ulx bytes - out of memory\n",
+	 len);
       return;
     }
 
@@ -346,8 +365,10 @@ SWIwrite (ARMul_State * state, ARMword f, ARMword ptr, ARMword len)
 
   if (local == NULL)
     {
-      sim_callback->printf_filtered (sim_callback, "sim: Unable to write 0x%lx bytes - out of memory\n",
-	       (long) len);
+      sim_callback->printf_filtered
+	(sim_callback,
+	 "sim: Unable to write 0x%lx bytes - out of memory\n",
+	 (long) len);
       return;
     }
 
@@ -388,110 +409,134 @@ SWIflen (ARMul_State * state, ARMword fh)
 unsigned
 ARMul_OSHandleSWI (ARMul_State * state, ARMword number)
 {
-  ARMword          addr;
-  ARMword          temp;
-  ARMword          saved_number = 0;
   struct OSblock * OSptr = (struct OSblock *) state->OSptr;
-  
-  /* Intel do not want DEMON SWI support.  */
-  if (state->is_XScale)
-    switch (number)
-    {
-    case SWI_Read:
-    case SWI_Write:
-    case SWI_Open:
-    case SWI_Clock:
-    case SWI_Time:
-    case SWI_Close:
-    case SWI_Flen:
-    case SWI_Exit:
-    case SWI_Seek:
-    case SWI_WriteC:
-    case SWI_Write0:
-    case SWI_GetErrno:
-    case SWI_GetEnv:
-      saved_number = number;
-      number = -1;
-    default:
-      break;
-    }
-  
+  int              unhandled = FALSE;
+
   switch (number)
     {
     case SWI_Read:
-      SWIread (state, state->Reg[0], state->Reg[1], state->Reg[2]);
+      if (swi_mask & SWI_MASK_DEMON)
+	SWIread (state, state->Reg[0], state->Reg[1], state->Reg[2]);
+      else
+	unhandled = TRUE;
       break;
 
     case SWI_Write:
-      SWIwrite (state, state->Reg[0], state->Reg[1], state->Reg[2]);
+      if (swi_mask & SWI_MASK_DEMON)
+	SWIwrite (state, state->Reg[0], state->Reg[1], state->Reg[2]);
+      else
+	unhandled = TRUE;
       break;
 
     case SWI_Open:
-      SWIopen (state, state->Reg[0], state->Reg[1]);
+      if (swi_mask & SWI_MASK_DEMON)
+	SWIopen (state, state->Reg[0], state->Reg[1]);
+      else
+	unhandled = TRUE;
       break;
 
     case SWI_Clock:
-      /* Return number of centi-seconds.  */
-      state->Reg[0] =
+      if (swi_mask & SWI_MASK_DEMON)
+	{
+	  /* Return number of centi-seconds.  */
+	  state->Reg[0] =
 #ifdef CLOCKS_PER_SEC
-	(CLOCKS_PER_SEC >= 100)
-	? (ARMword) (clock () / (CLOCKS_PER_SEC / 100))
-	: (ARMword) ((clock () * 100) / CLOCKS_PER_SEC);
+	    (CLOCKS_PER_SEC >= 100)
+	    ? (ARMword) (clock () / (CLOCKS_PER_SEC / 100))
+	    : (ARMword) ((clock () * 100) / CLOCKS_PER_SEC);
 #else
-	/* Presume unix... clock() returns microseconds.  */
-	(ARMword) (clock () / 10000);
+	  /* Presume unix... clock() returns microseconds.  */
+	  (ARMword) (clock () / 10000);
 #endif
-      OSptr->ErrorNo = errno;
+	  OSptr->ErrorNo = errno;
+	}
+      else
+	unhandled = TRUE;
       break;
 
     case SWI_Time:
-      state->Reg[0] = (ARMword) sim_callback->time (sim_callback, NULL);
-      OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
+      if (swi_mask & SWI_MASK_DEMON)
+	{
+	  state->Reg[0] = (ARMword) sim_callback->time (sim_callback, NULL);
+	  OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
+	}
+      else
+	unhandled = TRUE;
       break;
 
     case SWI_Close:
-      state->Reg[0] = sim_callback->close (sim_callback, state->Reg[0]);
-      OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
+      if (swi_mask & SWI_MASK_DEMON)
+	{
+	  state->Reg[0] = sim_callback->close (sim_callback, state->Reg[0]);
+	  OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
+	}
+      else
+	unhandled = TRUE;
       break;
 
     case SWI_Flen:
-      SWIflen (state, state->Reg[0]);
+      if (swi_mask & SWI_MASK_DEMON)
+	SWIflen (state, state->Reg[0]);
+      else
+	unhandled = TRUE;
       break;
 
     case SWI_Exit:
-      state->Emulate = FALSE;
+      if (swi_mask & SWI_MASK_DEMON)
+	state->Emulate = FALSE;
+      else
+	unhandled = TRUE;
       break;
 
     case SWI_Seek:
-      /* We must return non-zero for failure.  */
-      state->Reg[0] = -1 >= sim_callback->lseek (sim_callback, state->Reg[0], state->Reg[1], SEEK_SET);
-      OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
+      if (swi_mask & SWI_MASK_DEMON)
+	{
+	  /* We must return non-zero for failure.  */
+	  state->Reg[0] = -1 >= sim_callback->lseek (sim_callback, state->Reg[0], state->Reg[1], SEEK_SET);
+	  OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
+	}
+      else
+	unhandled = TRUE;
       break;
 
     case SWI_WriteC:
-      {
-	char tmp = state->Reg[0];
-	(void) sim_callback->write_stdout (sim_callback, &tmp, 1);
-	OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
-      }
+      if (swi_mask & SWI_MASK_DEMON)
+	{
+	  char tmp = state->Reg[0];
+	  (void) sim_callback->write_stdout (sim_callback, &tmp, 1);
+	  OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
+	}
+      else
+	unhandled = TRUE;
       break;
 
     case SWI_Write0:
-      SWIWrite0 (state, state->Reg[0]);
+      if (swi_mask & SWI_MASK_DEMON)
+	SWIWrite0 (state, state->Reg[0]);
+      else
+	unhandled = TRUE;
       break;
 
     case SWI_GetErrno:
-      state->Reg[0] = OSptr->ErrorNo;
+      if (swi_mask & SWI_MASK_DEMON)
+	state->Reg[0] = OSptr->ErrorNo;
+      else
+	unhandled = TRUE;
       break;
 
     case SWI_GetEnv:
-      state->Reg[0] = ADDRCMDLINE;
-      if (state->MemSize)
-	state->Reg[1] = state->MemSize;
-      else
-	state->Reg[1] = ADDRUSERSTACK;
+      if (swi_mask & SWI_MASK_DEMON)
+	{
+	  state->Reg[0] = ADDRCMDLINE;
+	  if (state->MemSize)
+	    state->Reg[1] = state->MemSize;
+	  else
+	    state->Reg[1] = ADDRUSERSTACK;
 
-      WriteCommandLineTo (state, state->Reg[0]);
+	  WriteCommandLineTo (state, state->Reg[0]);
+	}
+      else
+	unhandled = TRUE;
       break;
 
     case SWI_Breakpoint:
@@ -502,145 +547,263 @@ ARMul_OSHandleSWI (ARMul_State * state, ARMword number)
       /* Handle Angel SWIs as well as Demon ones.  */
     case AngelSWI_ARM:
     case AngelSWI_Thumb:
-      /* R1 is almost always a parameter block.  */
-      addr = state->Reg[1];
-      /* R0 is a reason code.  */
-      switch (state->Reg[0])
+      if (swi_mask & SWI_MASK_ANGEL)
 	{
-	  /* Unimplemented reason codes.  */
-	case AngelSWI_Reason_ReadC:
-	case AngelSWI_Reason_IsTTY:
-	case AngelSWI_Reason_TmpNam:
-	case AngelSWI_Reason_Remove:
-	case AngelSWI_Reason_Rename:
-	case AngelSWI_Reason_System:
-	case AngelSWI_Reason_EnterSVC:
-	default:
-	  state->Emulate = FALSE;
-	  return FALSE;
+	  ARMword addr;
+	  ARMword temp;
 
-	case AngelSWI_Reason_Clock:
-	  /* Return number of centi-seconds.  */
-	  state->Reg[0] =
+	  /* R1 is almost always a parameter block.  */
+	  addr = state->Reg[1];
+	  /* R0 is a reason code.  */
+	  switch (state->Reg[0])
+	    {
+	    case -1:
+	      /* This can happen when a SWI is interrupted (eg receiving a
+		 ctrl-C whilst processing SWIRead()).  The SWI will complete
+		 returning -1 in r0 to the caller.  If GDB is then used to
+		 resume the system call the reason code will now be -1.  */
+	      return TRUE;
+	  
+	      /* Unimplemented reason codes.  */
+	    case AngelSWI_Reason_ReadC:
+	    case AngelSWI_Reason_IsTTY:
+	    case AngelSWI_Reason_TmpNam:
+	    case AngelSWI_Reason_Remove:
+	    case AngelSWI_Reason_Rename:
+	    case AngelSWI_Reason_System:
+	    case AngelSWI_Reason_EnterSVC:
+	    default:
+	      state->Emulate = FALSE;
+	      return FALSE;
+
+	    case AngelSWI_Reason_Clock:
+	      /* Return number of centi-seconds.  */
+	      state->Reg[0] =
 #ifdef CLOCKS_PER_SEC
-	    (CLOCKS_PER_SEC >= 100)
-	    ? (ARMword) (clock () / (CLOCKS_PER_SEC / 100))
-	    : (ARMword) ((clock () * 100) / CLOCKS_PER_SEC);
+		(CLOCKS_PER_SEC >= 100)
+		? (ARMword) (clock () / (CLOCKS_PER_SEC / 100))
+		: (ARMword) ((clock () * 100) / CLOCKS_PER_SEC);
 #else
-	    /* Presume unix... clock() returns microseconds.  */
-	    (ARMword) (clock () / 10000);
+	      /* Presume unix... clock() returns microseconds.  */
+	      (ARMword) (clock () / 10000);
 #endif
-	  OSptr->ErrorNo = errno;
-	  break;
+	      OSptr->ErrorNo = errno;
+	      break;
 
-	case AngelSWI_Reason_Time:
-	  state->Reg[0] = (ARMword) sim_callback->time (sim_callback, NULL);
-	  OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
-	  break;
+	    case AngelSWI_Reason_Time:
+	      state->Reg[0] = (ARMword) sim_callback->time (sim_callback, NULL);
+	      OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
+	      break;
 
-	case AngelSWI_Reason_WriteC:
-	  {
-	    char tmp = ARMul_SafeReadByte (state, addr);
-	    (void) sim_callback->write_stdout (sim_callback, &tmp, 1);
-	    OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
-	  }
-	  /* Fall thgrough.  */
+	    case AngelSWI_Reason_WriteC:
+	      {
+		char tmp = ARMul_SafeReadByte (state, addr);
+		(void) sim_callback->write_stdout (sim_callback, &tmp, 1);
+		OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
+		break;
+	      }
 
-	case AngelSWI_Reason_Write0:
-	  SWIWrite0 (state, addr);
-	  break;
+	    case AngelSWI_Reason_Write0:
+	      SWIWrite0 (state, addr);
+	      break;
 
-	case AngelSWI_Reason_Close:
-	  state->Reg[0] = sim_callback->close (sim_callback, ARMul_ReadWord (state, addr));
-	  OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
-	  break;
+	    case AngelSWI_Reason_Close:
+	      state->Reg[0] = sim_callback->close (sim_callback, ARMul_ReadWord (state, addr));
+	      OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
+	      break;
 
-	case AngelSWI_Reason_Seek:
-	  state->Reg[0] = -1 >= sim_callback->lseek (sim_callback, ARMul_ReadWord (state, addr),
-				       ARMul_ReadWord (state, addr + 4),
-				       SEEK_SET);
-	  OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
-	  break;
+	    case AngelSWI_Reason_Seek:
+	      state->Reg[0] = -1 >= sim_callback->lseek (sim_callback, ARMul_ReadWord (state, addr),
+							 ARMul_ReadWord (state, addr + 4),
+							 SEEK_SET);
+	      OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
+	      break;
 
-	case AngelSWI_Reason_FLen:
-	  SWIflen (state, ARMul_ReadWord (state, addr));
-	  break;
+	    case AngelSWI_Reason_FLen:
+	      SWIflen (state, ARMul_ReadWord (state, addr));
+	      break;
 
-	case AngelSWI_Reason_GetCmdLine:
-	  WriteCommandLineTo (state, ARMul_ReadWord (state, addr));
-	  break;
+	    case AngelSWI_Reason_GetCmdLine:
+	      WriteCommandLineTo (state, ARMul_ReadWord (state, addr));
+	      break;
 
-	case AngelSWI_Reason_HeapInfo:
-	  /* R1 is a pointer to a pointer.  */
-	  addr = ARMul_ReadWord (state, addr);
+	    case AngelSWI_Reason_HeapInfo:
+	      /* R1 is a pointer to a pointer.  */
+	      addr = ARMul_ReadWord (state, addr);
 
-	  /* Pick up the right memory limit.  */
-	  if (state->MemSize)
-	    temp = state->MemSize;
-	  else
-	    temp = ADDRUSERSTACK;
+	      /* Pick up the right memory limit.  */
+	      if (state->MemSize)
+		temp = state->MemSize;
+	      else
+		temp = ADDRUSERSTACK;
 
-	  ARMul_WriteWord (state, addr, 0);	/* Heap base */
-	  ARMul_WriteWord (state, addr + 4, temp);	/* Heap limit */
-	  ARMul_WriteWord (state, addr + 8, temp);	/* Stack base */
-	  ARMul_WriteWord (state, addr + 12, temp);	/* Stack limit */
-	  break;
+	      ARMul_WriteWord (state, addr, 0);		/* Heap base.  */
+	      ARMul_WriteWord (state, addr + 4, temp);	/* Heap limit.  */
+	      ARMul_WriteWord (state, addr + 8, temp);	/* Stack base.  */
+	      ARMul_WriteWord (state, addr + 12, temp);	/* Stack limit.  */
+	      break;
 
-	case AngelSWI_Reason_ReportException:
-	  if (state->Reg[1] == ADP_Stopped_ApplicationExit)
-	    state->Reg[0] = 0;
-	  else
-	    state->Reg[0] = -1;
-	  state->Emulate = FALSE;
-	  break;
+	    case AngelSWI_Reason_ReportException:
+	      if (state->Reg[1] == ADP_Stopped_ApplicationExit)
+		state->Reg[0] = 0;
+	      else
+		state->Reg[0] = -1;
+	      state->Emulate = FALSE;
+	      break;
 
-	case ADP_Stopped_ApplicationExit:
-	  state->Reg[0] = 0;
-	  state->Emulate = FALSE;
-	  break;
+	    case ADP_Stopped_ApplicationExit:
+	      state->Reg[0] = 0;
+	      state->Emulate = FALSE;
+	      break;
 
-	case ADP_Stopped_RunTimeError:
-	  state->Reg[0] = -1;
-	  state->Emulate = FALSE;
-	  break;
+	    case ADP_Stopped_RunTimeError:
+	      state->Reg[0] = -1;
+	      state->Emulate = FALSE;
+	      break;
 
-	case AngelSWI_Reason_Errno:
-	  state->Reg[0] = OSptr->ErrorNo;
-	  break;
+	    case AngelSWI_Reason_Errno:
+	      state->Reg[0] = OSptr->ErrorNo;
+	      break;
 
-	case AngelSWI_Reason_Open:
-	  SWIopen (state,
-		   ARMul_ReadWord (state, addr),
-		   ARMul_ReadWord (state, addr + 4));
-	  break;
+	    case AngelSWI_Reason_Open:
+	      SWIopen (state,
+		       ARMul_ReadWord (state, addr),
+		       ARMul_ReadWord (state, addr + 4));
+	      break;
 
-	case AngelSWI_Reason_Read:
-	  SWIread (state,
-		   ARMul_ReadWord (state, addr),
-		   ARMul_ReadWord (state, addr + 4),
-		   ARMul_ReadWord (state, addr + 8));
-	  break;
+	    case AngelSWI_Reason_Read:
+	      SWIread (state,
+		       ARMul_ReadWord (state, addr),
+		       ARMul_ReadWord (state, addr + 4),
+		       ARMul_ReadWord (state, addr + 8));
+	      break;
 
-	case AngelSWI_Reason_Write:
-	  SWIwrite (state,
-		    ARMul_ReadWord (state, addr),
-		    ARMul_ReadWord (state, addr + 4),
-		    ARMul_ReadWord (state, addr + 8));
+	    case AngelSWI_Reason_Write:
+	      SWIwrite (state,
+			ARMul_ReadWord (state, addr),
+			ARMul_ReadWord (state, addr + 4),
+			ARMul_ReadWord (state, addr + 8));
+	      break;
+	    }
+	}
+      else
+	unhandled = TRUE;
+      break;
+
+      /* The following SWIs are generated by the softvectorcode[]
+	 installed by default by the simulator.  */
+    case 0x91: /* Undefined Instruction.  */
+      {
+	ARMword addr = state->RegBank[UNDEFBANK][14] - 4;
+	
+	sim_callback->printf_filtered
+	  (sim_callback, "sim: exception: Unhandled Instruction '0x%08x' at 0x%08x.  Stopping.\n",
+	   ARMul_ReadWord (state, addr), addr);
+	state->EndCondition = RDIError_SoftwareInterrupt;
+	state->Emulate = FALSE;
+	return FALSE;
+      }      
+
+    case 0x90: /* Reset.  */
+    case 0x92: /* SWI.  */
+      /* These two can be safely ignored.  */
+      break;
+
+    case 0x93: /* Prefetch Abort.  */
+    case 0x94: /* Data Abort.  */
+    case 0x95: /* Address Exception.  */
+    case 0x96: /* IRQ.  */
+    case 0x97: /* FIQ.  */
+    case 0x98: /* Error.  */
+      unhandled = TRUE;
+      break;
+
+    case -1:
+      /* This can happen when a SWI is interrupted (eg receiving a
+	 ctrl-C whilst processing SWIRead()).  The SWI will complete
+	 returning -1 in r0 to the caller.  If GDB is then used to
+	 resume the system call the reason code will now be -1.  */
+      return TRUE;
+	  
+    case 0x180001: /* RedBoot's Syscall SWI in ARM mode.  */
+      if (swi_mask & SWI_MASK_REDBOOT)
+	{
+	  switch (state->Reg[0])
+	    {
+	      /* These numbers are defined in libgloss/syscall.h
+		 but the simulator should not be dependend upon
+		 libgloss being installed.  */
+	    case 1:  /* Exit.  */
+	      state->Emulate = FALSE;
+	      /* Copy exit code into r0.  */
+	      state->Reg[0] = state->Reg[1];
+	      break;
+
+	    case 2:  /* Open.  */
+	      SWIopen (state, state->Reg[1], state->Reg[2]);
+	      break;
+
+	    case 3:  /* Close.  */
+	      state->Reg[0] = sim_callback->close (sim_callback, state->Reg[1]);
+	      OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
+	      break;
+
+	    case 4:  /* Read.  */
+	      SWIread (state, state->Reg[1], state->Reg[2], state->Reg[3]);
+	      break;
+
+	    case 5:  /* Write.  */
+	      SWIwrite (state, state->Reg[1], state->Reg[2], state->Reg[3]);
+	      break;
+
+	    case 6:  /* Lseek.  */
+	      state->Reg[0] = sim_callback->lseek (sim_callback,
+						   state->Reg[1],
+						   state->Reg[2],
+						   state->Reg[3]);
+	      OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
+	      break;
+
+	    case 17: /* Utime.  */
+	      state->Reg[0] = (ARMword) sim_callback->time (sim_callback,
+							    (long *) state->Reg[1]);
+	      OSptr->ErrorNo = sim_callback->get_errno (sim_callback);
+	      break;
+
+	    case 7:  /* Unlink.  */
+	    case 8:  /* Getpid.  */
+	    case 9:  /* Kill.  */
+	    case 10: /* Fstat.  */
+	    case 11: /* Sbrk.  */
+	    case 12: /* Argvlen.  */
+	    case 13: /* Argv.  */
+	    case 14: /* ChDir.  */
+	    case 15: /* Stat.  */
+	    case 16: /* Chmod.  */
+	    case 18: /* Time.  */
+	      sim_callback->printf_filtered
+		(sim_callback,
+		 "sim: unhandled RedBoot syscall '%d' encountered - ignoring\n",
+		 state->Reg[0]);
+	      return FALSE;
+
+	    default:
+	      sim_callback->printf_filtered
+		(sim_callback,
+		 "sim: unknown RedBoot syscall '%d' encountered - ignoring\n",
+		 state->Reg[0]);
+	      return FALSE;
+	    }
 	  break;
 	}
-
-    case 0x90:
-    case 0x91:
-    case 0x92:
-      /* These are used by the FPE code.  */
-      break;
       
     default:
-      /* If there is a SWI vector installed use it.  */
-      if (state->is_XScale && saved_number != -1)
-	number = saved_number;
-	    
-      if (SWI_vector_installed && number != SWI_Breakpoint)
+      unhandled = TRUE;
+    }
+      
+  if (unhandled)
+    {
+      if (SWI_vector_installed)
 	{
 	  ARMword cpsr;
 	  ARMword i_size;
@@ -661,7 +824,10 @@ ARMul_OSHandleSWI (ARMul_State * state, ARMword number)
 	}
       else
 	{
-	  sim_callback->printf_filtered (sim_callback, "sim: unknown SWI encountered - %x - ignoring\n", number);
+	  sim_callback->printf_filtered
+	    (sim_callback,
+	     "sim: unknown SWI encountered - %x - ignoring\n",
+	     number);
 	  return FALSE;
 	}
     }

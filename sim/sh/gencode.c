@@ -1,9 +1,10 @@
-/* Simulator/Opcode generator for the Hitachi Super-H architecture.
+/* Simulator/Opcode generator for the Renesas
+   (formerly Hitachi) / SuperH Inc. Super-H architecture.
 
    Written by Steve Chamberlain of Cygnus Support.
    sac@cygnus.com
 
-   This file is part of SH sim
+   This file is part of SH sim.
 
 
 		THIS SOFTWARE IS NOT COPYRIGHTED
@@ -19,7 +20,7 @@
 */
 
 /* This program generates the opcode table for the assembler and
-   the simulator code
+   the simulator code.
 
    -t		prints a pretty table for the assembler manual
    -s		generates the simulator code jump table
@@ -48,7 +49,7 @@ op tab[] =
 {
 
   { "n", "", "add #<imm>,<REG_N>", "0111nnnni8*1....",
-    "R[n] += SEXT(i);",
+    "R[n] += SEXT (i);",
     "if (i == 0) {",
     "  UNDEF(n); /* see #ifdef PARANOID */",
     "  break;",
@@ -71,7 +72,7 @@ op tab[] =
     "R[n] = ult;",
   },
 
-  { "0", "", "and #<imm>,R0", "11001001i8*1....",
+  { "0", "0", "and #<imm>,R0", "11001001i8*1....",
     "R0 &= i;",
   },
   { "n", "nm", "and <REG_M>,<REG_N>", "0010nnnnmmmm1001",
@@ -84,7 +85,7 @@ op tab[] =
 
   { "", "", "bf <bdisp8>", "10001011i8p1....",
     "if (!T) {",
-    "  SET_NIP (PC + 4 + (SEXT(i) * 2));",
+    "  SET_NIP (PC + 4 + (SEXT (i) * 2));",
     "  cycles += 2;",
     "}",
   },
@@ -151,6 +152,11 @@ op tab[] =
     "SET_SR_T (0);",
   },
 
+  /* sh4a */
+  { "", "", "clrdmxy", "0000000010001000",
+    "saved_state.asregs.cregs.named.sr &= ~(SR_MASK_DMX | SR_MASK_DMY);"
+  },
+
   { "", "0", "cmp/eq #<imm>,R0", "10001000i8*1....",
     "SET_SR_T (R0 == SEXT (i));",
   },
@@ -195,8 +201,8 @@ op tab[] =
     "SET_SR_T (0);",
   },
 
-  { "", "", "div1 <REG_M>,<REG_N>", "0011nnnnmmmm0100",
-    "div1 (R, m, n/*, T*/);",
+  { "n", "nm", "div1 <REG_M>,<REG_N>", "0011nnnnmmmm0100",
+    "div1 (&R0, m, n/*, T*/);",
   },
 
   { "", "nm", "dmuls.l <REG_M>,<REG_N>", "0011nnnnmmmm1101",
@@ -226,22 +232,22 @@ op tab[] =
     "R[n] = (R[m] & 0xffff);",
   },
 
-  /* sh3e */
+  /* sh2e */
   { "", "", "fabs <FREG_N>", "1111nnnn01011101",
     "FP_UNARY (n, fabs);",
-    "/* FIXME: FR(n) &= 0x7fffffff; */",
+    "/* FIXME: FR (n) &= 0x7fffffff; */",
   },
 
-  /* sh3e */
+  /* sh2e */
   { "", "", "fadd <FREG_M>,<FREG_N>", "1111nnnnmmmm0000",
     "FP_OP (n, +, m);",
   },
 
-  /* sh3e */
+  /* sh2e */
   { "", "", "fcmp/eq <FREG_M>,<FREG_N>", "1111nnnnmmmm0100",
     "FP_CMP (n, ==, m);",
   },
-  /* sh3e */
+  /* sh2e */
   { "", "", "fcmp/gt <FREG_M>,<FREG_N>", "1111nnnnmmmm0101",
     "FP_CMP (n, >, m);",
   },
@@ -257,7 +263,7 @@ op tab[] =
     "    int i;",
     "    float f;",
     "  } u;",
-    "  u.f = DR(n);",
+    "  u.f = DR (n);",
     "  FPUL = u.i;",
     "}",
   },
@@ -274,64 +280,73 @@ op tab[] =
     "    float f;",
     "  } u;",
     "  u.i = FPUL;",
-    "  SET_DR(n, u.f);",
+    "  SET_DR (n, u.f);",
     "}",
   },
 
-  /* sh3e */
+  /* sh2e */
   { "", "", "fdiv <FREG_M>,<FREG_N>", "1111nnnnmmmm0011",
     "FP_OP (n, /, m);",
-    "/* FIXME: check for DP and (n & 1) == 0? */",
+    "/* FIXME: check for DP and (n & 1) == 0?  */",
   },
 
   /* sh4 */
-  { "", "", "fipr <FV_M>,<FV_N>", "1111nnmm11101101",
-    "/* FIXME: not implemented */",
-    "RAISE_EXCEPTION (SIGILL);",
-    "/* FIXME: check for DP and (n & 1) == 0? */",
+  { "", "", "fipr <FV_M>,<FV_N>", "1111vvVV11101101",
+    "if (FPSCR_PR)", 
+    "  RAISE_EXCEPTION (SIGILL);",
+    "else",
+    "{",
+    "  double fsum = 0;",
+    "  /* FIXME: check for nans and infinities.  */",
+    "  fsum += FR (v1+0) * FR (v2+0);",
+    "  fsum += FR (v1+1) * FR (v2+1);",
+    "  fsum += FR (v1+2) * FR (v2+2);",
+    "  fsum += FR (v1+3) * FR (v2+3);",
+    "  SET_FR (v1+3, fsum);",
+    "}",
   },
 
-  /* sh3e */
+  /* sh2e */
   { "", "", "fldi0 <FREG_N>", "1111nnnn10001101",
-    "SET_FR (n, (float)0.0);",
-    "/* FIXME: check for DP and (n & 1) == 0? */",
+    "SET_FR (n, (float) 0.0);",
+    "/* FIXME: check for DP and (n & 1) == 0?  */",
   },
 
-  /* sh3e */
+  /* sh2e */
   { "", "", "fldi1 <FREG_N>", "1111nnnn10011101",
-    "SET_FR (n, (float)1.0);",
-    "/* FIXME: check for DP and (n & 1) == 0? */",
+    "SET_FR (n, (float) 1.0);",
+    "/* FIXME: check for DP and (n & 1) == 0?  */",
   },
 
-  /* sh3e */
+  /* sh2e */
   { "", "", "flds <FREG_N>,FPUL", "1111nnnn00011101",
     "  union",
     "  {",
     "    int i;",
     "    float f;",
     "  } u;",
-    "  u.f = FR(n);",
+    "  u.f = FR (n);",
     "  FPUL = u.i;",
   },
 
-  /* sh3e */
+  /* sh2e */
   { "", "", "float FPUL,<FREG_N>", "1111nnnn00101101",
     /* sh4 */
     "if (FPSCR_PR)",
-    "  SET_DR (n, (double)FPUL);",
+    "  SET_DR (n, (double) FPUL);",
     "else",
     "{",
-    "  SET_FR (n, (float)FPUL);",
+    "  SET_FR (n, (float) FPUL);",
     "}",
   },
 
-  /* sh3e */
+  /* sh2e */
   { "", "", "fmac <FREG_0>,<FREG_M>,<FREG_N>", "1111nnnnmmmm1110",
-    "SET_FR (n, FR(m) * FR(0) + FR(n));",
+    "SET_FR (n, FR (m) * FR (0) + FR (n));",
     "/* FIXME: check for DP and (n & 1) == 0? */",
   },
 
-  /* sh3e */
+  /* sh2e */
   { "", "", "fmov <FREG_M>,<FREG_N>", "1111nnnnmmmm1100",
     /* sh4 */
     "if (FPSCR_SZ) {",
@@ -345,8 +360,8 @@ op tab[] =
     "  SET_FR (n, FR (m));",
     "}",
   },
-  /* sh3e */
-  { "", "", "fmov.s <FREG_M>,@<REG_N>", "1111nnnnmmmm1010",
+  /* sh2e */
+  { "", "n", "fmov.s <FREG_M>,@<REG_N>", "1111nnnnmmmm1010",
     /* sh4 */
     "if (FPSCR_SZ) {",
     "  MA (2);",
@@ -355,11 +370,11 @@ op tab[] =
     "else",
     "{",
     "  MA (1);",
-    "  WLAT (R[n], FI(m));",
+    "  WLAT (R[n], FI (m));",
     "}",
   },
-  /* sh3e */
-  { "", "", "fmov.s @<REG_M>,<FREG_N>", "1111nnnnmmmm1000",
+  /* sh2e */
+  { "", "m", "fmov.s @<REG_M>,<FREG_N>", "1111nnnnmmmm1000",
     /* sh4 */
     "if (FPSCR_SZ) {",
     "  MA (2);",
@@ -368,11 +383,11 @@ op tab[] =
     "else",
     "{",
     "  MA (1);",
-    "  SET_FI(n, RLAT(R[m]));",
+    "  SET_FI (n, RLAT (R[m]));",
     "}",
   },
-  /* sh3e */
-  { "", "", "fmov.s @<REG_M>+,<FREG_N>", "1111nnnnmmmm1001",
+  /* sh2e */
+  { "m", "m", "fmov.s @<REG_M>+,<FREG_N>", "1111nnnnmmmm1001",
     /* sh4 */
     "if (FPSCR_SZ) {",
     "  MA (2);",
@@ -386,8 +401,8 @@ op tab[] =
     "  R[m] += 4;",
     "}",
   },
-  /* sh3e */
-  { "", "", "fmov.s <FREG_M>,@-<REG_N>", "1111nnnnmmmm1011",
+  /* sh2e */
+  { "n", "n", "fmov.s <FREG_M>,@-<REG_N>", "1111nnnnmmmm1011",
     /* sh4 */
     "if (FPSCR_SZ) {",
     "  MA (2);",
@@ -398,11 +413,11 @@ op tab[] =
     "{",
     "  MA (1);",
     "  R[n] -= 4;",
-    "  WLAT (R[n], FI(m));",
+    "  WLAT (R[n], FI (m));",
     "}",
   },
-  /* sh3e */
-  { "", "", "fmov.s @(R0,<REG_M>),<FREG_N>", "1111nnnnmmmm0110",
+  /* sh2e */
+  { "", "0m", "fmov.s @(R0,<REG_M>),<FREG_N>", "1111nnnnmmmm0110",
     /* sh4 */
     "if (FPSCR_SZ) {",
     "  MA (2);",
@@ -411,11 +426,11 @@ op tab[] =
     "else",
     "{",
     "  MA (1);",
-    "  SET_FI(n, RLAT(R[0] + R[m]));",
+    "  SET_FI (n, RLAT (R[0] + R[m]));",
     "}",
   },
-  /* sh3e */
-  { "", "", "fmov.s <FREG_M>,@(R0,<REG_N>)", "1111nnnnmmmm0111",
+  /* sh2e */
+  { "", "0n", "fmov.s <FREG_M>,@(R0,<REG_N>)", "1111nnnnmmmm0111",
     /* sh4 */
     "if (FPSCR_SZ) {",
     "  MA (2);",
@@ -424,59 +439,98 @@ op tab[] =
     "else",
     "{",
     "  MA (1);",
-    "  WLAT((R[0]+R[n]), FI(m));",
+    "  WLAT ((R[0]+R[n]), FI (m));",
     "}",
   },
 
-  /* sh4: See fmov instructions above for move to/from extended fp registers */
+  /* sh4: 
+     See fmov instructions above for move to/from extended fp registers.  */
 
-  /* sh3e */
+  /* sh2e */
   { "", "", "fmul <FREG_M>,<FREG_N>", "1111nnnnmmmm0010",
-    "FP_OP(n, *, m);",
+    "FP_OP (n, *, m);",
   },
 
-  /* sh3e */
+  /* sh2e */
   { "", "", "fneg <FREG_N>", "1111nnnn01001101",
-    "FP_UNARY(n, -);",
+    "FP_UNARY (n, -);",
+  },
+
+  /* sh4a */
+  { "", "", "fpchg", "1111011111111101",
+    "SET_FPSCR (GET_FPSCR () ^ FPSCR_MASK_PR);",
   },
 
   /* sh4 */
   { "", "", "frchg", "1111101111111101",
-    "SET_FPSCR (GET_FPSCR() ^ FPSCR_MASK_FR);",
+    "if (FPSCR_PR)",
+    "  RAISE_EXCEPTION (SIGILL);",
+    "else",
+    "  SET_FPSCR (GET_FPSCR () ^ FPSCR_MASK_FR);",
+  },
+
+  /* sh4 */
+  { "", "", "fsca", "1111eeee11111101",
+    "if (FPSCR_PR)",
+    "  RAISE_EXCEPTION (SIGILL);",
+    "else",
+    "  {",
+    "    SET_FR (n, fsca_s (FPUL, &sin));",
+    "    SET_FR (n+1, fsca_s (FPUL, &cos));",
+    "  }",
   },
 
   /* sh4 */
   { "", "", "fschg", "1111001111111101",
-    "SET_FPSCR (GET_FPSCR() ^ FPSCR_MASK_SZ);",
+    "SET_FPSCR (GET_FPSCR () ^ FPSCR_MASK_SZ);",
   },
 
   /* sh3e */
   { "", "", "fsqrt <FREG_N>", "1111nnnn01101101",
-    "FP_UNARY(n, sqrt);",
+    "FP_UNARY (n, sqrt);",
   },
 
-  /* sh3e */
+  /* sh4 */
+  { "", "", "fsrra <FREG_N>", "1111nnnn01111101",
+    "if (FPSCR_PR)",
+    "  RAISE_EXCEPTION (SIGILL);",
+    "else",
+    "  SET_FR (n, fsrra_s (FR (n)));",
+  },
+
+  /* sh2e */
   { "", "", "fsub <FREG_M>,<FREG_N>", "1111nnnnmmmm0001",
-    "FP_OP(n, -, m);",
+    "FP_OP (n, -, m);",
   },
 
-  /* sh3e */
+  /* sh2e */
   { "", "", "ftrc <FREG_N>, FPUL", "1111nnnn00111101",
     /* sh4 */
     "if (FPSCR_PR) {",
-    "  if (DR(n) != DR(n)) /* NaN */",
+    "  if (DR (n) != DR (n)) /* NaN */",
     "    FPUL = 0x80000000;",
     "  else",
-    "    FPUL =  (int)DR(n);",
+    "    FPUL =  (int) DR (n);",
     "}",
     "else",
-    "if (FR(n) != FR(n)) /* NaN */",
+    "if (FR (n) != FR (n)) /* NaN */",
     "  FPUL = 0x80000000;",
     "else",
-    "  FPUL = (int)FR(n);",
+    "  FPUL = (int) FR (n);",
   },
 
-  /* sh3e */
+  /* sh4 */
+  { "", "", "ftrv <FV_N>", "1111vv0111111101",
+    "if (FPSCR_PR)",
+    "  RAISE_EXCEPTION (SIGILL);",
+    "else",
+    "{", 
+    "  /* FIXME not implemented.  */",
+    "  printf (\"ftrv xmtrx, FV%d\\n\", v1);",
+    "}", 
+  },
+
+  /* sh2e */
   { "", "", "fsts FPUL,<FREG_N>", "1111nnnn00001101",
     "  union",
     "  {",
@@ -513,37 +567,55 @@ op tab[] =
   { "", "n", "ldc <REG_N>,MOD", "0100nnnn01011110",
     "SET_MOD (R[n]);",
   },
-#if 0
   { "", "n", "ldc <REG_N>,DBR", "0100nnnn11111010",
-    "DBR = R[n];",
-    "/* FIXME: user mode */",
+    "if (SR_MD)",
+    "  DBR = R[n]; /* priv mode */",
+    "else",
+    "  RAISE_EXCEPTION (SIGILL); /* user mode */",
   },
-#endif
-  { "", "n", "ldc.l @<REG_N>+,<CREG_M>", "0100nnnnmmmm0111",
+  { "", "n", "ldc <REG_N>,SGR", "0100nnnn00111010",
+    "if (SR_MD)",
+    "  SGR = R[n]; /* priv mode */",
+    "else",
+    "  RAISE_EXCEPTION (SIGILL); /* user mode */",
+  },
+  { "n", "n", "ldc.l @<REG_N>+,<CREG_M>", "0100nnnnmmmm0111",
     "MA (1);",
     "CREG (m) = RLAT (R[n]);",
     "R[n] += 4;",
     "/* FIXME: user mode */",
   },
-  { "", "n", "ldc.l @<REG_N>+,SR", "0100nnnn00000111",
+  { "n", "n", "ldc.l @<REG_N>+,SR", "0100nnnn00000111",
     "MA (1);",
     "SET_SR (RLAT (R[n]));",
     "R[n] += 4;",
     "/* FIXME: user mode */",
   },
-  { "", "n", "ldc.l @<REG_N>+,MOD", "0100nnnn01010111",
+  { "n", "n", "ldc.l @<REG_N>+,MOD", "0100nnnn01010111",
     "MA (1);",
     "SET_MOD (RLAT (R[n]));",
     "R[n] += 4;",
   },
-#if 0
-  { "", "n", "ldc.l @<REG_N>+,DBR", "0100nnnn11110110",
-    "MA (1);",
-    "DBR = RLAT (R[n]);",
-    "R[n] += 4;",
-    "/* FIXME: user mode */",
+  { "n", "n", "ldc.l @<REG_N>+,DBR", "0100nnnn11110110",
+    "if (SR_MD)",
+    "{ /* priv mode */",
+    "  MA (1);",
+    "  DBR = RLAT (R[n]);",
+    "  R[n] += 4;",
+    "}",
+    "else",
+    "  RAISE_EXCEPTION (SIGILL); /* user mode */",
   },
-#endif
+  { "n", "n", "ldc.l @<REG_N>+,SGR", "0100nnnn00110110",
+    "if (SR_MD)",
+    "{ /* priv mode */",
+    "  MA (1);",
+    "  SGR = RLAT (R[n]);",
+    "  R[n] += 4;",
+    "}",
+    "else",
+    "  RAISE_EXCEPTION (SIGILL); /* user mode */",
+  },
 
   /* sh-dsp */
   { "", "", "ldre @(<disp>,PC)", "10001110i8p1....",
@@ -553,40 +625,53 @@ op tab[] =
     "RS = SEXT (i) * 2 + 4 + PH2T (PC);",
   },
 
+  /* sh4a */
+  { "", "n", "ldrc <REG_N>", "0100nnnn00110100",
+    "SET_RC (R[n]);",
+    "loop = get_loop_bounds_ext (RS, RE, memory, mem_end, maskw, endianw);",
+    "CHECK_INSN_PTR (insn_ptr);",
+    "RE |= 1;",
+  },
+  { "", "", "ldrc #<imm>", "10001010i8*1....",
+    "SET_RC (i);",
+    "loop = get_loop_bounds_ext (RS, RE, memory, mem_end, maskw, endianw);",
+    "CHECK_INSN_PTR (insn_ptr);",
+    "RE |= 1;",
+  },
+
   { "", "n", "lds <REG_N>,<SREG_M>", "0100nnnnssss1010",
     "SREG (m) = R[n];",
   },
-  { "", "n", "lds.l @<REG_N>+,<SREG_M>", "0100nnnnssss0110",
+  { "n", "n", "lds.l @<REG_N>+,<SREG_M>", "0100nnnnssss0110",
     "MA (1);",
-    "SREG (m) = RLAT(R[n]);",
+    "SREG (m) = RLAT (R[n]);",
     "R[n] += 4;",
   },
-  /* sh3e / sh-dsp (lds <REG_N>,DSR) */
+  /* sh2e / sh-dsp (lds <REG_N>,DSR) */
   { "", "n", "lds <REG_N>,FPSCR", "0100nnnn01101010",
-    "SET_FPSCR(R[n]);",
+    "SET_FPSCR (R[n]);",
   },
-  /* sh3e / sh-dsp (lds.l @<REG_N>+,DSR) */
-  { "", "n", "lds.l @<REG_N>+,FPSCR", "0100nnnn01100110",
+  /* sh2e / sh-dsp (lds.l @<REG_N>+,DSR) */
+  { "n", "n", "lds.l @<REG_N>+,FPSCR", "0100nnnn01100110",
     "MA (1);",
-    "SET_FPSCR (RLAT(R[n]));",
+    "SET_FPSCR (RLAT (R[n]));",
     "R[n] += 4;",
   },
 
   { "", "", "ldtlb", "0000000000111000",
-    "/* FIXME: XXX*/ abort();",
+    "/* We don't implement cache or tlb, so this is a noop.  */",
   },
 
-  { "", "nm", "mac.l @<REG_M>+,@<REG_N>+", "0000nnnnmmmm1111",
-    "trap (255,R0,memory,maskl,maskw, endianw);",
-    "/* FIXME: mac.l support */",
+  { "nm", "nm", "mac.l @<REG_M>+,@<REG_N>+", "0000nnnnmmmm1111",
+    "macl (&R0, memory, n, m);",
   },
 
-  { "", "nm", "mac.w @<REG_M>+,@<REG_N>+", "0100nnnnmmmm1111",
-    "macw(R0,memory,n,m,endianw);",
+  { "nm", "nm", "mac.w @<REG_M>+,@<REG_N>+", "0100nnnnmmmm1111",
+    "macw (&R0, memory, n, m, endianw);",
   },
 
   { "n", "", "mov #<imm>,<REG_N>", "1110nnnni8*1....",
-    "R[n] = SEXT(i);",
+    "R[n] = SEXT (i);",
   },
   { "n", "m", "mov <REG_M>,<REG_N>", "0110nnnnmmmm0011",
     "R[n] = R[m];",
@@ -607,7 +692,7 @@ op tab[] =
     "R[n] = RSBAT (R0 + R[m]);",
     "L (n);",
   },
-  { "n", "m", "mov.b @<REG_M>+,<REG_N>", "0110nnnnmmmm0100",
+  { "nm", "m", "mov.b @<REG_M>+,<REG_N>", "0110nnnnmmmm0100",
     "MA (1);",
     "R[n] = RSBAT (R[m]);",
     "R[m] += 1;",
@@ -629,7 +714,7 @@ op tab[] =
     "MA (1);",
     "WBAT (R[n] + R0, R[m]);",
   },
-  { "", "nm", "mov.b <REG_M>,@-<REG_N>", "0010nnnnmmmm0100",
+  { "n", "nm", "mov.b <REG_M>,@-<REG_N>", "0010nnnnmmmm0100",
     "MA (1);",
     "R[n] -= 1;",
     "WBAT (R[n], R[m]);",
@@ -683,7 +768,7 @@ op tab[] =
     "MA (1);",
     "WLAT (R0 + R[n], R[m]);",
   },
-  { "", "nm", "mov.l <REG_M>,@-<REG_N>", "0010nnnnmmmm0110",
+  { "n", "nm", "mov.l <REG_M>,@-<REG_N>", "0010nnnnmmmm0110",
     "MA (1) ;",
     "R[n] -= 4;",
     "WLAT (R[n], R[m]);",
@@ -694,8 +779,8 @@ op tab[] =
   },
 
   { "0", "", "mov.w @(<disp>,GBR),R0", "11000101i8*2....",
-    "MA (1)",
-    ";R0 = RSWAT (i + GBR);",
+    "MA (1);",
+    "R0 = RSWAT (i + GBR);",
     "L (0);",
   },
   { "n", "", "mov.w @(<disp>,PC),<REG_N>", "1001nnnni8p2....",
@@ -750,19 +835,55 @@ op tab[] =
     "R0 = ((i + 4 + PH2T (PC)) & ~0x3);",
   },
 
-  { "0", "", "movca.l @R0, <REG_N>", "0000nnnn11000011",
-    "/* FIXME: Not implemented */",
-    "RAISE_EXCEPTION (SIGILL);",
+  { "", "n0", "movca.l R0, @<REG_N>", "0000nnnn11000011",
+    "/* We don't simulate cache, so this insn is identical to mov.  */",
+    "MA (1);",
+    "WLAT (R[n], R[0]);",
+  },
+
+  { "", "n0", "movco.l R0, @<REG_N>", "0000nnnn01110011", 
+    "/* LDST -> T */",
+    "SET_SR_T (LDST);",
+    "/* if (T) R0 -> (Rn) */",
+    "if (T)",
+    "  WLAT (R[n], R[0]);",
+    "/* 0 -> LDST */",
+    "SET_LDST (0);",
+  },
+
+  { "0", "n", "movli.l @<REG_N>, R0", "0000nnnn01100011", 
+    "/* 1 -> LDST */",
+    "SET_LDST (1);",
+    "/* (Rn) -> R0 */",
+    "R[0] = RLAT (R[n]);",
+    "/* if (interrupt/exception) 0 -> LDST */",
+    "/* (we don't simulate asynchronous interrupts/exceptions) */",
   },
 
   { "n", "", "movt <REG_N>", "0000nnnn00101001",
     "R[n] = T;",
   },
 
-  { "", "mn", "mul.l <REG_M>,<REG_N>", "0000nnnnmmmm0111",
-    "MACL = ((int)R[n]) * ((int)R[m]);",
+  { "0", "n", "movua.l @<REG_N>,R0", "0100nnnn10101001",
+    "int regn = R[n];",
+    "MA (1);",
+    "R[0] = (RBAT (regn) << 24) + (RBAT (regn + 1) << 16) + ",
+    "  (RBAT (regn + 2) << 8) + RBAT (regn + 3);",
+    "L (0);",
   },
-#if 0
+  { "0n", "n", "movua.l @<REG_N>+,R0", "0100nnnn11101001",
+    "int regn = R[n];",
+    "MA (1);",
+    "R[0] = (RBAT (regn) << 24) + (RBAT (regn + 1) << 16) + ",
+    "  (RBAT (regn + 2) << 8) + RBAT (regn + 3);",
+    "R[n] += 4;",
+    "L (0);",
+  },
+  { "", "mn", "mul.l <REG_M>,<REG_N>", "0000nnnnmmmm0111",
+    "MACL = ((int) R[n]) * ((int) R[m]);",
+  },
+#if 0  /* FIXME: The above cast to int is not really portable.
+	  It should be replaced by a SEXT32 macro.  */
   { "", "nm", "mul.l <REG_M>,<REG_N>", "0000nnnnmmmm0111",
     "MACL = R[n] * R[m];",
   },
@@ -770,13 +891,13 @@ op tab[] =
 
   /* muls.w - see muls */
   { "", "mn", "muls <REG_M>,<REG_N>", "0010nnnnmmmm1111",
-    "MACL = ((int)(short)R[n]) * ((int)(short)R[m]);",
+    "MACL = ((int) (short) R[n]) * ((int) (short) R[m]);",
   },
 
   /* mulu.w - see mulu */
   { "", "mn", "mulu <REG_M>,<REG_N>", "0010nnnnmmmm1110",
-    "MACL = (((unsigned int)(unsigned short)R[n])",
-    "        * ((unsigned int)(unsigned short)R[m]));",
+    "MACL = (((unsigned int) (unsigned short) R[n])",
+    "        * ((unsigned int) (unsigned short) R[m]));",
   },
 
   { "n", "m", "neg <REG_M>,<REG_N>", "0110nnnnmmmm1011",
@@ -798,18 +919,24 @@ op tab[] =
     "R[n] = ~R[m];",
   },
 
-  { "0", "", "ocbi @<REG_N>", "0000nnnn10010011",
-    "/* FIXME: Not implemented */",
-    "RAISE_EXCEPTION (SIGILL);",
+  /* sh4a */
+  { "", "n", "icbi @<REG_N>", "0000nnnn11100011",
+    "/* Except for the effect on the cache - which is not simulated -",
+    "   this is like a nop.  */",
   },
 
-  { "0", "", "ocbp @<REG_N>", "0000nnnn10100011",
-    "/* FIXME: Not implemented */",
-    "RAISE_EXCEPTION (SIGILL);",
+  { "", "n", "ocbi @<REG_N>", "0000nnnn10010011",
+    "RSBAT (R[n]); /* Take exceptions like byte load, otherwise noop.  */",
+    "/* FIXME: Cache not implemented */",
+  },
+
+  { "", "n", "ocbp @<REG_N>", "0000nnnn10100011",
+    "RSBAT (R[n]); /* Take exceptions like byte load, otherwise noop.  */",
+    "/* FIXME: Cache not implemented */",
   },
 
   { "", "n", "ocbwb @<REG_N>", "0000nnnn10110011",
-    "RSBAT (R[n]); /* Take exceptions like byte load.  */",
+    "RSBAT (R[n]); /* Take exceptions like byte load, otherwise noop.  */",
     "/* FIXME: Cache not implemented */",
   },
 
@@ -826,6 +953,18 @@ op tab[] =
 
   { "", "n", "pref @<REG_N>", "0000nnnn10000011",
     "/* Except for the effect on the cache - which is not simulated -",
+    "   this is like a nop.  */",
+  },
+
+  /* sh4a */
+  { "", "n", "prefi @<REG_N>", "0000nnnn11010011",
+    "/* Except for the effect on the cache - which is not simulated -",
+    "   this is like a nop.  */",
+  },
+
+  /* sh4a */
+  { "", "", "synco", "0000000010101011", 
+    "/* Except for the effect on the pipeline - which is not simulated -", 
     "   this is like a nop.  */",
   },
 
@@ -876,11 +1015,23 @@ op tab[] =
     "Delay_Slot (PC + 2);",
   },
 
+  /* sh4a */
+  { "", "", "setdmx", "0000000010011000",
+    "saved_state.asregs.cregs.named.sr |=  SR_MASK_DMX;"
+    "saved_state.asregs.cregs.named.sr &= ~SR_MASK_DMY;"
+  },
+
+  /* sh4a */
+  { "", "", "setdmy", "0000000011001000",
+    "saved_state.asregs.cregs.named.sr |=  SR_MASK_DMY;"
+    "saved_state.asregs.cregs.named.sr &= ~SR_MASK_DMX;"
+  },
+
   /* sh-dsp */
   { "", "n", "setrc <REG_N>", "0100nnnn00010100",
     "SET_RC (R[n]);",
   },
-  { "", "n", "setrc #<imm>", "10000010i8*1....",
+  { "", "", "setrc #<imm>", "10000010i8*1....",
     /* It would be more realistic to let loop_start point to some static
        memory that contains an illegal opcode and then give a bus error when
        the loop is eventually encountered, but it seems not only simpler,
@@ -951,39 +1102,50 @@ op tab[] =
   },
 
   { "", "", "sleep", "0000000000011011",
-    "nip = PC;",
-    "trap (0xc3, R0, memory, maskl, maskw, endianw);",
+    "nip += trap (0xc3, &R0, PC, memory, maskl, maskw, endianw);",
   },
 
   { "n", "", "stc <CREG_M>,<REG_N>", "0000nnnnmmmm0010",
     "R[n] = CREG (m);",
   },
 
-#if 0
   { "n", "", "stc SGR,<REG_N>", "0000nnnn00111010",
-    "R[n] = SGR;",
+    "if (SR_MD)",
+    "  R[n] = SGR; /* priv mode */",
+    "else",
+    "  RAISE_EXCEPTION (SIGILL); /* user mode */",
   },
   { "n", "", "stc DBR,<REG_N>", "0000nnnn11111010",
-    "R[n] = DBR;",
+    "if (SR_MD)",
+    "  R[n] = DBR; /* priv mode */",
+    "else",
+    "  RAISE_EXCEPTION (SIGILL); /* user mode */",
   },
-#endif
   { "n", "n", "stc.l <CREG_M>,@-<REG_N>", "0100nnnnmmmm0011",
     "MA (1);",
     "R[n] -= 4;",
     "WLAT (R[n], CREG (m));",
   },
-#if 0
   { "n", "n", "stc.l SGR,@-<REG_N>", "0100nnnn00110010",
-    "MA (1);",
-    "R[n] -= 4;",
-    "WLAT (R[n], SGR);",
+    "if (SR_MD)",
+    "{ /* priv mode */",
+    "  MA (1);",
+    "  R[n] -= 4;",
+    "  WLAT (R[n], SGR);",
+    "}",
+    "else",
+    "  RAISE_EXCEPTION (SIGILL); /* user mode */",
   },
   { "n", "n", "stc.l DBR,@-<REG_N>", "0100nnnn11110010",
-    "MA (1);",
-    "R[n] -= 4;",
-    "WLAT (R[n], DBR);",
+    "if (SR_MD)",
+    "{ /* priv mode */",
+    "  MA (1);",
+    "  R[n] -= 4;",
+    "  WLAT (R[n], DBR);",
+    "}",
+    "else",
+    "  RAISE_EXCEPTION (SIGILL); /* user mode */",
   },
-#endif
 
   { "n", "", "sts <SREG_M>,<REG_N>", "0000nnnnssss1010",
     "R[n] = SREG (m);",
@@ -1023,43 +1185,31 @@ op tab[] =
 
   { "", "n", "tas.b @<REG_N>", "0100nnnn00011011",
     "MA (1);",
-    "ult = RBAT(R[n]);",
+    "ult = RBAT (R[n]);",
     "SET_SR_T (ult == 0);",
-    "WBAT(R[n],ult|0x80);",
+    "WBAT (R[n],ult|0x80);",
   },
 
   { "0", "", "trapa #<imm>", "11000011i8*1....", 
-#if 0
-    /* SH-[12] */
     "long imm = 0xff & i;",
-    "if (i==0xc3)",
-    "  PC-=2;",
-    "if (i<20||i==34||i==0xc3)",
-    "  trap(i,R,memory,maskl,maskw,endianw);",
+    "if (i < 20 || i == 33 || i == 34 || i == 0xc3)",
+    "  nip += trap (i, &R0, PC, memory, maskl, maskw, endianw);",
+#if 0
     "else {",
-    "  R[15]-=4;",
-    "  WLAT(R[15],GET_SR());",
-    "  R[15]-=4;",
-    "  WLAT(R[15],PC+2);",
-    "  PC=RLAT(VBR+(imm<<2))-2;",
-    "}",
+    /* SH-[12] */
+    "  R[15] -= 4;",
+    "  WLAT (R[15], GET_SR ());",
+    "  R[15] -= 4;",
+    "  WLAT (R[15], PH2T (PC + 2));",
 #else
-    "if (i == 0xc3)",
-    "  {",
-    "    nip = PC;",
-    "    trap (i, R, memory, maskl, maskw,endianw);",
-    "  }",
-    "else if (i < 20 || i==34 || i==0xc3)",
-    "  trap (i, R, memory, maskl, maskw,endianw);",
     "else if (!SR_BL) {",
-    "  /* FIXME: TRA = (imm << 2); */",
-    "  SSR = GET_SR();",
+    "  SSR = GET_SR ();",
     "  SPC = PH2T (PC + 2);",
-    "  SET_SR (GET_SR() | SR_MASK_MD | SR_MASK_BL | SR_MASK_RB);",
+    "  SET_SR (GET_SR () | SR_MASK_MD | SR_MASK_BL | SR_MASK_RB);",
     "  /* FIXME: EXPEVT = 0x00000160; */",
-    "  SET_NIP (PT2H (VBR + 0x00000100));",
-    "}",
 #endif
+    "  SET_NIP (PT2H (RLAT (VBR + (imm<<2))));",
+    "}",
   },
 
   { "", "mn", "tst <REG_M>,<REG_N>", "0010nnnnmmmm1000",
@@ -1093,10 +1243,10 @@ op tab[] =
 
 #if 0
   { "divs.l <REG_M>,<REG_N>", "0100nnnnmmmm1110",
-    "divl(0,R[n],R[m]);",
+    "divl (0, R[n], R[m]);",
   },
   { "divu.l <REG_M>,<REG_N>", "0100nnnnmmmm1101",
-    "divl(0,R[n],R[m]);",
+    "divl (0, R[n], R[m]);",
   },
 #endif
 
@@ -1150,7 +1300,7 @@ op movsxy_tab[] =
     "DSP_R (m) = RSWAT (R[n]);",
     "R[n] += R[8];",
   },
-  { "n", "n", "<DSP_REG_M>,movs.w @-<REG_N>", "111101NNMMMM0001",
+  { "n", "n", "movs.w <DSP_REG_M>,@-<REG_N>", "111101NNMMMM0001",
     "MA (1);",
     "R[n] -= 2;",
     "WWAT (R[n], DSP_R (m) >> 16);",
@@ -1211,7 +1361,7 @@ op movsxy_tab[] =
     "DSP_GRD (m) = SIGN32 (DSP_R (m));",
     "R[n] += R[8];",
   },
-  { "n", "n", "<DSP_REG_M>,movs.l @-<REG_N>", "111101NNMMMM0011",
+  { "n", "n", "movs.l <DSP_REG_M>,@-<REG_N>", "111101NNMMMM0011",
     "MA (1);",
     "R[n] -= 4;",
     "WLAT (R[n], DSP_R (m));",
@@ -1230,7 +1380,7 @@ op movsxy_tab[] =
     "WLAT (R[n], DSP_R (m));",
     "R[n] += R[8];",
   },
-  { "n", "n", "<DSP_GRD_M>,movs.l @-<REG_N>", "111101NNGGGG0011",
+  { "n", "n", "movs.l <DSP_GRD_M>,@-<REG_N>", "111101NNGGGG0011",
     "MA (1);",
     "R[n] -= 4;",
     "WLAT (R[n], SEXT (DSP_R (m)));",
@@ -1249,54 +1399,116 @@ op movsxy_tab[] =
     "WLAT (R[n], SEXT (DSP_R (m)));",
     "R[n] += R[8];",
   },
-  { "", "n", "movx.w @<REG_x>,<DSP_XX>",   "111100xxXX000100",
+  { "", "n", "movx.w @<REG_xy>,<DSP_XY>",   "111100xyXY0001??",
     "DSP_R (m) = RSWAT (R[n]) << 16;",
-    "iword &= 0xfd53; goto top;",
+    "if (iword & 3)",
+    "  {",
+    "    iword &= 0xfd53; goto top;",
+    "  }",
   },
-  { "n", "n", "movx.w @<REG_x>+,<DSP_XX>", "111100xxXX001000",
+  { "", "n", "movx.l @<REG_xy>,<DSP_XY>",   "111100xyXY010100",
+    "DSP_R (m) = RLAT (R[n]);",
+  },
+  { "n", "n", "movx.w @<REG_xy>+,<DSP_XY>", "111100xyXY0010??",
     "DSP_R (m) = RSWAT (R[n]) << 16;",
     "R[n] += ((R[n] & 0xffff) == MOD_ME) ? MOD_DELTA : 2;",
-    "iword &= 0xfd53; goto top;",
+    "if (iword & 3)",
+    "  {",
+    "    iword &= 0xfd53; goto top;",
+    "  }",
   },
-  { "n", "n8","movx.w @<REG_x>+REG_8,<DSP_XX>", "111100xxXX001000",
+  { "n", "n", "movx.l @<REG_xy>+,<DSP_XY>", "111100xyXY011000",
+    "DSP_R (m) = RLAT (R[n]);",
+    "R[n] += ((R[n] & 0xffff) == MOD_ME) ? MOD_DELTA : 4;",
+  },
+  { "n", "n8","movx.w @<REG_xy>+REG_8,<DSP_XY>", "111100xyXY0011??",
     "DSP_R (m) = RSWAT (R[n]) << 16;",
     "R[n] += ((R[n] & 0xffff) == MOD_ME) ? MOD_DELTA : R[8];",
-    "iword &= 0xfd53; goto top;",
+    "if (iword & 3)",
+    "  {",
+    "    iword &= 0xfd53; goto top;",
+    "  }",
   },
-  { "", "n", "movx.w <DSP_Aa>,@<REG_x>",   "111100xxaa100100",
+  { "n", "n8","movx.l @<REG_xy>+REG_8,<DSP_XY>", "111100xyXY011100",
+    "DSP_R (m) = RLAT (R[n]);",
+    "R[n] += ((R[n] & 0xffff) == MOD_ME) ? MOD_DELTA : R[8];",
+  },
+  { "", "n", "movx.w <DSP_Ax>,@<REG_xy>",   "111100xyax1001??",
     "WWAT (R[n], DSP_R (m) >> 16);",
-    "iword &= 0xfd53; goto top;",
+    "if (iword & 3)",
+    "  {",
+    "    iword &= 0xfd53; goto top;",
+    "  }",
   },
-  { "n", "n", "movx.w <DSP_Aa>,@<REG_x>+", "111100xxaa101000",
+  { "", "n", "movx.l <DSP_Ax>,@<REG_xy>",   "111100xyax110100",
+    "WLAT (R[n], DSP_R (m));",
+  },
+  { "n", "n", "movx.w <DSP_Ax>,@<REG_xy>+", "111100xyax1010??",
     "WWAT (R[n], DSP_R (m) >> 16);",
     "R[n] += ((R[n] & 0xffff) == MOD_ME) ? MOD_DELTA : 2;",
-    "iword &= 0xfd53; goto top;",
+    "if (iword & 3)",
+    "  {",
+    "    iword &= 0xfd53; goto top;",
+    "  }",
   },
-  { "n", "n8","movx.w <DSP_Aa>,@<REG_x>+REG_8","111100xxaa101000",
+  { "n", "n", "movx.l <DSP_Ax>,@<REG_xy>+", "111100xyax111000",
+    "WLAT (R[n], DSP_R (m));",
+    "R[n] += ((R[n] & 0xffff) == MOD_ME) ? MOD_DELTA : 4;",
+  },
+  { "n", "n8","movx.w <DSP_Ax>,@<REG_xy>+REG_8","111100xyax1011??",
     "WWAT (R[n], DSP_R (m) >> 16);",
     "R[n] += ((R[n] & 0xffff) == MOD_ME) ? MOD_DELTA : R[8];",
-    "iword &= 0xfd53; goto top;",
+    "if (iword & 3)",
+    "  {",
+    "    iword &= 0xfd53; goto top;",
+    "  }",
   },
-  { "", "n", "movy.w @<REG_y>,<DSP_YY>",   "111100yyYY000001",
+  { "n", "n8","movx.l <DSP_Ax>,@<REG_xy>+REG_8","111100xyax111100",
+    "WLAT (R[n], DSP_R (m));",
+    "R[n] += ((R[n] & 0xffff) == MOD_ME) ? MOD_DELTA : R[8];",
+  },
+  { "", "n", "movy.w @<REG_yx>,<DSP_YX>",   "111100yxYX000001",
     "DSP_R (m) = RSWAT (R[n]) << 16;",
   },
-  { "n", "n", "movy.w @<REG_x>+,<DSP_YY>", "111100yyYY000010",
+  { "n", "n", "movy.w @<REG_yx>+,<DSP_YX>", "111100yxYX000010",
     "DSP_R (m) = RSWAT (R[n]) << 16;",
     "R[n] += ((R[n] | ~0xffff) == MOD_ME) ? MOD_DELTA : 2;",
   },
-  { "n", "n9","movy.w @<REG_x>+REG_9,<DSP_YY>", "111100yyYY000010",
+  { "n", "n9","movy.w @<REG_yx>+REG_9,<DSP_YX>", "111100yxYX000011",
     "DSP_R (m) = RSWAT (R[n]) << 16;",
     "R[n] += ((R[n] | ~0xffff) == MOD_ME) ? MOD_DELTA : R[9];",
   },
-  { "", "n", "movy.w <DSP_Aa>,@<REG_x>",   "111100yyAA010001",
+  { "", "n", "movy.w <DSP_Ay>,@<REG_yx>",   "111100yxAY010001",
     "WWAT (R[n], DSP_R (m) >> 16);",
   },
-  { "n", "n", "movy.w <DSP_Aa>,@<REG_x>+", "111100yyAA010010",
+  { "n", "n", "movy.w <DSP_Ay>,@<REG_yx>+", "111100yxAY010010",
     "WWAT (R[n], DSP_R (m) >> 16);",
     "R[n] += ((R[n] | ~0xffff) == MOD_ME) ? MOD_DELTA : 2;",
   },
-  { "n", "n9", "movy.w <DSP_Aa>,@<REG_x>+REG_9", "111100yyAA010010",
+  { "n", "n9", "movy.w <DSP_Ay>,@<REG_yx>+REG_9", "111100yxAY010011",
     "WWAT (R[n], DSP_R (m) >> 16);",
+    "R[n] += ((R[n] | ~0xffff) == MOD_ME) ? MOD_DELTA : R[9];",
+  },
+  { "", "n", "movy.l @<REG_yx>,<DSP_YX>",   "111100yxYX100001",
+    "DSP_R (m) = RLAT (R[n]);",
+  },
+  { "n", "n", "movy.l @<REG_yx>+,<DSP_YX>", "111100yxYX100010",
+    "DSP_R (m) = RLAT (R[n]);",
+    "R[n] += ((R[n] | ~0xffff) == MOD_ME) ? MOD_DELTA : 4;",
+  },
+  { "n", "n9","movy.l @<REG_yx>+REG_9,<DSP_YX>", "111100yxYX100011",
+    "DSP_R (m) = RLAT (R[n]);",
+    "R[n] += ((R[n] | ~0xffff) == MOD_ME) ? MOD_DELTA : R[9];",
+  },
+  { "", "n", "movy.l <DSP_Ay>,@<REG_yx>",   "111100yxAY110001",
+    "WLAT (R[n], DSP_R (m));",
+  },
+  { "n", "n", "movy.l <DSP_Ay>,@<REG_yx>+", "111100yxAY110010",
+    "WLAT (R[n], DSP_R (m));",
+    "R[n] += ((R[n] | ~0xffff) == MOD_ME) ? MOD_DELTA : 4;",
+  },
+  { "n", "n9", "movy.l <DSP_Ay>,@<REG_yx>+REG_9", "111100yxAY110011",
+    "WLAT (R[n], DSP_R (m));",
     "R[n] += ((R[n] | ~0xffff) == MOD_ME) ? MOD_DELTA : R[9];",
   },
   { "", "", "nopx nopy", "1111000000000000",
@@ -1315,10 +1527,10 @@ op ppi_tab[] =
   { "","", "pshl #<imm>,dz",	"00000iiim16.zzzz",
     "int Sz = DSP_R (z) & 0xffff0000;",
     "",
-    "if (i < 16)",
+    "if (i <= 16)",
     "  res = Sz << i;",
     "else if (i >= 128 - 16)",
-    "  res = Sz >> 128 - i;",
+    "  res = (unsigned) Sz >> 128 - i;	/* no sign extension */",
     "else",
     "  {",
     "    RAISE_EXCEPTION (SIGILL);",
@@ -1332,7 +1544,7 @@ op ppi_tab[] =
     "int Sz = DSP_R (z);",
     "int Sz_grd = GET_DSP_GRD (z);",
     "",
-    "if (i < 32)",
+    "if (i <= 32)",
     "  {",
     "    if (i == 32)",
     "      {",
@@ -1371,7 +1583,7 @@ op ppi_tab[] =
     "greater_equal = 0;",
   },
   { "","", "pmuls Se,Sf,Dg",	"0100eeffxxyygguu",
-    "res = (DSP_R (e)) >> 16 * (DSP_R (f) >> 16) * 2;",
+    "res = (DSP_R (e) >> 16) * (DSP_R (f) >> 16) * 2;",
     "if (res == 0x80000000)",
     "  res = 0x7fffffff;",
     "DSP_R (g) = res;",
@@ -1384,7 +1596,7 @@ op ppi_tab[] =
     "int Sy = DSP_R (y);",
     "int Sy_grd = SIGN32 (Sy);",
     "",
-    "res = (DSP_R (e)) >> 16 * (DSP_R (f) >> 16) * 2;",
+    "res = (DSP_R (e) >> 16) * (DSP_R (f) >> 16) * 2;",
     "if (res == 0x80000000)",
     "  res = 0x7fffffff;",
     "DSP_R (g) = res;",
@@ -1403,7 +1615,7 @@ op ppi_tab[] =
     "int Sy = DSP_R (y);",
     "int Sy_grd = SIGN32 (Sy);",
     "",
-    "res = (DSP_R (e)) >> 16 * (DSP_R (f) >> 16) * 2;",
+    "res = (DSP_R (e) >> 16) * (DSP_R (f) >> 16) * 2;",
     "if (res == 0x80000000)",
     "  res = 0x7fffffff;",
     "DSP_R (g) = res;",
@@ -1453,7 +1665,7 @@ op ppi_tab[] =
     "DSR |= carry;\n",
     "goto assign_z;\n",
   },
-  { "","", "pcmp Sx,Sy",	"10000100xxyy....",
+  { "","", "pcmp Sx,Sy",	"10000100xxyyzzzz",
     "int Sx = DSP_R (x);",
     "int Sx_grd = GET_DSP_GRD (x);",
     "int Sy = DSP_R (y);",
@@ -1469,6 +1681,24 @@ op ppi_tab[] =
   { "","", "pwsb Sx,Sy,Dz",	"10100100xxyyzzzz",
   },
   { "","", "pwad Sx,Sy,Dz",	"10110100xxyyzzzz",
+  },
+  { "","", "(if cc) pabs Sx,Dz",	"100010ccxx01zzzz",
+    "/* FIXME: duplicate code pabs.  */",
+    "res = DSP_R (x);",
+    "res_grd = GET_DSP_GRD (x);",
+    "if (res >= 0)",
+    "  carry = 0;",
+    "else",
+    "  {",
+    "    res = -res;",
+    "    carry = (res != 0); /* The manual has a bug here.  */", 
+    "    res_grd = -res_grd - carry;", 
+    "  }",
+    "COMPUTE_OVERFLOW;",
+    "/* ??? The re-computing of overflow after",
+    "   saturation processing is specific to pabs.  */",
+    "overflow = res_grd != SIGN32 (res) ? DSR_MASK_V : 0;",
+    "ADD_SUB_GE;",
   },
   { "","", "pabs Sx,Dz",	"10001000xx..zzzz",
     "res = DSP_R (x);",
@@ -1487,15 +1717,52 @@ op ppi_tab[] =
     "overflow = res_grd != SIGN32 (res) ? DSR_MASK_V : 0;",
     "ADD_SUB_GE;",
   },
-  { "","", "prnd Sx,Dz",	"10011000xx..zzzz",
+
+  { "","", "(if cc) prnd Sx,Dz",	"100110ccxx01zzzz",
+    "/* FIXME: duplicate code prnd.  */",
     "int Sx = DSP_R (x);",
     "int Sx_grd = GET_DSP_GRD (x);",
     "",
-    "res = Sx + 0x8000;",
+    "res = (Sx + 0x8000) & 0xffff0000;",
     "carry = (unsigned) res < (unsigned) Sx;",
     "res_grd = Sx_grd + carry;",
     "COMPUTE_OVERFLOW;",
     "ADD_SUB_GE;",
+  },
+  { "","", "prnd Sx,Dz",	"10011000xx..zzzz",
+    "int Sx = DSP_R (x);",
+    "int Sx_grd = GET_DSP_GRD (x);",
+    "",
+    "res = (Sx + 0x8000) & 0xffff0000;",
+    "carry = (unsigned) res < (unsigned) Sx;",
+    "res_grd = Sx_grd + carry;",
+    "COMPUTE_OVERFLOW;",
+    "ADD_SUB_GE;",
+  },
+
+  { "","", "(if cc) pabs Sy,Dz",	"101010cc01yyzzzz",
+    "/* FIXME: duplicate code pabs.  */",
+    "res = DSP_R (y);",
+    "res_grd = 0;",
+    "overflow = 0;",
+    "greater_equal = DSR_MASK_G;",
+    "if (res >= 0)",
+    "  carry = 0;",
+    "else",
+    "  {",
+    "    res = -res;",
+    "    carry = 1;",
+    "    if (res < 0)",
+    "      {",
+    "        if (S)",
+    "          res = 0x7fffffff;",
+    "        else",
+    "          {",
+    "            overflow = DSR_MASK_V;",
+    "            greater_equal = 0;",
+    "          }",
+    "      }",
+    "  }",
   },
   { "","", "pabs Sy,Dz",	"10101000..yyzzzz",
     "res = DSP_R (y);",
@@ -1520,11 +1787,22 @@ op ppi_tab[] =
     "      }",
     "  }",
   },
+  { "","", "(if cc) prnd Sy,Dz",	"101110cc01yyzzzz",
+    "/* FIXME: duplicate code prnd.  */",
+    "int Sy = DSP_R (y);",
+    "int Sy_grd = SIGN32 (Sy);",
+    "",
+    "res = (Sy + 0x8000) & 0xffff0000;",
+    "carry = (unsigned) res < (unsigned) Sy;",
+    "res_grd = Sy_grd + carry;",
+    "COMPUTE_OVERFLOW;",
+    "ADD_SUB_GE;",
+  },
   { "","", "prnd Sy,Dz",	"10111000..yyzzzz",
     "int Sy = DSP_R (y);",
     "int Sy_grd = SIGN32 (Sy);",
     "",
-    "res = Sy + 0x8000;",
+    "res = (Sy + 0x8000) & 0xffff0000;",
     "carry = (unsigned) res < (unsigned) Sy;",
     "res_grd = Sy_grd + carry;",
     "COMPUTE_OVERFLOW;",
@@ -1534,10 +1812,10 @@ op ppi_tab[] =
     "int Sx = DSP_R (x) & 0xffff0000;",
     "int Sy = DSP_R (y) >> 16 & 0x7f;",
     "",
-    "if (Sy < 16)",
+    "if (Sy <= 16)",
     "  res = Sx << Sy;",
     "else if (Sy >= 128 - 16)",
-    "  res = Sx >> 128 - Sy;",
+    "  res = (unsigned) Sx >> 128 - Sy;	/* no sign extension */",
     "else",
     "  {",
     "    RAISE_EXCEPTION (SIGILL);",
@@ -1550,7 +1828,7 @@ op ppi_tab[] =
     "int Sx_grd = GET_DSP_GRD (x);",
     "int Sy = DSP_R (y) >> 16 & 0x7f;",
     "",
-    "if (Sy < 32)",
+    "if (Sy <= 32)",
     "  {",
     "    if (Sy == 32)",
     "      {",
@@ -1597,6 +1875,18 @@ op ppi_tab[] =
     "res = Sx - Sy;",
     "carry = (unsigned) res > (unsigned) Sx;",
     "res_grd = Sx_grd - Sy_grd - carry;",
+    "COMPUTE_OVERFLOW;",
+    "ADD_SUB_GE;",
+  },
+  { "","", "(if cc) psub Sy,Sx,Dz",	"100001ccxxyyzzzz",
+    "int Sx = DSP_R (x);",
+    "int Sx_grd = GET_DSP_GRD (x);",
+    "int Sy = DSP_R (y);",
+    "int Sy_grd = SIGN32 (Sy);",
+    "",
+    "res = Sy - Sx;",
+    "carry = (unsigned) res > (unsigned) Sy;",
+    "res_grd = Sy_grd - Sx_grd - carry;",
     "COMPUTE_OVERFLOW;",
     "ADD_SUB_GE;",
   },
@@ -1688,6 +1978,21 @@ op ppi_tab[] =
     "carry = 0;",
     "overflow = 0;",
     "greater_equal = 1;",
+  },
+  { "","", "pclr Du pmuls Se,Sf,Dg",	"0100eeff0001gguu",
+    "/* Do multiply.  */",
+    "res = (DSP_R (e) >> 16) * (DSP_R (f) >> 16) * 2;",
+    "if (res == 0x80000000)",
+    "  res = 0x7fffffff;",
+    "DSP_R (g) = res;",
+    "DSP_GRD (g) = SIGN32 (res);",
+    "/* FIXME: update DSR based on results of multiply!  */",
+    "",
+    "/* Do clr.  */",
+    "z = u;",
+    "res = 0;",
+    "res_grd = 0;",
+    "goto assign_z;",
   },
   { "","", "(if cc) pdmsb Sx,Dz",	"100111ccxx..zzzz",
     "unsigned Sx = DSP_R (x);",
@@ -1804,6 +2109,27 @@ op ppi_tab[] =
     "  MACL = DSP_R (z) = res;",
     "return;",
   },
+  /* sh4a */
+  { "","", "(if cc) pswap Sx,Dz",	"100111ccxx01zzzz",
+    "int Sx = DSP_R (x);",
+    "",
+    "res = ((Sx & 0xffff) * 65536) + ((Sx >> 16) & 0xffff);",
+    "res_grd = GET_DSP_GRD (x);",
+    "carry = 0;",
+    "overflow = 0;",
+    "greater_equal = res & 0x80000000 ? 0 : DSR_MASK_G;",
+  },
+  /* sh4a */
+  { "","", "(if cc) pswap Sy,Dz",	"101111cc01yyzzzz",
+    "int Sy = DSP_R (y);",
+    "",
+    "res = ((Sy & 0xffff) * 65536) + ((Sy >> 16) & 0xffff);",
+    "res_grd = SIGN32 (Sy);",
+    "carry = 0;",
+    "overflow = 0;",
+    "greater_equal = res & 0x80000000 ? 0 : DSR_MASK_G;",
+  },
+
   {0, 0}
 };
 
@@ -1937,131 +2263,138 @@ gengastab ()
     {
       printf ("%s %-30s\n", p->code, p->name);
     }
-
-
 }
 
-/* Convert a string of 4 binary digits into an int */
+static unsigned short table[1 << 16];
 
-static
-int
-bton (s)
-     char *s;
-
-{
-  int n = 0;
-  int v = 8;
-  while (v)
-    {
-      if (*s == '1')
-	n |= v;
-      v >>= 1;
-      s++;
-    }
-  return n;
-}
-
-static unsigned char table[1 << 16];
-
-/* Take an opcode expand all varying fields in it out and fill all the
-  right entries in 'table' with the opcode index*/
+/* Take an opcode, expand all varying fields in it out and fill all the
+   right entries in 'table' with the opcode index.  */
 
 static void
-expand_opcode (shift, val, i, s)
-     int shift;
+expand_opcode (val, i, s)
      int val;
      int i;
      char *s;
 {
-  int j;
-
   if (*s == 0)
     {
       table[val] = i;
     }
   else
     {
+      int j = 0, m = 0;
+
       switch (s[0])
 	{
-
+	default:
+	  fprintf (stderr, "expand_opcode: illegal char '%c'\n", s[0]);
+	  exit (1);
 	case '0':
 	case '1':
-	  {
-	    int m, mv;
-
-	    val |= bton (s) << shift;
-	    if (s[2] == '0' || s[2] == '1')
-	      expand_opcode (shift - 4, val, i, s + 4);
-	    else if (s[2] == 'N')
-	      for (j = 0; j < 4; j++)
-		expand_opcode (shift - 4, val | (j << shift), i, s + 4);
-	    else if (s[2] == 'x')
-	      for (j = 0; j < 4; j += 2)
-		for (m = 0; m < 32; m++)
-		  {
-		    /* Ignore illegal nopy */
-		    if ((m & 7) == 0 && m != 0)
-		      continue;
-		    mv = m & 3 | (m & 4) << 2 | (m & 8) << 3 | (m & 16) << 4;
-		    expand_opcode (shift - 4, val | mv | (j << shift), i,
-				   s + 4);
-		  }
-	    else if (s[2] == 'y')
-	      for (j = 0; j < 2; j++)
-		expand_opcode (shift - 4, val | (j << shift), i, s + 4);
-	    break;
-	  }
+	  /* Consume an arbitrary number of ones and zeros.  */
+	  do {
+	    j = (j << 1) + (s[m++] - '0');
+	  } while (s[m] == '0' || s[m] == '1');
+	  expand_opcode ((val << m) | j, i, s + m);
+	  break;
+	case 'N':	/* NN -- four-way fork */
+	  for (j = 0; j < 4; j++)
+	    expand_opcode ((val << 2) | j, i, s + 2);
+	  break;
+	case 'x':	/* xx or xy -- two-way or four-way fork */
+	  for (j = 0; j < 4; j += (s[1] == 'x' ? 2 : 1))
+	    expand_opcode ((val << 2) | j, i, s + 2);
+	  break;
+	case 'y':	/* yy or yx -- two-way or four-way fork */
+	  for (j = 0; j < (s[1] == 'x' ? 4 : 2); j++)
+	    expand_opcode ((val << 2) | j, i, s + 2);
+	  break;
+	case '?':	/* Seven-way "wildcard" fork for movxy */
+	  expand_opcode ((val << 2), i, s + 2);
+	  for (j = 1; j < 4; j++)
+	    {
+	      expand_opcode ((val << 2) | j, i, s + 2);
+	      expand_opcode ((val << 2) | (j + 16), i, s + 2);
+	    }
+	  break;
+	case 'i':	/* eg. "i8*1" */
+	case '.':	/* "...." is a wildcard */
 	case 'n':
 	case 'm':
+	  /* nnnn, mmmm, i#*#, .... -- 16-way fork.  */
 	  for (j = 0; j < 16; j++)
-	    {
-	      expand_opcode (shift - 4, val | (j << shift), i, s + 4);
-
-	    }
+	    expand_opcode ((val << 4) | j, i, s + 4);
+	  break;
+	case 'e':
+	  /* eeee -- even numbered register:
+	     8 way fork.  */
+	  for (j = 0; j < 15; j += 2)
+	    expand_opcode ((val << 4) | j, i, s + 4);
 	  break;
 	case 'M':
-	  /* A1, A0,X0,X1,Y0,Y1,M0,A1G,M1,M1G */
-	  for (j = 5; j < 16; j++)
-	    if (j != 6)
-	      expand_opcode (shift - 4, val | (j << shift), i, s + 4);
+	  /* A0, A1, X0, X1, Y0, Y1, M0, M1, A0G, A1G:
+	     MMMM -- 10-way fork */
+	  expand_opcode ((val << 4) | 5, i, s + 4);
+	  for (j = 7; j < 16; j++)
+	    expand_opcode ((val << 4) | j, i, s + 4);
 	  break;
 	case 'G':
-	  /* A1G, A0G: */
+	  /* A1G, A0G: 
+	     GGGG -- two-way fork */
 	  for (j = 13; j <= 15; j +=2)
-	    expand_opcode (shift - 4, val | (j << shift), i, s + 4);
+	    expand_opcode ((val << 4) | j, i, s + 4);
 	  break;
 	case 's':
+	  /* ssss -- 10-way fork */
 	  /* System registers mach, macl, pr: */
 	  for (j = 0; j < 3; j++)
-	    expand_opcode (shift - 4, val | (j << shift), i, s + 4);
+	    expand_opcode ((val << 4) | j, i, s + 4);
 	  /* System registers fpul, fpscr/dsr, a0, x0, x1, y0, y1: */
 	  for (j = 5; j < 12; j++)
-	    expand_opcode (shift - 4, val | (j << shift), i, s + 4);
+	    expand_opcode ((val << 4) | j, i, s + 4);
 	  break;
 	case 'X':
+	  /* XX/XY -- 2/4 way fork.  */
+	  for (j = 0; j < 4; j += (s[1] == 'X' ? 2 : 1))
+	    expand_opcode ((val << 2) | j, i, s + 2);
+	  break;
 	case 'a':
-	  val |= bton (s) << shift;
-	  for (j = 0; j < 16; j += 8)
-	    expand_opcode (shift - 4, val | (j << shift), i, s + 4);
+	  /* aa/ax -- 2/4 way fork.  */
+	  for (j = 0; j < 4; j += (s[1] == 'a' ? 2 : 1))
+	    expand_opcode ((val << 2) | j, i, s + 2);
 	  break;
 	case 'Y':
-	case 'A':
-	  val |= bton (s) << shift;
-	  for (j = 0; j < 8; j += 4)
-	    expand_opcode (shift - 4, val | (j << shift), i, s + 4);
+	  /* YY/YX -- 2/4 way fork.  */
+	  for (j = 0; j < (s[1] == 'Y' ? 2 : 4); j += 1)
+	    expand_opcode ((val << 2) | j, i, s + 2);
 	  break;
-
-	default:
-	  for (j = 0; j < (1 << (shift + 4)); j++)
+	case 'A':
+	  /* AA/AY: 2/4 way fork.  */
+	  for (j = 0; j < (s[1] == 'A' ? 2 : 4); j += 1)
+	    expand_opcode ((val << 2) | j, i, s + 2);
+	  break;
+	case 'v':
+	  /* vv(VV) -- 4(16) way fork.  */
+	  /* Vector register fv0/4/8/12.  */
+	  if (s[2] == 'V')
 	    {
-	      table[val | j] = i;
+	      /* 2 vector registers.  */
+	      for (j = 0; j < 15; j++)
+		expand_opcode ((val << 4) | j, i, s + 4);
 	    }
+	  else
+	    {
+	      /* 1 vector register.  */
+	      for (j = 0; j < 4; j += 1)
+		expand_opcode ((val << 2) | j, i, s + 2);
+	    }
+	  break;
 	}
     }
 }
 
 /* Print the jump table used to index an opcode into a switch
-   statement entry. */
+   statement entry.  */
 
 static void
 dumptable (name, size, start)
@@ -2074,7 +2407,7 @@ dumptable (name, size, start)
 
   int i = start;
 
-  printf ("unsigned char %s[%d]={\n", name, size);
+  printf ("unsigned short %s[%d]={\n", name, size);
   while (i < start + size)
     {
       int j = 0;
@@ -2111,16 +2444,16 @@ filltable (p)
   for (; p->name; p++)
     {
       p->index = index++;
-      expand_opcode (12, 0, p->index, p->code);
+      expand_opcode (0, p->index, p->code);
     }
 }
 
-/* Table already contais all the switch case tags for 16-bit opcode double
+/* Table already contains all the switch case tags for 16-bit opcode double
    data transfer (ddt) insns, and the switch case tag for processing parallel
    processing insns (ppi) for code 0xf800 (ppi nopx nopy).  Copy the
    latter tag to represent all combinations of ppi with ddt.  */
 static void
-ppi_moves ()
+expand_ppi_movxy ()
 {
   int i;
 
@@ -2150,6 +2483,23 @@ gensim_caselist (p)
 	{
 	  switch (*s)
 	    {
+	    default:
+	      fprintf (stderr, "gencode/gensim_caselist: illegal char '%c'\n",
+		       *s);
+	      exit (1);
+	      break;
+	    case '?':
+	      /* Wildcard expansion, nothing to do here.  */
+	      s += 2;
+	      break;
+	    case 'v':
+	      printf ("      int v1 = ((iword >> 10) & 3) * 4;\n");
+	      s += 2;
+	      break;
+	    case 'V':
+	      printf ("      int v2 = ((iword >> 8)  & 3) * 4;\n");
+	      s += 2;
+	      break;
 	    case '0':
 	    case '1':
 	      s += 2;
@@ -2158,7 +2508,8 @@ gensim_caselist (p)
 	      s += 4;
 	      break;
 	    case 'n':
-	      printf ("      int n = (iword >>8) & 0xf;\n");
+	    case 'e':
+	      printf ("      int n = (iword >> 8) & 0xf;\n");
 	      needn = 1;
 	      s += 4;
 	      break;
@@ -2167,12 +2518,26 @@ gensim_caselist (p)
 	      s += 2;
 	      break;
 	    case 'x':
-	      printf ("      int n = ((iword >> 9) & 1) + 4;\n");
+	      if (s[1] == 'y')	/* xy */
+		{
+		  printf ("      int n = (iword & 3) ? \n");
+		  printf ("              ((iword >> 9) & 1) + 4 : \n");
+		  printf ("              REG_xy ((iword >> 8) & 3);\n");
+		}
+	      else
+		printf ("      int n = ((iword >> 9) & 1) + 4;\n");
 	      needn = 1;
 	      s += 2;
 	      break;
 	    case 'y':
-	      printf ("      int n = ((iword >> 8) & 1) + 4;\n");
+	      if (s[1] == 'x')	/* yx */
+		{
+		  printf ("      int n = (iword & 0xc) ? \n");
+		  printf ("              ((iword >> 8) & 1) + 6 : \n");
+		  printf ("              REG_yx ((iword >> 8) & 3);\n");
+		}
+	      else
+		printf ("      int n = ((iword >> 8) & 1) + 6;\n");
 	      needn = 1;
 	      s += 2;
 	      break;
@@ -2181,23 +2546,51 @@ gensim_caselist (p)
 	    case 's':
 	    case 'M':
 	    case 'G':
-	      printf ("      int m = (iword >>4) & 0xf;\n");
+	      printf ("      int m = (iword >> 4) & 0xf;\n");
 	      s += 4;
 	      break;
 	    case 'X':
-	      printf ("      int m = ((iword >> 7) & 1) + 8;\n");
+	      if (s[1] == 'Y')	/* XY */
+		{
+		  printf ("      int m = (iword & 3) ? \n");
+		  printf ("              ((iword >> 7) & 1) + 8 : \n");
+		  printf ("              DSP_xy ((iword >> 6) & 3);\n");
+		}
+	      else
+		printf ("      int m = ((iword >> 7) & 1) + 8;\n");
 	      s += 2;
 	      break;
 	    case 'a':
-	      printf ("      int m = 7 - ((iword >> 6) & 2);\n");
+	      if (s[1] == 'x')	/* ax */
+		{
+		  printf ("      int m = (iword & 3) ? \n");
+		  printf ("              7 - ((iword >> 6) & 2) : \n");
+		  printf ("              DSP_ax ((iword >> 6) & 3);\n");
+		}
+	      else
+		printf ("      int m = 7 - ((iword >> 6) & 2);\n");
 	      s += 2;
 	      break;
 	    case 'Y':
-	      printf ("      int m = ((iword >> 6) & 1) + 10;\n");
+	      if (s[1] == 'X')	/* YX */
+		{
+		  printf ("      int m = (iword & 0xc) ? \n");
+		  printf ("              ((iword >> 6) & 1) + 10 : \n");
+		  printf ("              DSP_yx ((iword >> 6) & 3);\n");
+		}
+	      else
+		printf ("      int m = ((iword >> 6) & 1) + 10;\n");
 	      s += 2;
 	      break;
 	    case 'A':
-	      printf ("      int m = 7 - ((iword >> 5) & 2);\n");
+	      if (s[1] == 'Y')	/* AY */
+		{
+		  printf ("      int m = (iword & 0xc) ? \n");
+		  printf ("              7 - ((iword >> 5) & 2) : \n");
+		  printf ("              DSP_ay ((iword >> 6) & 3);\n");
+		}
+	      else
+		printf ("      int m = 7 - ((iword >> 5) & 2);\n");
 	      s += 2;
 	      break;
 
@@ -2225,10 +2618,10 @@ gensim_caselist (p)
 		case '1':
 		  break;
 		case '2':
-		  printf ("<<1");
+		  printf (" << 1");
 		  break;
 		case '4':
-		  printf ("<<2");
+		  printf (" << 2");
 		  break;
 		}
 	      printf (";\n");
@@ -2237,27 +2630,27 @@ gensim_caselist (p)
 	}
       if (sextbit > 0)
 	{
-	  printf ("      i = (i ^ (1<<%d))-(1<<%d);\n",
+	  printf ("      i = (i ^ (1 << %d)) - (1 << %d);\n",
 		  sextbit - 1, sextbit - 1);
 	}
 
       if (needm && needn)
-	printf ("      TB(m,n);\n");  
+	printf ("      TB (m,n);\n");  
       else if (needm)
-	printf ("      TL(m);\n");
+	printf ("      TL (m);\n");
       else if (needn)
-	printf ("      TL(n);\n");
+	printf ("      TL (n);\n");
 
       {
-	/* Do the refs */
+	/* Do the refs.  */
 	char *r;
 	for (r = p->refs; *r; r++)
 	  {
-	    if (*r == '0') printf("      CREF(0);\n"); 
-	    if (*r == '8') printf("      CREF(8);\n"); 
-	    if (*r == '9') printf("      CREF(9);\n"); 
-	    if (*r == 'n') printf("      CREF(n);\n"); 
-	    if (*r == 'm') printf("      CREF(m);\n"); 
+	    if (*r == '0') printf ("      CREF (0);\n"); 
+	    if (*r == '8') printf ("      CREF (8);\n"); 
+	    if (*r == '9') printf ("      CREF (9);\n"); 
+	    if (*r == 'n') printf ("      CREF (n);\n"); 
+	    if (*r == 'm') printf ("      CREF (m);\n"); 
 	  }
       }
 
@@ -2272,13 +2665,13 @@ gensim_caselist (p)
       printf ("      }\n");
 
       {
-	/* Do the defs */
+	/* Do the defs.  */
 	char *r;
 	for (r = p->defs; *r; r++) 
 	  {
-	    if (*r == '0') printf("      CDEF(0);\n"); 
-	    if (*r == 'n') printf("      CDEF(n);\n"); 
-	    if (*r == 'm') printf("      CDEF(m);\n"); 
+	    if (*r == '0') printf("      CDEF (0);\n"); 
+	    if (*r == 'n') printf("      CDEF (n);\n"); 
+	    if (*r == 'm') printf("      CDEF (m);\n"); 
 	  }
       }
 
@@ -2291,6 +2684,18 @@ static void
 gensim ()
 {
   printf ("{\n");
+  printf ("/* REG_xy = [r4, r5, r0, r1].  */\n");
+  printf ("#define REG_xy(R) ((R)==0 ? 4 : (R)==2 ? 5 : (R)==1 ?  0 :  1)\n");
+  printf ("/* REG_yx = [r6, r7, r2, r3].  */\n");
+  printf ("#define REG_yx(R) ((R)==0 ? 6 : (R)==1 ? 7 : (R)==2 ?  2 :  3)\n");
+  printf ("/* DSP_ax = [a0, a1, x0, x1].  */\n");
+  printf ("#define DSP_ax(R) ((R)==0 ? 7 : (R)==2 ? 5 : (R)==1 ?  8 :  9)\n");
+  printf ("/* DSP_ay = [a0, a1, y0, y1].  */\n");
+  printf ("#define DSP_ay(R) ((R)==0 ? 7 : (R)==1 ? 5 : (R)==2 ? 10 : 11)\n");
+  printf ("/* DSP_xy = [x0, x1, y0, y1].  */\n");
+  printf ("#define DSP_xy(R) ((R)==0 ? 8 : (R)==2 ? 9 : (R)==1 ? 10 : 11)\n");
+  printf ("/* DSP_yx = [y0, y1, x0, x1].  */\n");
+  printf ("#define DSP_yx(R) ((R)==0 ? 10 : (R)==1 ? 11 : (R)==2 ? 8 : 9)\n");
   printf ("  switch (jump_table[iword]) {\n");
 
   gensim_caselist (tab);
@@ -2314,22 +2719,27 @@ gendefines ()
       char *s = p->name;
       printf ("#define OPC_");
       while (*s) {
-	if (isupper(*s)) 
-	  *s = tolower(*s);
-	if (isalpha(*s)) printf("%c", *s);
-	if (*s == ' ') printf("_");
-	if (*s == '@') printf("ind_");
-	if (*s == ',') printf("_");
+	if (isupper (*s)) 
+	  *s = tolower (*s);
+	if (isalpha (*s))
+	  printf ("%c", *s);
+	if (*s == ' ')
+	  printf ("_");
+	if (*s == '@')
+	  printf ("ind_");
+	if (*s == ',')
+	  printf ("_");
 	s++;
       }
-      printf(" %d\n",p->index);
+      printf (" %d\n",p->index);
     }
 }
 
 static int ppi_index;
 
-/* Take an ppi code, expand all varying fields in it and fill all the
-   right entries in 'table' with the opcode index.  */
+/* Take a ppi code, expand all varying fields in it and fill all the
+   right entries in 'table' with the opcode index.
+   NOTE: tail recursion optimization removed for simplicity.  */
 
 static void
 expand_ppi_code (val, i, s)
@@ -2339,41 +2749,40 @@ expand_ppi_code (val, i, s)
 {
   int j;
 
-  for (;;)
+  switch (s[0])
     {
-      switch (s[0])
-	{
-	/* The last eight bits are disregarded for the switch table.  */
-	case 'm':
-	case 'x':
-	case '.':
-	  table[val] = i;
-	  return;
-	case '0':
-	  val += val;
-	  s++;
-	  break;
-	case '1':
-	  val += val + 1;
-	  s++;
-	  break;
-	case 'i':
-	case 'e': case 'f':
-	  val += val;
-	  s++;
-	  expand_ppi_code (val, i, s);
-	  val++;
-	  break;
-	case 'c':
-	  val <<= 2;
-	  s += 2;
-	  val++;
-	  expand_ppi_code (val, ppi_index++, s);
-	  val++;
-	  expand_ppi_code (val, i, s);
-	  val++;
-	  break;
-	}
+    default:
+      fprintf (stderr, "gencode/expand_ppi_code: Illegal char '%c'\n", s[0]);
+      exit (2);
+      break;
+    case 'g':
+    case 'z':
+      /* The last four bits are disregarded for the switch table.  */
+      table[val] = i;
+      return;
+    case 'm':
+      /* Four-bit expansion.  */
+      for (j = 0; j < 16; j++)
+	expand_ppi_code ((val << 4) + j, i, s + 4);
+      break;
+    case '.':
+    case '0':
+      expand_ppi_code ((val << 1), i, s + 1);
+      break;
+    case '1':
+      expand_ppi_code ((val << 1) + 1, i, s + 1);
+      break;
+    case 'i':
+    case 'e': case 'f':
+    case 'x': case 'y':
+      expand_ppi_code ((val << 1), i, s + 1);
+      expand_ppi_code ((val << 1) + 1, i, s + 1);
+      break;
+    case 'c':
+      expand_ppi_code ((val << 2) + 1, ppi_index++, s + 2);
+      expand_ppi_code ((val << 2) + 2, i, s + 2);
+      expand_ppi_code ((val << 2) + 3, i, s + 2);
+      break;
     }
 }
 
@@ -2425,18 +2834,24 @@ ppi_gensim ()
   printf ("ppi_insn (iword)\n");
   printf ("     int iword;\n");
   printf ("{\n");
+  printf ("  /* 'ee' = [x0, x1, y0, a1] */\n");
   printf ("  static char e_tab[] = { 8,  9, 10,  5};\n");
+  printf ("  /* 'ff' = [y0, y1, x0, a1] */\n");
   printf ("  static char f_tab[] = {10, 11,  8,  5};\n");
+  printf ("  /* 'xx' = [x0, x1, a0, a1]  */\n");
   printf ("  static char x_tab[] = { 8,  9,  7,  5};\n");
+  printf ("  /* 'yy' = [y0, y1, m0, m1]  */\n");
   printf ("  static char y_tab[] = {10, 11, 12, 14};\n");
+  printf ("  /* 'gg' = [m0, m1, a0, a1]  */\n");
   printf ("  static char g_tab[] = {12, 14,  7,  5};\n");
+  printf ("  /* 'uu' = [x0, y0, a0, a1]  */\n");
   printf ("  static char u_tab[] = { 8, 10,  7,  5};\n");
   printf ("\n");
   printf ("  int z;\n");
   printf ("  int res, res_grd;\n");
   printf ("  int carry, overflow, greater_equal;\n");
   printf ("\n");
-  printf ("  switch (ppi_table[iword >> 8]) {\n");
+  printf ("  switch (ppi_table[iword >> 4]) {\n");
 
   for (; p->name; p++)
     {
@@ -2472,7 +2887,7 @@ ppi_gensim ()
 	      break;
 	    case 'c':
 	      printf ("      if ((((iword >> 8) ^ DSR) & 1) == 0)\n");
-	      printf ("\tbreak;\n");
+	      printf ("\treturn;\n");
 	      printf ("    }\n");
 	      printf ("  case %d:      \n", p->index + 1);
 	      printf ("    {\n");
@@ -2559,12 +2974,12 @@ main (ac, av)
      int ac;
      char **av;
 {
-  /* verify the table before anything else */
+  /* Verify the table before anything else.  */
   {
     op *p;
     for (p = tab; p->name; p++)
       {
-	/* check that the code field contains 16 bits */
+	/* Check that the code field contains 16 bits.  */
 	if (strlen (p->code) != 16)
 	  {
 	    fprintf (stderr, "Code `%s' length wrong (%d) for `%s'\n",
@@ -2574,7 +2989,7 @@ main (ac, av)
       }
   }
 
-  /* now generate the requested data */
+  /* Now generate the requested data.  */
   if (ac > 1)
     {
       if (strcmp (av[1], "-t") == 0)
@@ -2592,12 +3007,12 @@ main (ac, av)
 
 	  memset (table, 0, sizeof table);
 	  filltable (movsxy_tab);
-	  ppi_moves ();
+	  expand_ppi_movxy ();
 	  dumptable ("sh_dsp_table", 1 << 12, 0xf000);
 
 	  memset (table, 0, sizeof table);
 	  ppi_filltable ();
-	  dumptable ("ppi_table", 1 << 8, 0);
+	  dumptable ("ppi_table", 1 << 12, 0);
 	}
       else if (strcmp (av[1], "-x") == 0)
 	{

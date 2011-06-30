@@ -21,16 +21,11 @@
 #ifndef NM_ARMLINUX_H
 #define NM_ARMLINUX_H
 
-#include "nm-linux.h"
+#include "config/nm-linux.h"
 
 /* ptrace register ``addresses'' are absolute.  */
 
 #define U_REGS_OFFSET 0
-
-#ifdef GDBSERVER
-#define REGISTER_U_ADDR(addr,blockend,regno) \
-	 (addr) = arm_register_u_addr ((blockend),(regno))
-#endif /* GDBSERVER */
 
 /* Return sizeof user struct to callers in less machine dependent routines */
 extern int kernel_u_size (void);
