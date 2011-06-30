@@ -186,14 +186,15 @@ struct language_defn
 
     void (*la_post_parser) (struct expression ** expp, int void_context_p);
 
-    void (*la_printchar) (int ch, struct ui_file * stream);
+    void (*la_printchar) (int ch, struct type *chtype, struct ui_file * stream);
 
-    void (*la_printstr) (struct ui_file * stream, const gdb_byte *string,
-			 unsigned int length, int width,
+    void (*la_printstr) (struct ui_file * stream, struct type *elttype,
+			 const gdb_byte *string, unsigned int length,
 			 int force_ellipses,
 			 const struct value_print_options *);
 
-    void (*la_emitchar) (int ch, struct ui_file * stream, int quoter);
+    void (*la_emitchar) (int ch, struct type *chtype,
+			 struct ui_file * stream, int quoter);
 
     /* Print a type using syntax appropriate for this language. */
 
@@ -287,7 +288,7 @@ struct language_defn
        hold the size in bytes of the string (only actual characters, excluding
        an eventual terminating null character).  CHARSET will hold the encoding
        used in the string.  */
-    int (*la_get_string) (struct value *value, gdb_byte **buffer, int *length,
+    void (*la_get_string) (struct value *value, gdb_byte **buffer, int *length,
 			  const char **charset);
 
     /* Add fields above this point, so the magic number is always last. */
@@ -381,13 +382,13 @@ extern enum language set_language (enum language);
 #define LA_VALUE_PRINT(val,stream,options) \
   (current_language->la_value_print(val,stream,options))
 
-#define LA_PRINT_CHAR(ch, stream) \
-  (current_language->la_printchar(ch, stream))
-#define LA_PRINT_STRING(stream, string, length, width, force_ellipses,options) \
-  (current_language->la_printstr(stream, string, length, width, \
+#define LA_PRINT_CHAR(ch, type, stream) \
+  (current_language->la_printchar(ch, type, stream))
+#define LA_PRINT_STRING(stream, elttype, string, length, force_ellipses,options) \
+  (current_language->la_printstr(stream, elttype, string, length, \
 				 force_ellipses,options))
-#define LA_EMIT_CHAR(ch, stream, quoter) \
-  (current_language->la_emitchar(ch, stream, quoter))
+#define LA_EMIT_CHAR(ch, type, stream, quoter) \
+  (current_language->la_emitchar(ch, type, stream, quoter))
 #define LA_GET_STRING(value, buffer, length, encoding) \
   (current_language->la_get_string(value, buffer, length, encoding))
 
@@ -499,7 +500,10 @@ int default_pass_by_reference (struct type *type);
 void default_print_typedef (struct type *type, struct symbol *new_symbol,
 			    struct ui_file *stream);
 
-int default_get_string (struct value *value, gdb_byte **buffer, int *length,
-			const char **charset);
+void default_get_string (struct value *value, gdb_byte **buffer, int *length,
+			 const char **charset);
+
+void c_get_string (struct value *value, gdb_byte **buffer, int *length,
+		   const char **charset);
 
 #endif /* defined (LANGUAGE_H) */

@@ -18,6 +18,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include "gdb_assert.h"
 #include "charset.h"
 #include "value.h"
 #include "exceptions.h"
@@ -54,10 +55,14 @@ struct value *values_in_python = NULL;
 #define builtin_type_pybool \
   language_bool_type (current_language, current_gdbarch)
 
+#define builtin_type_pychar \
+  language_string_char_type (current_language, current_gdbarch)
+
 typedef struct {
   PyObject_HEAD
   struct value *value;
-  int owned_by_gdb;
+  PyObject *address;
+  PyObject *type;
 } value_object;
 
 /* Called by the Python interpreter when deallocating a value object.  */
@@ -68,8 +73,19 @@ valpy_dealloc (PyObject *obj)
 
   value_remove_from_list (&values_in_python, self->value);
 
-  if (!self->owned_by_gdb)
-    value_free (self->value);
+  value_free (self->value);
+
+  if (self->address)
+    /* Use braces to appease gcc warning.  *sigh*  */
+    {
+      Py_DECREF (self->address);
+    }
+
+  if (self->type)
+    {
+      Py_DECREF (self->type);
+    }
+
   self->ob_type->tp_free (self);
 }
 
@@ -79,7 +95,6 @@ valpy_new (PyTypeObject *subtype, PyObject *args, PyObject *keywords)
 {
   struct value *value = NULL;   /* Initialize to appease gcc warning.  */
   value_object *value_obj;
-  volatile struct gdb_exception except;
 
   if (PyTuple_Size (args) != 1)
     {
@@ -96,20 +111,16 @@ valpy_new (PyTypeObject *subtype, PyObject *args, PyObject *keywords)
       return NULL;
     }
 
-  TRY_CATCH (except, RETURN_MASK_ALL)
-    {
-      value = convert_value_from_python (PyTuple_GetItem (args, 0));
-    }
-  if (except.reason < 0)
+  value = convert_value_from_python (PyTuple_GetItem (args, 0));
+  if (value == NULL)
     {
       subtype->tp_free (value_obj);
-      return PyErr_Format (except.reason == RETURN_QUIT
-			     ? PyExc_KeyboardInterrupt : PyExc_TypeError,
-			     "%s", except.message);
+      return NULL;
     }
 
   value_obj->value = value;
-  value_obj->owned_by_gdb = 0;
+  value_obj->address = NULL;
+  value_obj->type = NULL;
   release_value (value);
   value_prepend_to_list (&values_in_python, value);
 
@@ -134,32 +145,55 @@ valpy_dereference (PyObject *self, PyObject *args)
 
 /* Return "&value".  */
 static PyObject *
-valpy_address (PyObject *self, PyObject *args)
+valpy_get_address (PyObject *self, void *closure)
 {
   struct value *res_val = NULL;	  /* Initialize to appease gcc warning.  */
+  value_object *val_obj = (value_object *) self;
   volatile struct gdb_exception except;
 
-  TRY_CATCH (except, RETURN_MASK_ALL)
+  if (!val_obj->address)
     {
-      res_val = value_addr (((value_object *) self)->value);
+      TRY_CATCH (except, RETURN_MASK_ALL)
+	{
+	  res_val = value_addr (val_obj->value);
+	}
+      if (except.reason < 0)
+	{
+	  val_obj->address = Py_None;
+	  Py_INCREF (Py_None);
+	}
+      else
+	val_obj->address = value_to_value_object (res_val);
     }
-  GDB_PY_HANDLE_EXCEPTION (except);
 
-  return value_to_value_object (res_val);
+  Py_INCREF (val_obj->address);
+
+  return val_obj->address;
 }
 
 /* Return type of the value.  */
 static PyObject *
-valpy_type (PyObject *self, PyObject *args)
+valpy_get_type (PyObject *self, void *closure)
 {
-  struct value *value = ((value_object *) self)->value;
-  return type_to_type_object (value_type (value));
+  value_object *obj = (value_object *) self;
+  if (!obj->type)
+    {
+      obj->type = type_to_type_object (value_type (obj->value));
+      if (!obj->type)
+	{
+	  obj->type = Py_None;
+	  Py_INCREF (obj->type);
+	}
+    }
+  Py_INCREF (obj->type);
+  return obj->type;
 }
 
-/* Return Unicode string with value contents (assumed to be encoded in the
-   target's charset).  */
+/* Implementation of gdb.Value.string ([encoding] [, errors]) -> string
+   Return Unicode string with value contents.  If ENCODING is not given,
+   the string is assumed to be encoded in the target's charset.  */
 static PyObject *
-valpy_string (PyObject *self, PyObject *args)
+valpy_string (PyObject *self, PyObject *args, PyObject *kw)
 {
   int length, ret = 0;
   gdb_byte *buffer;
@@ -170,25 +204,17 @@ valpy_string (PyObject *self, PyObject *args)
   const char *errors = NULL;
   const char *user_encoding = NULL;
   const char *la_encoding = NULL;
+  static char *keywords[] = { "encoding", "errors" };
 
-  if (!PyArg_ParseTuple (args, "|ss", &user_encoding, &errors))
+  if (!PyArg_ParseTupleAndKeywords (args, kw, "|ss", keywords,
+				    &user_encoding, &errors))
     return NULL;
 
   TRY_CATCH (except, RETURN_MASK_ALL)
     {
-      ret = LA_GET_STRING (value, &buffer, &length, &la_encoding);
+      LA_GET_STRING (value, &buffer, &length, &la_encoding);
     }
   GDB_PY_HANDLE_EXCEPTION (except);
-
-  if (ret != 0)
-    {
-      /* We may have read a partial string before the error happened, but
-         we will ignore it and throw an exception anyway.  */
-      PyErr_SetString (PyExc_RuntimeError, safe_strerror (ret));
-      xfree (buffer);
-
-      return NULL;
-    }
 
   encoding = (user_encoding && *user_encoding) ? user_encoding : la_encoding;
   unicode = PyUnicode_Decode (buffer, length, encoding, errors);
@@ -245,7 +271,7 @@ valpy_getitem (PyObject *self, PyObject *key)
   struct value *res_val = NULL;	  /* Initialize to appease gcc warning.  */
   volatile struct gdb_exception except;
 
-  if (PyUnicode_Check (key) || PyString_Check (key))
+  if (gdbpy_is_string (key))
     {  
       field = python_string_to_host_string (key);
       if (field == NULL)
@@ -264,6 +290,9 @@ valpy_getitem (PyObject *self, PyObject *key)
 	     value code throw an exception if the index has an invalid
 	     type.  */
 	  struct value *idx = convert_value_from_python (key);
+	  if (idx == NULL)
+	    return NULL;
+
 	  res_val = value_subscript (tmp, idx);
 	}
     }
@@ -317,6 +346,18 @@ valpy_str (PyObject *self)
   return result;
 }
 
+/* Implements gdb.Value.is_optimized_out.  */
+static PyObject *
+valpy_get_is_optimized_out (PyObject *self, void *closure)
+{
+  struct value *value = ((value_object *) self)->value;
+
+  if (value_optimized_out (value))
+    Py_RETURN_TRUE;
+
+  Py_RETURN_FALSE;
+}
+
 enum valpy_opcode
 {
   VALPY_ADD,
@@ -353,7 +394,12 @@ valpy_binop (enum valpy_opcode opcode, PyObject *self, PyObject *other)
 	 kind of object, altogether.  Because of this, we can't assume self is
 	 a gdb.Value object and need to convert it from python as well.  */
       arg1 = convert_value_from_python (self);
+      if (arg1 == NULL)
+	break;
+
       arg2 = convert_value_from_python (other);
+      if (arg2 == NULL)
+	break;
 
       switch (opcode)
 	{
@@ -430,7 +476,7 @@ valpy_binop (enum valpy_opcode opcode, PyObject *self, PyObject *other)
     }
   GDB_PY_HANDLE_EXCEPTION (except);
 
-  return value_to_value_object (res_val);
+  return res_val ? value_to_value_object (res_val) : NULL;
 }
 
 static PyObject *
@@ -617,6 +663,8 @@ valpy_richcompare (PyObject *self, PyObject *other, int op)
   TRY_CATCH (except, RETURN_MASK_ALL)
     {
       value_other = convert_value_from_python (other);
+      if (value_other == NULL)
+	return NULL;
 
       switch (op) {
         case Py_LT:
@@ -751,7 +799,8 @@ value_to_value_object (struct value *val)
   if (val_obj != NULL)
     {
       val_obj->value = val;
-      val_obj->owned_by_gdb = 0;
+      val_obj->address = NULL;
+      val_obj->type = NULL;
       release_value (val);
       value_prepend_to_list (&values_in_python, val);
     }
@@ -771,7 +820,7 @@ value_object_to_value (PyObject *self)
 }
 
 /* Try to convert a Python value to a gdb value.  If the value cannot
-   be converted, throw a gdb exception.  */
+   be converted, set a Python exception and return NULL.  */
 
 struct value *
 convert_value_from_python (PyObject *obj)
@@ -779,49 +828,65 @@ convert_value_from_python (PyObject *obj)
   struct value *value = NULL; /* -Wall */
   PyObject *target_str, *unicode_str;
   struct cleanup *old;
+  volatile struct gdb_exception except;
+  int cmp;
 
-  if (! obj)
-    error (_("Internal error while converting Python value."));
+  gdb_assert (obj != NULL);
 
-  if (PyBool_Check (obj))
-    value = value_from_longest (builtin_type_pybool, obj == Py_True);
-  else if (PyInt_Check (obj))
-    value = value_from_longest (builtin_type_pyint, PyInt_AsLong (obj));
-  else if (PyLong_Check (obj))
+  TRY_CATCH (except, RETURN_MASK_ALL)
     {
-      LONGEST l = PyLong_AsLongLong (obj);
-      if (! PyErr_Occurred ())
-	value = value_from_longest (builtin_type_pylong, l);
-    }
-  else if (PyFloat_Check (obj))
-    {
-      double d = PyFloat_AsDouble (obj);
-      if (! PyErr_Occurred ())
-	value = value_from_double (builtin_type_pyfloat, d);
-    }
-  else if (gdbpy_is_string (obj))
-    {
-      char *s;
-
-      s = python_string_to_target_string (obj);
-      if (s == NULL)
+      if (PyBool_Check (obj)) 
 	{
-	  PyErr_Clear ();
-	  error (_("Error converting Python value."));
+	  cmp = PyObject_IsTrue (obj);
+	  if (cmp >= 0)
+	    value = value_from_longest (builtin_type_pybool, cmp);
 	}
+      else if (PyInt_Check (obj))
+	{
+	  long l = PyInt_AsLong (obj);
 
-      old = make_cleanup (xfree, s);
-      value = value_from_string (s);
-      do_cleanups (old);
+	  if (! PyErr_Occurred ())
+	    value = value_from_longest (builtin_type_pyint, l);
+	}
+      else if (PyLong_Check (obj))
+	{
+	  LONGEST l = PyLong_AsLongLong (obj);
+
+	  if (! PyErr_Occurred ())
+	    value = value_from_longest (builtin_type_pylong, l);
+	}
+      else if (PyFloat_Check (obj))
+	{
+	  double d = PyFloat_AsDouble (obj);
+
+	  if (! PyErr_Occurred ())
+	    value = value_from_double (builtin_type_pyfloat, d);
+	}
+      else if (gdbpy_is_string (obj))
+	{
+	  char *s;
+
+	  s = python_string_to_target_string (obj);
+	  if (s != NULL)
+	    {
+	      old = make_cleanup (xfree, s);
+	      value = value_cstring (s, strlen (s), builtin_type_pychar);
+	      do_cleanups (old);
+	    }
+	}
+      else if (PyObject_TypeCheck (obj, &value_object_type))
+	value = value_copy (((value_object *) obj)->value);
+      else
+	PyErr_Format (PyExc_TypeError, _("Could not convert Python object: %s"),
+		      PyString_AsString (PyObject_Str (obj)));
     }
-  else if (PyObject_TypeCheck (obj, &value_object_type))
-    value = ((value_object *) obj)->value;
-  else
-    error (_("Could not convert Python object: %s"),
-	   PyString_AsString (PyObject_Str (obj)));
-
-  if (PyErr_Occurred ())
-    error (_("Error converting Python value."));
+  if (except.reason < 0)
+    {
+      PyErr_Format (except.reason == RETURN_QUIT
+		    ? PyExc_KeyboardInterrupt : PyExc_RuntimeError,
+		    "%s", except.message);
+      return NULL;
+    }
 
   return value;
 }
@@ -860,13 +925,22 @@ gdbpy_initialize_values (void)
 
 
 
+static PyGetSetDef value_object_getset[] = {
+  { "address", valpy_get_address, NULL, "The address of the value.",
+    NULL },
+  { "is_optimized_out", valpy_get_is_optimized_out, NULL,
+    "Boolean telling whether the value is optimized out (i.e., not available).",
+    NULL },
+  { "type", valpy_get_type, NULL, "Type of the value.", NULL },
+  {NULL}  /* Sentinel */
+};
+
 static PyMethodDef value_object_methods[] = {
-  { "address", valpy_address, METH_NOARGS, "Return the address of the value." },
   { "cast", valpy_cast, METH_VARARGS, "Cast the value to the supplied type." },
   { "dereference", valpy_dereference, METH_NOARGS, "Dereferences the value." },
-  { "type", valpy_type, METH_NOARGS, "Return type of the value." },
-  { "string", valpy_string, METH_VARARGS,
-    "Return Unicode string representation of the value." },
+  { "string", (PyCFunction) valpy_string, METH_VARARGS | METH_KEYWORDS,
+    "string ([encoding] [, errors]) -> string\n\
+Return Unicode string representation of the value." },
   {NULL}  /* Sentinel */
 };
 
@@ -933,7 +1007,7 @@ PyTypeObject value_object_type = {
   0,				  /* tp_iternext */
   value_object_methods,		  /* tp_methods */
   0,				  /* tp_members */
-  0,				  /* tp_getset */
+  value_object_getset,		  /* tp_getset */
   0,				  /* tp_base */
   0,				  /* tp_dict */
   0,				  /* tp_descr_get */

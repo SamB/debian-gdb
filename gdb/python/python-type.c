@@ -1,6 +1,6 @@
 /* Python interface to types.
 
-   Copyright (C) 2008 Free Software Foundation, Inc.
+   Copyright (C) 2008, 2009 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -26,6 +26,7 @@
 #include "cp-support.h"
 #include "demangle.h"
 #include "objfiles.h"
+#include "language.h"
 
 typedef struct pyty_type_object
 {
@@ -88,8 +89,6 @@ static struct pyty_code pyty_codes[] =
   ENTRY (TYPE_CODE_BOOL),
   ENTRY (TYPE_CODE_COMPLEX),
   ENTRY (TYPE_CODE_TYPEDEF),
-  ENTRY (TYPE_CODE_TEMPLATE),
-  ENTRY (TYPE_CODE_TEMPLATE_ARG),
   ENTRY (TYPE_CODE_NAMESPACE),
   ENTRY (TYPE_CODE_DECFLOAT),
   ENTRY (TYPE_CODE_INTERNAL_FUNCTION),
@@ -103,6 +102,7 @@ field_dealloc (PyObject *obj)
 {
   field_object *f = (field_object *) obj;
   Py_XDECREF (f->dict);
+  f->ob_type->tp_free (obj);
 }
 
 static PyObject *
@@ -125,7 +125,7 @@ field_new (void)
 
 /* Return the code for this type.  */
 static PyObject *
-typy_code (PyObject *self, PyObject *args)
+typy_get_code (PyObject *self, void *closure)
 {
   struct type *type = ((type_object *) self)->type;
   return PyInt_FromLong (TYPE_CODE (type));
@@ -175,7 +175,14 @@ convert_field (struct type *type, int field)
   if (PyObject_SetAttrString (result, "bitsize", arg) < 0)
     goto failarg;
 
-  arg = type_to_type_object (TYPE_FIELD_TYPE (type, field));
+  /* A field can have a NULL type in some situations.  */
+  if (TYPE_FIELD_TYPE (type, field) == NULL)
+    {
+      arg = Py_None;
+      Py_INCREF (arg);
+    }
+  else
+    arg = type_to_type_object (TYPE_FIELD_TYPE (type, field));
   if (!arg)
     goto fail;
   if (PyObject_SetAttrString (result, "type", arg) < 0)
@@ -225,12 +232,21 @@ typy_fields (PyObject *self, PyObject *args)
 
 /* Return the type's tag, or None.  */
 static PyObject *
-typy_tag (PyObject *self, PyObject *args)
+typy_get_tag (PyObject *self, void *closure)
 {
   struct type *type = ((type_object *) self)->type;
   if (!TYPE_TAG_NAME (type))
     Py_RETURN_NONE;
   return PyString_FromString (TYPE_TAG_NAME (type));
+}
+
+/* Return the type, stripped of typedefs. */
+static PyObject *
+typy_strip_typedefs (PyObject *self, PyObject *args)
+{
+  struct type *type = ((type_object *) self)->type;
+
+  return type_to_type_object (check_typedef (type));
 }
 
 /* Return a Type object which represents a pointer to SELF.  */
@@ -330,35 +346,36 @@ typy_unqualified (PyObject *self, PyObject *args)
 
 /* Return the size of the type represented by SELF, in bytes.  */
 static PyObject *
-typy_sizeof (PyObject *self, PyObject *args)
+typy_get_sizeof (PyObject *self, void *closure)
 {
   struct type *type = ((type_object *) self)->type;
   volatile struct gdb_exception except;
 
   TRY_CATCH (except, RETURN_MASK_ALL)
     {
-      CHECK_TYPEDEF (type);
+      check_typedef (type);
     }
-  GDB_PY_HANDLE_EXCEPTION (except);
+  /* Ignore exceptions.  */
 
   return PyLong_FromLong (TYPE_LENGTH (type));
 }
 
 static struct type *
-typy_lookup_typename (char *type_name, struct block *block)
+typy_lookup_typename (char *type_name)
 {
   struct type *type = NULL;
   volatile struct gdb_exception except;
   TRY_CATCH (except, RETURN_MASK_ALL)
     {
       if (!strncmp (type_name, "struct ", 7))
-	type = lookup_struct (type_name + 7, block);
+	type = lookup_struct (type_name + 7, NULL);
       else if (!strncmp (type_name, "union ", 6))
-	type = lookup_union (type_name + 6, block);
+	type = lookup_union (type_name + 6, NULL);
       else if (!strncmp (type_name, "enum ", 5))
-	type = lookup_enum (type_name + 5, block);
+	type = lookup_enum (type_name + 5, NULL);
       else
-	type = lookup_typename (type_name, block, 0);
+	type = lookup_typename (current_language, current_gdbarch,
+				type_name, NULL, 0);
     }
   if (except.reason < 0)
     {
@@ -372,8 +389,7 @@ typy_lookup_typename (char *type_name, struct block *block)
 }
 
 static struct type *
-typy_lookup_type (struct demangle_component *demangled,
-		  struct block *block)
+typy_lookup_type (struct demangle_component *demangled)
 {
   struct type *type;
   char *type_name;
@@ -388,7 +404,7 @@ typy_lookup_type (struct demangle_component *demangled,
       || demangled_type == DEMANGLE_COMPONENT_CONST
       || demangled_type == DEMANGLE_COMPONENT_VOLATILE)
     {
-      type = typy_lookup_type (demangled->u.s_binary.left, block);
+      type = typy_lookup_type (demangled->u.s_binary.left);
       if (! type)
 	return NULL;
 
@@ -406,7 +422,7 @@ typy_lookup_type (struct demangle_component *demangled,
     }
 
   type_name = cp_comp_to_string (demangled, 10);
-  type = typy_lookup_typename (type_name, block);
+  type = typy_lookup_typename (type_name);
   xfree (type_name);
 
   return type;
@@ -420,22 +436,9 @@ typy_template_argument (PyObject *self, PyObject *args)
   struct demangle_component *demangled;
   const char *err;
   struct type *argtype;
-  struct block *block = NULL;
-  PyObject *block_obj = NULL;
 
-  if (! PyArg_ParseTuple (args, "i|O", &argno, &block_obj))
+  if (! PyArg_ParseTuple (args, "i", &argno))
     return NULL;
-
-  if (block_obj)
-    {
-      block = block_object_to_block (block_obj);
-      if (! block)
-	{
-	  PyErr_SetString (PyExc_RuntimeError,
-			   "second argument must be block");
-	  return NULL;
-	}
-    }
 
   type = check_typedef (type);
   if (TYPE_CODE (type) == TYPE_CODE_REF)
@@ -479,7 +482,7 @@ typy_template_argument (PyObject *self, PyObject *args)
       return NULL;
     }
 
-  argtype = typy_lookup_type (demangled->u.s_binary.left, block);
+  argtype = typy_lookup_type (demangled->u.s_binary.left);
   if (! argtype)
     return NULL;
 
@@ -544,10 +547,7 @@ clean_up_objfile_types (struct objfile *objfile, void *datum)
 
       htab_empty (copied_types);
 
-      /* No need to decref the old type here, since we know it has no
-	 reference count.  */
       obj->type = copy_type_recursive (objfile, obj->type, copied_types);
-      type_incref (obj->type);
 
       obj->next = NULL;
       obj->prev = NULL;
@@ -564,7 +564,6 @@ static void
 set_type (type_object *obj, struct type *type)
 {
   obj->type = type;
-  type_incref (type);
   obj->prev = NULL;
   if (type && TYPE_OBJFILE (type))
     {
@@ -579,54 +578,10 @@ set_type (type_object *obj, struct type *type)
     obj->next = NULL;
 }
 
-static PyObject *
-typy_new (PyTypeObject *subtype, PyObject *args, PyObject *kwargs)
-{
-  char *type_name = NULL;
-  struct type *type = NULL;
-  type_object *result;
-  PyObject *block_obj = NULL;
-  struct block *block = NULL;
-
-  /* FIXME: it is strange to allow a Type with no name, but we need
-     this for type_to_type_object.  */
-  if (! PyArg_ParseTuple (args, "|sO", &type_name, &block_obj))
-    return NULL;
-
-  if (block_obj)
-    {
-      block = block_object_to_block (block_obj);
-      if (! block)
-	{
-	  PyErr_SetString (PyExc_RuntimeError,
-			   "second argument must be block");
-	  return NULL;
-	}
-    }
-
-  if (type_name)
-    {
-      type = typy_lookup_typename (type_name, block);
-      if (! type)
-	return NULL;
-    }
-
-  result = (type_object *) subtype->tp_alloc (subtype, 1);
-  if (! result)
-    return NULL;
-
-  set_type (result, type);
-
-  return (PyObject *) result;
-}
-
 static void
 typy_dealloc (PyObject *obj)
 {
   type_object *type = (type_object *) obj;
-
-  if (type->type)
-    type_decref (type->type);
 
   if (type->prev)
     type->prev->next = type->next;
@@ -666,6 +621,24 @@ type_object_to_type (PyObject *obj)
 
 
 
+/* Implementation of gdb.lookup_type.  */
+PyObject *
+gdbpy_lookup_type (PyObject *self, PyObject *args, PyObject *kw)
+{
+  static char *keywords[] = { "name", NULL };
+  char *type_name = NULL;
+  struct type *type = NULL;
+
+  if (! PyArg_ParseTupleAndKeywords (args, kw, "s", keywords, &type_name))
+    return NULL;
+
+  type = typy_lookup_typename (type_name);
+  if (! type)
+    return NULL;
+
+  return (PyObject *) type_to_type_object (type);
+}
+
 void
 gdbpy_initialize_types (void)
 {
@@ -697,27 +670,47 @@ gdbpy_initialize_types (void)
 
 
 
+static PyGetSetDef type_object_getset[] =
+{
+  { "code", typy_get_code, NULL,
+    "The code for this type.", NULL },
+  { "sizeof", typy_get_sizeof, NULL,
+    "The size of this type, in bytes.", NULL },
+  { "tag", typy_get_tag, NULL,
+    "The tag name for this type, or None.", NULL },
+  { NULL }
+};
+
 static PyMethodDef type_object_methods[] =
 {
-  { "code", typy_code, METH_NOARGS, "Return the code for this type" },
-  { "const", typy_const, METH_NOARGS, "Return a const variant of this type" },
+  { "const", typy_const, METH_NOARGS,
+    "const () -> Type\n\
+Return a const variant of this type." },
   { "fields", typy_fields, METH_NOARGS,
-    "Return a sequence holding all the fields of this type.\n\
+    "field () -> list\n\
+Return a sequence holding all the fields of this type.\n\
 Each field is a dictionary." },
-  { "pointer", typy_pointer, METH_NOARGS, "Return pointer to this type" },
-  { "reference", typy_reference, METH_NOARGS, "Return reference to this type" },
-  { "sizeof", typy_sizeof, METH_NOARGS,
-    "Return the size of this type, in bytes" },
-  { "tag", typy_tag, METH_NOARGS,
-    "Return the tag name for this type, or None." },
+  { "pointer", typy_pointer, METH_NOARGS,
+    "pointer () -> Type\n\
+Return a type of pointer to this type." },
+  { "reference", typy_reference, METH_NOARGS,
+    "reference () -> Type\n\
+Return a type of reference to this type." },
+  { "strip_typedefs", typy_strip_typedefs, METH_NOARGS,
+    "strip_typedefs () -> Type\n\
+Return a type formed by stripping this type of all typedefs."},
   { "target", typy_target, METH_NOARGS,
-    "Return the target type of this type" },
+    "target () -> Type\n\
+Return the target type of this type." },
   { "template_argument", typy_template_argument, METH_VARARGS,
-    "Return a single template argument type" },
+    "template_argument (arg) -> Type\n\
+Return the type of a template argument." },
   { "unqualified", typy_unqualified, METH_NOARGS,
-    "Return a variant of this type without const or volatile attributes" },
+    "unqualified () -> Type\n\
+Return a variant of this type without const or volatile attributes." },
   { "volatile", typy_volatile, METH_NOARGS,
-    "Return a volatile variant of this type" },
+    "volatile () -> Type\n\
+Return a volatile variant of this type" },
   { NULL }
 };
 
@@ -753,7 +746,7 @@ static PyTypeObject type_object_type =
   0,				  /* tp_iternext */
   type_object_methods,		  /* tp_methods */
   0,				  /* tp_members */
-  0,				  /* tp_getset */
+  type_object_getset,		  /* tp_getset */
   0,				  /* tp_base */
   0,				  /* tp_dict */
   0,				  /* tp_descr_get */
@@ -761,7 +754,7 @@ static PyTypeObject type_object_type =
   0,				  /* tp_dictoffset */
   0,				  /* tp_init */
   0,				  /* tp_alloc */
-  typy_new,			  /* tp_new */
+  0,				  /* tp_new */
 };
 
 static PyTypeObject field_object_type =

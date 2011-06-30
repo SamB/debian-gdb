@@ -71,8 +71,8 @@ typedef struct varobj_update_result_t
 {
   struct varobj *varobj;
   int type_changed;
-  int changed;
   int children_changed;
+  int changed;
   enum varobj_scope_status status;
   /* This variable is used internally by varobj_update to indicate if the
      new value of varobj is already computed and installed, or has to
@@ -112,12 +112,6 @@ extern void varobj_set_frozen (struct varobj *var, int frozen);
 
 extern int varobj_get_frozen (struct varobj *var);
 
-extern void varobj_get_child_range (struct varobj *var,
-				    VEC (varobj_p) *children,
-				    int *from, int *to);
-
-extern void varobj_set_child_range (struct varobj *var, int from, int to);
-
 extern char *varobj_get_display_hint (struct varobj *var);
 
 extern int varobj_get_num_children (struct varobj *var);
@@ -154,13 +148,6 @@ extern int varobj_editable_p (struct varobj *var);
 
 extern int varobj_floating_p (struct varobj *var);
 
-extern void 
-varobj_set_visualizer (struct varobj *var, const char *visualizer);
-
-extern void 
-varobj_clear_type_visualizers ();
-
-extern void 
-varobj_set_visualizer (struct varobj *var, const char *visualizer);
+extern void varobj_set_visualizer (struct varobj *var, const char *visualizer);
 
 #endif /* VAROBJ_H */

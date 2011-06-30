@@ -459,7 +459,7 @@ gnuv3_baseclass_offset (struct type *type, int index, const bfd_byte *valaddr,
      start of whichever baseclass it resides in, as a sanity measure - iff
      we have debugging information for that baseclass.  */
 
-  vbasetype = TYPE_VPTR_BASETYPE (type);
+  vbasetype = check_typedef (TYPE_VPTR_BASETYPE (type));
   vbasetype_vptr_fieldno = get_vptr_fieldno (vbasetype, NULL);
 
   if (vbasetype_vptr_fieldno >= 0
@@ -481,7 +481,7 @@ gnuv3_baseclass_offset (struct type *type, int index, const bfd_byte *valaddr,
    which has virtual table index VOFFSET.  The method has an associated
    "this" adjustment of ADJUSTMENT bytes.  */
 
-const char *
+static const char *
 gnuv3_find_method_in (struct type *domain, CORE_ADDR voffset,
 		      LONGEST adjustment)
 {

@@ -2073,6 +2073,10 @@ mn10300_elf_relax_section (bfd *abfd,
   asection *section = sec;
   bfd_vma align_gap_adjustment;
 
+  if (link_info->relocatable)
+    (*link_info->callbacks->einfo)
+      (_("%P%F: --relax and -r may not be used together\n"));
+
   /* Assume nothing changes.  */
   *again = FALSE;
 
@@ -2777,7 +2781,6 @@ mn10300_elf_relax_section (bfd *abfd,
 						      isym->st_name);
 
 	  if ((sym_sec->flags & SEC_MERGE)
-	      && ELF_ST_TYPE (isym->st_info) == STT_SECTION
 	      && sym_sec->sec_info_type == ELF_INFO_TYPE_MERGE)
 	    {
 	      symval = isym->st_value + irel->r_addend;

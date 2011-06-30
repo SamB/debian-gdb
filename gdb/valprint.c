@@ -217,6 +217,33 @@ show_addressprint (struct ui_file *file, int from_tty,
 }
 
 
+/* A helper function for val_print.  When printing in "summary" mode,
+   we want to print scalar arguments, but not aggregate arguments.
+   This function distinguishes between the two.  */
+
+static int
+scalar_type_p (struct type *type)
+{
+  CHECK_TYPEDEF (type);
+  while (TYPE_CODE (type) == TYPE_CODE_REF)
+    {
+      type = TYPE_TARGET_TYPE (type);
+      CHECK_TYPEDEF (type);
+    }
+  switch (TYPE_CODE (type))
+    {
+    case TYPE_CODE_ARRAY:
+    case TYPE_CODE_STRUCT:
+    case TYPE_CODE_UNION:
+    case TYPE_CODE_SET:
+    case TYPE_CODE_STRING:
+    case TYPE_CODE_BITSTRING:
+      return 0;
+    default:
+      return 1;
+    }
+}
+
 /* Print using the given LANGUAGE the data of type TYPE located at VALADDR
    (within GDB), which came from the inferior at address ADDRESS, onto
    stdio stream STREAM according to OPTIONS.
@@ -267,6 +294,14 @@ val_print (struct type *type, const gdb_byte *valaddr, int embedded_offset,
 				      language);
       if (ret)
 	return ret;
+    }
+
+  /* Handle summary mode.  If the value is a scalar, print it;
+     otherwise, print an ellipsis.  */
+  if (options->summary && !scalar_type_p (type))
+    {
+      fprintf_filtered (stream, "...");
+      return 0;
     }
 
   TRY_CATCH (except, RETURN_MASK_ERROR)
@@ -950,7 +985,8 @@ print_hex_chars (struct ui_file *stream, const gdb_byte *valaddr,
    Omit any leading zero chars.  */
 
 void
-print_char_chars (struct ui_file *stream, const gdb_byte *valaddr,
+print_char_chars (struct ui_file *stream, struct type *type,
+		  const gdb_byte *valaddr,
 		  unsigned len, enum bfd_endian byte_order)
 {
   const gdb_byte *p;
@@ -963,7 +999,7 @@ print_char_chars (struct ui_file *stream, const gdb_byte *valaddr,
 
       while (p < valaddr + len)
 	{
-	  LA_EMIT_CHAR (*p, stream, '\'');
+	  LA_EMIT_CHAR (*p, type, stream, '\'');
 	  ++p;
 	}
     }
@@ -975,7 +1011,7 @@ print_char_chars (struct ui_file *stream, const gdb_byte *valaddr,
 
       while (p >= valaddr)
 	{
-	  LA_EMIT_CHAR (*p, stream, '\'');
+	  LA_EMIT_CHAR (*p, type, stream, '\'');
 	  --p;
 	}
     }
@@ -1116,7 +1152,6 @@ val_print_array_elements (struct type *type, const gdb_byte *valaddr,
 
   for (; i < len && things_printed < options->print_max; i++)
     {
-      size_t elt_offset = i * eltlen;
       if (i != 0)
 	{
 	  if (options->prettyprint_arrays)
@@ -1136,7 +1171,7 @@ val_print_array_elements (struct type *type, const gdb_byte *valaddr,
       rep1 = i + 1;
       reps = 1;
       while ((rep1 < len) &&
-	     !memcmp (valaddr + elt_offset, valaddr + rep1 * eltlen, eltlen))
+	     !memcmp (valaddr + i * eltlen, valaddr + rep1 * eltlen, eltlen))
 	{
 	  ++reps;
 	  ++rep1;
@@ -1144,7 +1179,7 @@ val_print_array_elements (struct type *type, const gdb_byte *valaddr,
 
       if (reps > options->repeat_count_threshold)
 	{
-	  val_print (elttype, valaddr + elt_offset, 0, address + elt_offset,
+	  val_print (elttype, valaddr + i * eltlen, 0, address + i * eltlen,
 		     stream, recurse + 1, options, current_language);
 	  annotate_elt_rep (reps);
 	  fprintf_filtered (stream, " <repeats %u times>", reps);
@@ -1155,7 +1190,7 @@ val_print_array_elements (struct type *type, const gdb_byte *valaddr,
 	}
       else
 	{
-	  val_print (elttype, valaddr + elt_offset, 0, address + elt_offset,
+	  val_print (elttype, valaddr + i * eltlen, 0, address + i * eltlen,
 		     stream, recurse + 1, options, current_language);
 	  annotate_elt ();
 	  things_printed++;
@@ -1258,13 +1293,14 @@ read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
      some error, such as bumping into the end of the address space.  */
 
   found_nul = 0;
-  old_chain = make_cleanup (null_cleanup, 0);
+  *buffer = NULL;
+
+  old_chain = make_cleanup (free_current_contents, buffer);
 
   if (len > 0)
     {
       *buffer = (gdb_byte *) xmalloc (len * width);
       bufptr = *buffer;
-      old_chain = make_cleanup (xfree, *buffer);
 
       nfetch = partial_memory_read (addr, bufptr, len * width, &errcode)
 	/ width;
@@ -1275,8 +1311,6 @@ read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
     {
       unsigned long bufsize = 0;
 
-      *buffer = NULL;
-
       do
 	{
 	  QUIT;
@@ -1285,13 +1319,9 @@ read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
 	  if (*buffer == NULL)
 	    *buffer = (gdb_byte *) xmalloc (nfetch * width);
 	  else
-	    {
-	      discard_cleanups (old_chain);
-	      *buffer = (gdb_byte *) xrealloc (*buffer,
-					       (nfetch + bufsize) * width);
-	    }
+	    *buffer = (gdb_byte *) xrealloc (*buffer,
+					     (nfetch + bufsize) * width);
 
-	  old_chain = make_cleanup (xfree, *buffer);
 	  bufptr = *buffer + bufsize * width;
 	  bufsize += nfetch;
 
@@ -1352,7 +1382,8 @@ read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
    whichever is smaller.  */
 
 int
-val_print_string (CORE_ADDR addr, int len, int width, struct ui_file *stream,
+val_print_string (struct type *elttype, CORE_ADDR addr, int len,
+		  struct ui_file *stream,
 		  const struct value_print_options *options)
 {
   int force_ellipsis = 0;	/* Force ellipsis to be printed if nonzero.  */
@@ -1362,6 +1393,7 @@ val_print_string (CORE_ADDR addr, int len, int width, struct ui_file *stream,
   int bytes_read;
   gdb_byte *buffer = NULL;	/* Dynamically growable fetch buffer.  */
   struct cleanup *old_chain = NULL;	/* Top of the old cleanup chain.  */
+  int width = TYPE_LENGTH (elttype);
 
   /* First we need to figure out the limit on the number of characters we are
      going to attempt to fetch and print.  This is actually pretty simple.  If
@@ -1415,7 +1447,7 @@ val_print_string (CORE_ADDR addr, int len, int width, struct ui_file *stream,
 	{
 	  fputs_filtered (" ", stream);
 	}
-      LA_PRINT_STRING (stream, buffer, bytes_read / width, width, force_ellipsis, options);
+      LA_PRINT_STRING (stream, elttype, buffer, bytes_read / width, force_ellipsis, options);
     }
 
   if (errcode != 0)
@@ -1658,21 +1690,21 @@ Show printing of addresses."), NULL,
 			   show_addressprint,
 			   &setprintlist, &showprintlist);
 
-  add_setshow_uinteger_cmd ("input-radix", class_support, &input_radix_1,
-			    _("\
+  add_setshow_zuinteger_cmd ("input-radix", class_support, &input_radix_1,
+			     _("\
 Set default input radix for entering numbers."), _("\
 Show default input radix for entering numbers."), NULL,
-			    set_input_radix,
-			    show_input_radix,
-			    &setlist, &showlist);
+			     set_input_radix,
+			     show_input_radix,
+			     &setlist, &showlist);
 
-  add_setshow_uinteger_cmd ("output-radix", class_support, &output_radix_1,
-			    _("\
+  add_setshow_zuinteger_cmd ("output-radix", class_support, &output_radix_1,
+			     _("\
 Set default output radix for printing of values."), _("\
 Show default output radix for printing of values."), NULL,
-			    set_output_radix,
-			    show_output_radix,
-			    &setlist, &showlist);
+			     set_output_radix,
+			     show_output_radix,
+			     &setlist, &showlist);
 
   /* The "set radix" and "show radix" commands are special in that
      they are like normal set and show commands but allow two normally

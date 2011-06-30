@@ -29,6 +29,7 @@
 struct field;
 struct block;
 struct value_print_options;
+struct language_defn;
 
 /* Some macros for char-based bitfields.  */
 
@@ -1101,7 +1102,7 @@ extern struct type *builtin_type_error;
 	      0, size)  \
     : xzalloc (size))
 
-extern struct type *alloc_type (struct objfile *, struct type *);
+extern struct type *alloc_type (struct objfile *);
 
 extern struct type *init_type (enum type_code, int, int, char *,
 			       struct objfile *);
@@ -1115,6 +1116,10 @@ extern struct type *init_type (enum type_code, int, int, char *,
 extern struct type *init_composite_type (char *name, enum type_code code);
 extern void append_composite_type_field (struct type *t, char *name,
 					 struct type *field);
+extern void append_composite_type_field_aligned (struct type *t,
+						 char *name,
+						 struct type *field,
+						 int alignment);
 
 /* Helper functions to construct a bit flags type.  An initially empty
    type is created using init_flag_type().  Flags are then added using
@@ -1161,7 +1166,8 @@ extern struct type *make_pointer_type (struct type *, struct type **);
 
 extern struct type *lookup_pointer_type (struct type *);
 
-extern struct type *make_function_type (struct type *, struct type **);
+extern struct type *make_function_type (struct type *, struct type **,
+					struct objfile *);
 
 extern struct type *lookup_function_type (struct type *);
 
@@ -1171,30 +1177,36 @@ extern struct type *create_range_type (struct type *, struct type *, int,
 extern struct type *create_array_type (struct type *, struct type *,
 				       struct type *);
 
-extern struct type *create_string_type (struct type *, struct type *);
+extern struct type *create_string_type (struct type *, struct type *,
+					struct type *);
 
 extern struct type *create_set_type (struct type *, struct type *);
 
-extern struct type *lookup_unsigned_typename (char *);
+extern struct type *lookup_unsigned_typename (const struct language_defn *,
+					      struct gdbarch *,char *);
 
-extern struct type *lookup_signed_typename (char *);
+extern struct type *lookup_signed_typename (const struct language_defn *,
+					    struct gdbarch *,char *);
 
 extern struct type *check_typedef (struct type *);
 
-#define CHECK_TYPEDEF(TYPE) (TYPE) = check_typedef (TYPE)
+#define CHECK_TYPEDEF(TYPE)			\
+  do {						\
+    (TYPE) = check_typedef (TYPE);		\
+  } while (0)
 
 extern void check_stub_method_group (struct type *, int);
 
 extern char *gdb_mangle_name (struct type *, int, int);
 
-extern struct type *lookup_typename (char *, struct block *, int);
+extern struct type *lookup_typename (const struct language_defn *,
+				     struct gdbarch *, char *,
+				     struct block *, int);
 
 extern struct type *lookup_template_type (char *, struct type *,
 					  struct block *);
 
 extern int get_vptr_fieldno (struct type *, struct type **);
-
-extern int get_destructor_fn_field (struct type *, int *, int *);
 
 extern int get_discrete_bounds (struct type *, LONGEST *, LONGEST *);
 
@@ -1267,9 +1279,5 @@ extern struct type *copy_type_recursive (struct objfile *objfile,
 					 htab_t copied_types);
 
 extern struct type *copy_type (const struct type *type);
-
-extern void type_incref (struct type *type);
-
-extern void type_decref (struct type *type);
 
 #endif /* GDBTYPES_H */
