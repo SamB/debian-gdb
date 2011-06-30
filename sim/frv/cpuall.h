@@ -2,7 +2,7 @@
 
 THIS FILE IS MACHINE GENERATED WITH CGEN.
 
-Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+Copyright 1996-2004 Free Software Foundation, Inc.
 
 This file is part of the GNU simulators.
 
@@ -39,6 +39,7 @@ extern const MACH fr550_mach;
 extern const MACH fr500_mach;
 extern const MACH tomcat_mach;
 extern const MACH fr400_mach;
+extern const MACH fr450_mach;
 extern const MACH simple_mach;
 
 #ifndef WANT_CPU

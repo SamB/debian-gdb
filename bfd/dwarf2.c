@@ -61,8 +61,8 @@ struct attribute
   {
     char *str;
     struct dwarf_block *blk;
-    bfd_vma val;
-    bfd_signed_vma sval;
+    bfd_uint64_t val;
+    bfd_int64_t sval;
   }
   u;
 };
@@ -230,7 +230,7 @@ read_4_bytes (bfd *abfd, char *buf)
   return bfd_get_32 (abfd, buf);
 }
 
-static bfd_vma
+static bfd_uint64_t
 read_8_bytes (bfd *abfd, char *buf)
 {
   return bfd_get_64 (abfd, buf);
@@ -268,7 +268,7 @@ read_indirect_string (struct comp_unit* unit,
 		      char *buf,
 		      unsigned int *bytes_read_ptr)
 {
-  bfd_vma offset;
+  bfd_uint64_t offset;
   struct dwarf2_debug *stash = unit->stash;
 
   if (unit->offset_size == 4)
@@ -281,6 +281,7 @@ read_indirect_string (struct comp_unit* unit,
     {
       asection *msec;
       bfd *abfd = unit->abfd;
+      bfd_size_type sz;
 
       msec = bfd_get_section_by_name (abfd, ".debug_str");
       if (! msec)
@@ -291,13 +292,14 @@ read_indirect_string (struct comp_unit* unit,
 	  return NULL;
 	}
 
-      stash->dwarf_str_size = msec->_raw_size;
-      stash->dwarf_str_buffer = bfd_alloc (abfd, msec->_raw_size);
+      sz = msec->rawsize ? msec->rawsize : msec->size;
+      stash->dwarf_str_size = sz;
+      stash->dwarf_str_buffer = bfd_alloc (abfd, sz);
       if (! stash->dwarf_abbrev_buffer)
 	return NULL;
 
       if (! bfd_get_section_contents (abfd, msec, stash->dwarf_str_buffer,
-				      0, msec->_raw_size))
+				      0, sz))
 	return NULL;
     }
 
@@ -378,7 +380,7 @@ read_signed_leb128 (bfd *abfd ATTRIBUTE_UNUSED,
 
 /* END VERBATIM */
 
-static bfd_vma
+static bfd_uint64_t
 read_address (struct comp_unit *unit, char *buf)
 {
   switch (unit->addr_size)
@@ -422,7 +424,7 @@ lookup_abbrev (unsigned int number, struct abbrev_info **abbrevs)
    in a hash table.  */
 
 static struct abbrev_info**
-read_abbrevs (bfd *abfd, bfd_vma offset, struct dwarf2_debug *stash)
+read_abbrevs (bfd *abfd, bfd_uint64_t offset, struct dwarf2_debug *stash)
 {
   struct abbrev_info **abbrevs;
   char *abbrev_ptr;
@@ -443,7 +445,7 @@ read_abbrevs (bfd *abfd, bfd_vma offset, struct dwarf2_debug *stash)
 	  return 0;
 	}
 
-      stash->dwarf_abbrev_size = msec->_raw_size;
+      stash->dwarf_abbrev_size = msec->size;
       stash->dwarf_abbrev_buffer
 	= bfd_simple_get_relocated_section_contents (abfd, msec, NULL,
 						     stash->syms);
@@ -801,10 +803,9 @@ add_line_info (struct line_info_table *table,
   info->column = column;
   info->end_sequence = end_sequence;
 
-  amt = strlen (filename);
-  if (amt)
+  if (filename && filename[0])
     {
-      info->filename = bfd_alloc (table->abfd, amt + 1);
+      info->filename = bfd_alloc (table->abfd, strlen (filename) + 1);
       if (info->filename)
 	strcpy (info->filename, filename);
     }
@@ -922,7 +923,7 @@ decode_line_info (struct comp_unit *unit, struct dwarf2_debug *stash)
 	  return 0;
 	}
 
-      stash->dwarf_line_size = msec->_raw_size;
+      stash->dwarf_line_size = msec->size;
       stash->dwarf_line_buffer
 	= bfd_simple_get_relocated_section_contents (abfd, msec, NULL,
 						     stash->syms);
@@ -1436,7 +1437,7 @@ parse_comp_unit (bfd *abfd,
 {
   struct comp_unit* unit;
   unsigned int version;
-  bfd_vma abbrev_offset = 0;
+  bfd_uint64_t abbrev_offset = 0;
   unsigned int addr_size;
   struct abbrev_info** abbrevs;
   unsigned int abbrev_number, bytes_read, i;
@@ -1677,7 +1678,7 @@ find_debug_info (bfd *abfd, asection *after_sec)
   return NULL;
 }
 
-/* The DWARF2 version of find_nearest line.  Return TRUE if the line
+/* The DWARF2 version of find_nearest_line.  Return TRUE if the line
    is found without error.  ADDR_SIZE is the number of bytes in the
    initial .debug_info length field and in the abbreviation offset.
    You may use zero to indicate that the default value should be
@@ -1702,13 +1703,19 @@ _bfd_dwarf2_find_nearest_line (bfd *abfd,
      We keep a list of all the previously read compilation units, and
      a pointer to the next un-read compilation unit.  Check the
      previously read units before reading more.  */
-  struct dwarf2_debug *stash = *pinfo;
+  struct dwarf2_debug *stash;
 
   /* What address are we looking for?  */
-  bfd_vma addr = offset + section->vma;
+  bfd_vma addr;
 
   struct comp_unit* each;
 
+  stash = *pinfo;
+  addr = offset;
+  if (section->output_section)
+    addr += section->output_section->vma + section->output_offset;
+  else
+    addr += section->vma;
   *filename_ptr = NULL;
   *functionname_ptr = NULL;
   *linenumber_ptr = 0;
@@ -1745,7 +1752,7 @@ _bfd_dwarf2_find_nearest_line (bfd *abfd,
 	 In the second pass we read in the section's contents.  The allows
 	 us to avoid reallocing the data as we add sections to the stash.  */
       for (total_size = 0; msec; msec = find_debug_info (abfd, msec))
-	total_size += msec->_raw_size;
+	total_size += msec->size;
 
       stash->info_ptr = bfd_alloc (abfd, total_size);
       if (stash->info_ptr == NULL)
@@ -1760,7 +1767,7 @@ _bfd_dwarf2_find_nearest_line (bfd *abfd,
 	  bfd_size_type size;
 	  bfd_size_type start;
 
-	  size = msec->_raw_size;
+	  size = msec->size;
 	  if (size == 0)
 	    continue;
 
@@ -1834,7 +1841,7 @@ _bfd_dwarf2_find_nearest_line (bfd *abfd,
 	  stash->info_ptr += length;
 
 	  if ((bfd_vma) (stash->info_ptr - stash->sec_info_ptr)
-	      == stash->sec->_raw_size)
+	      == stash->sec->size)
 	    {
 	      stash->sec = find_debug_info (abfd, stash->sec);
 	      stash->sec_info_ptr = stash->info_ptr;

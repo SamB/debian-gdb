@@ -1,6 +1,6 @@
-This is gdb.info, produced by makeinfo version 4.6 from ./gdb.texinfo.
+This is gdb.info, produced by makeinfo version 4.7 from ./gdb.texinfo.
 
-INFO-DIR-SECTION Programming & development tools.
+INFO-DIR-SECTION Software development
 START-INFO-DIR-ENTRY
 * Gdb: (gdb).                     The GNU debugger.
 END-INFO-DIR-ENTRY
@@ -8,7 +8,7 @@ END-INFO-DIR-ENTRY
    This file documents the GNU debugger GDB.
 
    This is the Ninth Edition, of `Debugging with GDB: the GNU
-Source-Level Debugger' for GDB Version 6.1.
+Source-Level Debugger' for GDB Version 6.3.
 
    Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
 1998,
@@ -27,10 +27,433 @@ published by the Free Software Foundation raise funds for GNU
 development."
 
 
+File: gdb.info,  Node: Bug Criteria,  Next: Bug Reporting,  Up: GDB Bugs
+
+26.1 Have you found a bug?
+==========================
+
+If you are not sure whether you have found a bug, here are some
+guidelines:
+
+   * If the debugger gets a fatal signal, for any input whatever, that
+     is a GDB bug.  Reliable debuggers never crash.
+
+   * If GDB produces an error message for valid input, that is a bug.
+     (Note that if you're cross debugging, the problem may also be
+     somewhere in the connection to the target.)
+
+   * If GDB does not produce an error message for invalid input, that
+     is a bug.  However, you should note that your idea of "invalid
+     input" might be our idea of "an extension" or "support for
+     traditional practice".
+
+   * If you are an experienced user of debugging tools, your suggestions
+     for improvement of GDB are welcome in any case.
+
+
+File: gdb.info,  Node: Bug Reporting,  Prev: Bug Criteria,  Up: GDB Bugs
+
+26.2 How to report bugs
+=======================
+
+A number of companies and individuals offer support for GNU products.
+If you obtained GDB from a support organization, we recommend you
+contact that organization first.
+
+   You can find contact information for many support companies and
+individuals in the file `etc/SERVICE' in the GNU Emacs distribution.
+
+   In any event, we also recommend that you submit bug reports for GDB.
+The prefered method is to submit them directly using GDB's Bugs web
+page (http://www.gnu.org/software/gdb/bugs/).  Alternatively, the
+e-mail gateway <bug-gdb@gnu.org> can be used.
+
+   *Do not send bug reports to `info-gdb', or to `help-gdb', or to any
+newsgroups.*  Most users of GDB do not want to receive bug reports.
+Those that do have arranged to receive `bug-gdb'.
+
+   The mailing list `bug-gdb' has a newsgroup `gnu.gdb.bug' which
+serves as a repeater.  The mailing list and the newsgroup carry exactly
+the same messages.  Often people think of posting bug reports to the
+newsgroup instead of mailing them.  This appears to work, but it has one
+problem which can be crucial: a newsgroup posting often lacks a mail
+path back to the sender.  Thus, if we need to ask for more information,
+we may be unable to reach you.  For this reason, it is better to send
+bug reports to the mailing list.
+
+   The fundamental principle of reporting bugs usefully is this:
+*report all the facts*.  If you are not sure whether to state a fact or
+leave it out, state it!
+
+   Often people omit facts because they think they know what causes the
+problem and assume that some details do not matter.  Thus, you might
+assume that the name of the variable you use in an example does not
+matter.  Well, probably it does not, but one cannot be sure.  Perhaps
+the bug is a stray memory reference which happens to fetch from the
+location where that name is stored in memory; perhaps, if the name were
+different, the contents of that location would fool the debugger into
+doing the right thing despite the bug.  Play it safe and give a
+specific, complete example.  That is the easiest thing for you to do,
+and the most helpful.
+
+   Keep in mind that the purpose of a bug report is to enable us to fix
+the bug.  It may be that the bug has been reported previously, but
+neither you nor we can know that unless your bug report is complete and
+self-contained.
+
+   Sometimes people give a few sketchy facts and ask, "Does this ring a
+bell?"  Those bug reports are useless, and we urge everyone to _refuse
+to respond to them_ except to chide the sender to report bugs properly.
+
+   To enable us to fix the bug, you should include all these things:
+
+   * The version of GDB.  GDB announces it if you start with no
+     arguments; you can also print it at any time using `show version'.
+
+     Without this, we will not know whether there is any point in
+     looking for the bug in the current version of GDB.
+
+   * The type of machine you are using, and the operating system name
+     and version number.
+
+   * What compiler (and its version) was used to compile GDB--e.g.
+     "gcc-2.8.1".
+
+   * What compiler (and its version) was used to compile the program
+     you are debugging--e.g.  "gcc-2.8.1", or "HP92453-01 A.10.32.03 HP
+     C Compiler".  For GCC, you can say `gcc --version' to get this
+     information; for other compilers, see the documentation for those
+     compilers.
+
+   * The command arguments you gave the compiler to compile your
+     example and observe the bug.  For example, did you use `-O'?  To
+     guarantee you will not omit something important, list them all.  A
+     copy of the Makefile (or the output from make) is sufficient.
+
+     If we were to try to guess the arguments, we would probably guess
+     wrong and then we might not encounter the bug.
+
+   * A complete input script, and all necessary source files, that will
+     reproduce the bug.
+
+   * A description of what behavior you observe that you believe is
+     incorrect.  For example, "It gets a fatal signal."
+
+     Of course, if the bug is that GDB gets a fatal signal, then we
+     will certainly notice it.  But if the bug is incorrect output, we
+     might not notice unless it is glaringly wrong.  You might as well
+     not give us a chance to make a mistake.
+
+     Even if the problem you experience is a fatal signal, you should
+     still say so explicitly.  Suppose something strange is going on,
+     such as, your copy of GDB is out of synch, or you have encountered
+     a bug in the C library on your system.  (This has happened!)  Your
+     copy might crash and ours would not.  If you told us to expect a
+     crash, then when ours fails to crash, we would know that the bug
+     was not happening for us.  If you had not told us to expect a
+     crash, then we would not be able to draw any conclusion from our
+     observations.
+
+     To collect all this information, you can use a session recording
+     program such as `script', which is available on many Unix systems.
+     Just run your GDB session inside `script' and then include the
+     `typescript' file with your bug report.
+
+     Another way to record a GDB session is to run GDB inside Emacs and
+     then save the entire buffer to a file.
+
+   * If you wish to suggest changes to the GDB source, send us context
+     diffs.  If you even discuss something in the GDB source, refer to
+     it by context, not by line number.
+
+     The line numbers in our development sources will not match those
+     in your sources.  Your line numbers would convey no useful
+     information to us.
+
+
+   Here are some things that are not necessary:
+
+   * A description of the envelope of the bug.
+
+     Often people who encounter a bug spend a lot of time investigating
+     which changes to the input file will make the bug go away and which
+     changes will not affect it.
+
+     This is often time consuming and not very useful, because the way
+     we will find the bug is by running a single example under the
+     debugger with breakpoints, not by pure deduction from a series of
+     examples.  We recommend that you save your time for something else.
+
+     Of course, if you can find a simpler example to report _instead_
+     of the original one, that is a convenience for us.  Errors in the
+     output will be easier to spot, running under the debugger will take
+     less time, and so on.
+
+     However, simplification is not vital; if you do not want to do
+     this, report the bug anyway and send us the entire test case you
+     used.
+
+   * A patch for the bug.
+
+     A patch for the bug does help us if it is a good one.  But do not
+     omit the necessary information, such as the test case, on the
+     assumption that a patch is all we need.  We might see problems
+     with your patch and decide to fix the problem another way, or we
+     might not understand it at all.
+
+     Sometimes with a program as complicated as GDB it is very hard to
+     construct an example that will make the program follow a certain
+     path through the code.  If you do not send us the example, we will
+     not be able to construct one, so we will not be able to verify
+     that the bug is fixed.
+
+     And if we cannot understand what bug you are trying to fix, or why
+     your patch should be an improvement, we will not install it.  A
+     test case will help us to understand.
+
+   * A guess about what the bug is or what it depends on.
+
+     Such guesses are usually wrong.  Even we cannot guess right about
+     such things without first using the debugger to find the facts.
+
+
+File: gdb.info,  Node: Command Line Editing,  Next: Using History Interactively,  Prev: Formatting Documentation,  Up: Top
+
+27 Command Line Editing
+***********************
+
+This chapter describes the basic features of the GNU command line
+editing interface.
+
+* Menu:
+
+* Introduction and Notation::	Notation used in this text.
+* Readline Interaction::	The minimum set of commands for editing a line.
+* Readline Init File::		Customizing Readline from a user's view.
+* Bindable Readline Commands::	A description of most of the Readline commands
+				available for binding
+* Readline vi Mode::		A short description of how to make Readline
+				behave like the vi editor.
+
+
+File: gdb.info,  Node: Introduction and Notation,  Next: Readline Interaction,  Up: Command Line Editing
+
+27.1 Introduction to Line Editing
+=================================
+
+The following paragraphs describe the notation used to represent
+keystrokes.
+
+   The text `C-k' is read as `Control-K' and describes the character
+produced when the <k> key is pressed while the Control key is depressed.
+
+   The text `M-k' is read as `Meta-K' and describes the character
+produced when the Meta key (if you have one) is depressed, and the <k>
+key is pressed.  The Meta key is labeled <ALT> on many keyboards.  On
+keyboards with two keys labeled <ALT> (usually to either side of the
+space bar), the <ALT> on the left side is generally set to work as a
+Meta key.  The <ALT> key on the right may also be configured to work as
+a Meta key or may be configured as some other modifier, such as a
+Compose key for typing accented characters.
+
+   If you do not have a Meta or <ALT> key, or another key working as a
+Meta key, the identical keystroke can be generated by typing <ESC>
+_first_, and then typing <k>.  Either process is known as "metafying"
+the <k> key.
+
+   The text `M-C-k' is read as `Meta-Control-k' and describes the
+character produced by "metafying" `C-k'.
+
+   In addition, several keys have their own names.  Specifically,
+<DEL>, <ESC>, <LFD>, <SPC>, <RET>, and <TAB> all stand for themselves
+when seen in this text, or in an init file (*note Readline Init File::).
+If your keyboard lacks a <LFD> key, typing <C-j> will produce the
+desired character.  The <RET> key may be labeled <Return> or <Enter> on
+some keyboards.
+
+
+File: gdb.info,  Node: Readline Interaction,  Next: Readline Init File,  Prev: Introduction and Notation,  Up: Command Line Editing
+
+27.2 Readline Interaction
+=========================
+
+Often during an interactive session you type in a long line of text,
+only to notice that the first word on the line is misspelled.  The
+Readline library gives you a set of commands for manipulating the text
+as you type it in, allowing you to just fix your typo, and not forcing
+you to retype the majority of the line.  Using these editing commands,
+you move the cursor to the place that needs correction, and delete or
+insert the text of the corrections.  Then, when you are satisfied with
+the line, you simply press <RET>.  You do not have to be at the end of
+the line to press <RET>; the entire line is accepted regardless of the
+location of the cursor within the line.
+
+* Menu:
+
+* Readline Bare Essentials::	The least you need to know about Readline.
+* Readline Movement Commands::	Moving about the input line.
+* Readline Killing Commands::	How to delete text, and how to get it back!
+* Readline Arguments::		Giving numeric arguments to commands.
+* Searching::			Searching through previous lines.
+
+
+File: gdb.info,  Node: Readline Bare Essentials,  Next: Readline Movement Commands,  Up: Readline Interaction
+
+27.2.1 Readline Bare Essentials
+-------------------------------
+
+In order to enter characters into the line, simply type them.  The typed
+character appears where the cursor was, and then the cursor moves one
+space to the right.  If you mistype a character, you can use your erase
+character to back up and delete the mistyped character.
+
+   Sometimes you may mistype a character, and not notice the error
+until you have typed several other characters.  In that case, you can
+type `C-b' to move the cursor to the left, and then correct your
+mistake.  Afterwards, you can move the cursor to the right with `C-f'.
+
+   When you add text in the middle of a line, you will notice that
+characters to the right of the cursor are `pushed over' to make room
+for the text that you have inserted.  Likewise, when you delete text
+behind the cursor, characters to the right of the cursor are `pulled
+back' to fill in the blank space created by the removal of the text.  A
+list of the bare essentials for editing the text of an input line
+follows.
+
+`C-b'
+     Move back one character.
+
+`C-f'
+     Move forward one character.
+
+<DEL> or <Backspace>
+     Delete the character to the left of the cursor.
+
+`C-d'
+     Delete the character underneath the cursor.
+
+Printing characters
+     Insert the character into the line at the cursor.
+
+`C-_' or `C-x C-u'
+     Undo the last editing command.  You can undo all the way back to an
+     empty line.
+
+(Depending on your configuration, the <Backspace> key be set to delete
+the character to the left of the cursor and the <DEL> key set to delete
+the character underneath the cursor, like `C-d', rather than the
+character to the left of the cursor.)
+
+
+File: gdb.info,  Node: Readline Movement Commands,  Next: Readline Killing Commands,  Prev: Readline Bare Essentials,  Up: Readline Interaction
+
+27.2.2 Readline Movement Commands
+---------------------------------
+
+The above table describes the most basic keystrokes that you need in
+order to do editing of the input line.  For your convenience, many
+other commands have been added in addition to `C-b', `C-f', `C-d', and
+<DEL>.  Here are some commands for moving more rapidly about the line.
+
+`C-a'
+     Move to the start of the line.
+
+`C-e'
+     Move to the end of the line.
+
+`M-f'
+     Move forward a word, where a word is composed of letters and
+     digits.
+
+`M-b'
+     Move backward a word.
+
+`C-l'
+     Clear the screen, reprinting the current line at the top.
+
+   Notice how `C-f' moves forward a character, while `M-f' moves
+forward a word.  It is a loose convention that control keystrokes
+operate on characters while meta keystrokes operate on words.
+
+
+File: gdb.info,  Node: Readline Killing Commands,  Next: Readline Arguments,  Prev: Readline Movement Commands,  Up: Readline Interaction
+
+27.2.3 Readline Killing Commands
+--------------------------------
+
+"Killing" text means to delete the text from the line, but to save it
+away for later use, usually by "yanking" (re-inserting) it back into
+the line.  (`Cut' and `paste' are more recent jargon for `kill' and
+`yank'.)
+
+   If the description for a command says that it `kills' text, then you
+can be sure that you can get the text back in a different (or the same)
+place later.
+
+   When you use a kill command, the text is saved in a "kill-ring".
+Any number of consecutive kills save all of the killed text together, so
+that when you yank it back, you get it all.  The kill ring is not line
+specific; the text that you killed on a previously typed line is
+available to be yanked back later, when you are typing another line.  
+
+   Here is the list of commands for killing text.
+
+`C-k'
+     Kill the text from the current cursor position to the end of the
+     line.
+
+`M-d'
+     Kill from the cursor to the end of the current word, or, if between
+     words, to the end of the next word.  Word boundaries are the same
+     as those used by `M-f'.
+
+`M-<DEL>'
+     Kill from the cursor the start of the current word, or, if between
+     words, to the start of the previous word.  Word boundaries are the
+     same as those used by `M-b'.
+
+`C-w'
+     Kill from the cursor to the previous whitespace.  This is
+     different than `M-<DEL>' because the word boundaries differ.
+
+
+   Here is how to "yank" the text back into the line.  Yanking means to
+copy the most-recently-killed text from the kill buffer.
+
+`C-y'
+     Yank the most recently killed text back into the buffer at the
+     cursor.
+
+`M-y'
+     Rotate the kill-ring, and yank the new top.  You can only do this
+     if the prior command is `C-y' or `M-y'.
+
+
+File: gdb.info,  Node: Readline Arguments,  Next: Searching,  Prev: Readline Killing Commands,  Up: Readline Interaction
+
+27.2.4 Readline Arguments
+-------------------------
+
+You can pass numeric arguments to Readline commands.  Sometimes the
+argument acts as a repeat count, other times it is the sign of the
+argument that is significant.  If you pass a negative argument to a
+command which normally acts in a forward direction, that command will
+act in a backward direction.  For example, to kill text back to the
+start of the line, you might type `M-- C-k'.
+
+   The general way to pass numeric arguments to a command is to type
+meta digits before the command.  If the first `digit' typed is a minus
+sign (`-'), then the sign of the argument will be negative.  Once you
+have typed one meta digit to get the argument started, you can type the
+remainder of the digits, and then the command.  For example, to give
+the `C-d' command an argument of 10, you could type `M-1 0 C-d', which
+will delete the next ten characters on the input line.
+
+
 File: gdb.info,  Node: Searching,  Prev: Readline Arguments,  Up: Readline Interaction
 
-Searching for Commands in the History
--------------------------------------
+27.2.5 Searching for Commands in the History
+--------------------------------------------
 
 Readline provides commands for searching through the command history
 for lines containing a specified string.  There are two search modes:
@@ -70,8 +493,8 @@ typed by the user or be part of the contents of the current line.
 
 File: gdb.info,  Node: Readline Init File,  Next: Bindable Readline Commands,  Prev: Readline Interaction,  Up: Command Line Editing
 
-Readline Init File
-==================
+27.3 Readline Init File
+=======================
 
 Although the Readline library comes with a set of Emacs-like
 keybindings installed by default, it is possible to use a different set
@@ -98,8 +521,8 @@ incorporating any changes that you might have made to it.
 
 File: gdb.info,  Node: Readline Init File Syntax,  Next: Conditional Init Constructs,  Up: Readline Init File
 
-Readline Init File Syntax
--------------------------
+27.3.1 Readline Init File Syntax
+--------------------------------
 
 There are only a few basic constructs allowed in the Readline init
 file.  Blank lines are ignored.  Lines beginning with a `#' are
@@ -379,8 +802,8 @@ Key Bindings
 
 File: gdb.info,  Node: Conditional Init Constructs,  Next: Sample Init File,  Prev: Readline Init File Syntax,  Up: Readline Init File
 
-Conditional Init Constructs
----------------------------
+27.3.2 Conditional Init Constructs
+----------------------------------
 
 Readline implements a facility similar in spirit to the conditional
 compilation features of the C preprocessor which allows key bindings
@@ -439,8 +862,8 @@ are four parser directives used.
 
 File: gdb.info,  Node: Sample Init File,  Prev: Conditional Init Constructs,  Up: Readline Init File
 
-Sample Init File
-----------------
+27.3.3 Sample Init File
+-----------------------
 
 Here is an example of an INPUTRC file.  This illustrates key binding,
 variable assignment, and conditional syntax.
@@ -456,16 +879,16 @@ variable assignment, and conditional syntax.
      # First, include any systemwide bindings and variable
      # assignments from /etc/Inputrc
      $include /etc/Inputrc
-     
+
      #
      # Set various bindings for emacs mode.
-     
+
      set editing-mode emacs
-     
+
      $if mode=emacs
-     
+
      Meta-Control-h:	backward-kill-word	Text after the function name is ignored
-     
+
      #
      # Arrow keys in keypad mode
      #
@@ -494,14 +917,14 @@ variable assignment, and conditional syntax.
      #"\M-\C-[C":       forward-char
      #"\M-\C-[A":       previous-history
      #"\M-\C-[B":       next-history
-     
+
      C-q: quoted-insert
-     
+
      $endif
-     
+
      # An old-style binding.  This happens to be the default.
      TAB: complete
-     
+
      # Macros that are convenient for shell interaction
      $if Bash
      # edit the path
@@ -520,25 +943,25 @@ variable assignment, and conditional syntax.
      # Edit variable on current line.
      "\M-\C-v": "\C-a\C-k$\C-y\M-\C-e\C-a\C-y="
      $endif
-     
+
      # use a visible bell if one is available
      set bell-style visible
-     
+
      # don't strip characters to 7 bits when reading
      set input-meta on
-     
+
      # allow iso-latin1 characters to be inserted rather
      # than converted to prefix-meta sequences
      set convert-meta off
-     
+
      # display characters with the eighth bit set directly
      # rather than as meta-prefixed characters
      set output-meta on
-     
+
      # if there are more than 150 possible completions for
      # a word, ask the user if he wants to see all of them
      set completion-query-items 150
-     
+
      # For FTP
      $if Ftp
      "\C-xg": "get \M-?"
@@ -549,8 +972,8 @@ variable assignment, and conditional syntax.
 
 File: gdb.info,  Node: Bindable Readline Commands,  Next: Readline vi Mode,  Prev: Readline Init File,  Up: Command Line Editing
 
-Bindable Readline Commands
-==========================
+27.4 Bindable Readline Commands
+===============================
 
 * Menu:
 
@@ -575,8 +998,8 @@ as the "region".
 
 File: gdb.info,  Node: Commands For Moving,  Next: Commands For History,  Up: Bindable Readline Commands
 
-Commands For Moving
--------------------
+27.4.1 Commands For Moving
+--------------------------
 
 `beginning-of-line (C-a)'
      Move to the start of the current line.
@@ -609,8 +1032,8 @@ Commands For Moving
 
 File: gdb.info,  Node: Commands For History,  Next: Commands For Text,  Prev: Commands For Moving,  Up: Bindable Readline Commands
 
-Commands For Manipulating The History
--------------------------------------
+27.4.2 Commands For Manipulating The History
+--------------------------------------------
 
 `accept-line (Newline or Return)'
      Accept the line regardless of where the cursor is.  If this line is
@@ -679,8 +1102,8 @@ Commands For Manipulating The History
 
 File: gdb.info,  Node: Commands For Text,  Next: Commands For Killing,  Prev: Commands For History,  Up: Bindable Readline Commands
 
-Commands For Changing Text
---------------------------
+27.4.3 Commands For Changing Text
+---------------------------------
 
 `delete-char (C-d)'
      Delete the character at point.  If point is at the beginning of
@@ -747,8 +1170,8 @@ Commands For Changing Text
 
 File: gdb.info,  Node: Commands For Killing,  Next: Numeric Arguments,  Prev: Commands For Text,  Up: Bindable Readline Commands
 
-Killing And Yanking
--------------------
+27.4.4 Killing And Yanking
+--------------------------
 
 `kill-line (C-k)'
      Kill the text from point to the end of the line.
@@ -808,8 +1231,8 @@ Killing And Yanking
 
 File: gdb.info,  Node: Numeric Arguments,  Next: Commands For Completion,  Prev: Commands For Killing,  Up: Bindable Readline Commands
 
-Specifying Numeric Arguments
-----------------------------
+27.4.5 Specifying Numeric Arguments
+-----------------------------------
 
 `digit-argument (M-0, M-1, ... M--)'
      Add this digit to the argument already accumulating, or start a new
@@ -831,8 +1254,8 @@ Specifying Numeric Arguments
 
 File: gdb.info,  Node: Commands For Completion,  Next: Keyboard Macros,  Prev: Numeric Arguments,  Up: Bindable Readline Commands
 
-Letting Readline Type For You
------------------------------
+27.4.6 Letting Readline Type For You
+------------------------------------
 
 `complete (<TAB>)'
      Attempt to perform completion on the text before point.  The
@@ -868,8 +1291,8 @@ Letting Readline Type For You
 
 File: gdb.info,  Node: Keyboard Macros,  Next: Miscellaneous Commands,  Prev: Commands For Completion,  Up: Bindable Readline Commands
 
-Keyboard Macros
----------------
+27.4.7 Keyboard Macros
+----------------------
 
 `start-kbd-macro (C-x ()'
      Begin saving the characters typed into the current keyboard macro.
@@ -886,8 +1309,8 @@ Keyboard Macros
 
 File: gdb.info,  Node: Miscellaneous Commands,  Prev: Keyboard Macros,  Up: Bindable Readline Commands
 
-Some Miscellaneous Commands
----------------------------
+27.4.8 Some Miscellaneous Commands
+----------------------------------
 
 `re-read-init-file (C-x C-r)'
      Read in the contents of the INPUTRC file, and incorporate any
@@ -974,8 +1397,8 @@ Some Miscellaneous Commands
 
 File: gdb.info,  Node: Readline vi Mode,  Prev: Bindable Readline Commands,  Up: Command Line Editing
 
-Readline vi Mode
-================
+27.5 Readline vi Mode
+=====================
 
 While the Readline library does not have a full set of `vi' editing
 functions, it does contain enough to allow simple editing of the line.
@@ -996,8 +1419,8 @@ the standard `vi' movement keys, move to previous history lines with
 
 File: gdb.info,  Node: Using History Interactively,  Next: Installing GDB,  Prev: Command Line Editing,  Up: Top
 
-Using History Interactively
-***************************
+28 Using History Interactively
+******************************
 
 This chapter describes how to use the GNU History Library interactively,
 from a user's standpoint.  It should be considered a user's guide.
@@ -1009,8 +1432,8 @@ from a user's standpoint.  It should be considered a user's guide.
 
 File: gdb.info,  Node: History Interaction,  Up: Using History Interactively
 
-History Expansion
-=================
+28.1 History Expansion
+======================
 
 The History library provides a history expansion feature that is similar
 to the history expansion provided by `csh'.  This section describes the
@@ -1041,11 +1464,11 @@ appearance of the history expansion character, which is `!' by default.
 
 File: gdb.info,  Node: Event Designators,  Next: Word Designators,  Up: History Interaction
 
-Event Designators
------------------
+28.1.1 Event Designators
+------------------------
 
 An event designator is a reference to a command line entry in the
-history list.
+history list.  
 
 `!'
      Start a history substitution, except when followed by a space, tab,
@@ -1079,8 +1502,8 @@ history list.
 
 File: gdb.info,  Node: Word Designators,  Next: Modifiers,  Prev: Event Designators,  Up: History Interaction
 
-Word Designators
-----------------
+28.1.2 Word Designators
+-----------------------
 
 Word designators are used to select desired words from the event.  A
 `:' separates the event specification from the word designator.  It may
@@ -1141,8 +1564,8 @@ previous command is used as the event.
 
 File: gdb.info,  Node: Modifiers,  Prev: Word Designators,  Up: History Interaction
 
-Modifiers
----------
+28.1.3 Modifiers
+----------------
 
 After the optional word designator, you can add a sequence of one or
 more of the following modifiers, each preceded by a `:'.
@@ -1182,8 +1605,8 @@ more of the following modifiers, each preceded by a `:'.
 
 File: gdb.info,  Node: Formatting Documentation,  Next: Command Line Editing,  Prev: GDB Bugs,  Up: Top
 
-Formatting Documentation
-************************
+Appendix A Formatting Documentation
+***********************************
 
 The GDB 4 release includes an already-formatted reference card, ready
 for printing with PostScript or Ghostscript, in the `gdb' subdirectory
@@ -1210,7 +1633,7 @@ and TeX (or `texi2roff') to typeset the printed version.
 
    GDB includes an already formatted copy of the on-line Info version
 of this manual in the `gdb' subdirectory.  The main Info file is
-`gdb-6.1/gdb/gdb.info', and it refers to subordinate files matching
+`gdb-6.3/gdb/gdb.info', and it refers to subordinate files matching
 `gdb.info*' in the same directory.  If necessary, you can print out
 these files, or read them with any editor; but they are easier to read
 using the `info' subsystem in GNU Emacs or the standalone `info'
@@ -1220,7 +1643,7 @@ program, available as part of the GNU Texinfo distribution.
 Info formatting programs, such as `texinfo-format-buffer' or `makeinfo'.
 
    If you have `makeinfo' installed, and are in the top level GDB
-source directory (`gdb-6.1', in the case of version 6.1), you can make
+source directory (`gdb-6.3', in the case of version 6.3), you can make
 the Info file by typing:
 
      cd gdb
@@ -1246,7 +1669,7 @@ format.  On its own, TeX cannot either read or typeset a Texinfo file.
 
    If you have TeX and a DVI printer program installed, you can typeset
 and print this manual.  First switch to the the `gdb' subdirectory of
-the main source directory (for example, to `gdb-6.1/gdb') and type:
+the main source directory (for example, to `gdb-6.3/gdb') and type:
 
      make gdb.dvi
 
@@ -1254,13 +1677,13 @@ the main source directory (for example, to `gdb-6.1/gdb') and type:
 
    ---------- Footnotes ----------
 
-   (1) In `gdb-6.1/gdb/refcard.ps' of the version 6.1 release.
+   (1) In `gdb-6.3/gdb/refcard.ps' of the version 6.3 release.
 
 
 File: gdb.info,  Node: Installing GDB,  Next: Maintenance Commands,  Prev: Using History Interactively,  Up: Top
 
-Installing GDB
-**************
+Appendix B Installing GDB
+*************************
 
 GDB comes with a `configure' script that automates the process of
 preparing GDB for installation; you can then use `make' to build the
@@ -1270,39 +1693,39 @@ preparing GDB for installation; you can then use `make' to build the
 in a single directory, whose name is usually composed by appending the
 version number to `gdb'.
 
-   For example, the GDB version 6.1 distribution is in the `gdb-6.1'
+   For example, the GDB version 6.3 distribution is in the `gdb-6.3'
 directory.  That directory contains:
 
-`gdb-6.1/configure (and supporting files)'
+`gdb-6.3/configure (and supporting files)'
      script for configuring GDB and all its supporting libraries
 
-`gdb-6.1/gdb'
+`gdb-6.3/gdb'
      the source specific to GDB itself
 
-`gdb-6.1/bfd'
+`gdb-6.3/bfd'
      source for the Binary File Descriptor library
 
-`gdb-6.1/include'
+`gdb-6.3/include'
      GNU include files
 
-`gdb-6.1/libiberty'
+`gdb-6.3/libiberty'
      source for the `-liberty' free software library
 
-`gdb-6.1/opcodes'
+`gdb-6.3/opcodes'
      source for the library of opcode tables and disassemblers
 
-`gdb-6.1/readline'
+`gdb-6.3/readline'
      source for the GNU command-line interface
 
-`gdb-6.1/glob'
+`gdb-6.3/glob'
      source for the GNU filename pattern-matching subroutine
 
-`gdb-6.1/mmalloc'
+`gdb-6.3/mmalloc'
      source for the GNU memory-mapped malloc package
 
    The simplest way to configure and build GDB is to run `configure'
 from the `gdb-VERSION-NUMBER' source directory, which in this example
-is the `gdb-6.1' directory.
+is the `gdb-6.3' directory.
 
    First switch to the `gdb-VERSION-NUMBER' source directory if you are
 not already in it; then run `configure'.  Pass the identifier for the
@@ -1310,7 +1733,7 @@ platform on which GDB will run as an argument.
 
    For example:
 
-     cd gdb-6.1
+     cd gdb-6.3
      ./configure HOST
      make
 
@@ -1331,8 +1754,8 @@ you may need to run `sh' on it explicitly:
      sh configure HOST
 
    If you run `configure' from a directory that contains source
-directories for multiple libraries or programs, such as the `gdb-6.1'
-source directory for version 6.1, `configure' creates configuration
+directories for multiple libraries or programs, such as the `gdb-6.3'
+source directory for version 6.3, `configure' creates configuration
 files for every directory level underneath (unless you tell it not to,
 with the `--norecursion' option).
 
@@ -1361,8 +1784,8 @@ processes whose programs are not readable.
 
 File: gdb.info,  Node: Separate Objdir,  Next: Config Names,  Up: Installing GDB
 
-Compiling GDB in another directory
-==================================
+B.1 Compiling GDB in another directory
+======================================
 
 If you want to run GDB versions for several host or target machines,
 you need a different `gdb' compiled for each combination of host and
@@ -1379,13 +1802,13 @@ directory.  If the path to `configure' would be the same as the
 argument to `--srcdir', you can leave out the `--srcdir' option; it is
 assumed.)
 
-   For example, with version 6.1, you can build GDB in a separate
+   For example, with version 6.3, you can build GDB in a separate
 directory for a Sun 4 like this:
 
-     cd gdb-6.1
+     cd gdb-6.3
      mkdir ../gdb-sun4
      cd ../gdb-sun4
-     ../gdb-6.1/configure sun4
+     ../gdb-6.3/configure sun4
      make
 
    When `configure' builds a configuration using a remote source
@@ -1396,7 +1819,7 @@ directory `gdb-sun4/libiberty', and GDB itself in `gdb-sun4/gdb'.
 
    Make sure that your path to the `configure' script has just one
 instance of `gdb' in it.  If your path to `configure' looks like
-`../gdb-6.1/gdb/configure', you are configuring only one subdirectory
+`../gdb-6.3/gdb/configure', you are configuring only one subdirectory
 of GDB, not the whole package.  This leads to build errors about
 missing include files such as `bfd/bfd.h'.
 
@@ -1412,8 +1835,8 @@ called `configure' (or one of its subdirectories).
 
    The `Makefile' that `configure' generates in each source directory
 also runs recursively.  If you type `make' in a source directory such
-as `gdb-6.1' (or in a separate configured directory configured with
-`--srcdir=DIRNAME/gdb-6.1'), you will build all the required libraries,
+as `gdb-6.3' (or in a separate configured directory configured with
+`--srcdir=DIRNAME/gdb-6.3'), you will build all the required libraries,
 and then build GDB.
 
    When you have multiple hosts or targets configured in separate
@@ -1424,8 +1847,8 @@ with each other.
 
 File: gdb.info,  Node: Config Names,  Next: Configure Options,  Prev: Separate Objdir,  Up: Installing GDB
 
-Specifying names for hosts and targets
-======================================
+B.2 Specifying names for hosts and targets
+==========================================
 
 The specifications used for hosts and targets in the `configure' script
 are based on a three-part naming scheme, but some short predefined
@@ -1458,13 +1881,13 @@ you can use it to test your guesses on abbreviations--for example:
      Invalid configuration `i986v': machine `i986v' not recognized
 
 `config.sub' is also distributed in the GDB source directory
-(`gdb-6.1', for version 6.1).
+(`gdb-6.3', for version 6.3).
 
 
 File: gdb.info,  Node: Configure Options,  Prev: Config Names,  Up: Installing GDB
 
-`configure' options
-===================
+B.3 `configure' options
+=======================
 
 Here is a summary of the `configure' options and arguments that are
 most often useful for building GDB.  `configure' also has several other
@@ -1528,8 +1951,8 @@ generally needed for special purposes only.
 
 File: gdb.info,  Node: Maintenance Commands,  Next: Remote Protocol,  Prev: Installing GDB,  Up: Top
 
-Maintenance Commands
-********************
+Appendix C Maintenance Commands
+*******************************
 
 In addition to commands intended for GDB users, GDB includes a number
 of commands intended for GDB developers.  These commands are provided
@@ -1648,12 +2071,24 @@ here for reference.
      Configuring with `--enable-profiling' arranges for GDB to be
      compiled with the `-pg' compiler option.
 
+`maint set dwarf2 max-cache-age'
+`maint show dwarf2 max-cache-age'
+     Control the DWARF 2 compilation unit cache.
+
+     In object files with inter-compilation-unit references, such as
+     those produced by the GCC option `-feliminate-dwarf2-dups', the
+     DWARF 2 reader needs to frequently refer to previously read
+     compilation units.  This setting controls how long a compilation
+     unit will remain in the cache if it is not referenced.  Setting it
+     to zero disables caching, which will slow down GDB startup but
+     reduce memory consumption.
+
 
 
 File: gdb.info,  Node: Remote Protocol,  Next: Agent Expressions,  Prev: Maintenance Commands,  Up: Top
 
-GDB Remote Serial Protocol
-**************************
+Appendix D GDB Remote Serial Protocol
+*************************************
 
 * Menu:
 
@@ -1668,8 +2103,8 @@ GDB Remote Serial Protocol
 
 File: gdb.info,  Node: Overview,  Next: Packets,  Up: Remote Protocol
 
-Overview
-========
+D.1 Overview
+============
 
 There may be occasions when you need to know something about the
 protocol--for example, if there is only one serial port to your target
@@ -1685,8 +2120,7 @@ PACKET-DATA, and the terminating character `#' followed by a two-digit
 CHECKSUM:
 
      `$'PACKET-DATA`#'CHECKSUM
-
-The two-digit CHECKSUM is computed as the modulo 256 sum of all
+   The two-digit CHECKSUM is computed as the modulo 256 sum of all
 characters between the leading `$' and the trailing `#' (an eight bit
 unsigned checksum).
 
@@ -1705,8 +2139,7 @@ the package was received correctly) or `-' (to request retransmission):
 
      -> `$'PACKET-DATA`#'CHECKSUM
      <- `+'
-
-The host (GDB) sends COMMANDs, and the target (the debugging stub
+   The host (GDB) sends COMMANDs, and the target (the debugging stub
 incorporated in your program) sends a RESPONSE.  In the case of step
 and continue COMMANDs, the response is only sent when the operation has
 completed (the target has again stopped).
@@ -1732,8 +2165,7 @@ used.
 
    So:
      "`0* '"
-
-means the same as "0000".
+   means the same as "0000".
 
    The error response returned for some packets includes a two character
 error number.  That number is not well defined.
@@ -1749,8 +2181,8 @@ COMMANDs.  All other COMMANDs are optional.
 
 File: gdb.info,  Node: Packets,  Next: Stop Reply Packets,  Prev: Overview,  Up: Remote Protocol
 
-Packets
-=======
+D.2 Packets
+===========
 
 The following table provides a complete list of all currently defined
 COMMANDs and their corresponding response DATA.
@@ -1951,14 +2383,20 @@ COMMANDs and their corresponding response DATA.
      Reserved for future use.
 
 `O' -- reserved
-     Reserved for future use.
 
-`p'N... -- read reg *(reserved)*
-     *Note write register packet::.
+`p'HEX NUMBER OF REGISTER -- read register packet
+     *Note read registers packet::, for a description of how the
+     returned register value is encoded.
 
      Reply:
-    `R....'
-          The hex encoded value of the register in target byte order.
+    `XX...'
+          the register's value
+
+    `ENN'
+          for an error
+
+    `'
+          Indicating an unrecognized QUERY.
 
 `P'N...`='R... -- write register
      Write register N... with value R..., which contains two hex digits
@@ -2220,8 +2658,8 @@ COMMANDs and their corresponding response DATA.
 
 File: gdb.info,  Node: Stop Reply Packets,  Next: General Query Packets,  Prev: Packets,  Up: Remote Protocol
 
-Stop Reply Packets
-==================
+D.3 Stop Reply Packets
+======================
 
 The `C', `c', `S', `s' and `?' packets can receive any of the below as
 a reply.  In the case of the `C', `c', `S' and `s' packets, that reply
@@ -2275,8 +2713,8 @@ signal numbering conventions is used.
 
 File: gdb.info,  Node: General Query Packets,  Next: Register Packet Format,  Prev: Stop Reply Packets,  Up: Remote Protocol
 
-General Query Packets
-=====================
+D.4 General Query Packets
+=========================
 
 The following set and query packets have already been defined.
 
@@ -2507,8 +2945,8 @@ The following set and query packets have already been defined.
 
 File: gdb.info,  Node: Register Packet Format,  Next: Examples,  Prev: General Query Packets,  Up: Remote Protocol
 
-Register Packet Format
-======================
+D.5 Register Packet Format
+==========================
 
 The following `g'/`G' packets have previously been defined.  In the
 below, some thirty-two bit registers are transferred as sixty-four
@@ -2531,8 +2969,8 @@ MIPS64
 
 File: gdb.info,  Node: Examples,  Next: File-I/O remote protocol extension,  Prev: Register Packet Format,  Up: Remote Protocol
 
-Examples
-========
+D.6 Examples
+============
 
 Example sequence of a target being re-started.  Notice how the restart
 does not get any direct output:
@@ -2562,8 +3000,8 @@ does not get any direct output:
 
 File: gdb.info,  Node: File-I/O remote protocol extension,  Prev: Examples,  Up: Remote Protocol
 
-File-I/O remote protocol extension
-==================================
+D.7 File-I/O remote protocol extension
+======================================
 
 * Menu:
 
@@ -2584,8 +3022,8 @@ File-I/O remote protocol extension
 
 File: gdb.info,  Node: File-I/O Overview,  Next: Protocol basics,  Up: File-I/O remote protocol extension
 
-File-I/O Overview
------------------
+D.7.1 File-I/O Overview
+-----------------------
 
 The File I/O remote protocol extension (short: File-I/O) allows the
 target to use the hosts file system and console I/O when calling various
@@ -2629,8 +3067,8 @@ are not supported by this protocol.
 
 File: gdb.info,  Node: Protocol basics,  Next: The F request packet,  Prev: File-I/O Overview,  Up: File-I/O remote protocol extension
 
-Protocol basics
----------------
+D.7.2 Protocol basics
+---------------------
 
 The File-I/O protocol uses the `F' packet, as request as well as as
 reply packet.  Since a File-I/O system call can only occur when GDB is
@@ -2688,8 +3126,8 @@ continues the latest continue or step action.
 
 File: gdb.info,  Node: The F request packet,  Next: The F reply packet,  Prev: Protocol basics,  Up: File-I/O remote protocol extension
 
-The `F' request packet
-----------------------
+D.7.3 The `F' request packet
+----------------------------
 
 The `F' request packet has the following format:
 
@@ -2712,8 +3150,8 @@ separated by a slash.
 
 File: gdb.info,  Node: The F reply packet,  Next: Memory transfer,  Prev: The F request packet,  Up: File-I/O remote protocol extension
 
-The `F' reply packet
---------------------
+D.7.4 The `F' reply packet
+--------------------------
 
 The `F' reply packet has the following format:
 
@@ -2742,8 +3180,8 @@ The `F' reply packet has the following format:
 
 File: gdb.info,  Node: Memory transfer,  Next: The Ctrl-C message,  Prev: The F reply packet,  Up: File-I/O remote protocol extension
 
-Memory transfer
----------------
+D.7.5 Memory transfer
+---------------------
 
 Structured data which is transferred using a memory read or write as
 e.g.  a `struct stat' is expected to be in a protocol specific format
@@ -2755,8 +3193,8 @@ data should point to the already coerced data at any time.
 
 File: gdb.info,  Node: The Ctrl-C message,  Next: Console I/O,  Prev: Memory transfer,  Up: File-I/O remote protocol extension
 
-The Ctrl-C message
-------------------
+D.7.6 The Ctrl-C message
+------------------------
 
 A special case is, if the CTRL-C FLAG is set in the GDB reply packet.
 In this case the target should behave, as if it had gotten a break
@@ -2791,8 +3229,8 @@ has been completed.
 
 File: gdb.info,  Node: Console I/O,  Next: The isatty call,  Prev: The Ctrl-C message,  Up: File-I/O remote protocol extension
 
-Console I/O
------------
+D.7.7 Console I/O
+-----------------
 
 By default and if not explicitely closed by the target system, the file
 descriptors 0, 1 and 2 are connected to the GDB console.  Output on the
@@ -2819,8 +3257,8 @@ stopped on users request.
 
 File: gdb.info,  Node: The isatty call,  Next: The system call,  Prev: Console I/O,  Up: File-I/O remote protocol extension
 
-The isatty(3) call
-------------------
+D.7.8 The isatty(3) call
+------------------------
 
 A special case in this protocol is the library call `isatty' which is
 implemented as it's own call inside of this protocol.  It returns 1 to
@@ -2831,8 +3269,8 @@ require implementing `ioctl' and would be more complex than needed.
 
 File: gdb.info,  Node: The system call,  Next: List of supported calls,  Prev: The isatty call,  Up: File-I/O remote protocol extension
 
-The system(3) call
-------------------
+D.7.9 The system(3) call
+------------------------
 
 The other special case in this protocol is the `system' call which is
 implemented as it's own call, too.  GDB is taking over the full task of
@@ -2859,8 +3297,8 @@ entering
 
 File: gdb.info,  Node: List of supported calls,  Next: Protocol specific representation of datatypes,  Prev: The system call,  Up: File-I/O remote protocol extension
 
-List of supported calls
------------------------
+D.7.10 List of supported calls
+------------------------------
 
 * Menu:
 
@@ -2885,7 +3323,7 @@ open
 Synopsis:
      int open(const char *pathname, int flags);
      int open(const char *pathname, int flags, mode_t mode);
-     
+
 Request:
      Fopen,pathptr/len,flags,mode
 
@@ -2944,7 +3382,7 @@ Request:
 Return value:
      open returns the new file descriptor or -1 if an error
      occured.
-     
+
 Errors:
 
 
@@ -2994,13 +3432,13 @@ close
 
 Synopsis:
      int close(int fd);
-     
+
 Request:
      Fclose,fd
-     
+
 Return value:
      close returns zero on success, or -1 if an error occurred.
-     
+
 Errors:
 
 
@@ -3018,15 +3456,15 @@ read
 
 Synopsis:
      int read(int fd, void *buf, unsigned int count);
-     
+
 Request:
      Fread,fd,bufptr,count
-     
+
 Return value:
      On success, the number of bytes read is returned.
      Zero indicates end of file.  If count is zero, read
      returns zero as well.  On error, -1 is returned.
-     
+
 Errors:
 
 
@@ -3047,15 +3485,15 @@ write
 
 Synopsis:
      int write(int fd, const void *buf, unsigned int count);
-     
+
 Request:
      Fwrite,fd,bufptr,count
-     
+
 Return value:
      On success, the number of bytes written are returned.
      Zero indicates nothing was written.  On error, -1
      is returned.
-     
+
 Errors:
 
 
@@ -3083,7 +3521,7 @@ lseek
 
 Synopsis:
      long lseek (int fd, long offset, int flag);
-     
+
 Request:
      Flseek,fd,offset,flag
 
@@ -3102,7 +3540,7 @@ Return value:
      On success, the resulting unsigned offset in bytes from
      the beginning of the file is returned.  Otherwise, a
      value of -1 is returned.
-     
+
 Errors:
 
 
@@ -3126,13 +3564,13 @@ rename
 
 Synopsis:
      int rename(const char *oldpath, const char *newpath);
-     
+
 Request:
      Frename,oldpathptr/len,newpathptr/len
-     
+
 Return value:
      On success, zero is returned.  On error, -1 is returned.
-     
+
 Errors:
 
 
@@ -3183,13 +3621,13 @@ unlink
 
 Synopsis:
      int unlink(const char *pathname);
-     
+
 Request:
      Funlink,pathnameptr/len
-     
+
 Return value:
      On success, zero is returned.  On error, -1 is returned.
-     
+
 Errors:
 
 
@@ -3230,14 +3668,14 @@ stat/fstat
 Synopsis:
      int stat(const char *pathname, struct stat *buf);
      int fstat(int fd, struct stat *buf);
-     
+
 Request:
      Fstat,pathnameptr/len,bufptr
      Ffstat,fd,bufptr
-     
+
 Return value:
      On success, zero is returned.  On error, -1 is returned.
-     
+
 Errors:
 
 
@@ -3271,13 +3709,13 @@ gettimeofday
 
 Synopsis:
      int gettimeofday(struct timeval *tv, void *tz);
-     
+
 Request:
      Fgettimeofday,tvptr,tzptr
-     
+
 Return value:
      On success, 0 is returned, -1 otherwise.
-     
+
 Errors:
 
 
@@ -3295,13 +3733,13 @@ isatty
 
 Synopsis:
      int isatty(int fd);
-     
+
 Request:
      Fisatty,fd
-     
+
 Return value:
      Returns 1 if fd refers to the GDB console, 0 otherwise.
-     
+
 Errors:
 
 
@@ -3316,17 +3754,17 @@ system
 
 Synopsis:
      int system(const char *command);
-     
+
 Request:
      Fsystem,commandptr/len
-     
+
 Return value:
      The value returned is -1 on error and the return status
      of the command otherwise.  Only the exit status of the
      command is returned, which is extracted from the hosts
      system return value by calling WEXITSTATUS(retval).
      In case /bin/sh could not be executed, 127 is returned.
-     
+
 Errors:
 
 
@@ -3336,8 +3774,8 @@ Errors:
 
 File: gdb.info,  Node: Protocol specific representation of datatypes,  Next: Constants,  Prev: List of supported calls,  Up: File-I/O remote protocol extension
 
-Protocol specific representation of datatypes
----------------------------------------------
+D.7.11 Protocol specific representation of datatypes
+----------------------------------------------------
 
 * Menu:
 
@@ -3427,18 +3865,18 @@ of values.
 
      st_dev:     0       file
                  1       console
-     
+
      st_ino:     No valid meaning for the target.  Transmitted unchanged.
-     
+
      st_mode:    Valid mode bits are described in Appendix C.  Any other
                  bits have currently no meaning for the target.
-     
+
      st_uid:     No valid meaning for the target.  Transmitted unchanged.
-     
+
      st_gid:     No valid meaning for the target.  Transmitted unchanged.
-     
+
      st_rdev:    No valid meaning for the target.  Transmitted unchanged.
-     
+
      st_atime, st_mtime, st_ctime:
                  These values have a host and file system dependent
                  accuracy.  Especially on Windows hosts the file systems
@@ -3472,8 +3910,8 @@ structure is of size 8 bytes.
 
 File: gdb.info,  Node: Constants,  Next: File-I/O Examples,  Prev: Protocol specific representation of datatypes,  Up: File-I/O remote protocol extension
 
-Constants
----------
+D.7.12 Constants
+----------------
 
 The following values are used for the constants inside of the protocol.
 GDB and target are resposible to translate these values before and
@@ -3583,8 +4021,8 @@ All values are given in decimal representation.
 
 File: gdb.info,  Node: File-I/O Examples,  Prev: Constants,  Up: File-I/O remote protocol extension
 
-File-I/O Examples
------------------
+D.7.13 File-I/O Examples
+------------------------
 
 Example sequence of a write call, file descriptor 3, buffer is at target
 address 0x1234, 6 bytes should be written:
@@ -3628,8 +4066,8 @@ host is called:
 
 File: gdb.info,  Node: Agent Expressions,  Next: Copying,  Prev: Remote Protocol,  Up: Top
 
-The GDB Agent Expression Mechanism
-**********************************
+Appendix E The GDB Agent Expression Mechanism
+*********************************************
 
 In some applications, it is not feasable for the debugger to interrupt
 the program's execution long enough for the developer to learn anything
@@ -3683,8 +4121,8 @@ real-time applications.
 
 File: gdb.info,  Node: General Bytecode Design,  Next: Bytecode Descriptions,  Up: Agent Expressions
 
-General Bytecode Design
-=======================
+E.1 General Bytecode Design
+===========================
 
 The agent represents bytecode expressions as an array of bytes.  Each
 instruction is one byte long (thus the term "bytecode").  Some
@@ -3705,8 +4143,7 @@ stack element as follows:
        LONGEST l;
        DOUBLEST d;
      };
-
-where `LONGEST' and `DOUBLEST' are `typedef' names for the largest
+   where `LONGEST' and `DOUBLEST' are `typedef' names for the largest
 integer and floating point types on the machine.
 
    By the time the bytecode interpreter reaches the end of the
@@ -3724,10 +4161,9 @@ breakpoints, the value may be useful.
      The address of the start of the bytecode expression, necessary for
      interpreting the `goto' and `if_goto' instructions.
 
-
-Neither of these registers is directly visible to the bytecode language
-itself, but they are useful for defining the meanings of the bytecode
-operations.
+   Neither of these registers is directly visible to the bytecode
+language itself, but they are useful for defining the meanings of the
+bytecode operations.
 
    There are no instructions to perform side effects on the running
 program, or call the program's functions; we assume that these
@@ -3807,8 +4243,8 @@ registers, and `z' is a global variable holding a 32-bit `int':
 
 File: gdb.info,  Node: Bytecode Descriptions,  Next: Using Agent Expressions,  Prev: General Bytecode Design,  Up: Agent Expressions
 
-Bytecode Descriptions
-=====================
+E.2 Bytecode Descriptions
+=========================
 
 Each bytecode description has the following form:
 
@@ -4062,8 +4498,8 @@ describing them, to save time.
 
 File: gdb.info,  Node: Using Agent Expressions,  Next: Varying Target Capabilities,  Prev: Bytecode Descriptions,  Up: Agent Expressions
 
-Using Agent Expressions
-=======================
+E.3 Using Agent Expressions
+===========================
 
 Here is a sketch of a full non-stop debugging cycle, showing how agent
 expressions fit into the process.
@@ -4098,8 +4534,8 @@ expressions fit into the process.
 
 File: gdb.info,  Node: Varying Target Capabilities,  Next: Tracing on Symmetrix,  Prev: Using Agent Expressions,  Up: Agent Expressions
 
-Varying Target Capabilities
-===========================
+E.4 Varying Target Capabilities
+===============================
 
 Some targets don't support floating-point, and some would rather not
 have to deal with `long long' operations.  Also, different targets will
@@ -4129,8 +4565,8 @@ least the following information:
 
 File: gdb.info,  Node: Tracing on Symmetrix,  Next: Rationale,  Prev: Varying Target Capabilities,  Up: Agent Expressions
 
-Tracing on Symmetrix
-====================
+E.5 Tracing on Symmetrix
+========================
 
 This section documents the API used by the GDB agent to collect data on
 Symmetrix systems.
@@ -4141,7 +4577,7 @@ Symmetrix application code already includes substantial tracing
 facilities; the GDB agent for the Symmetrix system uses those facilities
 for its own data collection, via the API described here.
 
- - Function: DTC_RESPONSE adbg_find_memory_in_frame (FRAME_DEF *FRAME,
+ -- Function: DTC_RESPONSE adbg_find_memory_in_frame (FRAME_DEF *FRAME,
           char *ADDRESS, char **BUFFER, unsigned int *SIZE)
      Search the trace frame FRAME for memory saved from ADDRESS.  If
      the memory is available, provide the address of the buffer holding
@@ -4228,7 +4664,7 @@ Symmetrix INLINES console:
        char *addr;
        char *buffer;
        unsigned long size;
-     
+
        addr = 0;
        for (;;)
          {
@@ -4256,8 +4692,8 @@ stub relies upon, too.]]
 
 File: gdb.info,  Node: Rationale,  Prev: Tracing on Symmetrix,  Up: Agent Expressions
 
-Rationale
-=========
+E.6 Rationale
+=============
 
 Some of the design decisions apparent above are arguable.
 
@@ -4412,13 +4848,14 @@ Why does `trace16' exist?
 
 File: gdb.info,  Node: Copying,  Next: GNU Free Documentation License,  Prev: Agent Expressions,  Up: Top
 
-GNU GENERAL PUBLIC LICENSE
-**************************
+Appendix F GNU GENERAL PUBLIC LICENSE
+*************************************
 
                          Version 2, June 1991
+
      Copyright (C) 1989, 1991 Free Software Foundation, Inc.
      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
-     
+
      Everyone is permitted to copy and distribute verbatim copies
      of this license document, but changing it is not allowed.
 
@@ -4680,7 +5117,6 @@ modification follow.
      and reuse of software generally.
 
                                 NO WARRANTY
-
  11. BECAUSE THE PROGRAM IS LICENSED FREE OF CHARGE, THERE IS NO
      WARRANTY FOR THE PROGRAM, TO THE EXTENT PERMITTED BY APPLICABLE
      LAW.  EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT
@@ -4704,7 +5140,6 @@ modification follow.
      ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
 
                       END OF TERMS AND CONDITIONS
-
 How to Apply These Terms to Your New Programs
 =============================================
 
@@ -4720,17 +5155,17 @@ the "copyright" line and a pointer to where the full notice is found.
 
      ONE LINE TO GIVE THE PROGRAM'S NAME AND A BRIEF IDEA OF WHAT IT DOES.
      Copyright (C) YEAR  NAME OF AUTHOR
-     
+
      This program is free software; you can redistribute it and/or modify
      it under the terms of the GNU General Public License as published by
      the Free Software Foundation; either version 2 of the License, or
      (at your option) any later version.
-     
+
      This program is distributed in the hope that it will be useful,
      but WITHOUT ANY WARRANTY; without even the implied warranty of
      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
      GNU General Public License for more details.
-     
+
      You should have received a copy of the GNU General Public License
      along with this program; if not, write to the Free Software
      Foundation, Inc., 59 Temple Place - Suite 330,
@@ -4760,7 +5195,7 @@ if necessary.  Here is a sample; alter the names:
 
      Yoyodyne, Inc., hereby disclaims all copyright interest in the program
      `Gnomovision' (which makes passes at compilers) written by James Hacker.
-     
+
      SIGNATURE OF TY COON, 1 April 1989
      Ty Coon, President of Vice
 
@@ -4773,13 +5208,14 @@ GNU Library General Public License instead of this License.
 
 File: gdb.info,  Node: GNU Free Documentation License,  Next: Index,  Prev: Copying,  Up: Top
 
-GNU Free Documentation License
-******************************
+Appendix G GNU Free Documentation License
+*****************************************
 
                       Version 1.2, November 2002
+
      Copyright (C) 2000,2001,2002 Free Software Foundation, Inc.
      59 Temple Place, Suite 330, Boston, MA  02111-1307, USA
-     
+
      Everyone is permitted to copy and distribute verbatim copies
      of this license document, but changing it is not allowed.
 
@@ -5170,8 +5606,8 @@ GNU Free Documentation License
      you may choose any version ever published (not as a draft) by the
      Free Software Foundation.
 
-ADDENDUM: How to use this License for your documents
-====================================================
+G.1 ADDENDUM: How to use this License for your documents
+========================================================
 
 To use this License in a document you have written, include a copy of
 the License in the document and put the following copyright and license
@@ -5200,1466 +5636,4 @@ situation.
 recommend releasing these examples in parallel under your choice of
 free software license, such as the GNU General Public License, to
 permit their use in free software.
-
-
-File: gdb.info,  Node: Index,  Prev: GNU Free Documentation License,  Up: Top
-
-Index
-*****
-
-* Menu:
-
-* ! packet:                              Packets.
-* "No symbol "foo" in current context":  Variables.
-* # (a comment):                         Command Syntax.
-* # in Modula-2:                         GDB/M2.
-* $:                                     Value History.
-* $$:                                    Value History.
-* $_ and info breakpoints:               Set Breaks.
-* $_ and info line:                      Machine Code.
-* $_, $__, and value history:            Memory.
-* $_, convenience variable:              Convenience Vars.
-* $__, convenience variable:             Convenience Vars.
-* $_exitcode, convenience variable:      Convenience Vars.
-* $bpnum, convenience variable:          Set Breaks.
-* $cdir, convenience variable:           Source Path.
-* $cwdr, convenience variable:           Source Path.
-* $tpnum:                                Create and Delete Tracepoints.
-* $trace_file:                           Tracepoint Variables.
-* $trace_frame:                          Tracepoint Variables.
-* $trace_func:                           Tracepoint Variables.
-* $trace_line:                           Tracepoint Variables.
-* $tracepoint:                           Tracepoint Variables.
-* --annotate:                            Mode Options.
-* --args:                                Mode Options.
-* --async:                               Mode Options.
-* --batch:                               Mode Options.
-* --baud:                                Mode Options.
-* --cd:                                  Mode Options.
-* --command:                             File Options.
-* --core:                                File Options.
-* --directory:                           File Options.
-* --epoch:                               Mode Options.
-* --exec:                                File Options.
-* --fullname:                            Mode Options.
-* --interpreter:                         Mode Options.
-* --mapped:                              File Options.
-* --noasync:                             Mode Options.
-* --nowindows:                           Mode Options.
-* --nx:                                  Mode Options.
-* --pid:                                 File Options.
-* --quiet:                               Mode Options.
-* --readnow:                             File Options.
-* --se:                                  File Options.
-* --silent:                              Mode Options.
-* --statistics:                          Mode Options.
-* --symbols:                             File Options.
-* --tty:                                 Mode Options.
-* --tui:                                 Mode Options.
-* --version:                             Mode Options.
-* --windows:                             Mode Options.
-* --write:                               Mode Options.
-* -b:                                    Mode Options.
-* -break-after:                          GDB/MI Breakpoint Table Commands.
-* -break-condition:                      GDB/MI Breakpoint Table Commands.
-* -break-delete:                         GDB/MI Breakpoint Table Commands.
-* -break-disable:                        GDB/MI Breakpoint Table Commands.
-* -break-enable:                         GDB/MI Breakpoint Table Commands.
-* -break-info:                           GDB/MI Breakpoint Table Commands.
-* -break-insert:                         GDB/MI Breakpoint Table Commands.
-* -break-list:                           GDB/MI Breakpoint Table Commands.
-* -break-watch:                          GDB/MI Breakpoint Table Commands.
-* -c:                                    File Options.
-* -d:                                    File Options.
-* -data-disassemble:                     GDB/MI Data Manipulation.
-* -data-evaluate-expression:             GDB/MI Data Manipulation.
-* -data-list-changed-registers:          GDB/MI Data Manipulation.
-* -data-list-register-names:             GDB/MI Data Manipulation.
-* -data-list-register-values:            GDB/MI Data Manipulation.
-* -data-read-memory:                     GDB/MI Data Manipulation.
-* -display-delete:                       GDB/MI Data Manipulation.
-* -display-disable:                      GDB/MI Data Manipulation.
-* -display-enable:                       GDB/MI Data Manipulation.
-* -display-insert:                       GDB/MI Data Manipulation.
-* -display-list:                         GDB/MI Data Manipulation.
-* -e:                                    File Options.
-* -environment-cd:                       GDB/MI Data Manipulation.
-* -environment-directory:                GDB/MI Data Manipulation.
-* -environment-path:                     GDB/MI Data Manipulation.
-* -environment-pwd:                      GDB/MI Data Manipulation.
-* -exec-abort:                           GDB/MI Program Control.
-* -exec-arguments:                       GDB/MI Program Control.
-* -exec-continue:                        GDB/MI Program Control.
-* -exec-finish:                          GDB/MI Program Control.
-* -exec-interrupt:                       GDB/MI Program Control.
-* -exec-next:                            GDB/MI Program Control.
-* -exec-next-instruction:                GDB/MI Program Control.
-* -exec-return:                          GDB/MI Program Control.
-* -exec-run:                             GDB/MI Program Control.
-* -exec-show-arguments:                  GDB/MI Program Control.
-* -exec-step:                            GDB/MI Program Control.
-* -exec-step-instruction:                GDB/MI Program Control.
-* -exec-until:                           GDB/MI Program Control.
-* -f:                                    Mode Options.
-* -file-exec-and-symbols:                GDB/MI Program Control.
-* -file-exec-file:                       GDB/MI Program Control.
-* -file-list-exec-sections:              GDB/MI Program Control.
-* -file-list-exec-source-file:           GDB/MI Program Control.
-* -file-list-exec-source-files:          GDB/MI Program Control.
-* -file-list-shared-libraries:           GDB/MI Program Control.
-* -file-list-symbol-files:               GDB/MI Program Control.
-* -file-symbol-file:                     GDB/MI Program Control.
-* -gdb-exit:                             GDB/MI Miscellaneous Commands.
-* -gdb-set:                              GDB/MI Miscellaneous Commands.
-* -gdb-show:                             GDB/MI Miscellaneous Commands.
-* -gdb-version:                          GDB/MI Miscellaneous Commands.
-* -interpreter-exec:                     GDB/MI Miscellaneous Commands.
-* -m:                                    File Options.
-* -n:                                    Mode Options.
-* -nw:                                   Mode Options.
-* -p:                                    File Options.
-* -q:                                    Mode Options.
-* -r:                                    File Options.
-* -s:                                    File Options.
-* -stack-info-depth:                     GDB/MI Stack Manipulation.
-* -stack-info-frame:                     GDB/MI Stack Manipulation.
-* -stack-list-arguments:                 GDB/MI Stack Manipulation.
-* -stack-list-frames:                    GDB/MI Stack Manipulation.
-* -stack-list-locals:                    GDB/MI Stack Manipulation.
-* -stack-select-frame:                   GDB/MI Stack Manipulation.
-* -symbol-info-address:                  GDB/MI Symbol Query.
-* -symbol-info-file:                     GDB/MI Symbol Query.
-* -symbol-info-function:                 GDB/MI Symbol Query.
-* -symbol-info-line:                     GDB/MI Symbol Query.
-* -symbol-info-symbol:                   GDB/MI Symbol Query.
-* -symbol-list-functions:                GDB/MI Symbol Query.
-* -symbol-list-lines:                    GDB/MI Symbol Query.
-* -symbol-list-types:                    GDB/MI Symbol Query.
-* -symbol-list-variables:                GDB/MI Symbol Query.
-* -symbol-locate:                        GDB/MI Symbol Query.
-* -symbol-type:                          GDB/MI Symbol Query.
-* -t:                                    Mode Options.
-* -target-attach:                        GDB/MI Target Manipulation.
-* -target-compare-sections:              GDB/MI Target Manipulation.
-* -target-detach:                        GDB/MI Target Manipulation.
-* -target-disconnect:                    GDB/MI Target Manipulation.
-* -target-download:                      GDB/MI Target Manipulation.
-* -target-exec-status:                   GDB/MI Target Manipulation.
-* -target-list-available-targets:        GDB/MI Target Manipulation.
-* -target-list-current-targets:          GDB/MI Target Manipulation.
-* -target-list-parameters:               GDB/MI Target Manipulation.
-* -target-select:                        GDB/MI Target Manipulation.
-* -thread-info:                          GDB/MI Thread Commands.
-* -thread-list-all-threads:              GDB/MI Thread Commands.
-* -thread-list-ids:                      GDB/MI Thread Commands.
-* -thread-select:                        GDB/MI Thread Commands.
-* -var-assign:                           GDB/MI Variable Objects.
-* -var-create:                           GDB/MI Variable Objects.
-* -var-delete:                           GDB/MI Variable Objects.
-* -var-evaluate-expression:              GDB/MI Variable Objects.
-* -var-info-expression:                  GDB/MI Variable Objects.
-* -var-info-num-children:                GDB/MI Variable Objects.
-* -var-info-type:                        GDB/MI Variable Objects.
-* -var-list-children:                    GDB/MI Variable Objects.
-* -var-set-format:                       GDB/MI Variable Objects.
-* -var-show-attributes:                  GDB/MI Variable Objects.
-* -var-show-format:                      GDB/MI Variable Objects.
-* -var-update:                           GDB/MI Variable Objects.
-* -w:                                    Mode Options.
-* -x:                                    File Options.
-* ., Modula-2 scope operator:            M2 Scope.
-* .debug subdirectories:                 Separate Debug Files.
-* .esgdbinit:                            Command Files.
-* .gdbinit:                              Command Files.
-* .gnu_debuglink sections:               Separate Debug Files.
-* .o files, reading symbols from:        Files.
-* .os68gdbinit:                          Command Files.
-* .vxgdbinit:                            Command Files.
-* /proc:                                 SVR4 Process Information.
-* ? packet:                              Packets.
-* @, referencing memory as an array:     Arrays.
-* ^done:                                 GDB/MI Result Records.
-* ^error:                                GDB/MI Result Records.
-* ^running:                              GDB/MI Result Records.
-* _NSPrintForDebugger, and printing Objective-C objects: The Print Command with Objective-C.
-* A packet:                              Packets.
-* abbreviation:                          Command Syntax.
-* abort (C-g):                           Miscellaneous Commands.
-* accept-line (Newline or Return):       Commands For History.
-* acknowledgment, for GDB remote:        Overview.
-* actions:                               Tracepoint Actions.
-* active targets:                        Active Targets.
-* adbg_find_memory_in_frame:             Tracing on Symmetrix.
-* add-shared-symbol-file:                Files.
-* add-symbol-file:                       Files.
-* address of a symbol:                   Symbols.
-* advance LOCATION:                      Continuing and Stepping.
-* Alpha stack:                           MIPS.
-* AMD 29K register stack:                A29K.
-* annotations:                           Annotations Overview.
-* annotations for errors, warnings and interrupts: Errors.
-* annotations for invalidation messages: Invalidation.
-* annotations for prompts:               Prompting.
-* annotations for running programs:      Annotations for Running.
-* annotations for source display:        Source Annotations.
-* append:                                Dump/Restore Files.
-* append data to a file:                 Dump/Restore Files.
-* apropos:                               Help.
-* arguments (to your program):           Arguments.
-* artificial array:                      Arrays.
-* ASCII character set:                   Character Sets.
-* assembly instructions:                 Machine Code.
-* assignment:                            Assignment.
-* async output in GDB/MI:                GDB/MI Output Syntax.
-* AT&T disassembly flavor:               Machine Code.
-* attach:                                Attach.
-* attach to a program by name:           Server.
-* automatic display:                     Auto Display.
-* automatic overlay debugging:           Automatic Overlay Debugging.
-* automatic thread selection:            Threads.
-* auxiliary vector:                      Auxiliary Vector.
-* awatch:                                Set Watchpoints.
-* b (break):                             Set Breaks.
-* B packet:                              Packets.
-* b packet:                              Packets.
-* backtrace:                             Backtrace.
-* backtrace limit:                       Backtrace.
-* backtraces:                            Backtrace.
-* backward-char (C-b):                   Commands For Moving.
-* backward-delete-char (Rubout):         Commands For Text.
-* backward-kill-line (C-x Rubout):       Commands For Killing.
-* backward-kill-word (M-<DEL>):          Commands For Killing.
-* backward-word (M-b):                   Commands For Moving.
-* beginning-of-history (M-<):            Commands For History.
-* beginning-of-line (C-a):               Commands For Moving.
-* bell-style:                            Readline Init File Syntax.
-* break:                                 Set Breaks.
-* break ... thread THREADNO:             Thread Stops.
-* break in overloaded functions:         Debugging C plus plus.
-* break, and Objective-C:                Method Names in Commands.
-* breakpoint:                            Annotations for Running.
-* breakpoint address adjusted:           Breakpoint related warnings.
-* breakpoint commands:                   Break Commands.
-* breakpoint commands for GDB/MI:        GDB/MI Breakpoint Table Commands.
-* breakpoint conditions:                 Conditions.
-* breakpoint numbers:                    Breakpoints.
-* breakpoint on events:                  Breakpoints.
-* breakpoint on memory address:          Breakpoints.
-* breakpoint on variable modification:   Breakpoints.
-* breakpoint ranges:                     Breakpoints.
-* breakpoint subroutine, remote:         Stub Contents.
-* breakpoints:                           Breakpoints.
-* breakpoints and threads:               Thread Stops.
-* breakpoints in overlays:               Overlay Commands.
-* breakpoints-invalid:                   Invalidation.
-* bt (backtrace):                        Backtrace.
-* bug criteria:                          Bug Criteria.
-* bug reports:                           Bug Reporting.
-* bugs in GDB:                           GDB Bugs.
-* c (continue):                          Continuing and Stepping.
-* c (SingleKey TUI key):                 TUI Single Key Mode.
-* C and C++:                             C.
-* C and C++ checks:                      C Checks.
-* C and C++ constants:                   C Constants.
-* C and C++ defaults:                    C Defaults.
-* C and C++ operators:                   C Operators.
-* C packet:                              Packets.
-* c packet:                              Packets.
-* C++:                                   C.
-* C++ compilers:                         C plus plus expressions.
-* C++ exception handling:                Debugging C plus plus.
-* C++ scope resolution:                  Variables.
-* C++ symbol decoding style:             Print Settings.
-* C++ symbol display:                    Debugging C plus plus.
-* C-L:                                   TUI Keys.
-* C-o (operate-and-get-next):            Command Syntax.
-* C-x 1:                                 TUI Keys.
-* C-x 2:                                 TUI Keys.
-* C-x A:                                 TUI Keys.
-* C-x a:                                 TUI Keys.
-* C-x C-a:                               TUI Keys.
-* C-x o:                                 TUI Keys.
-* C-x s:                                 TUI Keys.
-* call:                                  Calling.
-* call overloaded functions:             C plus plus expressions.
-* call stack:                            Stack.
-* call-last-kbd-macro (C-x e):           Keyboard Macros.
-* calling functions:                     Calling.
-* calling make:                          Shell Commands.
-* capitalize-word (M-c):                 Commands For Text.
-* casts, to view memory:                 Expressions.
-* catch:                                 Set Catchpoints.
-* catch catch:                           Set Catchpoints.
-* catch exceptions, list active handlers: Frame Info.
-* catch exec:                            Set Catchpoints.
-* catch fork:                            Set Catchpoints.
-* catch load:                            Set Catchpoints.
-* catch throw:                           Set Catchpoints.
-* catch unload:                          Set Catchpoints.
-* catch vfork:                           Set Catchpoints.
-* catchpoints:                           Breakpoints.
-* catchpoints, setting:                  Set Catchpoints.
-* cd:                                    Working Directory.
-* cdir:                                  Source Path.
-* character sets:                        Character Sets.
-* character-search (C-]):                Miscellaneous Commands.
-* character-search-backward (M-C-]):     Miscellaneous Commands.
-* charset:                               Character Sets.
-* checks, range:                         Type Checking.
-* checks, type:                          Checks.
-* checksum, for GDB remote:              Overview.
-* choosing target byte order:            Byte Order.
-* clear:                                 Delete Breaks.
-* clear, and Objective-C:                Method Names in Commands.
-* clear-screen (C-l):                    Commands For Moving.
-* clearing breakpoints, watchpoints, catchpoints: Delete Breaks.
-* close, file-i/o system call:           close.
-* collect (tracepoints):                 Tracepoint Actions.
-* collected data discarded:              Starting and Stopping Trace Experiment.
-* colon, doubled as scope operator:      M2 Scope.
-* colon-colon, context for variables/functions: Variables.
-* colon-colon, in Modula-2:              M2 Scope.
-* command editing:                       Readline Bare Essentials.
-* command files:                         Command Files.
-* command hooks:                         Hooks.
-* command interpreters:                  Interpreters.
-* command line editing:                  Editing.
-* commands <1>:                          Prompting.
-* commands:                              Break Commands.
-* commands for C++:                      Debugging C plus plus.
-* commands to STDBUG (ST2000):           ST2000.
-* comment:                               Command Syntax.
-* comment-begin:                         Readline Init File Syntax.
-* compatibility, GDB/MI and CLI:         GDB/MI Compatibility with CLI.
-* compilation directory:                 Source Path.
-* compiling, on Sparclet:                Sparclet.
-* complete:                              Help.
-* complete (<TAB>):                      Commands For Completion.
-* completion:                            Completion.
-* completion of quoted strings:          Completion.
-* completion-query-items:                Readline Init File Syntax.
-* condition:                             Conditions.
-* conditional breakpoints:               Conditions.
-* configuring GDB:                       Installing GDB.
-* configuring GDB, and source tree subdirectories: Installing GDB.
-* confirmation:                          Messages/Warnings.
-* connect (to STDBUG):                   ST2000.
-* console i/o as part of file-i/o:       Console I/O.
-* console interpreter:                   Interpreters.
-* console output in GDB/MI:              GDB/MI Output Syntax.
-* constants, in file-i/o protocol:       Constants.
-* continue:                              Continuing and Stepping.
-* continuing:                            Continuing and Stepping.
-* continuing threads:                    Thread Stops.
-* control C, and remote debugging:       Bootstrapping.
-* controlling terminal:                  Input/Output.
-* convenience variables:                 Convenience Vars.
-* convenience variables for tracepoints: Tracepoint Variables.
-* convert-meta:                          Readline Init File Syntax.
-* copy-backward-word ():                 Commands For Killing.
-* copy-forward-word ():                  Commands For Killing.
-* copy-region-as-kill ():                Commands For Killing.
-* core:                                  Files.
-* core dump file:                        Files.
-* core-file:                             Files.
-* crash of debugger:                     Bug Criteria.
-* ctrl-c message, in file-i/o protocol:  The Ctrl-C message.
-* current directory:                     Source Path.
-* current stack frame:                   Frames.
-* current thread:                        Threads.
-* cwd:                                   Source Path.
-* Cygwin-specific commands:              Cygwin Native.
-* d (delete):                            Delete Breaks.
-* d (SingleKey TUI key):                 TUI Single Key Mode.
-* D packet:                              Packets.
-* d packet:                              Packets.
-* data manipulation, in GDB/MI:          GDB/MI Data Manipulation.
-* debug formats and C++:                 C plus plus expressions.
-* debug links:                           Separate Debug Files.
-* debugger crash:                        Bug Criteria.
-* debugging C++ programs:                C plus plus expressions.
-* debugging information directory, global: Separate Debug Files.
-* debugging information in separate files: Separate Debug Files.
-* debugging optimized code:              Compilation.
-* debugging stub, example:               remote stub.
-* debugging target:                      Targets.
-* define:                                Define.
-* defining macros interactively:         Macros.
-* definition, showing a macro's:         Macros.
-* delete:                                Delete Breaks.
-* delete breakpoints:                    Delete Breaks.
-* delete display:                        Auto Display.
-* delete mem:                            Memory Region Attributes.
-* delete tracepoint:                     Create and Delete Tracepoints.
-* delete-char (C-d):                     Commands For Text.
-* delete-char-or-list ():                Commands For Completion.
-* delete-horizontal-space ():            Commands For Killing.
-* deleting breakpoints, watchpoints, catchpoints: Delete Breaks.
-* demangling:                            Print Settings.
-* descriptor tables display:             DJGPP Native.
-* detach:                                Attach.
-* detach (remote):                       Connecting.
-* device:                                Renesas Boards.
-* digit-argument (M-0, M-1, ... M--):    Numeric Arguments.
-* dir:                                   Source Path.
-* direct memory access (DMA) on MS-DOS:  DJGPP Native.
-* directories for source files:          Source Path.
-* directory:                             Source Path.
-* directory, compilation:                Source Path.
-* directory, current:                    Source Path.
-* dis (disable):                         Disabling.
-* disable:                               Disabling.
-* disable breakpoints:                   Disabling.
-* disable display:                       Auto Display.
-* disable mem:                           Memory Region Attributes.
-* disable tracepoint:                    Enable and Disable Tracepoints.
-* disable-completion:                    Readline Init File Syntax.
-* disassemble:                           Machine Code.
-* disconnect:                            Connecting.
-* display:                               Auto Display.
-* display of expressions:                Auto Display.
-* DJGPP debugging:                       DJGPP Native.
-* dll-symbols:                           Cygwin Native.
-* DLLs with no debugging symbols:        Non-debug DLL symbols.
-* do (down):                             Selection.
-* do-uppercase-version (M-a, M-b, M-X, ...): Miscellaneous Commands.
-* document:                              Define.
-* documentation:                         Formatting Documentation.
-* Down:                                  TUI Keys.
-* down:                                  Selection.
-* down-silently:                         Selection.
-* downcase-word (M-l):                   Commands For Text.
-* download to H8/300 or H8/500:          H8/300.
-* download to Renesas SH:                H8/300.
-* download to Sparclet:                  Sparclet Download.
-* download to VxWorks:                   VxWorks Download.
-* dump:                                  Dump/Restore Files.
-* dump all data collected at tracepoint: tdump.
-* dump data to a file:                   Dump/Restore Files.
-* dump-functions ():                     Miscellaneous Commands.
-* dump-macros ():                        Miscellaneous Commands.
-* dump-variables ():                     Miscellaneous Commands.
-* dump/restore files:                    Dump/Restore Files.
-* dynamic linking:                       Files.
-* e (edit):                              Edit.
-* EBCDIC character set:                  Character Sets.
-* echo:                                  Output.
-* edit:                                  Edit.
-* editing:                               Editing.
-* editing command lines:                 Readline Bare Essentials.
-* editing source files:                  Edit.
-* editing-mode:                          Readline Init File Syntax.
-* else:                                  Define.
-* Emacs:                                 Emacs.
-* enable:                                Disabling.
-* enable breakpoints:                    Disabling.
-* enable display:                        Auto Display.
-* enable mem:                            Memory Region Attributes.
-* enable tracepoint:                     Enable and Disable Tracepoints.
-* enable-keypad:                         Readline Init File Syntax.
-* end:                                   Break Commands.
-* end-kbd-macro (C-x )):                 Keyboard Macros.
-* end-of-history (M->):                  Commands For History.
-* end-of-line (C-e):                     Commands For Moving.
-* entering numbers:                      Numbers.
-* environment (of your program):         Environment.
-* errno values, in file-i/o protocol:    Errno values.
-* error:                                 Errors.
-* error on valid input:                  Bug Criteria.
-* error-begin:                           Errors.
-* event designators:                     Event Designators.
-* event handling:                        Set Catchpoints.
-* examining data:                        Data.
-* examining memory:                      Memory.
-* exception handlers:                    Set Catchpoints.
-* exception handlers, how to list:       Frame Info.
-* exceptionHandler:                      Bootstrapping.
-* exchange-point-and-mark (C-x C-x):     Miscellaneous Commands.
-* exec-file:                             Files.
-* executable file:                       Files.
-* exited:                                Annotations for Running.
-* exiting GDB:                           Quitting GDB.
-* expand-tilde:                          Readline Init File Syntax.
-* expanding preprocessor macros:         Macros.
-* expressions:                           Expressions.
-* expressions in C or C++:               C.
-* expressions in C++:                    C plus plus expressions.
-* expressions in Modula-2:               Modula-2.
-* f (frame):                             Selection.
-* f (SingleKey TUI key):                 TUI Single Key Mode.
-* F packet:                              Packets.
-* F reply packet:                        The F reply packet.
-* F request packet:                      The F request packet.
-* fatal signal:                          Bug Criteria.
-* fatal signals:                         Signals.
-* FDL, GNU Free Documentation License:   GNU Free Documentation License.
-* fg (resume foreground execution):      Continuing and Stepping.
-* file:                                  Files.
-* file-i/o examples:                     File-I/O Examples.
-* file-i/o overview:                     File-I/O Overview.
-* File-I/O remote protocol extension:    File-I/O remote protocol extension.
-* file-i/o reply packet:                 The F reply packet.
-* file-i/o request packet:               The F request packet.
-* find trace snapshot:                   tfind.
-* finish:                                Continuing and Stepping.
-* flinching:                             Messages/Warnings.
-* float promotion:                       ABI.
-* floating point:                        Floating Point Hardware.
-* floating point registers:              Registers.
-* floating point, MIPS remote:           MIPS Embedded.
-* flush_i_cache:                         Bootstrapping.
-* focus:                                 TUI Commands.
-* focus of debugging:                    Threads.
-* foo:                                   Symbol Errors.
-* fork, debugging programs which call:   Processes.
-* format options:                        Print Settings.
-* formatted output:                      Output Formats.
-* Fortran:                               Summary.
-* forward-backward-delete-char ():       Commands For Text.
-* forward-char (C-f):                    Commands For Moving.
-* forward-search:                        Search.
-* forward-search-history (C-s):          Commands For History.
-* forward-word (M-f):                    Commands For Moving.
-* frame number:                          Frames.
-* frame pointer:                         Frames.
-* frame, command:                        Frames.
-* frame, definition:                     Frames.
-* frame, selecting:                      Selection.
-* frameless execution:                   Frames.
-* frames-invalid:                        Invalidation.
-* free memory information (MS-DOS):      DJGPP Native.
-* fstat, file-i/o system call:           stat/fstat.
-* Fujitsu:                               remote stub.
-* full symbol tables, listing GDB's internal: Symbols.
-* functions without line info, and stepping: Continuing and Stepping.
-* G packet:                              Packets.
-* g packet:                              Packets.
-* g++, GNU C++ compiler:                 C.
-* garbled pointers:                      DJGPP Native.
-* GCC and C++:                           C plus plus expressions.
-* GDB bugs, reporting:                   Bug Reporting.
-* GDB reference card:                    Formatting Documentation.
-* gdb.ini:                               Command Files.
-* GDB/MI, breakpoint commands:           GDB/MI Breakpoint Table Commands.
-* GDB/MI, compatibility with CLI:        GDB/MI Compatibility with CLI.
-* GDB/MI, data manipulation:             GDB/MI Data Manipulation.
-* GDB/MI, input syntax:                  GDB/MI Input Syntax.
-* GDB/MI, its purpose:                   GDB/MI.
-* GDB/MI, out-of-band records:           GDB/MI Out-of-band Records.
-* GDB/MI, output syntax:                 GDB/MI Output Syntax.
-* GDB/MI, result records:                GDB/MI Result Records.
-* GDB/MI, simple examples:               GDB/MI Simple Examples.
-* GDB/MI, stream records:                GDB/MI Stream Records.
-* GDBHISTFILE:                           History.
-* gdbserve.nlm:                          NetWare.
-* gdbserver:                             Server.
-* GDT:                                   DJGPP Native.
-* getDebugChar:                          Bootstrapping.
-* gettimeofday, file-i/o system call:    gettimeofday.
-* global debugging information directory: Separate Debug Files.
-* GNU C++:                               C.
-* GNU Emacs:                             Emacs.
-* gnu_debuglink_crc32:                   Separate Debug Files.
-* h (help):                              Help.
-* H packet:                              Packets.
-* H8/300 or H8/500 download:             H8/300.
-* handle:                                Signals.
-* handle_exception:                      Stub Contents.
-* handling signals:                      Signals.
-* hardware watchpoints:                  Set Watchpoints.
-* hbreak:                                Set Breaks.
-* help:                                  Help.
-* help target:                           Target Commands.
-* help user-defined:                     Define.
-* heuristic-fence-post (Alpha, MIPS):    MIPS.
-* history events:                        Event Designators.
-* history expansion <1>:                 History Interaction.
-* history expansion:                     History.
-* history file:                          History.
-* history number:                        Value History.
-* history save:                          History.
-* history size:                          History.
-* history substitution:                  History.
-* history-preserve-point:                Readline Init File Syntax.
-* history-search-backward ():            Commands For History.
-* history-search-forward ():             Commands For History.
-* hook:                                  Hooks.
-* hook-:                                 Hooks.
-* hookpost:                              Hooks.
-* hookpost-:                             Hooks.
-* hooks, for commands:                   Hooks.
-* hooks, post-command:                   Hooks.
-* hooks, pre-command:                    Hooks.
-* horizontal-scroll-mode:                Readline Init File Syntax.
-* host character set:                    Character Sets.
-* htrace disable:                        OpenRISC 1000.
-* htrace enable:                         OpenRISC 1000.
-* htrace info:                           OpenRISC 1000.
-* htrace mode continuous:                OpenRISC 1000.
-* htrace mode suspend:                   OpenRISC 1000.
-* htrace print:                          OpenRISC 1000.
-* htrace qualifier:                      OpenRISC 1000.
-* htrace record:                         OpenRISC 1000.
-* htrace rewind:                         OpenRISC 1000.
-* htrace stop:                           OpenRISC 1000.
-* htrace trigger:                        OpenRISC 1000.
-* hwatch:                                OpenRISC 1000.
-* i (info):                              Help.
-* I packet:                              Packets.
-* i packet:                              Packets.
-* i/o:                                   Input/Output.
-* i386:                                  remote stub.
-* i386-stub.c:                           remote stub.
-* IBM1047 character set:                 Character Sets.
-* IDT:                                   DJGPP Native.
-* if:                                    Define.
-* ignore:                                Conditions.
-* ignore count (of breakpoint):          Conditions.
-* INCLUDE_RDB:                           VxWorks.
-* info:                                  Help.
-* info address:                          Symbols.
-* info all-registers:                    Registers.
-* info args:                             Frame Info.
-* info auxv:                             Auxiliary Vector.
-* info breakpoints:                      Set Breaks.
-* info catch:                            Frame Info.
-* info cisco:                            KOD.
-* info classes:                          Symbols.
-* info display:                          Auto Display.
-* info dll:                              Cygwin Native.
-* info dos:                              DJGPP Native.
-* info extensions:                       Show.
-* info f (info frame):                   Frame Info.
-* info files:                            Files.
-* info float:                            Floating Point Hardware.
-* info frame:                            Frame Info.
-* info frame, show the source language:  Show.
-* info functions:                        Symbols.
-* info line:                             Machine Code.
-* info line, and Objective-C:            Method Names in Commands.
-* info locals:                           Frame Info.
-* info macro:                            Macros.
-* info mem:                              Memory Region Attributes.
-* info or1k spr:                         OpenRISC 1000.
-* info proc:                             SVR4 Process Information.
-* info proc mappings:                    SVR4 Process Information.
-* info program:                          Stopping.
-* info registers:                        Registers.
-* info s (info stack):                   Backtrace.
-* info scope:                            Symbols.
-* info selectors:                        Symbols.
-* info set:                              Help.
-* info share:                            Files.
-* info sharedlibrary:                    Files.
-* info signals:                          Signals.
-* info source:                           Symbols.
-* info source, show the source language: Show.
-* info sources:                          Symbols.
-* info stack:                            Backtrace.
-* info symbol:                           Symbols.
-* info target:                           Files.
-* info terminal:                         Input/Output.
-* info threads:                          Threads.
-* info tracepoints:                      Listing Tracepoints.
-* info types:                            Symbols.
-* info variables:                        Symbols.
-* info vector:                           Vector Unit.
-* info w32:                              Cygwin Native.
-* info watchpoints:                      Set Watchpoints.
-* info win:                              TUI Commands.
-* information about tracepoints:         Listing Tracepoints.
-* inheritance:                           Debugging C plus plus.
-* init file:                             Command Files.
-* init file name:                        Command Files.
-* initial frame:                         Frames.
-* initialization file, readline:         Readline Init File.
-* innermost frame:                       Frames.
-* input syntax for GDB/MI:               GDB/MI Input Syntax.
-* input-meta:                            Readline Init File Syntax.
-* insert-comment (M-#):                  Miscellaneous Commands.
-* insert-completions (M-*):              Commands For Completion.
-* inspect:                               Data.
-* installation:                          Installing GDB.
-* instructions, assembly:                Machine Code.
-* integral datatypes, in file-i/o protocol: Integral datatypes.
-* Intel:                                 remote stub.
-* Intel disassembly flavor:              Machine Code.
-* interaction, readline:                 Readline Interaction.
-* internal commands:                     Maintenance Commands.
-* internal GDB breakpoints:              Set Breaks.
-* interpreter-exec:                      Interpreters.
-* interrupt:                             Quitting GDB.
-* interrupting remote programs:          Connecting.
-* interrupting remote targets:           Bootstrapping.
-* invalid input:                         Bug Criteria.
-* invoke another interpreter:            Interpreters.
-* isatty call, file-i/o protocol:        The isatty call.
-* isatty, file-i/o system call:          isatty.
-* isearch-terminators:                   Readline Init File Syntax.
-* ISO 8859-1 character set:              Character Sets.
-* ISO Latin 1 character set:             Character Sets.
-* jump:                                  Jumping.
-* jump, and Objective-C:                 Method Names in Commands.
-* k packet:                              Packets.
-* kernel object display:                 KOD.
-* keymap:                                Readline Init File Syntax.
-* kill:                                  Kill Process.
-* kill ring:                             Readline Killing Commands.
-* kill-line (C-k):                       Commands For Killing.
-* kill-region ():                        Commands For Killing.
-* kill-whole-line ():                    Commands For Killing.
-* kill-word (M-d):                       Commands For Killing.
-* killing text:                          Readline Killing Commands.
-* KOD:                                   KOD.
-* l (list):                              List.
-* languages:                             Languages.
-* last tracepoint number:                Create and Delete Tracepoints.
-* latest breakpoint:                     Set Breaks.
-* layout asm:                            TUI Commands.
-* layout next:                           TUI Commands.
-* layout prev:                           TUI Commands.
-* layout regs:                           TUI Commands.
-* layout split:                          TUI Commands.
-* layout src:                            TUI Commands.
-* LDT:                                   DJGPP Native.
-* leaving GDB:                           Quitting GDB.
-* Left:                                  TUI Keys.
-* limits, in file-i/o protocol:          Limits.
-* linespec:                              List.
-* list:                                  List.
-* list of supported file-i/o calls:      List of supported calls.
-* list output in GDB/MI:                 GDB/MI Output Syntax.
-* list, and Objective-C:                 Method Names in Commands.
-* listing GDB's internal symbol tables:  Symbols.
-* listing machine instructions:          Machine Code.
-* listing mapped overlays:               Overlay Commands.
-* load address, overlay's:               How Overlays Work.
-* load FILENAME:                         Target Commands.
-* local variables:                       Symbols.
-* locate address:                        Output Formats.
-* log output in GDB/MI:                  GDB/MI Output Syntax.
-* logging GDB output:                    Logging output.
-* lseek flags, in file-i/o protocol:     Lseek flags.
-* lseek, file-i/o system call:           lseek.
-* M packet:                              Packets.
-* m packet:                              Packets.
-* m680x0:                                remote stub.
-* m68k-stub.c:                           remote stub.
-* machine instructions:                  Machine Code.
-* macro define:                          Macros.
-* macro definition, showing:             Macros.
-* macro expand:                          Macros.
-* macro expand-once:                     Macros.
-* macro expansion, showing the results of preprocessor: Macros.
-* macro undef:                           Macros.
-* macros, example of debugging with:     Macros.
-* macros, user-defined:                  Macros.
-* maint info breakpoints:                Maintenance Commands.
-* maint info psymtabs:                   Symbols.
-* maint info sections:                   Files.
-* maint info symtabs:                    Symbols.
-* maint internal-error:                  Maintenance Commands.
-* maint internal-warning:                Maintenance Commands.
-* maint print cooked-registers:          Maintenance Commands.
-* maint print dummy-frames:              Maintenance Commands.
-* maint print psymbols:                  Symbols.
-* maint print raw-registers:             Maintenance Commands.
-* maint print reggroups:                 Maintenance Commands.
-* maint print register-groups:           Maintenance Commands.
-* maint print registers:                 Maintenance Commands.
-* maint print symbols:                   Symbols.
-* maint set profile:                     Maintenance Commands.
-* maint show profile:                    Maintenance Commands.
-* maintenance commands:                  Maintenance Commands.
-* make:                                  Shell Commands.
-* manual overlay debugging:              Overlay Commands.
-* map an overlay:                        Overlay Commands.
-* mapped:                                Files.
-* mapped address:                        How Overlays Work.
-* mapped overlays:                       How Overlays Work.
-* mark-modified-lines:                   Readline Init File Syntax.
-* mark-symlinked-directories:            Readline Init File Syntax.
-* match-hidden-files:                    Readline Init File Syntax.
-* mem:                                   Memory Region Attributes.
-* member functions:                      C plus plus expressions.
-* memory models, H8/500:                 H8/500.
-* memory region attributes:              Memory Region Attributes.
-* memory tracing:                        Breakpoints.
-* memory transfer, in file-i/o protocol: Memory transfer.
-* memory, viewing as typed object:       Expressions.
-* memory-mapped symbol file:             Files.
-* memset:                                Bootstrapping.
-* menu-complete ():                      Commands For Completion.
-* meta-flag:                             Readline Init File Syntax.
-* mi interpreter:                        Interpreters.
-* mi1 interpreter:                       Interpreters.
-* mi2 interpreter:                       Interpreters.
-* minimal language:                      Unsupported languages.
-* Minimal symbols and DLLs:              Non-debug DLL symbols.
-* MIPS boards:                           MIPS Embedded.
-* MIPS remote floating point:            MIPS Embedded.
-* MIPS remotedebug protocol:             MIPS Embedded.
-* MIPS stack:                            MIPS.
-* mode_t values, in file-i/o protocol:   mode_t values.
-* Modula-2:                              Summary.
-* Modula-2 built-ins:                    Built-In Func/Proc.
-* Modula-2 checks:                       M2 Checks.
-* Modula-2 constants:                    Built-In Func/Proc.
-* Modula-2 defaults:                     M2 Defaults.
-* Modula-2 operators:                    M2 Operators.
-* Modula-2, deviations from:             Deviations.
-* Modula-2, GDB support:                 Modula-2.
-* Motorola 680x0:                        remote stub.
-* MS Windows debugging:                  Cygwin Native.
-* MS-DOS system info:                    DJGPP Native.
-* MS-DOS-specific commands:              DJGPP Native.
-* multiple processes:                    Processes.
-* multiple targets:                      Active Targets.
-* multiple threads:                      Threads.
-* n (next):                              Continuing and Stepping.
-* n (SingleKey TUI key):                 TUI Single Key Mode.
-* names of symbols:                      Symbols.
-* namespace in C++:                      C plus plus expressions.
-* native Cygwin debugging:               Cygwin Native.
-* native DJGPP debugging:                DJGPP Native.
-* negative breakpoint numbers:           Set Breaks.
-* New SYSTAG message:                    Threads.
-* New SYSTAG message, on HP-UX:          Threads.
-* next:                                  Continuing and Stepping.
-* next-history (C-n):                    Commands For History.
-* nexti:                                 Continuing and Stepping.
-* ni (nexti):                            Continuing and Stepping.
-* non-incremental-forward-search-history (M-n): Commands For History.
-* non-incremental-reverse-search-history (M-p): Commands For History.
-* notation, readline:                    Readline Bare Essentials.
-* notational conventions, for GDB/MI:    GDB/MI.
-* notify output in GDB/MI:               GDB/MI Output Syntax.
-* number representation:                 Numbers.
-* numbers for breakpoints:               Breakpoints.
-* object files, relocatable, reading symbols from: Files.
-* Objective-C:                           Objective-C.
-* online documentation:                  Help.
-* open flags, in file-i/o protocol:      Open flags.
-* open, file-i/o system call:            open.
-* OpenRISC 1000:                         OpenRISC 1000.
-* OpenRISC 1000 htrace:                  OpenRISC 1000.
-* operations allowed on pending breakpoints: Set Breaks.
-* optimized code, debugging:             Compilation.
-* or1k boards:                           OpenRISC 1000.
-* or1ksim:                               OpenRISC 1000.
-* OS ABI:                                ABI.
-* out-of-band records in GDB/MI:         GDB/MI Out-of-band Records.
-* outermost frame:                       Frames.
-* output:                                Output.
-* output formats:                        Output Formats.
-* output syntax of GDB/MI:               GDB/MI Output Syntax.
-* output-meta:                           Readline Init File Syntax.
-* overlay area:                          How Overlays Work.
-* overlay auto:                          Overlay Commands.
-* overlay example program:               Overlay Sample Program.
-* overlay load-target:                   Overlay Commands.
-* overlay manual:                        Overlay Commands.
-* overlay map-overlay:                   Overlay Commands.
-* overlay off:                           Overlay Commands.
-* overlay unmap-overlay:                 Overlay Commands.
-* overlays:                              Overlays.
-* overlays, setting breakpoints in:      Overlay Commands.
-* overload-choice:                       Prompting.
-* overloaded functions, calling:         C plus plus expressions.
-* overloaded functions, overload resolution: Debugging C plus plus.
-* overloading:                           Breakpoint Menus.
-* overloading in C++:                    Debugging C plus plus.
-* overwrite-mode ():                     Commands For Text.
-* P packet:                              Packets.
-* p packet:                              Packets.
-* packets, reporting on stdout:          Debugging Output.
-* page tables display (MS-DOS):          DJGPP Native.
-* page-completions:                      Readline Init File Syntax.
-* partial symbol dump:                   Symbols.
-* partial symbol tables, listing GDB's internal: Symbols.
-* Pascal:                                Summary.
-* passcount:                             Tracepoint Passcounts.
-* patching binaries:                     Patching.
-* path:                                  Environment.
-* pauses in output:                      Screen Size.
-* pending breakpoints:                   Set Breaks.
-* PgDn:                                  TUI Keys.
-* PgUp:                                  TUI Keys.
-* physical address from linear address:  DJGPP Native.
-* pipes:                                 Starting.
-* po (print-object):                     The Print Command with Objective-C.
-* pointer values, in file-i/o protocol:  Pointer values.
-* pointer, finding referent:             Print Settings.
-* possible-completions (M-?):            Commands For Completion.
-* post-commands:                         Prompting.
-* post-overload-choice:                  Prompting.
-* post-prompt:                           Prompting.
-* post-prompt-for-continue:              Prompting.
-* post-query:                            Prompting.
-* pre-commands:                          Prompting.
-* pre-overload-choice:                   Prompting.
-* pre-prompt:                            Prompting.
-* pre-prompt-for-continue:               Prompting.
-* pre-query:                             Prompting.
-* prefix-meta (<ESC>):                   Miscellaneous Commands.
-* premature return from system calls:    Thread Stops.
-* preprocessor macro expansion, showing the results of: Macros.
-* previous-history (C-p):                Commands For History.
-* print:                                 Data.
-* print an Objective-C object description: The Print Command with Objective-C.
-* print settings:                        Print Settings.
-* print-object:                          The Print Command with Objective-C.
-* printf:                                Output.
-* printing data:                         Data.
-* process image:                         SVR4 Process Information.
-* processes, multiple:                   Processes.
-* profiling GDB:                         Maintenance Commands.
-* prompt <1>:                            Prompting.
-* prompt:                                Prompt.
-* prompt-for-continue:                   Prompting.
-* protocol basics, file-i/o:             Protocol basics.
-* protocol specific representation of datatypes, in file-i/o protocol: Protocol specific representation of datatypes.
-* protocol, GDB remote serial:           Overview.
-* ptype:                                 Symbols.
-* putDebugChar:                          Bootstrapping.
-* pwd:                                   Working Directory.
-* q (quit):                              Quitting GDB.
-* q (SingleKey TUI key):                 TUI Single Key Mode.
-* Q packet:                              Packets.
-* q packet:                              Packets.
-* query:                                 Prompting.
-* quit:                                  Errors.
-* quit [EXPRESSION]:                     Quitting GDB.
-* quoted-insert (C-q or C-v):            Commands For Text.
-* quotes in commands:                    Completion.
-* quoting names:                         Symbols.
-* r (run):                               Starting.
-* r (SingleKey TUI key):                 TUI Single Key Mode.
-* R packet:                              Packets.
-* r packet:                              Packets.
-* raise exceptions:                      Set Catchpoints.
-* range checking:                        Type Checking.
-* ranges of breakpoints:                 Breakpoints.
-* rbreak:                                Set Breaks.
-* re-read-init-file (C-x C-r):           Miscellaneous Commands.
-* read, file-i/o system call:            read.
-* reading symbols from relocatable object files: Files.
-* reading symbols immediately:           Files.
-* readline:                              Editing.
-* readnow:                               Files.
-* recent tracepoint number:              Create and Delete Tracepoints.
-* redirection:                           Input/Output.
-* redraw-current-line ():                Commands For Moving.
-* reference card:                        Formatting Documentation.
-* reference declarations:                C plus plus expressions.
-* refresh:                               TUI Commands.
-* register stack, AMD29K:                A29K.
-* registers:                             Registers.
-* regular expression:                    Set Breaks.
-* reloading symbols:                     Symbols.
-* reloading the overlay table:           Overlay Commands.
-* relocatable object files, reading symbols from: Files.
-* remote connection without stubs:       Server.
-* remote debugging:                      Remote.
-* remote programs, interrupting:         Connecting.
-* remote protocol, field separator:      Overview.
-* remote serial debugging summary:       Debug Session.
-* remote serial debugging, overview:     remote stub.
-* remote serial protocol:                Overview.
-* remote serial stub:                    Stub Contents.
-* remote serial stub list:               remote stub.
-* remote serial stub, initialization:    Stub Contents.
-* remote serial stub, main routine:      Stub Contents.
-* remote stub, example:                  remote stub.
-* remote stub, support routines:         Bootstrapping.
-* remotedebug, MIPS protocol:            MIPS Embedded.
-* remotetimeout:                         Sparclet.
-* remove actions from a tracepoint:      Tracepoint Actions.
-* rename, file-i/o system call:          rename.
-* Renesas:                               remote stub.
-* Renesas SH download:                   H8/300.
-* repeating command sequences:           Command Syntax.
-* repeating commands:                    Command Syntax.
-* reporting bugs in GDB:                 GDB Bugs.
-* response time, MIPS debugging:         MIPS.
-* restore:                               Dump/Restore Files.
-* restore data from a file:              Dump/Restore Files.
-* result records in GDB/MI:              GDB/MI Result Records.
-* resuming execution:                    Continuing and Stepping.
-* RET (repeat last command):             Command Syntax.
-* retransmit-timeout, MIPS protocol:     MIPS Embedded.
-* return:                                Returning.
-* returning from a function:             Returning.
-* reverse-search:                        Search.
-* reverse-search-history (C-r):          Commands For History.
-* revert-line (M-r):                     Miscellaneous Commands.
-* Right:                                 TUI Keys.
-* run:                                   Starting.
-* running:                               Starting.
-* running and debugging Sparclet programs: Sparclet Execution.
-* running VxWorks tasks:                 VxWorks Attach.
-* running, on Sparclet:                  Sparclet.
-* rwatch:                                Set Watchpoints.
-* s (SingleKey TUI key):                 TUI Single Key Mode.
-* s (step):                              Continuing and Stepping.
-* S packet:                              Packets.
-* s packet:                              Packets.
-* save tracepoints for future sessions:  save-tracepoints.
-* save-tracepoints:                      save-tracepoints.
-* saving symbol table:                   Files.
-* scope:                                 M2 Scope.
-* search:                                Search.
-* searching:                             Search.
-* section:                               Files.
-* segment descriptor tables:             DJGPP Native.
-* select trace snapshot:                 tfind.
-* select-frame:                          Frames.
-* selected frame:                        Stack.
-* selecting frame silently:              Frames.
-* self-insert (a, b, A, 1, !, ...):      Commands For Text.
-* separate debugging information files:  Separate Debug Files.
-* sequence-id, for GDB remote:           Overview.
-* serial connections, debugging:         Debugging Output.
-* serial device, Renesas micros:         Renesas Boards.
-* serial line speed, Renesas micros:     Renesas Boards.
-* serial line, target remote:            Connecting.
-* serial protocol, GDB remote:           Overview.
-* server prefix for annotations:         Server Prefix.
-* set:                                   Help.
-* set args:                              Arguments.
-* set auto-solib-add:                    Files.
-* set auto-solib-limit:                  Files.
-* set backtrace limit:                   Backtrace.
-* set backtrace past-main:               Backtrace.
-* set breakpoint pending:                Set Breaks.
-* set charset:                           Character Sets.
-* set check range:                       Range Checking.
-* set check type:                        Type Checking.
-* set check, range:                      Range Checking.
-* set check, type:                       Type Checking.
-* set coerce-float-to-double:            ABI.
-* set complaints:                        Messages/Warnings.
-* set confirm:                           Messages/Warnings.
-* set cp-abi:                            ABI.
-* set debug arch:                        Debugging Output.
-* set debug event:                       Debugging Output.
-* set debug expression:                  Debugging Output.
-* set debug frame:                       Debugging Output.
-* set debug overload:                    Debugging Output.
-* set debug remote:                      Debugging Output.
-* set debug serial:                      Debugging Output.
-* set debug target:                      Debugging Output.
-* set debug varobj:                      Debugging Output.
-* set debug-file-directory:              Separate Debug Files.
-* set debugevents:                       Cygwin Native.
-* set debugexceptions:                   Cygwin Native.
-* set debugexec:                         Cygwin Native.
-* set debugmemory:                       Cygwin Native.
-* set demangle-style:                    Print Settings.
-* set disassembly-flavor:                Machine Code.
-* set editing:                           Editing.
-* set endian auto:                       Byte Order.
-* set endian big:                        Byte Order.
-* set endian little:                     Byte Order.
-* set environment:                       Environment.
-* set extension-language:                Show.
-* set follow-fork-mode:                  Processes.
-* set gnutarget:                         Target Commands.
-* set height:                            Screen Size.
-* set history expansion:                 History.
-* set history filename:                  History.
-* set history save:                      History.
-* set history size:                      History.
-* set host-charset:                      Character Sets.
-* set input-radix:                       Numbers.
-* set language:                          Manually.
-* set listsize:                          List.
-* set logging:                           Logging output.
-* set machine:                           Renesas Special.
-* set max-user-call-depth:               Define.
-* set memory MOD:                        H8/500.
-* set mipsfpu:                           MIPS Embedded.
-* set new-console:                       Cygwin Native.
-* set new-group:                         Cygwin Native.
-* set opaque-type-resolution:            Symbols.
-* set os:                                KOD.
-* set osabi:                             ABI.
-* set output-radix:                      Numbers.
-* set overload-resolution:               Debugging C plus plus.
-* set print address:                     Print Settings.
-* set print array:                       Print Settings.
-* set print asm-demangle:                Print Settings.
-* set print demangle:                    Print Settings.
-* set print elements:                    Print Settings.
-* set print max-symbolic-offset:         Print Settings.
-* set print null-stop:                   Print Settings.
-* set print object:                      Print Settings.
-* set print pretty:                      Print Settings.
-* set print sevenbit-strings:            Print Settings.
-* set print static-members:              Print Settings.
-* set print symbol-filename:             Print Settings.
-* set print union:                       Print Settings.
-* set print vtbl:                        Print Settings.
-* set processor ARGS:                    MIPS Embedded.
-* set prompt:                            Prompt.
-* set remote hardware-breakpoint-limit:  Remote configuration.
-* set remote hardware-watchpoint-limit:  Remote configuration.
-* set remote system-call-allowed 0:      The system call.
-* set remote system-call-allowed 1:      The system call.
-* set remotedebug, MIPS protocol:        MIPS Embedded.
-* set retransmit-timeout:                MIPS Embedded.
-* set rstack_high_address:               A29K.
-* set shell:                             Cygwin Native.
-* set solib-absolute-prefix:             Files.
-* set solib-search-path:                 Files.
-* set step-mode:                         Continuing and Stepping.
-* set symbol-reloading:                  Symbols.
-* set target-charset:                    Character Sets.
-* set timeout:                           MIPS Embedded.
-* set tracepoint:                        Create and Delete Tracepoints.
-* set trust-readonly-sections:           Files.
-* set tui active-border-mode:            TUI Configuration.
-* set tui border-kind:                   TUI Configuration.
-* set tui border-mode:                   TUI Configuration.
-* set variable:                          Assignment.
-* set verbose:                           Messages/Warnings.
-* set width:                             Screen Size.
-* set write:                             Patching.
-* set-mark (C-@):                        Miscellaneous Commands.
-* set_debug_traps:                       Stub Contents.
-* setting variables:                     Assignment.
-* setting watchpoints:                   Set Watchpoints.
-* SH:                                    remote stub.
-* sh-stub.c:                             remote stub.
-* share:                                 Files.
-* shared libraries:                      Files.
-* sharedlibrary:                         Files.
-* shell:                                 Shell Commands.
-* shell escape:                          Shell Commands.
-* show:                                  Help.
-* show args:                             Arguments.
-* show auto-solib-add:                   Files.
-* show auto-solib-limit:                 Files.
-* show backtrace limit:                  Backtrace.
-* show backtrace past-main:              Backtrace.
-* show breakpoint pending:               Set Breaks.
-* show charset:                          Character Sets.
-* show check range:                      Range Checking.
-* show check type:                       Type Checking.
-* show complaints:                       Messages/Warnings.
-* show confirm:                          Messages/Warnings.
-* show convenience:                      Convenience Vars.
-* show copying:                          Help.
-* show cp-abi:                           ABI.
-* show debug arch:                       Debugging Output.
-* show debug event:                      Debugging Output.
-* show debug expression:                 Debugging Output.
-* show debug frame:                      Debugging Output.
-* show debug overload:                   Debugging Output.
-* show debug remote:                     Debugging Output.
-* show debug serial:                     Debugging Output.
-* show debug target:                     Debugging Output.
-* show debug varobj:                     Debugging Output.
-* show debug-file-directory:             Separate Debug Files.
-* show demangle-style:                   Print Settings.
-* show directories:                      Source Path.
-* show editing:                          Editing.
-* show environment:                      Environment.
-* show gnutarget:                        Target Commands.
-* show height:                           Screen Size.
-* show history:                          History.
-* show host-charset:                     Character Sets.
-* show input-radix:                      Numbers.
-* show language:                         Show.
-* show listsize:                         List.
-* show logging:                          Logging output.
-* show machine:                          Renesas Special.
-* show max-user-call-depth:              Define.
-* show mipsfpu:                          MIPS Embedded.
-* show new-console:                      Cygwin Native.
-* show new-group:                        Cygwin Native.
-* show opaque-type-resolution:           Symbols.
-* show os:                               KOD.
-* show osabi:                            ABI.
-* show output-radix:                     Numbers.
-* show paths:                            Environment.
-* show print address:                    Print Settings.
-* show print array:                      Print Settings.
-* show print asm-demangle:               Print Settings.
-* show print demangle:                   Print Settings.
-* show print elements:                   Print Settings.
-* show print max-symbolic-offset:        Print Settings.
-* show print object:                     Print Settings.
-* show print pretty:                     Print Settings.
-* show print sevenbit-strings:           Print Settings.
-* show print static-members:             Print Settings.
-* show print symbol-filename:            Print Settings.
-* show print union:                      Print Settings.
-* show print vtbl:                       Print Settings.
-* show processor:                        MIPS Embedded.
-* show prompt:                           Prompt.
-* show remote system-call-allowed:       The system call.
-* show remotedebug, MIPS protocol:       MIPS Embedded.
-* show retransmit-timeout:               MIPS Embedded.
-* show rstack_high_address:              A29K.
-* show shell:                            Cygwin Native.
-* show solib-absolute-prefix:            Files.
-* show solib-search-path:                Files.
-* show symbol-reloading:                 Symbols.
-* show target-charset:                   Character Sets.
-* show timeout:                          MIPS Embedded.
-* show user:                             Define.
-* show values:                           Value History.
-* show verbose:                          Messages/Warnings.
-* show version:                          Help.
-* show warranty:                         Help.
-* show width:                            Screen Size.
-* show write:                            Patching.
-* show-all-if-ambiguous:                 Readline Init File Syntax.
-* shows:                                 History.
-* si (stepi):                            Continuing and Stepping.
-* signal <1>:                            Annotations for Running.
-* signal:                                Signaling.
-* signal-name:                           Annotations for Running.
-* signal-name-end:                       Annotations for Running.
-* signal-string:                         Annotations for Running.
-* signal-string-end:                     Annotations for Running.
-* signalled:                             Annotations for Running.
-* signals:                               Signals.
-* silent:                                Break Commands.
-* sim:                                   Z8000.
-* simulator, Z8000:                      Z8000.
-* size of screen:                        Screen Size.
-* software watchpoints:                  Set Watchpoints.
-* source <1>:                            Source Annotations.
-* source:                                Command Files.
-* source path:                           Source Path.
-* Sparc:                                 remote stub.
-* sparc-stub.c:                          remote stub.
-* sparcl-stub.c:                         remote stub.
-* Sparclet:                              Sparclet.
-* SparcLite:                             remote stub.
-* speed:                                 Renesas Boards.
-* spr:                                   OpenRISC 1000.
-* ST2000 auxiliary commands:             ST2000.
-* st2000 CMD:                            ST2000.
-* stack frame:                           Frames.
-* stack on Alpha:                        MIPS.
-* stack on MIPS:                         MIPS.
-* stack traces:                          Backtrace.
-* stacking targets:                      Active Targets.
-* start a new trace experiment:          Starting and Stopping Trace Experiment.
-* start-kbd-macro (C-x ():               Keyboard Macros.
-* starting <1>:                          Annotations for Running.
-* starting:                              Starting.
-* stat, file-i/o system call:            stat/fstat.
-* status of trace data collection:       Starting and Stopping Trace Experiment.
-* status output in GDB/MI:               GDB/MI Output Syntax.
-* STDBUG commands (ST2000):              ST2000.
-* step:                                  Continuing and Stepping.
-* stepi:                                 Continuing and Stepping.
-* stepping:                              Continuing and Stepping.
-* stepping into functions with no line info: Continuing and Stepping.
-* stop a running trace experiment:       Starting and Stopping Trace Experiment.
-* stop reply packets:                    Stop Reply Packets.
-* stop, a pseudo-command:                Hooks.
-* stopped threads:                       Thread Stops.
-* stopping:                              Annotations for Running.
-* stream records in GDB/MI:              GDB/MI Stream Records.
-* struct stat, in file-i/o protocol:     struct stat.
-* struct timeval, in file-i/o protocol:  struct timeval.
-* stub example, remote debugging:        remote stub.
-* stupid questions:                      Messages/Warnings.
-* switching threads:                     Threads.
-* switching threads automatically:       Threads.
-* symbol decoding style, C++:            Print Settings.
-* symbol dump:                           Symbols.
-* symbol from address:                   Symbols.
-* symbol names:                          Symbols.
-* symbol overloading:                    Breakpoint Menus.
-* symbol table:                          Files.
-* symbol tables, listing GDB's internal: Symbols.
-* symbol-file:                           Files.
-* symbols, reading from relocatable object files: Files.
-* symbols, reading immediately:          Files.
-* sysinfo:                               DJGPP Native.
-* system call, file-i/o protocol:        The system call.
-* system calls and thread breakpoints:   Thread Stops.
-* system, file-i/o system call:          system.
-* T packet:                              Packets.
-* t packet:                              Packets.
-* T packet reply:                        Stop Reply Packets.
-* target:                                Targets.
-* target abug:                           M68K.
-* target array:                          MIPS Embedded.
-* target byte order:                     Byte Order.
-* target character set:                  Character Sets.
-* target core:                           Target Commands.
-* target cpu32bug:                       M68K.
-* target dbug:                           M68K.
-* target ddb PORT:                       MIPS Embedded.
-* target dink32:                         PowerPC.
-* target e7000, with H8/300:             H8/300.
-* target e7000, with Renesas ICE:        Renesas ICE.
-* target e7000, with Renesas SH:         SH.
-* target est:                            M68K.
-* target exec:                           Target Commands.
-* target hms, and serial protocol:       Renesas Boards.
-* target hms, with H8/300:               H8/300.
-* target hms, with Renesas SH:           SH.
-* target jtag:                           OpenRISC 1000.
-* target lsi PORT:                       MIPS Embedded.
-* target m32r:                           M32R/D.
-* target m32rsdi:                        M32R/D.
-* target mips PORT:                      MIPS Embedded.
-* target nrom:                           Target Commands.
-* target op50n:                          PA.
-* target output in GDB/MI:               GDB/MI Output Syntax.
-* target pmon PORT:                      MIPS Embedded.
-* target ppcbug:                         PowerPC.
-* target ppcbug1:                        PowerPC.
-* target r3900:                          MIPS Embedded.
-* target rdi:                            ARM.
-* target rdp:                            ARM.
-* target remote:                         Target Commands.
-* target rom68k:                         M68K.
-* target rombug:                         M68K.
-* target sds:                            PowerPC.
-* target sh3, with H8/300:               H8/300.
-* target sh3, with SH:                   SH.
-* target sh3e, with H8/300:              H8/300.
-* target sh3e, with SH:                  SH.
-* target sim:                            Target Commands.
-* target sim, with Z8000:                Z8000.
-* target sparclite:                      Sparclite.
-* target vxworks:                        VxWorks.
-* target w89k:                           PA.
-* tbreak:                                Set Breaks.
-* TCP port, target remote:               Connecting.
-* tdump:                                 tdump.
-* terminal:                              Input/Output.
-* Text User Interface:                   TUI.
-* tfind:                                 tfind.
-* thbreak:                               Set Breaks.
-* this, inside C++ member functions:     C plus plus expressions.
-* thread apply:                          Threads.
-* thread breakpoints:                    Thread Stops.
-* thread breakpoints and system calls:   Thread Stops.
-* thread identifier (GDB):               Threads.
-* thread identifier (system):            Threads.
-* thread identifier (system), on HP-UX:  Threads.
-* thread number:                         Threads.
-* thread THREADNO:                       Threads.
-* threads and watchpoints:               Set Watchpoints.
-* threads of execution:                  Threads.
-* threads, automatic switching:          Threads.
-* threads, continuing:                   Thread Stops.
-* threads, stopped:                      Thread Stops.
-* timeout, MIPS protocol:                MIPS Embedded.
-* trace:                                 Create and Delete Tracepoints.
-* trace experiment, status of:           Starting and Stopping Trace Experiment.
-* tracebacks:                            Backtrace.
-* tracepoint actions:                    Tracepoint Actions.
-* tracepoint data, display:              tdump.
-* tracepoint deletion:                   Create and Delete Tracepoints.
-* tracepoint number:                     Create and Delete Tracepoints.
-* tracepoint pass count:                 Tracepoint Passcounts.
-* tracepoint variables:                  Tracepoint Variables.
-* tracepoints:                           Tracepoints.
-* translating between character sets:    Character Sets.
-* transpose-chars (C-t):                 Commands For Text.
-* transpose-words (M-t):                 Commands For Text.
-* tstart:                                Starting and Stopping Trace Experiment.
-* tstatus:                               Starting and Stopping Trace Experiment.
-* tstop:                                 Starting and Stopping Trace Experiment.
-* tty:                                   Input/Output.
-* TUI:                                   TUI.
-* TUI commands:                          TUI Commands.
-* TUI configuration variables:           TUI Configuration.
-* TUI key bindings:                      TUI Keys.
-* tui reg:                               TUI Commands.
-* TUI single key mode:                   TUI Single Key Mode.
-* type casting memory:                   Expressions.
-* type checking:                         Checks.
-* type conversions in C++:               C plus plus expressions.
-* u (SingleKey TUI key):                 TUI Single Key Mode.
-* u (until):                             Continuing and Stepping.
-* UDP port, target remote:               Connecting.
-* undisplay:                             Auto Display.
-* undo (C-_ or C-x C-u):                 Miscellaneous Commands.
-* universal-argument ():                 Numeric Arguments.
-* unix-line-discard (C-u):               Commands For Killing.
-* unix-word-rubout (C-w):                Commands For Killing.
-* unknown address, locating:             Output Formats.
-* unlink, file-i/o system call:          unlink.
-* unmap an overlay:                      Overlay Commands.
-* unmapped overlays:                     How Overlays Work.
-* unset environment:                     Environment.
-* unsupported languages:                 Unsupported languages.
-* until:                                 Continuing and Stepping.
-* Up:                                    TUI Keys.
-* up:                                    Selection.
-* up-silently:                           Selection.
-* upcase-word (M-u):                     Commands For Text.
-* update:                                TUI Commands.
-* user-defined command:                  Define.
-* user-defined macros:                   Macros.
-* v (SingleKey TUI key):                 TUI Single Key Mode.
-* value history:                         Value History.
-* variable name conflict:                Variables.
-* variable objects in GDB/MI:            GDB/MI Variable Objects.
-* variable values, wrong:                Variables.
-* variables, readline:                   Readline Init File Syntax.
-* variables, setting:                    Assignment.
-* vCont packet:                          Packets.
-* vCont? packet:                         Packets.
-* vector unit:                           Vector Unit.
-* vector, auxiliary:                     Auxiliary Vector.
-* version number:                        Help.
-* visible-stats:                         Readline Init File Syntax.
-* VxWorks:                               VxWorks.
-* vxworks-timeout:                       VxWorks.
-* w (SingleKey TUI key):                 TUI Single Key Mode.
-* watch:                                 Set Watchpoints.
-* watchpoint:                            Annotations for Running.
-* watchpoints:                           Breakpoints.
-* watchpoints and threads:               Set Watchpoints.
-* whatis:                                Symbols.
-* where:                                 Backtrace.
-* while:                                 Define.
-* while-stepping (tracepoints):          Tracepoint Actions.
-* wild pointer, interpreting:            Print Settings.
-* winheight:                             TUI Commands.
-* word completion:                       Completion.
-* working directory:                     Source Path.
-* working directory (of your program):   Working Directory.
-* working language:                      Languages.
-* write, file-i/o system call:           write.
-* writing into corefiles:                Patching.
-* writing into executables:              Patching.
-* wrong values:                          Variables.
-* x (examine memory):                    Memory.
-* X packet:                              Packets.
-* x(examine), and info line:             Machine Code.
-* yank (C-y):                            Commands For Killing.
-* yank-last-arg (M-. or M-_):            Commands For History.
-* yank-nth-arg (M-C-y):                  Commands For History.
-* yank-pop (M-y):                        Commands For Killing.
-* yanking text:                          Readline Killing Commands.
-* z packet:                              Packets.
-* Z packets:                             Packets.
-* Z0 packet:                             Packets.
-* z0 packet:                             Packets.
-* Z1 packet:                             Packets.
-* z1 packet:                             Packets.
-* Z2 packet:                             Packets.
-* z2 packet:                             Packets.
-* Z3 packet:                             Packets.
-* z3 packet:                             Packets.
-* Z4 packet:                             Packets.
-* z4 packet:                             Packets.
-* Z8000:                                 Z8000.
-* Zilog Z8000 simulator:                 Z8000.
-* {TYPE}:                                Expressions.
-
 

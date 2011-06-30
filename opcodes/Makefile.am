@@ -1,6 +1,6 @@
 ## Process this file with automake to generate Makefile.in
 
-AUTOMAKE_OPTIONS = cygnus
+AUTOMAKE_OPTIONS = 1.9 cygnus
 
 SUBDIRS = po
 
@@ -57,6 +57,8 @@ CFILES = \
 	cgen-opc.c \
 	cris-dis.c \
 	cris-opc.c \
+	crx-dis.c \
+	crx-opc.c \
 	d10v-dis.c \
 	d10v-opc.c \
 	d30v-dis.c \
@@ -179,6 +181,8 @@ ALL_MACHINES = \
 	cgen-opc.lo \
 	cris-dis.lo \
 	cris-opc.lo \
+	crx-dis.lo \
+	crx-opc.lo \
 	d10v-dis.lo \
 	d10v-opc.lo \
 	d30v-dis.lo \
@@ -277,6 +281,10 @@ ALL_MACHINES = \
 
 OFILES = @BFD_MACHINES@
 
+# We should reconfigure whenever bfd/configure.in changes, because
+# that's where the version number in Makefile comes from.
+CONFIG_STATUS_DEPENDENCIES = $(BFDDIR)/configure.in
+
 INCLUDES = -D_GNU_SOURCE -I. -I$(srcdir) -I../bfd -I$(INCDIR) -I$(BFDDIR) @HDEFINES@ -I$(srcdir)/../intl -I../intl
 
 disassemble.lo: disassemble.c $(INCDIR)/dis-asm.h
@@ -314,11 +322,6 @@ POTFILES = $(HFILES) $(CFILES)
 po/POTFILES.in: @MAINT@ Makefile
 	for f in $(POTFILES); do echo $$f; done | LC_COLLATE= sort > tmp \
 	  && mv tmp $(srcdir)/po/POTFILES.in
-
-# We should reconfigure whenever bfd/configure.in changes, because
-# that's where the version number comes from.
-config.status: $(srcdir)/configure $(srcdir)/../bfd/configure.in
-	$(SHELL) ./config.status --recheck
 
 install-bfdlibLTLIBRARIES: @INSTALL_LIBBFD_TRUE@install_libopcodes
 	@$(NORMAL_INSTALL)
@@ -461,8 +464,6 @@ s390-opc.tab: s390-mkopc s390-opc.txt
 sh-dis.lo: sh-dis.c
 	$(LIBTOOL) --mode=compile $(COMPILE) -c @archdefs@ $<
 
-Makefile: $(BFDDIR)/configure.in
-
 # This dependency stuff is copied from BFD.
 
 DEP: dep.sed $(CFILES) $(HFILES) config.h
@@ -548,6 +549,11 @@ cris-dis.lo: cris-dis.c $(INCDIR)/dis-asm.h $(BFD_H) \
   $(INCDIR)/ansidecl.h $(INCDIR)/symcat.h sysdep.h config.h \
   $(INCDIR)/opcode/cris.h $(INCDIR)/libiberty.h
 cris-opc.lo: cris-opc.c $(INCDIR)/opcode/cris.h
+crx-dis.lo: crx-dis.c $(INCDIR)/dis-asm.h $(BFD_H) \
+  $(INCDIR)/ansidecl.h $(INCDIR)/symcat.h sysdep.h config.h \
+  $(INCDIR)/opcode/crx.h
+crx-opc.lo: crx-opc.c $(INCDIR)/libiberty.h $(INCDIR)/ansidecl.h \
+  $(INCDIR)/symcat.h $(INCDIR)/opcode/crx.h
 d10v-dis.lo: d10v-dis.c sysdep.h config.h $(INCDIR)/ansidecl.h \
   $(INCDIR)/opcode/d10v.h $(INCDIR)/dis-asm.h $(BFD_H) \
   $(INCDIR)/symcat.h
@@ -782,7 +788,7 @@ s390-dis.lo: s390-dis.c $(INCDIR)/ansidecl.h sysdep.h \
   config.h $(INCDIR)/dis-asm.h $(BFD_H) $(INCDIR)/symcat.h \
   $(INCDIR)/opcode/s390.h
 sh-dis.lo: sh-dis.c sysdep.h config.h $(INCDIR)/ansidecl.h \
-  sh-opc.h $(INCDIR)/dis-asm.h $(BFD_H) $(INCDIR)/symcat.h
+  sh-opc.h $(BFD_H) $(INCDIR)/symcat.h $(INCDIR)/dis-asm.h
 sh64-dis.lo: sh64-dis.c $(INCDIR)/dis-asm.h $(BFD_H) \
   $(INCDIR)/ansidecl.h $(INCDIR)/symcat.h sysdep.h config.h \
   sh64-opc.h $(INCDIR)/libiberty.h $(BFDDIR)/elf-bfd.h \
@@ -839,8 +845,8 @@ xstormy16-opc.lo: xstormy16-opc.c sysdep.h config.h \
   $(INCDIR)/ansidecl.h $(BFD_H) $(INCDIR)/symcat.h xstormy16-desc.h \
   $(INCDIR)/opcode/cgen.h xstormy16-opc.h $(INCDIR)/libiberty.h
 xtensa-dis.lo: xtensa-dis.c $(INCDIR)/xtensa-isa.h \
-  $(INCDIR)/ansidecl.h sysdep.h config.h $(INCDIR)/dis-asm.h \
-  $(BFD_H) $(INCDIR)/symcat.h
+  $(INCDIR)/ansidecl.h $(INCDIR)/libiberty.h sysdep.h \
+  config.h $(INCDIR)/dis-asm.h $(BFD_H) $(INCDIR)/symcat.h
 z8k-dis.lo: z8k-dis.c sysdep.h config.h $(INCDIR)/ansidecl.h \
   $(INCDIR)/dis-asm.h $(BFD_H) $(INCDIR)/symcat.h z8k-opc.h
 z8kgen.lo: z8kgen.c sysdep.h config.h $(INCDIR)/ansidecl.h \

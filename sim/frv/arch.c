@@ -2,7 +2,7 @@
 
 THIS FILE IS MACHINE GENERATED WITH CGEN.
 
-Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+Copyright 1996-2004 Free Software Foundation, Inc.
 
 This file is part of the GNU simulators.
 
@@ -41,6 +41,9 @@ const MACH *sim_machs[] =
 #endif
 #ifdef HAVE_CPU_FRVBF
   & fr400_mach,
+#endif
+#ifdef HAVE_CPU_FRVBF
+  & fr450_mach,
 #endif
 #ifdef HAVE_CPU_FRVBF
   & simple_mach,
