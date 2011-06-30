@@ -37,6 +37,9 @@
 
 static void undef_cmd_error (char *, char *);
 
+static struct cmd_list_element *delete_cmd (char *name,
+					    struct cmd_list_element **list);
+
 static struct cmd_list_element *find_cmd (char *command,
 					  int len,
 					  struct cmd_list_element *clist,
@@ -105,6 +108,18 @@ get_cmd_context (struct cmd_list_element *cmd)
   return cmd->context;
 }
 
+void
+set_cmd_no_selected_thread_ok (struct cmd_list_element *cmd)
+{
+  cmd->flags |= CMD_NO_SELECTED_THREAD_OK;
+}
+
+int
+get_cmd_no_selected_thread_ok (struct cmd_list_element *cmd)
+{
+  return cmd->flags & CMD_NO_SELECTED_THREAD_OK;
+}
+
 enum cmd_types
 cmd_type (struct cmd_list_element *cmd)
 {
@@ -113,7 +128,8 @@ cmd_type (struct cmd_list_element *cmd)
 
 void
 set_cmd_completer (struct cmd_list_element *cmd,
-		   char **(*completer) (char *text, char *word))
+		   char **(*completer) (struct cmd_list_element *self,
+					char *text, char *word))
 {
   cmd->completer = completer; /* Ok.  */
 }
@@ -142,9 +158,13 @@ add_cmd (char *name, enum command_class class, void (*fun) (char *, int),
 {
   struct cmd_list_element *c
   = (struct cmd_list_element *) xmalloc (sizeof (struct cmd_list_element));
-  struct cmd_list_element *p;
+  struct cmd_list_element *p, *iter;
 
-  delete_cmd (name, list);
+  /* Turn each alias of the old command into an alias of the new
+     command.  */
+  c->aliases = delete_cmd (name, list);
+  for (iter = c->aliases; iter; iter = iter->alias_chain)
+    iter->cmd_pointer = c;
 
   if (*list == NULL || strcmp ((*list)->name, name) >= 0)
     {
@@ -177,7 +197,8 @@ add_cmd (char *name, enum command_class class, void (*fun) (char *, int),
   c->prefixname = NULL;
   c->allow_unknown = 0;
   c->abbrev_flag = 0;
-  set_cmd_completer (c, make_symbol_completion_list);
+  set_cmd_completer (c, make_symbol_completion_list_fn);
+  c->destroyer = NULL;
   c->type = not_set_cmd;
   c->var = NULL;
   c->var_type = var_boolean;
@@ -186,6 +207,7 @@ add_cmd (char *name, enum command_class class, void (*fun) (char *, int),
   c->hookee_pre = NULL;
   c->hookee_post = NULL;
   c->cmd_pointer = NULL;
+  c->alias_chain = NULL;
 
   return c;
 }
@@ -240,6 +262,8 @@ add_alias_cmd (char *name, char *oldname, enum command_class class,
   c->allow_unknown = old->allow_unknown;
   c->abbrev_flag = abbrev_flag;
   c->cmd_pointer = old;
+  c->alias_chain = old->aliases;
+  old->aliases = c;
   return c;
 }
 
@@ -527,11 +551,16 @@ add_setshow_optional_filename_cmd (char *name, enum command_class class,
 				   struct cmd_list_element **set_list,
 				   struct cmd_list_element **show_list)
 {
+  struct cmd_list_element *set_result;
+ 
   add_setshow_cmd_full (name, class, var_optional_filename, var,
 			set_doc, show_doc, help_doc,
 			set_func, show_func,
 			set_list, show_list,
-			NULL, NULL);
+			&set_result, NULL);
+		
+  set_cmd_completer (set_result, filename_completer);
+
 }
 
 /* Add element named NAME to both the set and show command LISTs (the
@@ -599,40 +628,56 @@ add_setshow_zinteger_cmd (char *name, enum command_class class,
 
 /* Remove the command named NAME from the command list.  */
 
-void
+static struct cmd_list_element *
 delete_cmd (char *name, struct cmd_list_element **list)
 {
-  struct cmd_list_element *c;
-  struct cmd_list_element *p;
+  struct cmd_list_element *iter;
+  struct cmd_list_element **previous_chain_ptr;
+  struct cmd_list_element *aliases = NULL;
 
-  while (*list && strcmp ((*list)->name, name) == 0)
+  previous_chain_ptr = list;
+
+  for (iter = *previous_chain_ptr; iter; iter = *previous_chain_ptr)
     {
-      if ((*list)->hookee_pre)
-      (*list)->hookee_pre->hook_pre = 0;   /* Hook slips out of its mouth */
-      if ((*list)->hookee_post)
-      (*list)->hookee_post->hook_post = 0; /* Hook slips out of its bottom  */
-      p = (*list)->next;
-      xfree (* list);
-      *list = p;
+      if (strcmp (iter->name, name) == 0)
+	{
+	  if (iter->destroyer)
+	    iter->destroyer (iter, iter->context);
+	  if (iter->hookee_pre)
+	    iter->hookee_pre->hook_pre = 0;
+	  if (iter->hookee_post)
+	    iter->hookee_post->hook_post = 0;
+
+	  /* Update the link.  */
+	  *previous_chain_ptr = iter->next;
+
+	  aliases = iter->aliases;
+
+	  /* If this command was an alias, remove it from the list of
+	     aliases.  */
+	  if (iter->cmd_pointer)
+	    {
+	      struct cmd_list_element **prevp = &iter->cmd_pointer->aliases;
+	      struct cmd_list_element *a = *prevp;
+
+	      while (a != iter)
+		{
+		  prevp = &a->alias_chain;
+		  a = *prevp;
+		}
+	      *prevp = iter->alias_chain;
+	    }
+
+	  xfree (iter);
+
+	  /* We won't see another command with the same name.  */
+	  break;
+	}
+      else
+	previous_chain_ptr = &iter->next;
     }
 
-  if (*list)
-    for (c = *list; c->next;)
-      {
-	if (strcmp (c->next->name, name) == 0)
-	  {
-          if (c->next->hookee_pre)
-            c->next->hookee_pre->hook_pre = 0; /* hooked cmd gets away.  */
-          if (c->next->hookee_post)
-            c->next->hookee_post->hook_post = 0; /* remove post hook */
-                                               /* :( no fishing metaphore */
-	    p = c->next->next;
-	    xfree (c->next);
-	    c->next = p;
-	  }
-	else
-	  c = c->next;
-      }
+  return aliases;
 }
 
 /* Shorthands to the commands above. */
@@ -780,11 +825,11 @@ help_cmd (char *command, struct ui_file *stream)
                       "\nThis command has a hook (or hooks) defined:\n");
 
   if (c->hook_pre)
-    fprintf_filtered (stream, 
+    fprintf_filtered (stream,
                       "\tThis command is run after  : %s (pre hook)\n",
                     c->hook_pre->name);
   if (c->hook_post)
-    fprintf_filtered (stream, 
+    fprintf_filtered (stream,
                       "\tThis command is run before : %s (post hook)\n",
                     c->hook_post->name);
 }
@@ -1095,11 +1140,7 @@ lookup_cmd_1 (char **text, struct cmd_list_element *clist,
 
 
   command = (char *) alloca (len + 1);
-  for (tmp = 0; tmp < len; tmp++)
-    {
-      char x = (*text)[tmp];
-      command[tmp] = x;
-    }
+  memcpy (command, *text, len);
   command[len] = '\0';
 
   /* Look it up.  */
@@ -1148,7 +1189,7 @@ lookup_cmd_1 (char **text, struct cmd_list_element *clist,
        flags */
       
       if (found->flags & DEPRECATED_WARN_USER)
-      deprecated_cmd_warning (&line);
+	deprecated_cmd_warning (&line);
       found = found->cmd_pointer;
     }
   /* If we found a prefix command, keep looking.  */
@@ -1451,11 +1492,7 @@ lookup_cmd_composition (char *text,
        it's length is len).  We copy this into a local temporary */
       
       command = (char *) alloca (len + 1);
-      for (tmp = 0; tmp < len; tmp++)
-      {
-        char x = text[tmp];
-        command[tmp] = x;
-      }
+      memcpy (command, text, len);
       command[len] = '\0';
       
       /* Look it up.  */
@@ -1664,5 +1701,3 @@ cmd_func (struct cmd_list_element *cmd, char *args, int from_tty)
   else
     error (_("Invalid command"));
 }
-
-

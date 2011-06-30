@@ -53,7 +53,9 @@
 #include "objfiles.h"
 #include "target.h"
 #include "inferior.h"
+#include "gdbthread.h"
 #include "solist.h"
+#include "solib.h"
 
 #ifdef USE_LDR_ROUTINES
 # include <loader.h>
@@ -306,6 +308,16 @@ osf_clear_solib (void)
 static void
 osf_solib_create_inferior_hook (void)
 {
+  struct inferior *inf;
+  struct thread_info *tp;
+
+  inf = current_inferior ();
+
+  /* If we are attaching to the inferior, the shared libraries
+     have already been mapped, so nothing more to do.  */
+  if (inf->attach_flag)
+    return;
+
   /* Nothing to do for statically bound executables.  */
 
   if (symfile_objfile == NULL
@@ -316,17 +328,25 @@ osf_solib_create_inferior_hook (void)
   /* Now run the target.  It will eventually get a SIGTRAP, at
      which point all of the libraries will have been mapped in and we
      can go groveling around in the rld structures to find
-     out what we need to know about them. */
+     out what we need to know about them.
+     
+     If debugging from a core file, we cannot resume the execution
+     of the inferior.  But this is actually not an issue, because
+     shared libraries have already been mapped anyways, which means
+     we have nothing more to do.  */
+  if (!target_can_run (&current_target))
+    return;
 
+  tp = inferior_thread ();
   clear_proceed_status ();
-  stop_soon = STOP_QUIETLY;
-  stop_signal = TARGET_SIGNAL_0;
+  inf->stop_soon = STOP_QUIETLY;
+  tp->stop_signal = TARGET_SIGNAL_0;
   do
     {
-      target_resume (minus_one_ptid, 0, stop_signal);
+      target_resume (minus_one_ptid, 0, tp->stop_signal);
       wait_for_inferior (0);
     }
-  while (stop_signal != TARGET_SIGNAL_TRAP);
+  while (tp->stop_signal != TARGET_SIGNAL_TRAP);
 
   /*  solib_add will call reinit_frame_cache.
      But we are stopped in the runtime loader and we do not have symbols
@@ -335,7 +355,7 @@ osf_solib_create_inferior_hook (void)
      Delaying the resetting of stop_soon until after symbol loading
      suppresses the warning.  */
   solib_add ((char *) 0, 0, (struct target_ops *) 0, auto_solib_add);
-  stop_soon = NO_STOP_QUIETLY;
+  inf->stop_soon = NO_STOP_QUIETLY;
 }
 
 /* target_so_ops callback.  Do additional symbol handling, lookup, etc. after
@@ -594,7 +614,7 @@ osf_in_dynsym_resolve_code (CORE_ADDR pc)
      for the user: When stepping inside a subprogram located in a shared
      library, gdb might stop inside the dynamic loader code instead of
      inside the subprogram itself. See the explanations in infrun.c about
-     the IN_SOLIB_DYNSYM_RESOLVE_CODE macro for more details. */
+     the in_solib_dynsym_resolve_code() function for more details. */
   return 0;
 }
 

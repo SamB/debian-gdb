@@ -36,7 +36,7 @@
 /* Signal trampoline support.  */
 
 static void sparc64_linux_sigframe_init (const struct tramp_frame *self,
-					 struct frame_info *next_frame,
+					 struct frame_info *this_frame,
 					 struct trad_frame_cache *this_cache,
 					 CORE_ADDR func);
 
@@ -57,14 +57,14 @@ static const struct tramp_frame sparc64_linux_rt_sigframe =
 
 static void
 sparc64_linux_sigframe_init (const struct tramp_frame *self,
-			     struct frame_info *next_frame,
+			     struct frame_info *this_frame,
 			     struct trad_frame_cache *this_cache,
 			     CORE_ADDR func)
 {
   CORE_ADDR base, addr, sp_addr;
   int regnum;
 
-  base = frame_unwind_register_unsigned (next_frame, SPARC_O1_REGNUM);
+  base = get_frame_register_unsigned (this_frame, SPARC_O1_REGNUM);
   base += 128;
 
   /* Offsets from <bits/sigcontext.h>.  */
@@ -84,11 +84,11 @@ sparc64_linux_sigframe_init (const struct tramp_frame *self,
   trad_frame_set_reg_addr (this_cache, SPARC64_Y_REGNUM, addr + 24);
   trad_frame_set_reg_addr (this_cache, SPARC64_FPRS_REGNUM, addr + 28);
 
-  base = frame_unwind_register_unsigned (next_frame, SPARC_SP_REGNUM);
+  base = get_frame_register_unsigned (this_frame, SPARC_SP_REGNUM);
   if (base & 1)
     base += BIAS;
 
-  addr = get_frame_memory_unsigned (next_frame, sp_addr, 8);
+  addr = get_frame_memory_unsigned (this_frame, sp_addr, 8);
   if (addr & 1)
     addr += BIAS;
 
@@ -174,6 +174,32 @@ sparc64_linux_collect_core_fpregset (const struct regset *regset,
   sparc64_collect_fpregset (regcache, regnum, fpregs);
 }
 
+/* Set the program counter for process PTID to PC.  */
+
+#define TSTATE_SYSCALL	0x0000000000000020ULL
+
+static void
+sparc64_linux_write_pc (struct regcache *regcache, CORE_ADDR pc)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_regcache_arch (regcache));
+  ULONGEST state;
+
+  regcache_cooked_write_unsigned (regcache, tdep->pc_regnum, pc);
+  regcache_cooked_write_unsigned (regcache, tdep->npc_regnum, pc + 4);
+
+  /* Clear the "in syscall" bit to prevent the kernel from
+     messing with the PCs we just installed, if we happen to be
+     within an interrupted system call that the kernel wants to
+     restart.
+
+     Note that after we return from the dummy call, the TSTATE et al.
+     registers will be automatically restored, and the kernel
+     continues to restart the system call at this point.  */
+  regcache_cooked_read_unsigned (regcache, SPARC64_STATE_REGNUM, &state);
+  state &= ~TSTATE_SYSCALL;
+  regcache_cooked_write_unsigned (regcache, SPARC64_STATE_REGNUM, state);
+}
+
 
 
 static void
@@ -192,7 +218,7 @@ sparc64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tramp_frame_prepend_unwinder (gdbarch, &sparc64_linux_rt_sigframe);
 
   /* Hook in the DWARF CFI frame unwinder.  */
-  frame_unwind_append_sniffer (gdbarch, dwarf2_frame_sniffer);
+  dwarf2_append_unwinders (gdbarch);
 
   sparc64_init_abi (info, gdbarch);
 
@@ -211,6 +237,8 @@ sparc64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   /* Make sure we can single-step over signal return system calls.  */
   tdep->step_trap = sparc64_linux_step_trap;
+
+  set_gdbarch_write_pc (gdbarch, sparc64_linux_write_pc);
 }
 
 

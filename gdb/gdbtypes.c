@@ -108,6 +108,13 @@ struct type *builtin_type_arm_ext;
 struct type *builtin_type_ia64_spill;
 struct type *builtin_type_ia64_quad;
 
+/* Platform-neutral void type.  */
+struct type *builtin_type_void;
+
+/* Platform-neutral character types.  */
+struct type *builtin_type_true_char;
+struct type *builtin_type_true_unsigned_char;
+
 
 int opaque_type_resolution = 1;
 static void
@@ -277,7 +284,7 @@ make_pointer_type (struct type *type, struct type **typeptr)
   /* Mark pointers as unsigned.  The target converts between pointers
      and addresses (CORE_ADDRs) using gdbarch_pointer_to_address and
      gdbarch_address_to_pointer.  */
-  TYPE_FLAGS (ntype) |= TYPE_FLAG_UNSIGNED;
+  TYPE_UNSIGNED (ntype) = 1;
 
   if (!TYPE_POINTER_TYPE (type))	/* Remember it, if don't have one.  */
     TYPE_POINTER_TYPE (type) = ntype;
@@ -429,9 +436,9 @@ address_space_name_to_int (char *space_identifier)
   int type_flags;
   /* Check for known address space delimiters.  */
   if (!strcmp (space_identifier, "code"))
-    return TYPE_FLAG_CODE_SPACE;
+    return TYPE_INSTANCE_FLAG_CODE_SPACE;
   else if (!strcmp (space_identifier, "data"))
-    return TYPE_FLAG_DATA_SPACE;
+    return TYPE_INSTANCE_FLAG_DATA_SPACE;
   else if (gdbarch_address_class_name_to_type_flags_p (gdbarch)
            && gdbarch_address_class_name_to_type_flags (gdbarch,
 							space_identifier,
@@ -448,11 +455,11 @@ const char *
 address_space_int_to_name (int space_flag)
 {
   struct gdbarch *gdbarch = current_gdbarch;
-  if (space_flag & TYPE_FLAG_CODE_SPACE)
+  if (space_flag & TYPE_INSTANCE_FLAG_CODE_SPACE)
     return "code";
-  else if (space_flag & TYPE_FLAG_DATA_SPACE)
+  else if (space_flag & TYPE_INSTANCE_FLAG_DATA_SPACE)
     return "data";
-  else if ((space_flag & TYPE_FLAG_ADDRESS_CLASS_ALL)
+  else if ((space_flag & TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL)
            && gdbarch_address_class_type_flags_to_name_p (gdbarch))
     return gdbarch_address_class_type_flags_to_name (gdbarch, space_flag);
   else
@@ -525,8 +532,9 @@ make_type_with_address_space (struct type *type, int space_flag)
 {
   struct type *ntype;
   int new_flags = ((TYPE_INSTANCE_FLAGS (type)
-		    & ~(TYPE_FLAG_CODE_SPACE | TYPE_FLAG_DATA_SPACE
-		        | TYPE_FLAG_ADDRESS_CLASS_ALL))
+		    & ~(TYPE_INSTANCE_FLAG_CODE_SPACE
+			| TYPE_INSTANCE_FLAG_DATA_SPACE
+		        | TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL))
 		   | space_flag);
 
   return make_qualified_type (type, new_flags, NULL);
@@ -553,13 +561,13 @@ make_cv_type (int cnst, int voltl,
   struct objfile *objfile;
 
   int new_flags = (TYPE_INSTANCE_FLAGS (type)
-		   & ~(TYPE_FLAG_CONST | TYPE_FLAG_VOLATILE));
+		   & ~(TYPE_INSTANCE_FLAG_CONST | TYPE_INSTANCE_FLAG_VOLATILE));
 
   if (cnst)
-    new_flags |= TYPE_FLAG_CONST;
+    new_flags |= TYPE_INSTANCE_FLAG_CONST;
 
   if (voltl)
-    new_flags |= TYPE_FLAG_VOLATILE;
+    new_flags |= TYPE_INSTANCE_FLAG_VOLATILE;
 
   if (typeptr && *typeptr != NULL)
     {
@@ -655,7 +663,7 @@ lookup_methodptr_type (struct type *to_type)
   mtype = alloc_type (TYPE_OBJFILE (to_type));
   TYPE_TARGET_TYPE (mtype) = to_type;
   TYPE_DOMAIN_TYPE (mtype) = TYPE_DOMAIN_TYPE (to_type);
-  TYPE_LENGTH (mtype) = cplus_method_ptr_size ();
+  TYPE_LENGTH (mtype) = cplus_method_ptr_size (to_type);
   TYPE_CODE (mtype) = TYPE_CODE_METHODPTR;
   return mtype;
 }
@@ -699,7 +707,7 @@ create_range_type (struct type *result_type, struct type *index_type,
   TYPE_CODE (result_type) = TYPE_CODE_RANGE;
   TYPE_TARGET_TYPE (result_type) = index_type;
   if (TYPE_STUB (index_type))
-    TYPE_FLAGS (result_type) |= TYPE_FLAG_TARGET_STUB;
+    TYPE_TARGET_STUB (result_type) = 1;
   else
     TYPE_LENGTH (result_type) = TYPE_LENGTH (check_typedef (index_type));
   TYPE_NFIELDS (result_type) = 2;
@@ -710,7 +718,7 @@ create_range_type (struct type *result_type, struct type *index_type,
   TYPE_FIELD_BITPOS (result_type, 1) = high_bound;
 
   if (low_bound >= 0)
-    TYPE_FLAGS (result_type) |= TYPE_FLAG_UNSIGNED;
+    TYPE_UNSIGNED (result_type) = 1;
 
   return (result_type);
 }
@@ -748,7 +756,7 @@ get_discrete_bounds (struct type *type, LONGEST *lowp, LONGEST *highp)
 	  /* Set unsigned indicator if warranted.  */
 	  if (*lowp >= 0)
 	    {
-	      TYPE_FLAGS (type) |= TYPE_FLAG_UNSIGNED;
+	      TYPE_UNSIGNED (type) = 1;
 	    }
 	}
       else
@@ -828,7 +836,7 @@ create_array_type (struct type *result_type,
 
   /* TYPE_FLAG_TARGET_STUB will take care of zero length arrays */
   if (TYPE_LENGTH (result_type) == 0)
-    TYPE_FLAGS (result_type) |= TYPE_FLAG_TARGET_STUB;
+    TYPE_TARGET_STUB (result_type) = 1;
 
   return (result_type);
 }
@@ -882,7 +890,7 @@ create_set_type (struct type *result_type, struct type *domain_type)
       TYPE_LENGTH (result_type)
 	= (bit_length + TARGET_CHAR_BIT - 1) / TARGET_CHAR_BIT;
       if (low_bound >= 0)
-	TYPE_FLAGS (result_type) |= TYPE_FLAG_UNSIGNED;
+	TYPE_UNSIGNED (result_type) = 1;
     }
   TYPE_FIELD_TYPE (result_type, 0) = domain_type;
 
@@ -947,7 +955,7 @@ make_vector_type (struct type *array_type)
       TYPE_TARGET_TYPE (inner_array) = elt_type;
     }
 
-  TYPE_FLAGS (array_type) |= TYPE_FLAG_VECTOR;
+  TYPE_VECTOR (array_type) = 1;
 }
 
 struct type *
@@ -1015,7 +1023,7 @@ smash_to_method_type (struct type *type, struct type *domain,
   TYPE_FIELDS (type) = args;
   TYPE_NFIELDS (type) = nargs;
   if (varargs)
-    TYPE_FLAGS (type) |= TYPE_FLAG_VARARGS;
+    TYPE_VARARGS (type) = 1;
   TYPE_LENGTH (type) = 1;	/* In practice, this is never needed.  */
   TYPE_CODE (type) = TYPE_CODE_METHOD;
 }
@@ -1045,8 +1053,7 @@ lookup_typename (char *name, struct block *block, int noerr)
   struct symbol *sym;
   struct type *tmp;
 
-  sym = lookup_symbol (name, block, VAR_DOMAIN, 0, 
-		       (struct symtab **) NULL);
+  sym = lookup_symbol (name, block, VAR_DOMAIN, 0);
   if (sym == NULL || SYMBOL_CLASS (sym) != LOC_TYPEDEF)
     {
       tmp = language_lookup_primitive_type_by_name (current_language,
@@ -1101,8 +1108,7 @@ lookup_struct (char *name, struct block *block)
 {
   struct symbol *sym;
 
-  sym = lookup_symbol (name, block, STRUCT_DOMAIN, 0,
-		       (struct symtab **) NULL);
+  sym = lookup_symbol (name, block, STRUCT_DOMAIN, 0);
 
   if (sym == NULL)
     {
@@ -1125,8 +1131,7 @@ lookup_union (char *name, struct block *block)
   struct symbol *sym;
   struct type *t;
 
-  sym = lookup_symbol (name, block, STRUCT_DOMAIN, 0,
-		       (struct symtab **) NULL);
+  sym = lookup_symbol (name, block, STRUCT_DOMAIN, 0);
 
   if (sym == NULL)
     error (_("No union type named %s."), name);
@@ -1157,8 +1162,7 @@ lookup_enum (char *name, struct block *block)
 {
   struct symbol *sym;
 
-  sym = lookup_symbol (name, block, STRUCT_DOMAIN, 0,
-		       (struct symtab **) NULL);
+  sym = lookup_symbol (name, block, STRUCT_DOMAIN, 0);
   if (sym == NULL)
     {
       error (_("No enum type named %s."), name);
@@ -1186,8 +1190,7 @@ lookup_template_type (char *name, struct type *type,
   strcat (nam, TYPE_NAME (type));
   strcat (nam, " >");	/* FIXME, extra space still introduced in gcc? */
 
-  sym = lookup_symbol (nam, block, VAR_DOMAIN, 0, 
-		       (struct symtab **) NULL);
+  sym = lookup_symbol (nam, block, VAR_DOMAIN, 0);
 
   if (sym == NULL)
     {
@@ -1321,7 +1324,7 @@ get_vptr_fieldno (struct type *type, struct type **basetypep)
 	    {
 	      /* If the type comes from a different objfile we can't cache
 		 it, it may have a different lifetime. PR 2384 */
-	      if (TYPE_OBJFILE (type) == TYPE_OBJFILE (baseclass))
+	      if (TYPE_OBJFILE (type) == TYPE_OBJFILE (basetype))
 		{
 		  TYPE_VPTR_FIELDNO (type) = fieldno;
 		  TYPE_VPTR_BASETYPE (type) = basetype;
@@ -1425,8 +1428,7 @@ check_typedef (struct type *type)
 	      stub_noname_complaint ();
 	      return type;
 	    }
-	  sym = lookup_symbol (name, 0, STRUCT_DOMAIN, 0,
-			       (struct symtab **) NULL);
+	  sym = lookup_symbol (name, 0, STRUCT_DOMAIN, 0);
 	  if (sym)
 	    TYPE_TARGET_TYPE (type) = SYMBOL_TYPE (sym);
 	  else					/* TYPE_CODE_UNDEF */
@@ -1490,8 +1492,7 @@ check_typedef (struct type *type)
 	  stub_noname_complaint ();
 	  return type;
 	}
-      sym = lookup_symbol (name, 0, STRUCT_DOMAIN, 
-			   0, (struct symtab **) NULL);
+      sym = lookup_symbol (name, 0, STRUCT_DOMAIN, 0);
       if (sym)
         {
           /* Same as above for opaque types, we can replace the stub
@@ -1533,12 +1534,12 @@ check_typedef (struct type *type)
 	    nb_elements = high_bound - low_bound + 1;
 	
 	  TYPE_LENGTH (type) = nb_elements * TYPE_LENGTH (target_type);
-	  TYPE_FLAGS (type) &= ~TYPE_FLAG_TARGET_STUB;
+	  TYPE_TARGET_STUB (type) = 0;
 	}
       else if (TYPE_CODE (type) == TYPE_CODE_RANGE)
 	{
 	  TYPE_LENGTH (type) = TYPE_LENGTH (target_type);
-	  TYPE_FLAGS (type) &= ~TYPE_FLAG_TARGET_STUB;
+	  TYPE_TARGET_STUB (type) = 0;
 	}
     }
   /* Cache TYPE_LENGTH for future use.  */
@@ -1682,10 +1683,10 @@ check_stub_method (struct type *type, int method_id, int signature_id)
   TYPE_DOMAIN_TYPE (mtype) = type;
   TYPE_FIELDS (mtype) = argtypes;
   TYPE_NFIELDS (mtype) = argcount;
-  TYPE_FLAGS (mtype) &= ~TYPE_FLAG_STUB;
+  TYPE_STUB (mtype) = 0;
   TYPE_FN_FIELD_STUB (f, signature_id) = 0;
   if (p[-2] == '.')
-    TYPE_FLAGS (mtype) |= TYPE_FLAG_VARARGS;
+    TYPE_VARARGS (mtype) = 1;
 
   xfree (demangled_name);
 }
@@ -1767,7 +1768,33 @@ init_type (enum type_code code, int length, int flags,
   type = alloc_type (objfile);
   TYPE_CODE (type) = code;
   TYPE_LENGTH (type) = length;
-  TYPE_FLAGS (type) |= flags;
+
+  gdb_assert (!(flags & (TYPE_FLAG_MIN - 1)));
+  if (flags & TYPE_FLAG_UNSIGNED)
+    TYPE_UNSIGNED (type) = 1;
+  if (flags & TYPE_FLAG_NOSIGN)
+    TYPE_NOSIGN (type) = 1;
+  if (flags & TYPE_FLAG_STUB)
+    TYPE_STUB (type) = 1;
+  if (flags & TYPE_FLAG_TARGET_STUB)
+    TYPE_TARGET_STUB (type) = 1;
+  if (flags & TYPE_FLAG_STATIC)
+    TYPE_STATIC (type) = 1;
+  if (flags & TYPE_FLAG_PROTOTYPED)
+    TYPE_PROTOTYPED (type) = 1;
+  if (flags & TYPE_FLAG_INCOMPLETE)
+    TYPE_INCOMPLETE (type) = 1;
+  if (flags & TYPE_FLAG_VARARGS)
+    TYPE_VARARGS (type) = 1;
+  if (flags & TYPE_FLAG_VECTOR)
+    TYPE_VECTOR (type) = 1;
+  if (flags & TYPE_FLAG_STUB_SUPPORTED)
+    TYPE_STUB_SUPPORTED (type) = 1;
+  if (flags & TYPE_FLAG_NOTTEXT)
+    TYPE_NOTTEXT (type) = 1;
+  if (flags & TYPE_FLAG_FIXED_INSTANCE)
+    TYPE_FIXED_INSTANCE (type) = 1;
+
   if ((name != NULL) && (objfile != NULL))
     {
       TYPE_NAME (type) = obsavestring (name, strlen (name), 
@@ -1781,7 +1808,7 @@ init_type (enum type_code code, int length, int flags,
   /* C++ fancies.  */
 
   if (name && strcmp (name, "char") == 0)
-    TYPE_FLAGS (type) |= TYPE_FLAG_NOSIGN;
+    TYPE_NOSIGN (type) = 1;
 
   if (code == TYPE_CODE_STRUCT || code == TYPE_CODE_UNION
       || code == TYPE_CODE_NAMESPACE)
@@ -2407,6 +2434,20 @@ print_arg_types (struct field *args, int nargs, int spaces)
     }
 }
 
+int
+field_is_static (struct field *f)
+{
+  /* "static" fields are the fields whose location is not relative
+     to the address of the enclosing struct.  It would be nice to
+     have a dedicated flag that would be set for static fields when
+     the type is being created.  But in practice, checking the field
+     loc_kind should give us an accurate answer (at least as long as
+     we assume that DWARF block locations are not going to be used
+     for static fields).  FIXME?  */
+  return (FIELD_LOC_KIND (*f) == FIELD_LOC_KIND_PHYSNAME
+	  || FIELD_LOC_KIND (*f) == FIELD_LOC_KIND_PHYSADDR);
+}
+
 static void
 dump_fn_fieldlists (struct type *type, int spaces)
 {
@@ -2526,35 +2567,6 @@ print_cplus_stuff (struct type *type, int spaces)
   if (TYPE_NFN_FIELDS (type) > 0)
     {
       dump_fn_fieldlists (type, spaces);
-    }
-}
-
-static void
-print_bound_type (int bt)
-{
-  switch (bt)
-    {
-    case BOUND_CANNOT_BE_DETERMINED:
-      printf_filtered ("(BOUND_CANNOT_BE_DETERMINED)");
-      break;
-    case BOUND_BY_REF_ON_STACK:
-      printf_filtered ("(BOUND_BY_REF_ON_STACK)");
-      break;
-    case BOUND_BY_VALUE_ON_STACK:
-      printf_filtered ("(BOUND_BY_VALUE_ON_STACK)");
-      break;
-    case BOUND_BY_REF_IN_REG:
-      printf_filtered ("(BOUND_BY_REF_IN_REG)");
-      break;
-    case BOUND_BY_VALUE_IN_REG:
-      printf_filtered ("(BOUND_BY_VALUE_IN_REG)");
-      break;
-    case BOUND_SIMPLE:
-      printf_filtered ("(BOUND_SIMPLE)");
-      break;
-    default:
-      printf_filtered (_("(unknown bound type)"));
-      break;
     }
 }
 
@@ -2692,14 +2704,6 @@ recursive_dump_type (struct type *type, int spaces)
     }
   puts_filtered ("\n");
   printfi_filtered (spaces, "length %d\n", TYPE_LENGTH (type));
-  printfi_filtered (spaces, "upper_bound_type 0x%x ",
-		    TYPE_ARRAY_UPPER_BOUND_TYPE (type));
-  print_bound_type (TYPE_ARRAY_UPPER_BOUND_TYPE (type));
-  puts_filtered ("\n");
-  printfi_filtered (spaces, "lower_bound_type 0x%x ",
-		    TYPE_ARRAY_LOWER_BOUND_TYPE (type));
-  print_bound_type (TYPE_ARRAY_LOWER_BOUND_TYPE (type));
-  puts_filtered ("\n");
   printfi_filtered (spaces, "objfile ");
   gdb_print_host_address (TYPE_OBJFILE (type), gdb_stdout);
   printf_filtered ("\n");
@@ -2746,7 +2750,8 @@ recursive_dump_type (struct type *type, int spaces)
       puts_filtered (" TYPE_FLAG_ADDRESS_CLASS_2");
     }
   puts_filtered ("\n");
-  printfi_filtered (spaces, "flags 0x%x", TYPE_FLAGS (type));
+
+  printfi_filtered (spaces, "flags");
   if (TYPE_UNSIGNED (type))
     {
       puts_filtered (" TYPE_FLAG_UNSIGNED");
@@ -2785,6 +2790,18 @@ recursive_dump_type (struct type *type, int spaces)
   if (TYPE_VECTOR (type))
     {
       puts_filtered (" TYPE_FLAG_VECTOR");
+    }
+  if (TYPE_FIXED_INSTANCE (type))
+    {
+      puts_filtered (" TYPE_FIXED_INSTANCE");
+    }
+  if (TYPE_STUB_SUPPORTED (type))
+    {
+      puts_filtered (" TYPE_STUB_SUPPORTED");
+    }
+  if (TYPE_NOTTEXT (type))
+    {
+      puts_filtered (" TYPE_NOTTEXT");
     }
   puts_filtered ("\n");
   printfi_filtered (spaces, "nfields %d ", TYPE_NFIELDS (type));
@@ -2935,35 +2952,32 @@ copy_type_recursive (struct objfile *objfile,
 
   /* We must add the new type to the hash table immediately, in case
      we encounter this type again during a recursive call below.  */
-  stored = xmalloc (sizeof (struct type_pair));
+  stored = obstack_alloc (&objfile->objfile_obstack, sizeof (struct type_pair));
   stored->old = type;
   stored->new = new_type;
   *slot = stored;
 
-  /* Copy the common fields of types.  */
-  TYPE_CODE (new_type) = TYPE_CODE (type);
-  TYPE_ARRAY_UPPER_BOUND_TYPE (new_type) = 
-    TYPE_ARRAY_UPPER_BOUND_TYPE (type);
-  TYPE_ARRAY_LOWER_BOUND_TYPE (new_type) = 
-    TYPE_ARRAY_LOWER_BOUND_TYPE (type);
+  /* Copy the common fields of types.  For the main type, we simply
+     copy the entire thing and then update specific fields as needed.  */
+  *TYPE_MAIN_TYPE (new_type) = *TYPE_MAIN_TYPE (type);
+  TYPE_OBJFILE (new_type) = NULL;
+
   if (TYPE_NAME (type))
     TYPE_NAME (new_type) = xstrdup (TYPE_NAME (type));
   if (TYPE_TAG_NAME (type))
     TYPE_TAG_NAME (new_type) = xstrdup (TYPE_TAG_NAME (type));
-  TYPE_FLAGS (new_type) = TYPE_FLAGS (type);
-  TYPE_VPTR_FIELDNO (new_type) = TYPE_VPTR_FIELDNO (type);
 
   TYPE_INSTANCE_FLAGS (new_type) = TYPE_INSTANCE_FLAGS (type);
   TYPE_LENGTH (new_type) = TYPE_LENGTH (type);
 
   /* Copy the fields.  */
-  TYPE_NFIELDS (new_type) = TYPE_NFIELDS (type);
   if (TYPE_NFIELDS (type))
     {
       int i, nfields;
 
       nfields = TYPE_NFIELDS (type);
       TYPE_FIELDS (new_type) = xmalloc (sizeof (struct field) * nfields);
+      memset (TYPE_FIELDS (new_type), 0, sizeof (struct field) * nfields);
       for (i = 0; i < nfields; i++)
 	{
 	  TYPE_FIELD_ARTIFICIAL (new_type, i) = 
@@ -2976,18 +2990,25 @@ copy_type_recursive (struct objfile *objfile,
 	  if (TYPE_FIELD_NAME (type, i))
 	    TYPE_FIELD_NAME (new_type, i) = 
 	      xstrdup (TYPE_FIELD_NAME (type, i));
-	  if (TYPE_FIELD_STATIC_HAS_ADDR (type, i))
-	    SET_FIELD_PHYSADDR (TYPE_FIELD (new_type, i),
-				TYPE_FIELD_STATIC_PHYSADDR (type, i));
-	  else if (TYPE_FIELD_STATIC (type, i))
-	    SET_FIELD_PHYSNAME (TYPE_FIELD (new_type, i),
-				xstrdup (TYPE_FIELD_STATIC_PHYSNAME (type, 
-								     i)));
-	  else
+	  switch (TYPE_FIELD_LOC_KIND (type, i))
 	    {
-	      TYPE_FIELD_BITPOS (new_type, i) = 
-		TYPE_FIELD_BITPOS (type, i);
-	      TYPE_FIELD_STATIC_KIND (new_type, i) = 0;
+	    case FIELD_LOC_KIND_BITPOS:
+	      SET_FIELD_BITPOS (TYPE_FIELD (new_type, i),
+				TYPE_FIELD_BITPOS (type, i));
+	      break;
+	    case FIELD_LOC_KIND_PHYSADDR:
+	      SET_FIELD_PHYSADDR (TYPE_FIELD (new_type, i),
+				  TYPE_FIELD_STATIC_PHYSADDR (type, i));
+	      break;
+	    case FIELD_LOC_KIND_PHYSNAME:
+	      SET_FIELD_PHYSNAME (TYPE_FIELD (new_type, i),
+				  xstrdup (TYPE_FIELD_STATIC_PHYSNAME (type,
+								       i)));
+	      break;
+	    default:
+	      internal_error (__FILE__, __LINE__,
+			      _("Unexpected type field location kind: %d"),
+			      TYPE_FIELD_LOC_KIND (type, i));
 	    }
 	}
     }
@@ -3018,6 +3039,112 @@ copy_type_recursive (struct objfile *objfile,
     INIT_CPLUS_SPECIFIC (new_type);
 
   return new_type;
+}
+
+/* Make a copy of the given TYPE, except that the pointer & reference
+   types are not preserved.
+   
+   This function assumes that the given type has an associated objfile.
+   This objfile is used to allocate the new type.  */
+
+struct type *
+copy_type (const struct type *type)
+{
+  struct type *new_type;
+
+  gdb_assert (TYPE_OBJFILE (type) != NULL);
+
+  new_type = alloc_type (TYPE_OBJFILE (type));
+  TYPE_INSTANCE_FLAGS (new_type) = TYPE_INSTANCE_FLAGS (type);
+  TYPE_LENGTH (new_type) = TYPE_LENGTH (type);
+  memcpy (TYPE_MAIN_TYPE (new_type), TYPE_MAIN_TYPE (type),
+	  sizeof (struct main_type));
+
+  return new_type;
+}
+
+/* Allocate a hash table which is used when freeing a struct type.  */
+
+htab_t
+create_deleted_types_hash (void)
+{
+  return htab_create (1, htab_hash_pointer, htab_eq_pointer, NULL);
+}
+
+/* A helper for delete_type_recursive which deletes a main_type and
+   the things to which it refers.  TYPE is a type whose main_type we
+   wish to destroy.  DELETED_TYPES is a hash holding already-seen
+   pointers; see delete_type_recursive.  */
+
+static void
+delete_main_type (struct type *type, htab_t deleted_types)
+{
+  int i;
+  void **slot;
+
+  if (!type)
+    return;
+
+  /* Multiple types might share a single main_type.  So, we must
+     check to make sure this is not happening.  */
+  slot = htab_find_slot (deleted_types, TYPE_MAIN_TYPE (type), INSERT);
+  if (*slot != NULL)
+    return;
+  *slot = TYPE_MAIN_TYPE (type);
+
+  xfree (TYPE_NAME (type));
+  xfree (TYPE_TAG_NAME (type));
+
+  delete_type_recursive (TYPE_TARGET_TYPE (type), deleted_types);
+  delete_type_recursive (TYPE_VPTR_BASETYPE (type), deleted_types);
+
+  for (i = 0; i < TYPE_NFIELDS (type); ++i)
+    {
+      delete_type_recursive (TYPE_FIELD_TYPE (type, i), deleted_types);
+      xfree (TYPE_FIELD_NAME (type, i));
+
+      if (TYPE_FIELD_LOC_KIND (type, i) == FIELD_LOC_KIND_PHYSNAME)
+	xfree (TYPE_FIELD_STATIC_PHYSNAME (type, i));
+    }
+  xfree (TYPE_FIELDS (type));
+
+  /* Strangely, HAVE_CPLUS_STRUCT will return true when there isn't
+     one at all.  */
+  gdb_assert (!HAVE_CPLUS_STRUCT (type) || !TYPE_CPLUS_SPECIFIC (type));
+
+  xfree (TYPE_MAIN_TYPE (type));
+}
+
+/* Recursively delete TYPE and things it references.  TYPE must have
+   been allocated using xmalloc -- not using an objfile.
+   DELETED_TYPES is a hash table, allocated using
+   create_deleted_types_hash, which is used for checking whether a
+   type has already been deleted.  */
+
+void
+delete_type_recursive (struct type *type, htab_t deleted_types)
+{
+  void **slot;
+
+  if (!type)
+    return;
+
+  slot = htab_find_slot (deleted_types, type, INSERT);
+  if (*slot != NULL)
+    return;
+  gdb_assert (!TYPE_OBJFILE (type));
+  *slot = type;
+
+  delete_main_type (type, deleted_types);
+  delete_type_recursive (TYPE_POINTER_TYPE (type), deleted_types);
+  delete_type_recursive (TYPE_REFERENCE_TYPE (type), deleted_types);
+
+  /* It is somewhat inefficient to free the chain recursively.
+     However, the list is typically short, and this avoid duplicating
+     the deletion checking code.  */
+  delete_type_recursive (TYPE_CHAIN (type), deleted_types);
+
+  xfree (type);
 }
 
 static struct type *
@@ -3077,14 +3204,6 @@ gdbtypes_post_init (struct gdbarch *gdbarch)
 	       (TYPE_FLAG_NOSIGN
                 | (gdbarch_char_signed (gdbarch) ? 0 : TYPE_FLAG_UNSIGNED)),
 	       "char", (struct objfile *) NULL);
-  builtin_type->builtin_true_char =
-    init_type (TYPE_CODE_CHAR, TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-	       0,
-	       "true character", (struct objfile *) NULL);
-  builtin_type->builtin_true_unsigned_char =
-    init_type (TYPE_CODE_CHAR, TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-	       TYPE_FLAG_UNSIGNED,
-	       "true character", (struct objfile *) NULL);
   builtin_type->builtin_signed_char =
     init_type (TYPE_CODE_INT, TARGET_CHAR_BIT / TARGET_CHAR_BIT,
 	       0,
@@ -3300,6 +3419,19 @@ _initialize_gdbtypes (void)
     build_flt (-1, "builtin_type_ia64_spill", floatformats_ia64_spill);
   builtin_type_ia64_quad =
     build_flt (-1, "builtin_type_ia64_quad", floatformats_ia64_quad);
+
+  builtin_type_void =
+    init_type (TYPE_CODE_VOID, 1,
+	       0,
+	       "void", (struct objfile *) NULL);
+  builtin_type_true_char =
+    init_type (TYPE_CODE_CHAR, TARGET_CHAR_BIT / TARGET_CHAR_BIT,
+	       0,
+	       "true character", (struct objfile *) NULL);
+  builtin_type_true_unsigned_char =
+    init_type (TYPE_CODE_CHAR, TARGET_CHAR_BIT / TARGET_CHAR_BIT,
+	       TYPE_FLAG_UNSIGNED,
+	       "true character", (struct objfile *) NULL);
 
   add_setshow_zinteger_cmd ("overload", no_class, &overload_debug, _("\
 Set debugging of C++ overloading."), _("\

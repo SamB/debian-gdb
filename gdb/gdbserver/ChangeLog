@@ -1,3 +1,467 @@
+2008-11-19  Bob Wilson  <bob.wilson@acm.org>
+	
+	* xtensa-xtregs.c (XTENSA_ELF_XTREG_SIZE): Change to 4.
+	(xtensa_regmap_table): Add entry for scompare1.
+	
+2008-11-18  Thiago Jung Bauermann  <bauerman@br.ibm.com>
+
+	* Makefile.in (powerpc-isa205-32l.o, powerpc-isa205-32l.c,
+	powerpc-isa205-altivec32l.o, powerpc-isa205-altivec32l.c,
+	powerpc-isa205-vsx32l.o, powerpc-isa205-vsx32l.c,
+	powerpc-isa205-64l.o, powerpc-isa205-64l.c,
+	powerpc-isa205-altivec64l.o, powerpc-isa205-altivec64l.c,
+	powerpc-isa205-vsx64l.o, powerpc-isa205-vsx64l.c): New targets.
+	* configure.srv (powerpc*-*-linux*): Add ISA 2.05 object files and
+	XML target descriptions.
+	* linux-ppc-low.c (ppc_arch_setup): Init registers with 64-bit FPSCR
+	when inferior is running on an ISA 2.05 or later processor.  Add
+	special case to return offset for full 64-bit slot of FPSCR when
+	in 32-bits.
+
+2008-11-14  Daniel Gutson  <dgutson@codesourcery.com>
+
+	* Makefile.in (SFILES, clean): Added sparc64 files.
+	(reg-sparc64.o, reg-sparc64.c): New.
+	* configure.srv (sparc*-*-linux*): New configuration.
+	* linux-low.c (regsets_fetch_inferior_registers): Swap ptrace
+	syscall arguments for SPARC.
+	(regsets_store_inferior_registers): Likewise.
+	* linux-sparc-low.c: New file.
+
+2008-10-21  Doug Evans  <dje@google.com>
+
+	* Makefile.in (BFD_DIR,BFD,BFD_SRC,BFD_CFLAGS): Delete.
+	(READLINE_DIR,READLINE_DEP): Delete.
+	(INTERNAL_CFLAGS): Update.
+	(LINTFLAGS): Update.
+
+2008-10-10  Pedro Alves  <pedro@codesourcery.com>
+
+	* server.c (handle_v_run): If GDB didn't specify an argv, use the
+	whole argv from the last run, not just argv[0].
+
+2008-09-08  Pedro Alves  <pedro@codesourcery.com>
+
+	* regcache.c (new_register_cache): Return NULL if the register
+	cache size isn't known yet.
+	(free_register_cache): Avoid dereferencing a NULL regcache.
+
+2008-09-04  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* configure.srv: Merge MIPS and MIPS64.
+
+2008-08-24  Maciej W. Rozycki  <macro@linux-mips.org>
+
+	* Makefile.in (uninstall): Apply $(EXEEXT) too.
+
+2008-08-18  Luis Machado  <luisgpm@br.ibm.com>
+
+	* Makefile.in: Add required vsx dependencies.
+
+	* linux-ppc-low: Define PPC_FEATURE_HAS_VSX.
+	Declare init_registers_powerpc_vsx32l.
+	Declare init_registers_powerpc_vsx64l.
+	Define PTRACE_GETVSXREGS and PTRACE_SETVSXREGS.
+	(ppc_arch_setup): Check for VSX in hwcap.
+	(ppc_fill_vsxregset): New function.
+	(ppc_store_vsxregset): New function.
+	Add new VSX entry in regset_info target_regsets.
+
+	* configure.srv: Add new VSX dependencies.
+
+2008-08-12  Pedro Alves  <pedro@codesourcery.com>
+
+	* remote-utils.c (noack_mode, transport_is_reliable): New globals.
+	(remote_open): Set or clear transport_is_reliable.
+	(putpkt_binary): Don't expect acks in noack mode.
+	(getpkt): Don't send ack/nac in noack mode.
+	* server.c (handle_general_set): Handle QStartNoAckMode.
+	(handle_query): If connected by tcp pass QStartNoAckMode+ in
+	qSupported.
+	(main): Reset noack_mode on every connection.
+	* server.h (noack_mode): Declare.
+
+2008-08-07  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* Makefile.in (GDBREPLAY_OBS): New variable.
+	(gdbreplay$(EXEEXT)): Use it to avoid unportable $^.
+
+2008-08-05  Ulrich Weigand  <uweigand@de.ibm.com>
+	    Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* linux-low.c (linux_resume_one_process): Ignore ESRCH.
+	(usr_store_inferior_registers): Likewise.
+	(regsets_store_inferior_registers): Likewise.
+
+2008-07-31  Rolf Jansen  <rj@surtec.com>
+	    Pedro Alves  <pedro@codesourcery.com>
+
+	* configure.ac: Check for memmem declaration.
+	* server.c [HAVE_MALLOC_H]: Include malloc.h.
+	(disable_packet_vCont, disable_packet_Tthread, disable_packet_qC)
+	(disable_packet_qfThreadInfo): Unconditionally compile.
+	* server.h [!HAVE_DECL_MEMMEM]: Declare memmem.
+	* configure, config.in: Regenerate.
+
+2008-07-28  Doug Kwan  <dougkwan@google.com>
+
+	* linux-low.c (sys/dir.h, sys/user.h): Remove includes.
+	(linux_write_memory): Remove declaration of errno.
+
+2008-07-12  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* linux-low.c (handle_extended_wait): Do not use "status"
+	variable uninitialized.
+
+2008-07-07  Pedro Alves  <pedro@codesourcery.com>
+
+	* server.c (handle_v_attach): Inhibit reporting dll changes.
+
+2008-06-27  Pedro Alves  <pedro@codesourcery.com>
+
+	* remote-utils.c (prepare_resume_reply): If requested, don't
+	output "thread:TID" in the T stop reply.
+
+	* server.c (disable_packet_vCont, disable_packet_Tthread)
+	(disable_packet_qC, disable_packet_qfThreadInfo): New globals.
+	(handle_query): If requested, disable support for qC, qfThreadInfo
+	and qsThreadInfo.
+	(handle_v_requests): If requested, disable support for vCont.
+	(gdbserver_show_disableable): New.
+	(main): Handle --disable-packet and --disable-packet=LIST.
+
+	* server.h (disable_packet_vCont, disable_packet_Tthread)
+	(disable_packet_qC, disable_packet_qfThreadInfo): Declare.
+
+2008-06-20  Carlos O'Donell  <carlos@codesourcery.com>
+
+	* server.c (gdbserver_usage): Mention --version.
+
+2008-06-06  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* Makefile.in (gdbreplay.o): New rule.
+
+2008-06-06  Joseph Myers  <joseph@codesourcery.com>
+
+	* gdbreplay.c (gdbreplay_version): Say gdbreplay in version
+	message, not gdbserver.
+
+2008-06-05  Vladimir Prus  <vladimir@codesourcery.com>
+            Nathan Sidwell  <nathan@codesourcery.com>
+            Joseph Myers  <joseph@codesourcery.com>
+
+	* acinclude.m4: Include ../../config/acx.m4.
+	* configure.ac: Use ACX_PKGVERSION and ACX_BUGURL.
+	* configure, config.in: Regenerate.
+	* Makefile.in (gdbreplay$(EXEEXT)): Add version.o.
+	* server.c (gdbserver_version): Print PKGVERSION.
+	(gdbsrever_usage): Add stream parameter.  Print REPORT_BUGS_TO.
+	(main): Adjust gdbserver_usage calls.
+	* gdbreplay.c (version, host_name): Add declarations.
+	(gdbreplay_version, gdbreplay_usage): New.
+	(main): Accept --version and --help options.
+
+2008-06-04  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* linux-arm-low.c (thumb_breakpoint, thumb_breakpoint_len): New.
+	(arm_breakpoint_at): Handle Thumb.
+	(the_low_target): Add comment.
+
+2008-05-29  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* linux-ppc-low.c (ppc_collect_ptrace_register): Clear buffer.
+
+2008-05-09  Doug Evans  <dje@google.com>
+
+	* server.h (decode_search_memory_packet): Declare.
+	* remote-utils.c (decode_search_memory_packet): New fn.
+	* server.c (handle_search_memory_1): New fn.
+	(handle_search_memory): New fn.
+	(handle_query): Process qSearch:memory packets.
+
+2008-05-08  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* regcache.c (registers_length): Remove.
+	(set_register_cache): Verify that PBUFSIZ is large enough to hold a
+	full register packet.
+	* regcache.h (registers_length): Remove prototype.
+	* server.h (PBUFSIZ): Define to 16384.
+
+2008-05-03  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* configure.srv (powerpc*-*-linux*): Set srv_regobj to
+	powerpc-32l.o, powerpc-altivec32l.o, powerpc-e500l.o,
+	powerpc-64l.o, and powerpc-altivec64l.o.
+	Remove rs6000/powerpc-32.xml, rs6000/powerpc-64.xml, and
+	rs6000/powerpc-e500.xml; add rs6000/powerpc-32l.xml,
+	rs6000/powerpc-altivec32l.xml, rs6000/powerpc-e500l.xml,
+	rs6000/powerpc-64l.xml, rs6000/powerpc-altivec64l.xml,
+	rs6000/power-linux.xml, and rs6000/power64-linux.xml
+	to srv_xmlfiles.
+
+	* Makefile.in (reg-ppc.o, reg-ppc.c): Remove, replace by ...
+	(powerpc-32l.o, powerpc-32l.c): ... these new rules.
+	(powerpc-32.o, powerpc-32.c): Remove, replace by ...
+	(powerpc-altivec32l.o, powerpc-altivec32l.c): ... these new rules.
+	(powerpc-e500.o, powerpc-e500.c): Remove, replace by ...
+	(powerpc-e500l.o, powerpc-e500l.c): ... these new rules.
+	(reg-ppc64.o, reg-ppc64.c): Remove, replace by ...
+	(powerpc-64l.o, powerpc-64l.c): ... these new rules.
+	(powerpc-64.o, powerpc-64.c): Remove, replace by ...
+	(powerpc-altivec64l.o, powerpc-altivec64l.c): ... these new rules.
+	(clean): Update.
+
+	* linux-ppc-low.c (init_registers_ppc): Remove, replace by ...
+	(init_registers_powerpc_32l): ... this new prototype.
+	(init_registers_powerpc_32): Remove, replace by ...
+	(init_registers_powerpc_altivec32l): ... this new prototype.
+	(init_registers_powerpc_e500): Remove, replace by ...
+	(init_registers_powerpc_e500l): ... this new prototype.
+	(init_registers_ppc64): Remove, replace by ...
+	(init_registers_powerpc_64l): ... this new prototype.
+	(init_registers_powerpc_64): Remove, replace by ...
+	(init_registers_powerpc_altivec64l): ... this new prototype.
+	(ppc_num_regs): Set to 73.
+	(PT_ORIG_R3, PT_TRAP): Define if necessary.
+	(ppc_regmap, ppc_regmap_e500): Add values for orig_r3 and trap.
+	(ppc_cannot_store_register): Handle orig_r3 and trap.
+	(ppc_arch_setup): Update init_registers_... calls.
+	(ppc_fill_gregset): Handle orig_r3 and trap.
+
+	* inferiors.c (clear_inferiors): Reset current_inferior.
+
+2008-04-23  Paolo Bonzini  <bonzini@gnu.org>
+
+        * acinclude.m4: Add override.m4.
+        * configure: Regenerate.
+
+2008-04-21  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* linux-ppc-low.c (ppc_arch_setup): Reset ppc_hwcap after the
+	initial call to init_register_ppc64.
+
+2008-04-21  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* configure.srv (powerpc64-*-linux*, powerpc-*-linux*): Merge into single
+	powerpc*-*-linux* case.
+	(s390-*-linux*, s390x-*-linux*): Merge into single s390*-*-linux* case.
+
+2008-04-17  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* configure.srv [powerpc64-*-linux*]: Remove powerpc-e500.o from
+	srv_regobj.  Remove rs6000/powerpc-e500.xml and rs6000/power-spe.xml	
+	from reg_xmlfiles.
+	* linux-ppc-low.c: Include <elf.h>.
+	(PPC_FEATURE_HAS_ALTIVEC, PPC_FEATURE_HAS_SPE): Define.
+	(ppc_hwcap): New global variable.
+	(ppc_regmap): Remove __SPE__ #ifdef sections.
+	(ppc_regmap_e500): New global variable.
+	(ppc_cannot_store_register): Update __SPE__ special case.
+	(ppc_get_hwcap): New function.
+	(ppc_arch_setup): Use it to determine whether inferior supports
+	AltiVec or SPE registers.  Set the_low_target.regmap if appropriate.
+	(ppc_fill_vrregset, ppc_store_vrregset): Define unconditionally.
+	Do not access registers if target does not support AltiVec.
+	(ppc_fill_evrregset, ppc_store_evrregset): Define unconditionally.
+	Do not access registers if target does not support SPE.
+	(target_regsets): Unconditionally include AltiVec and SPE regsets.
+
+2008-04-17  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* linux-low.c (disabled_regsets, num_regsets): New.
+	(use_regsets_p): Delete.
+	(linux_wait_for_process): Clear disabled_regsets.
+	(regsets_fetch_inferior_registers): Check and set it.
+	(regsets_store_inferior_registers): Likewise.
+	(linux_fetch_registers, linux_store_registers): Do not use
+	use_regsets_p.
+	(initialize_low): Allocate disabled_regsets.
+
+2008-04-14  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* Makefile.in (LIBOBJS): New.
+	(OBS): Use LIBOBJS.
+	(memmem.o): New rule.
+	* configure.ac: Use AC_CONFIG_LIBOBJ_DIR and check for memmem.
+	* configure: Regenerated.
+
+2008-04-04  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* server.c (handle_query): Never return "unsupported" for
+	qXfer:features:read queries.
+
+2008-03-27  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* server.c (get_features_xml): Fix inverted condition.
+	(handle_query): Always support qXfer:feature:read.
+
+2008-03-10  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* server.c (wrapper_argv): New.
+	(start_inferior): Handle wrapper_argv.  If set, expect an extra
+	trap.
+	(gdbserver_usage): Document --wrapper.
+	(main): Parse --wrapper.
+
+2008-02-28  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* configure.srv [powerpc64-*-linux*]: Add all files mentioned for
+	powerpc-*-linux* to srv_regobj and reg_xmlfiles.
+	* linux-ppc-low.c (ppc_get_pc): Support bi-arch operation.
+	(ppc_set_pc): Likewise.
+	(ppc_arch_setup): New function.
+	(ppc_fill_gregset): Call ppc_collect_ptrace_register instead
+	of collect_register.
+	(the_low_target): Use ppc_arch_setup as arch_setup initializer.	
+
+2008-02-28  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* configure.srv [powerpc64-*-linux*]: Use linux-ppc-low.o
+	instead of linux-ppc64-low.o.
+	* linux-ppc64-low.c: Remove file.
+	* Makefile.in (SFILES): Remove linux-ppc64-low.c.
+	(linux-ppc64-low.o): Remove rule.
+
+	* linux-ppc-low.c (init_registers_ppc64): Add prototype.
+	(init_registers_powerpc_64): Likewise.
+	(ppc_regmap): Conditionally define depending on __powerpc64__.
+	(ppc_cannot_store_register): Do not special-case "fpscr" when
+	compiled on __powerpc64__.
+	(ppc_collect_ptrace_register): New function.
+	(ppc_supply_ptrace_register): New function.
+	(ppc_breakpoint): Change type to "unsigned int".
+	(ppc_breakpoint_at): Change type of "insn" to "unsigned int".
+	(the_low_target): Conditionally provide initializers for the
+	arch_setup member depending on __powerpc64__.  Install 
+	collect_ptrace_register and supply_ptrace_register members.
+
+2008-02-28  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* regcache.h (gdbserver_xmltarget): Add extern declaration.
+	* server.c (gdbserver_xmltarget): Define.
+	(get_features_xml): Use it to replace "target.xml" and arch_string.
+
+	* configure.srv: Remove srv_xmltarget.  Add XML files that were
+	mentioned there to srv_xmlfiles instead.  Remove conditional tests
+	on gdb_cv_arm_iwmmxt, gdb_cv_ppc_altivec, gdb_cv_ppc_spe; set
+	srv_xmlfiles and srv_regobj to include all possible choices.
+	* configure.ac (srv_xmltarget): Remove.
+	(srv_xmlfiles): Do not add "target.xml".
+	(gdb_cv_arm_iwmmxt, gdb_cv_ppc_altivec, gdb_cv_ppc_spe): Remove
+	checks for supplementary target information.
+	* configure: Regenerate.
+	* Makefile.in (XML_TARGET): Remove.
+	(target.xml): Remove rule.
+	(clean): Do not clean up target.xml.
+	(.PRECIOUS): Do not mention target.xml.
+
+	* target.h (struct target_ops): Remove arch_string member.
+	* linux-low.c (linux_arch_string): Remove.
+	(linux_target_ops): Remove arch_string initializer.
+	* linux-low.h (struct linux_target_ops): Remove arch_string member.
+	* linux-i386-low.c (the_low_target): Remove arch_string initializer.
+	* linux-x86-64-low.c (the_low_target): Remove arch_string initializer.
+	* spu-low.c (spu_arch_string): Remove.
+	(spu_target_ops): Remove arch_string initializer.
+	* win32-low.c (win32_arch_string): Remove.
+	(win32_target_ops): Remove arch_string initializer.
+	* win32-low.h (struct win32_target_ops): Remove arch_string member.
+	* win32-arm-low.c (the_low_target): Remove arch_string initializer.
+	* win32-i368-low.c (the_low_target): Remove arch_string initializer.
+
+2008-02-27  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* linux-low.h (struct linux_target_ops): Replace left_pad_xfer field
+	by collect_ptrace_register and supply_ptrace_register hooks.
+	* linux-low.c (fetch_register): Use supply_ptrace_register callback
+	instead of checking for the_low_target.left_pad_xfer.
+	(usr_store_inferior_registers): Use collect_ptrace_register callback
+	instead of checking for the_low_target.left_pad_xfer.
+
+	* linux-s390-low.c (s390_collect_ptrace_register): New function.
+	(s390_supply_ptrace_register): Likewise.
+	(s390_fill_gregset): Call s390_collect_ptrace_register.
+	(the_low_target): Update.
+
+	* linux-ppc64-low.c (ppc_collect_ptrace_register): New function.
+	(ppc_supply_ptrace_register): Likewise.
+	(the_low_target): Update.
+
+	* linux-i386-low.c (the_low_target): Update.
+	* linux-x86-64-low.c (the_low_target): Update.
+
+2008-02-27  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* configure.srv [s390x-*-linux*]: Set srv_regobj to include both
+	reg-s390.o and reg-s390x.o.
+
+	* linux-low.c (new_inferior): New global variable.
+	(linux_create_inferior, linux_attach): Set it.
+	(linux_wait_for_process): Call the_low_target.arch_setup after the
+	target has stopped for the first time.
+	(initialize_low): Do not call the_low_target.arch_setup.
+
+	* linux-s390-low.c (s390_get_pc): Support bi-arch operation.
+	(s390_set_pc): Likewise.
+	(s390_arch_setup): New function.
+	(the_low_target): Use s390_arch_setup as arch_setup routine.
+
+	* regcache.c (realloc_register_cache): New function.
+	(set_register_cache): Call it for each existing regcache.
+
+2008-02-27  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* server.h (init_registers): Remove prototype.
+
+	* linux-low.h (struct linux_target_ops): Add arch_setup field.
+	* linux-low.c (initialize_low): Call the_low_target.arch_setup ()
+	instead of init_registers ().
+	* linux-arm-low.c (init_registers_arm): Add prototype.
+	(init_registers_arm_with_iwmmxt): Likewise.
+	(the_low_target): Add initializer for arch_setup field.
+	* linux-cris-low.c (init_registers_cris): Add prototype.
+	(the_low_target): Add initializer for arch_setup field.
+	* linux-crisv32-low.c (init_registers_crisv32): Add prototype.
+	(the_low_target): Add initializer for arch_setup field.
+	* linux-i386-low.c (init_registers_i386_linux): Add prototype.
+	(the_low_target): Add initializer for arch_setup field.
+	* linux-ia64-low.c (init_registers_ia64): Add prototype.
+	(the_low_target): Add initializer for arch_setup field.
+	* linux-m32r-low.c (init_registers_m32r): Add prototype.
+	(the_low_target): Add initializer for arch_setup field.
+	* linux-m68k-low.c (init_registers_m68k): Add prototype.
+	(the_low_target): Add initializer for arch_setup field.
+	* linux-mips-low.c (init_registers_mips_linux): Add prototype.
+	(init_registers_mips64_linux): Likewise.
+	(the_low_target): Add initializer for arch_setup field.
+	* linux-ppc-low.c (init_registers_ppc): Add prototype.
+	(init_registers_powerpc_32, init_registers_powerpc_e500): Likewise.
+	(the_low_target): Add initializer for arch_setup field.
+	* linux-ppc64-low.c (init_registers_ppc64): Add prototype.
+	(init_registers_powerpc_64): Likewise.
+	(the_low_target): Add initializer for arch_setup field.
+	* linux-s390-low.c (init_registers_s390): Add prototype.
+	(init_registers_s390x): Likewise.
+	(the_low_target): Add initializer for arch_setup field.
+	* linux-sh-low.c (init_registers_sh): Add prototype.
+	(the_low_target): Add initializer for arch_setup field.
+	* linux-x86-64-low.c (init_registers_x86_64_linux): Add prototype.
+	(the_low_target): Add initializer for arch_setup field.
+	* linux-xtensa-low.c (init_registers_xtensa): Add prototype.
+	(the_low_target): Add initializer for arch_setup field.
+
+	* win32-low.h (struct win32_target_ops): Add arch_setup field.
+	* win32-low.c (initialize_low): Call the_low_target.arch_setup ()
+	instead of init_registers ().
+	* win32-arm-low.c (init_registers_arm): Add prototype.
+	(the_low_target): Add initializer for arch_setup field.
+	* win32-i386-low.c (init_registers_i386): Add prototype.
+	(the_low_target): Add initializer for arch_setup field.
+
+	* spu-low.c (init_registers_spu): Add prototype.
+	(initialize_low): Call initialie_registers_spu () instead of
+	initialize_registers ().
+
 2008-02-19  Pedro Alves  <pedro@codesourcery.com>
 
 	* server.c (handle_v_requests): When handling the vRun and vAttach

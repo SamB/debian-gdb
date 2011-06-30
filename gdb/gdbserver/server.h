@@ -50,6 +50,10 @@ extern void perror (const char *);
 #endif
 #endif
 
+#if !HAVE_DECL_MEMMEM
+extern void *memmem (const void *, size_t , const void *, size_t);
+#endif
+
 #ifndef ATTR_NORETURN
 #if defined(__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 7))
 #define ATTR_NORETURN __attribute__ ((noreturn))
@@ -156,6 +160,11 @@ extern int pass_signals[];
 
 extern jmp_buf toplevel;
 
+extern int disable_packet_vCont;
+extern int disable_packet_Tthread;
+extern int disable_packet_qC;
+extern int disable_packet_qfThreadInfo;
+
 /* Functions from hostio.c.  */
 extern int handle_vFile (char *, int, int *);
 
@@ -166,6 +175,8 @@ extern void hostio_last_error_from_errno (char *own_buf);
 
 extern int remote_debug;
 extern int all_symbols_looked_up;
+extern int noack_mode;
+extern int transport_is_reliable;
 
 int putpkt (char *buf);
 int putpkt_binary (char *buf, int len);
@@ -195,6 +206,10 @@ int decode_X_packet (char *from, int packet_len, CORE_ADDR * mem_addr_ptr,
 int decode_xfer_write (char *buf, int packet_len, char **annex,
 		       CORE_ADDR *offset, unsigned int *len,
 		       unsigned char *data);
+int decode_search_memory_packet (const char *buf, int packet_len,
+				 CORE_ADDR *start_addrp,
+				 CORE_ADDR *search_space_lenp,
+				 gdb_byte *pattern, unsigned int *pattern_lenp);
 
 int unhexify (char *bin, const char *hex, int count);
 int hexify (char *hex, const char *bin, int count);
@@ -221,19 +236,14 @@ void error (const char *string,...) ATTR_NORETURN ATTR_FORMAT (printf, 1, 2);
 void fatal (const char *string,...) ATTR_NORETURN ATTR_FORMAT (printf, 1, 2);
 void warning (const char *string,...) ATTR_FORMAT (printf, 1, 2);
 
-/* Functions from the register cache definition.  */
-
-void init_registers (void);
-
 /* Maximum number of bytes to read/write at once.  The value here
    is chosen to fill up a packet (the headers account for the 32).  */
 #define MAXBUFBYTES(N) (((N)-32)/2)
 
-/* Buffer sizes for transferring memory, registers, etc.  Round up PBUFSIZ to
-   hold all the registers, at least.  */
-#define	PBUFSIZ ((registers_length () + 32 > 2000) \
-		 ? (registers_length () + 32) \
-		 : 2000)
+/* Buffer sizes for transferring memory, registers, etc.   Set to a constant
+   value to accomodate multiple register formats.  This value must be at least
+   as large as the largest register set supported by gdbserver.  */
+#define PBUFSIZ 16384
 
 /* Version information, from version.c.  */
 extern const char version[];

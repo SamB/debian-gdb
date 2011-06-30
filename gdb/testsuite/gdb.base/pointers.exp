@@ -13,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Please email any bugs, comments, and/or additions to this file to:
-# bug-gdb@prep.ai.mit.edu
-
 # This file was written by Elena Zannoni (ezannoni@cygnus.com)
 
 # This file is part of the gdb testsuite
@@ -599,3 +596,7 @@ gdb_expect {
     timeout             { fail "(timeout) ptype ppppppC" }
 }
 
+# Regression test for a crash.
+
+gdb_test "p instance.array_variable + 0" \
+  " = \\(long int \\*\\) 0x\[0-9a-f\]*"

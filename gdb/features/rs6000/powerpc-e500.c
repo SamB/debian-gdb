@@ -47,10 +47,10 @@ initialize_tdesc_powerpc_e500 (void)
   tdesc_create_reg (feature, "r29", 29, 1, NULL, 32, "uint32");
   tdesc_create_reg (feature, "r30", 30, 1, NULL, 32, "uint32");
   tdesc_create_reg (feature, "r31", 31, 1, NULL, 32, "uint32");
-  tdesc_create_reg (feature, "pc", 64, 1, NULL, 32, "uint32");
+  tdesc_create_reg (feature, "pc", 64, 1, NULL, 32, "code_ptr");
   tdesc_create_reg (feature, "msr", 65, 1, NULL, 32, "uint32");
   tdesc_create_reg (feature, "cr", 66, 1, NULL, 32, "uint32");
-  tdesc_create_reg (feature, "lr", 67, 1, NULL, 32, "uint32");
+  tdesc_create_reg (feature, "lr", 67, 1, NULL, 32, "code_ptr");
   tdesc_create_reg (feature, "ctr", 68, 1, NULL, 32, "uint32");
   tdesc_create_reg (feature, "xer", 69, 1, NULL, 32, "uint32");
 
@@ -87,8 +87,8 @@ initialize_tdesc_powerpc_e500 (void)
   tdesc_create_reg (feature, "ev29h", 61, 1, NULL, 32, "int");
   tdesc_create_reg (feature, "ev30h", 62, 1, NULL, 32, "int");
   tdesc_create_reg (feature, "ev31h", 63, 1, NULL, 32, "int");
-  tdesc_create_reg (feature, "acc", 71, 1, NULL, 64, "int");
-  tdesc_create_reg (feature, "spefscr", 72, 1, NULL, 32, "int");
+  tdesc_create_reg (feature, "acc", 73, 1, NULL, 64, "int");
+  tdesc_create_reg (feature, "spefscr", 74, 1, NULL, 32, "int");
 
   tdesc_powerpc_e500 = result;
 }

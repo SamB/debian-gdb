@@ -41,6 +41,7 @@
 #include "sim-regno.h"
 #include "arch-utils.h"
 #include "readline/readline.h"
+#include "gdbthread.h"
 
 /* Prototypes */
 
@@ -83,7 +84,7 @@ static void gdbsim_open (char *args, int from_tty);
 
 static void gdbsim_close (int quitting);
 
-static void gdbsim_detach (char *args, int from_tty);
+static void gdbsim_detach (struct target_ops *ops, char *args, int from_tty);
 
 static void gdbsim_resume (ptid_t ptid, int step, enum target_signal siggnal);
 
@@ -93,9 +94,9 @@ static void gdbsim_prepare_to_store (struct regcache *regcache);
 
 static void gdbsim_files_info (struct target_ops *target);
 
-static void gdbsim_mourn_inferior (void);
+static void gdbsim_mourn_inferior (struct target_ops *target);
 
-static void gdbsim_stop (void);
+static void gdbsim_stop (ptid_t ptid);
 
 void simulator_command (char *args, int from_tty);
 
@@ -114,6 +115,12 @@ static int program_loaded = 0;
    this.  We also need to record the result of sim_open so we can pass it
    back to the other sim_foo routines.  */
 static SIM_DESC gdbsim_desc = 0;
+
+/* This is the ptid we use while we're connected to the simulator.
+   Its value is arbitrary, as the simulator target don't have a notion
+   or processes or threads, but we need something non-null to place in
+   inferior_ptid.  */
+static ptid_t remote_sim_ptid;
 
 static void
 dump_mem (char *buf, int len)
@@ -399,12 +406,13 @@ gdbsim_kill (void)
 static void
 gdbsim_load (char *args, int fromtty)
 {
-  char **argv = buildargv (args);
+  char **argv;
   char *prog;
 
-  if (argv == NULL)
-    nomem (0);
+  if (args == NULL)
+      error_no_arg (_("program to load"));
 
+  argv = gdb_buildargv (args);
   make_cleanup_freeargv (argv);
 
   prog = tilde_expand (argv[0]);
@@ -437,7 +445,8 @@ gdbsim_load (char *args, int fromtty)
    user types "run" after having attached.  */
 
 static void
-gdbsim_create_inferior (char *exec_file, char *args, char **env, int from_tty)
+gdbsim_create_inferior (struct target_ops *target, char *exec_file, char *args,
+			char **env, int from_tty)
 {
   int len;
   char *arg_buf, **argv;
@@ -452,7 +461,8 @@ gdbsim_create_inferior (char *exec_file, char *args, char **env, int from_tty)
 		     (exec_file ? exec_file : "(NULL)"),
 		     args);
 
-  gdbsim_kill ();
+  if (ptid_equal (inferior_ptid, remote_sim_ptid))
+    gdbsim_kill ();
   remove_breakpoints ();
   init_wait_for_inferior ();
 
@@ -464,14 +474,17 @@ gdbsim_create_inferior (char *exec_file, char *args, char **env, int from_tty)
       strcat (arg_buf, exec_file);
       strcat (arg_buf, " ");
       strcat (arg_buf, args);
-      argv = buildargv (arg_buf);
+      argv = gdb_buildargv (arg_buf);
       make_cleanup_freeargv (argv);
     }
   else
     argv = NULL;
   sim_create_inferior (gdbsim_desc, exec_bfd, argv, env);
 
-  inferior_ptid = pid_to_ptid (42);
+  inferior_ptid = remote_sim_ptid;
+  add_inferior_silent (ptid_get_pid (inferior_ptid));
+  add_thread_silent (inferior_ptid);
+
   target_mark_running (&gdbsim_ops);
   insert_breakpoints ();	/* Needed to get correct instruction in cache */
 
@@ -535,9 +548,7 @@ gdbsim_open (char *args, int from_tty)
       strcat (arg_buf, " ");	/* 1 */
       strcat (arg_buf, args);
     }
-  argv = buildargv (arg_buf);
-  if (argv == NULL)
-    error (_("Insufficient memory available to allocate simulator arg list."));
+  argv = gdb_buildargv (arg_buf);
   make_cleanup_freeargv (argv);
 
   init_callbacks ();
@@ -580,6 +591,8 @@ gdbsim_close (int quitting)
 
   end_callbacks ();
   generic_mourn_inferior ();
+  delete_thread_silent (remote_sim_ptid);
+  delete_inferior_silent (ptid_get_pid (remote_sim_ptid));
 }
 
 /* Takes a program previously attached to and detaches it.
@@ -592,7 +605,7 @@ gdbsim_close (int quitting)
    Use this when you want to detach and do something else with your gdb.  */
 
 static void
-gdbsim_detach (char *args, int from_tty)
+gdbsim_detach (struct target_ops *ops, char *args, int from_tty)
 {
   if (remote_debug)
     printf_filtered ("gdbsim_detach: args \"%s\"\n", args);
@@ -612,7 +625,7 @@ static int resume_step;
 static void
 gdbsim_resume (ptid_t ptid, int step, enum target_signal siggnal)
 {
-  if (PIDGET (inferior_ptid) != 42)
+  if (!ptid_equal (inferior_ptid, remote_sim_ptid))
     error (_("The program is not being run."));
 
   if (remote_debug)
@@ -632,7 +645,7 @@ gdbsim_resume (ptid_t ptid, int step, enum target_signal siggnal)
    For simulators that do not support this operation, just abort */
 
 static void
-gdbsim_stop (void)
+gdbsim_stop (ptid_t ptid)
 {
   if (!sim_stop (gdbsim_desc))
     {
@@ -668,7 +681,7 @@ gdb_os_poll_quit (host_callback *p)
 static void
 gdbsim_cntrl_c (int signo)
 {
-  gdbsim_stop ();
+  gdbsim_stop (remote_sim_ptid);
 }
 
 static ptid_t
@@ -810,14 +823,15 @@ gdbsim_files_info (struct target_ops *target)
 /* Clear the simulator's notion of what the break points are.  */
 
 static void
-gdbsim_mourn_inferior (void)
+gdbsim_mourn_inferior (struct target_ops *target)
 {
   if (remote_debug)
     printf_filtered ("gdbsim_mourn_inferior:\n");
 
   remove_breakpoints ();
-  target_mark_exited (&gdbsim_ops);
+  target_mark_exited (target);
   generic_mourn_inferior ();
+  delete_thread_silent (remote_sim_ptid);
 }
 
 /* Pass the command argument through to the simulator verbatim.  The
@@ -849,6 +863,35 @@ simulator_command (char *args, int from_tty)
   registers_changed ();
 }
 
+/* Check to see if a thread is still alive.  */
+
+static int
+gdbsim_thread_alive (ptid_t ptid)
+{
+  if (ptid_equal (ptid, remote_sim_ptid))
+    /* The simulators' task is always alive.  */
+    return 1;
+
+  return 0;
+}
+
+/* Convert a thread ID to a string.  Returns the string in a static
+   buffer.  */
+
+static char *
+gdbsim_pid_to_str (ptid_t ptid)
+{
+  static char buf[64];
+
+  if (ptid_equal (remote_sim_ptid, ptid))
+    {
+      xsnprintf (buf, sizeof buf, "Thread <main>");
+      return buf;
+    }
+
+  return normal_pid_to_str (ptid);
+}
+
 /* Define the target subroutine names */
 
 struct target_ops gdbsim_ops;
@@ -876,6 +919,8 @@ init_gdbsim_ops (void)
   gdbsim_ops.to_create_inferior = gdbsim_create_inferior;
   gdbsim_ops.to_mourn_inferior = gdbsim_mourn_inferior;
   gdbsim_ops.to_stop = gdbsim_stop;
+  gdbsim_ops.to_thread_alive = gdbsim_thread_alive;
+  gdbsim_ops.to_pid_to_str = gdbsim_pid_to_str;
   gdbsim_ops.to_stratum = process_stratum;
   gdbsim_ops.to_has_all_memory = 1;
   gdbsim_ops.to_has_memory = 1;
@@ -883,10 +928,6 @@ init_gdbsim_ops (void)
   gdbsim_ops.to_has_registers = 1;
   gdbsim_ops.to_has_execution = 1;
   gdbsim_ops.to_magic = OPS_MAGIC;
-
-#ifdef TARGET_REDEFINE_DEFAULT_OPS
-  TARGET_REDEFINE_DEFAULT_OPS (&gdbsim_ops);
-#endif
 }
 
 void
@@ -897,4 +938,8 @@ _initialize_remote_sim (void)
 
   add_com ("sim", class_obscure, simulator_command,
 	   _("Send a command to the simulator."));
+
+  /* Yes, 42000 is arbitrary.  The only sense out of it, is that it
+     isn't 0.  */
+  remote_sim_ptid = ptid_build (42000, 0, 42000);
 }

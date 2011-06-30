@@ -264,6 +264,9 @@ static const struct opcode32 coprocessor_opcodes[] =
   {FPU_NEON_EXT_V1, 0x0e100b30, 0x0f500f30, "vmov%c.%23?us16\t%12-15r, %16-19,7D[%6,21d]"},
   {FPU_NEON_EXT_V1, 0x0e400b10, 0x0fd00f10, "vmov%c.8\t%16-19,7D[%5,6,21d], %12-15r"},
   {FPU_NEON_EXT_V1, 0x0e500b10, 0x0f500f10, "vmov%c.%23?us8\t%12-15r, %16-19,7D[%5,6,21d]"},
+  /* Half-precision conversion instructions.  */
+  {FPU_NEON_FP16,   0x0eb20a40, 0x0fbf0f50, "vcvt%7?tb%c.f32.f16\t%y1, %y0"},
+  {FPU_NEON_FP16,   0x0eb30a40, 0x0fbf0f50, "vcvt%7?tb%c.f16.f32\t%y1, %y0"},
 
   /* Floating point coprocessor (VFP) instructions */
   {FPU_VFP_EXT_V1xD, 0x0ef1fa10, 0x0fffffff, "fmstat%c"},
@@ -504,6 +507,10 @@ static const struct opcode32 neon_opcodes[] =
   {FPU_NEON_EXT_V1, 0xf3b00800, 0xffb00c50, "vtbl%c.8\t%12-15,22D, %F, %0-3,5D"},
   {FPU_NEON_EXT_V1, 0xf3b00840, 0xffb00c50, "vtbx%c.8\t%12-15,22D, %F, %0-3,5D"},
   
+  /* Half-precision conversions.  */
+  {FPU_NEON_FP16,   0xf3b60600, 0xffbf0fd0, "vcvt%c.f16.f32\t%12-15,22D, %0-3,5Q"},
+  {FPU_NEON_FP16,   0xf3b60700, 0xffbf0fd0, "vcvt%c.f32.f16\t%12-15,22Q, %0-3,5D"},
+
   /* Two registers, miscellaneous */
   {FPU_NEON_EXT_V1, 0xf2880a10, 0xfebf0fd0, "vmovl%c.%24?us8\t%12-15,22Q, %0-3,5D"},
   {FPU_NEON_EXT_V1, 0xf2900a10, 0xfebf0fd0, "vmovl%c.%24?us16\t%12-15,22Q, %0-3,5D"},
@@ -3974,6 +3981,7 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
   int           status;
   int           is_thumb = FALSE;
   int           is_data = FALSE;
+  int           little_code;
   unsigned int	size = 4;
   void	 	(*printer) (bfd_vma, struct disassemble_info *, long);
   bfd_boolean   found = FALSE;
@@ -3985,6 +3993,10 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
       /* To avoid repeated parsing of these options, we remove them here.  */
       info->disassembler_options = NULL;
     }
+
+  /* Decide if our code is going to be little-endian, despite what the
+     function argument might say.  */
+  little_code = ((info->endian_code == BFD_ENDIAN_LITTLE) || little);
 
   /* First check the full symtab for a mapping symbol, even if there
      are no usable non-mapping symbols for this address.  */
@@ -4131,7 +4143,7 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
       size = 4;
 
       status = info->read_memory_func (pc, (bfd_byte *)b, 4, info);
-      if (little)
+      if (little_code)
 	given = (b[0]) | (b[1] << 8) | (b[2] << 16) | (b[3] << 24);
       else
 	given = (b[3]) | (b[2] << 8) | (b[1] << 16) | (b[0] << 24);
@@ -4147,7 +4159,7 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
       size = 2;
 
       status = info->read_memory_func (pc, (bfd_byte *)b, 2, info);
-      if (little)
+      if (little_code)
 	given = (b[0]) | (b[1] << 8);
       else
 	given = (b[1]) | (b[0] << 8);
@@ -4161,7 +4173,7 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
 	      || (given & 0xF800) == 0xE800)
 	    {
 	      status = info->read_memory_func (pc + 2, (bfd_byte *)b, 2, info);
-	      if (little)
+	      if (little_code)
 		given = (b[0]) | (b[1] << 8) | (given << 16);
 	      else
 		given = (b[1]) | (b[0] << 8) | (given << 16);
@@ -4172,7 +4184,7 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
 	}
 
       if (ifthen_address != pc)
-	find_ifthen_state(pc, info, little);
+	find_ifthen_state(pc, info, little_code);
 
       if (ifthen_state)
 	{
@@ -4210,6 +4222,12 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
 int
 print_insn_big_arm (bfd_vma pc, struct disassemble_info *info)
 {
+  /* Detect BE8-ness and record it in the disassembler info.  */
+  if (info->flavour == bfd_target_elf_flavour
+      && info->section != NULL
+      && (elf_elfheader (info->section->owner)->e_flags & EF_ARM_BE8))
+    info->endian_code = BFD_ENDIAN_LITTLE;
+
   return print_insn (pc, info, FALSE);
 }
 

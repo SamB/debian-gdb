@@ -1,5 +1,5 @@
 /* M16C/M32C specific support for 32-bit ELF.
-   Copyright (C) 2005, 2006, 2007
+   Copyright (C) 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -847,7 +847,7 @@ m32c_elf_print_private_bfd_data (bfd *abfd, PTR ptr)
   _bfd_elf_print_private_bfd_data (abfd, ptr);
 
   flags = elf_elfheader (abfd)->e_flags;
-  fprintf (file, _("private flags = 0x%lx:"), (long)flags);
+  fprintf (file, _("private flags = 0x%lx:"), (unsigned long) flags);
 
   switch (flags & EF_M32C_CPU_MASK)
     {
@@ -1998,6 +1998,7 @@ _bfd_m32c_elf_eh_frame_address_size (bfd *abfd, asection *sec ATTRIBUTE_UNUSED)
 
 #define ELF_ARCH		bfd_arch_m32c
 #define ELF_MACHINE_CODE	EM_M32C
+#define ELF_MACHINE_ALT1	EM_M32C_OLD
 #define ELF_MAXPAGESIZE		0x1000
 
 #if 0

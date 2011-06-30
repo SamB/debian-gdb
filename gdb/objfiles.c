@@ -48,6 +48,8 @@
 #include "dictionary.h"
 #include "source.h"
 #include "addrmap.h"
+#include "arch-utils.h"
+#include "exec.h"
 
 /* Prototypes for local functions */
 
@@ -66,10 +68,6 @@ struct objfile *rt_common_objfile;	/* For runtime common symbols */
    objfile_p_char is a char * to get it through
    bfd_map_over_sections; we cast it back to its proper type.  */
 
-#ifndef TARGET_KEEP_SECTION
-#define TARGET_KEEP_SECTION(ASECT)	0
-#endif
-
 /* Called via bfd_map_over_sections to build up the section table that
    the objfile references.  The objfile contains pointers to the start
    of the table (objfile->sections) and to the first location after
@@ -85,19 +83,17 @@ add_to_objfile_sections (struct bfd *abfd, struct bfd_section *asect,
 
   aflag = bfd_get_section_flags (abfd, asect);
 
-  if (!(aflag & SEC_ALLOC) && !(TARGET_KEEP_SECTION (asect)))
+  if (!(aflag & SEC_ALLOC))
     return;
 
   if (0 == bfd_section_size (abfd, asect))
     return;
-  section.offset = 0;
   section.objfile = objfile;
   section.the_bfd_section = asect;
   section.ovly_mapped = 0;
-  section.addr = bfd_section_vma (abfd, asect);
-  section.endaddr = section.addr + bfd_section_size (abfd, asect);
   obstack_grow (&objfile->objfile_obstack, (char *) &section, sizeof (section));
-  objfile->sections_end = (struct obj_section *) (((unsigned long) objfile->sections_end) + 1);
+  objfile->sections_end
+    = (struct obj_section *) (((size_t) objfile->sections_end) + 1);
 }
 
 /* Builds a section table for OBJFILE.
@@ -126,10 +122,10 @@ build_objfile_section_table (struct objfile *objfile)
      waste some memory.  */
 
   objfile->sections_end = 0;
-  bfd_map_over_sections (objfile->obfd, add_to_objfile_sections, (char *) objfile);
-  objfile->sections = (struct obj_section *)
-    obstack_finish (&objfile->objfile_obstack);
-  objfile->sections_end = objfile->sections + (unsigned long) objfile->sections_end;
+  bfd_map_over_sections (objfile->obfd,
+			 add_to_objfile_sections, (void *) objfile);
+  objfile->sections = obstack_finish (&objfile->objfile_obstack);
+  objfile->sections_end = objfile->sections + (size_t) objfile->sections_end;
   return (0);
 }
 
@@ -165,7 +161,6 @@ allocate_objfile (bfd *abfd, int flags)
     {
       objfile = (struct objfile *) xmalloc (sizeof (struct objfile));
       memset (objfile, 0, sizeof (struct objfile));
-      objfile->md = NULL;
       objfile->psymbol_cache = bcache_xmalloc ();
       objfile->macro_cache = bcache_xmalloc ();
       /* We could use obstack_specify_allocation here instead, but
@@ -187,6 +182,9 @@ allocate_objfile (bfd *abfd, int flags)
     }
   if (abfd != NULL)
     {
+      /* Look up the gdbarch associated with the BFD.  */
+      objfile->gdbarch = gdbarch_from_bfd (abfd);
+
       objfile->name = xstrdup (bfd_get_filename (abfd));
       objfile->mtime = bfd_get_mtime (abfd);
 
@@ -234,6 +232,13 @@ allocate_objfile (bfd *abfd, int flags)
   return (objfile);
 }
 
+/* Retrieve the gdbarch associated with OBJFILE.  */
+struct gdbarch *
+get_objfile_arch (struct objfile *objfile)
+{
+  return objfile->gdbarch;
+}
+
 /* Initialize entry point information for this objfile. */
 
 void
@@ -248,6 +253,12 @@ init_entry_point_info (struct objfile *objfile)
          the startup file because it contains the entry point.  */
       objfile->ei.entry_point = bfd_get_start_address (objfile->obfd);
     }
+  else if (bfd_get_file_flags (objfile->obfd) & DYNAMIC
+	   && bfd_get_start_address (objfile->obfd) != 0)
+    /* Some shared libraries may have entry points set and be
+       runnable.  There's no clear way to indicate this, so just check
+       for values other than zero.  */
+    objfile->ei.entry_point = bfd_get_start_address (objfile->obfd);    
   else
     {
       /* Examination of non-executable.o files.  Short-circuit this stuff.  */
@@ -515,6 +526,7 @@ free_all_objfiles (void)
 void
 objfile_relocate (struct objfile *objfile, struct section_offsets *new_offsets)
 {
+  struct obj_section *s;
   struct section_offsets *delta =
     ((struct section_offsets *) 
      alloca (SIZEOF_N_SECTION_OFFSETS (objfile->num_sections)));
@@ -578,8 +590,7 @@ objfile_relocate (struct objfile *objfile, struct section_offsets *new_offsets)
 	         But I'm leaving out that test, on the theory that
 	         they can't possibly pass the tests below.  */
 	      if ((SYMBOL_CLASS (sym) == LOC_LABEL
-		   || SYMBOL_CLASS (sym) == LOC_STATIC
-		   || SYMBOL_CLASS (sym) == LOC_INDIRECT)
+		   || SYMBOL_CLASS (sym) == LOC_STATIC)
 		  && SYMBOL_SECTION (sym) >= 0)
 		{
 		  SYMBOL_VALUE_ADDRESS (sym) +=
@@ -651,20 +662,14 @@ objfile_relocate (struct objfile *objfile, struct section_offsets *new_offsets)
         objfile->ei.entry_point += ANOFFSET (delta, SECT_OFF_TEXT (objfile));
     }
 
-  {
-    struct obj_section *s;
-    bfd *abfd;
+  /* Update the table in exec_ops, used to read memory.  */
+  ALL_OBJFILE_OSECTIONS (objfile, s)
+    {
+      int idx = s->the_bfd_section->index;
 
-    abfd = objfile->obfd;
-
-    ALL_OBJFILE_OSECTIONS (objfile, s)
-      {
-      	int idx = s->the_bfd_section->index;
-	
-	s->addr += ANOFFSET (delta, idx);
-	s->endaddr += ANOFFSET (delta, idx);
-      }
-  }
+      exec_set_section_address (bfd_get_filename (objfile->obfd), idx,
+				obj_section_addr (s));
+    }
 
   /* Relocate breakpoints as necessary, after things are relocated. */
   breakpoint_re_set ();
@@ -749,33 +754,24 @@ have_minimal_symbols (void)
   return 0;
 }
 
-/* Returns a section whose range includes PC and SECTION, or NULL if
-   none found.  Note the distinction between the return type, struct
-   obj_section (which is defined in gdb), and the input type "struct
-   bfd_section" (which is a bfd-defined data type).  The obj_section
-   contains a pointer to the "struct bfd_section".  */
-
-struct obj_section *
-find_pc_sect_section (CORE_ADDR pc, struct bfd_section *section)
-{
-  struct obj_section *s;
-  struct objfile *objfile;
-
-  ALL_OBJSECTIONS (objfile, s)
-    if ((section == 0 || section == s->the_bfd_section) &&
-	s->addr <= pc && pc < s->endaddr)
-      return (s);
-
-  return (NULL);
-}
-
-/* Returns a section whose range includes PC or NULL if none found. 
-   Backward compatibility, no section.  */
+/* Returns a section whose range includes PC or NULL if none found.   */
 
 struct obj_section *
 find_pc_section (CORE_ADDR pc)
 {
-  return find_pc_sect_section (pc, find_pc_mapped_section (pc));
+  struct obj_section *s;
+  struct objfile *objfile;
+
+  /* Check for mapped overlay section first.  */
+  s = find_pc_mapped_section (pc);
+  if (s)
+    return s;
+
+  ALL_OBJSECTIONS (objfile, s)
+    if (obj_section_addr (s) <= pc && pc < obj_section_endaddr (s))
+      return s;
+
+  return NULL;
 }
 
 
@@ -804,6 +800,7 @@ in_plt_section (CORE_ADDR pc, char *name)
 struct objfile_data
 {
   unsigned index;
+  void (*cleanup) (struct objfile *, void *);
 };
 
 struct objfile_data_registration
@@ -821,7 +818,7 @@ struct objfile_data_registry
 static struct objfile_data_registry objfile_data_registry = { NULL, 0 };
 
 const struct objfile_data *
-register_objfile_data (void)
+register_objfile_data_with_cleanup (void (*cleanup) (struct objfile *, void *))
 {
   struct objfile_data_registration **curr;
 
@@ -833,8 +830,15 @@ register_objfile_data (void)
   (*curr)->next = NULL;
   (*curr)->data = XMALLOC (struct objfile_data);
   (*curr)->data->index = objfile_data_registry.num_registrations++;
+  (*curr)->data->cleanup = cleanup;
 
   return (*curr)->data;
+}
+
+const struct objfile_data *
+register_objfile_data (void)
+{
+  return register_objfile_data_with_cleanup (NULL);
 }
 
 static void
@@ -849,6 +853,7 @@ static void
 objfile_free_data (struct objfile *objfile)
 {
   gdb_assert (objfile->data != NULL);
+  clear_objfile_data (objfile);
   xfree (objfile->data);
   objfile->data = NULL;
 }
@@ -856,7 +861,17 @@ objfile_free_data (struct objfile *objfile)
 void
 clear_objfile_data (struct objfile *objfile)
 {
+  struct objfile_data_registration *registration;
+  int i;
+
   gdb_assert (objfile->data != NULL);
+
+  for (registration = objfile_data_registry.registrations, i = 0;
+       i < objfile->num_data;
+       registration = registration->next, i++)
+    if (objfile->data[i] != NULL && registration->data->cleanup)
+      registration->data->cleanup (objfile, objfile->data[i]);
+
   memset (objfile->data, 0, objfile->num_data * sizeof (void *));
 }
 

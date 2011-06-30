@@ -28,6 +28,7 @@
 #include "target.h"
 #include "regcache.h"
 #include "gdb_string.h"
+#include "gdbthread.h"
 #include <ctype.h>
 #include <signal.h>
 #ifdef __MINGW32__
@@ -84,6 +85,11 @@ static int interrupted = 0;
 /* Forward data declarations */
 extern struct target_ops m32r_ops;
 
+/* This is the ptid we use while we're connected to the remote.  Its
+   value is arbitrary, as the target doesn't have a notion of
+   processes or threads, but we need something non-null to place in
+   inferior_ptid.  */
+static ptid_t remote_m32r_ptid;
 
 /* Commands */
 #define SDI_OPEN                 1
@@ -310,7 +316,8 @@ check_mmu_status (void)
 /* This is called not only when we first attach, but also when the
    user types "run" after having attached.  */
 static void
-m32r_create_inferior (char *execfile, char *args, char **env, int from_tty)
+m32r_create_inferior (struct target_ops *ops, char *execfile,
+		      char *args, char **env, int from_tty)
 {
   CORE_ADDR entry_pt;
 
@@ -432,6 +439,7 @@ m32r_close (int quitting)
     }
 
   inferior_ptid = null_ptid;
+  delete_thread_silent (remote_m32r_ptid);
   return;
 }
 
@@ -474,7 +482,7 @@ m32r_resume (ptid_t ptid, int step, enum target_signal sig)
       else
 	{
 	  buf[0] = SDI_WRITE_MEMORY;
-	  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+	  if (gdbarch_byte_order (target_gdbarch) == BFD_ENDIAN_BIG)
 	    store_long_parameter (buf + 1, pc_addr);
 	  else
 	    store_long_parameter (buf + 1, pc_addr - 1);
@@ -514,7 +522,7 @@ m32r_resume (ptid_t ptid, int step, enum target_signal sig)
 	continue;
 
       /* Set PBP. */
-      if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+      if (gdbarch_byte_order (target_gdbarch) == BFD_ENDIAN_BIG)
 	send_three_arg_cmd (SDI_WRITE_MEMORY, 0xffff8000 + 4 * i, 4,
 			    0x00000006);
       else
@@ -541,7 +549,7 @@ m32r_resume (ptid_t ptid, int step, enum target_signal sig)
       store_long_parameter (buf + 5, 4);
       if ((bp_addr & 2) == 0 && bp_addr != (pc_addr & 0xfffffffc))
 	{
-	  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+	  if (gdbarch_byte_order (target_gdbarch) == BFD_ENDIAN_BIG)
 	    {
 	      buf[9] = dbt_bp_entry[0];
 	      buf[10] = dbt_bp_entry[1];
@@ -558,7 +566,7 @@ m32r_resume (ptid_t ptid, int step, enum target_signal sig)
 	}
       else
 	{
-	  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+	  if (gdbarch_byte_order (target_gdbarch) == BFD_ENDIAN_BIG)
 	    {
 	      if ((bp_addr & 2) == 0)
 		{
@@ -605,7 +613,7 @@ m32r_resume (ptid_t ptid, int step, enum target_signal sig)
 	continue;
 
       /* DBC register */
-      if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+      if (gdbarch_byte_order (target_gdbarch) == BFD_ENDIAN_BIG)
 	{
 	  switch (ab_type[i])
 	    {
@@ -667,7 +675,8 @@ m32r_resume (ptid_t ptid, int step, enum target_signal sig)
      target is active.  These functions should be split out into seperate
      variables, especially since GDB will someday have a notion of debugging
      several processes.  */
-  inferior_ptid = pid_to_ptid (32);
+  inferior_ptid = remote_m32r_ptid;
+  add_thread_silent (remote_m32r_ptid);
 
   return;
 }
@@ -746,7 +755,7 @@ m32r_wait (ptid_t ptid, struct target_waitstatus *status)
   if (last_pc_addr != 0xffffffff)
     {
       buf[0] = SDI_WRITE_MEMORY;
-      if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+      if (gdbarch_byte_order (target_gdbarch) == BFD_ENDIAN_BIG)
 	store_long_parameter (buf + 1, last_pc_addr);
       else
 	store_long_parameter (buf + 1, last_pc_addr - 1);
@@ -775,7 +784,7 @@ m32r_wait (ptid_t ptid, struct target_waitstatus *status)
 	     address, we have to take care of it later. */
 	  if ((pc_addr & 0x2) != 0)
 	    {
-	      if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+	      if (gdbarch_byte_order (target_gdbarch) == BFD_ENDIAN_BIG)
 		{
 		  if ((bp_data[i][2] & 0x80) != 0)
 		    {
@@ -837,7 +846,7 @@ m32r_wait (ptid_t ptid, struct target_waitstatus *status)
 	  c = serial_readchar (sdi_desc, SDI_TIMEOUT);
 	  if (c != '-' && recv_data (buf, 4) != -1)
 	    {
-	      if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+	      if (gdbarch_byte_order (target_gdbarch) == BFD_ENDIAN_BIG)
 		{
 		  if ((buf[3] & 0x1) == 0x1)
 		    hit_watchpoint_addr = ab_address[i];
@@ -864,7 +873,7 @@ m32r_wait (ptid_t ptid, struct target_waitstatus *status)
    Use this when you want to detach and do something else
    with your gdb.  */
 static void
-m32r_detach (char *args, int from_tty)
+m32r_detach (struct target_ops *ops, char *args, int from_tty)
 {
   if (remote_debug)
     fprintf_unfiltered (gdb_stdlog, "m32r_detach(%d)\n", from_tty);
@@ -1127,6 +1136,7 @@ m32r_kill (void)
     fprintf_unfiltered (gdb_stdlog, "m32r_kill()\n");
 
   inferior_ptid = null_ptid;
+  delete_thread_silent (remote_m32r_ptid);
 
   return;
 }
@@ -1138,7 +1148,7 @@ m32r_kill (void)
    instructions.  */
 
 static void
-m32r_mourn_inferior (void)
+m32r_mourn_inferior (struct target_ops *ops)
 {
   if (remote_debug)
     fprintf_unfiltered (gdb_stdlog, "m32r_mourn_inferior()\n");
@@ -1366,6 +1376,7 @@ m32r_load (char *args, int from_tty)
     write_pc (bfd_get_start_address (exec_bfd));
 
   inferior_ptid = null_ptid;	/* No process now */
+  delete_thread_silent (remote_m32r_ptid);
 
   /* This is necessary because many things were based on the PC at the time
      that we attached to the monitor, which is no longer valid now that we
@@ -1391,7 +1402,7 @@ m32r_load (char *args, int from_tty)
 }
 
 static void
-m32r_stop (void)
+m32r_stop (ptid_t ptid)
 {
   if (remote_debug)
     fprintf_unfiltered (gdb_stdlog, "m32r_stop()\n");
@@ -1480,6 +1491,34 @@ m32r_stopped_by_watchpoint (void)
   return m32r_stopped_data_address (&current_target, &addr);
 }
 
+/* Check to see if a thread is still alive.  */
+
+static int
+m32r_thread_alive (ptid_t ptid)
+{
+  if (ptid_equal (ptid, remote_m32r_ptid))
+    /* The main task is always alive.  */
+    return 1;
+
+  return 0;
+}
+
+/* Convert a thread ID to a string.  Returns the string in a static
+   buffer.  */
+
+static char *
+m32r_pid_to_str (ptid_t ptid)
+{
+  static char buf[64];
+
+  if (ptid_equal (remote_m32r_ptid, ptid))
+    {
+      xsnprintf (buf, sizeof buf, "Thread <main>");
+      return buf;
+    }
+
+  return normal_pid_to_str (ptid);
+}
 
 static void
 sdireset_command (char *args, int from_tty)
@@ -1490,6 +1529,7 @@ sdireset_command (char *args, int from_tty)
   send_cmd (SDI_OPEN);
 
   inferior_ptid = null_ptid;
+  delete_thread_silent (remote_m32r_ptid);
 }
 
 
@@ -1601,6 +1641,8 @@ init_m32r_ops (void)
   m32r_ops.to_mourn_inferior = m32r_mourn_inferior;
   m32r_ops.to_stop = m32r_stop;
   m32r_ops.to_log_command = serial_log_command;
+  m32r_ops.to_thread_alive = m32r_thread_alive;
+  m32r_ops.to_pid_to_str = m32r_pid_to_str;
   m32r_ops.to_stratum = process_stratum;
   m32r_ops.to_has_all_memory = 1;
   m32r_ops.to_has_memory = 1;
@@ -1648,4 +1690,8 @@ _initialize_remote_m32r (void)
 	   _("Set breakpoints by IB break."));
   add_com ("use_dbt_break", class_obscure, use_dbt_breakpoints_command,
 	   _("Set breakpoints by dbt."));
+
+  /* Yes, 42000 is arbitrary.  The only sense out of it, is that it
+     isn't 0.  */
+  remote_m32r_ptid = ptid_build (42000, 0, 42000);
 }

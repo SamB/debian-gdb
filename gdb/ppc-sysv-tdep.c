@@ -177,13 +177,16 @@ ppc_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	    }
 	  else if (len == 8
 		   && (TYPE_CODE (type) == TYPE_CODE_INT	/* long long */
-		       || TYPE_CODE (type) == TYPE_CODE_FLT))	/* double */
+		       || TYPE_CODE (type) == TYPE_CODE_FLT	/* double */
+		       || (TYPE_CODE (type) == TYPE_CODE_DECFLOAT
+			   && tdep->soft_float)))
 	    {
-	      /* "long long" or soft-float "double" passed in an odd/even
-	         register pair with the low addressed word in the odd
-	         register and the high addressed word in the even
-	         register, or when the registers run out an 8 byte
-	         aligned stack location.  */
+	      /* "long long" or soft-float "double" or "_Decimal64"
+	         passed in an odd/even register pair with the low
+	         addressed word in the odd register and the high
+	         addressed word in the even register, or when the
+	         registers run out an 8 byte aligned stack
+	         location.  */
 	      if (greg > 9)
 		{
 		  /* Just in case GREG was 10.  */
@@ -210,13 +213,16 @@ ppc_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		  greg += 2;
 		}
 	    }
-	  else if (len == 16 && TYPE_CODE (type) == TYPE_CODE_FLT
-		   && (gdbarch_long_double_format (gdbarch)
-		       == floatformats_ibm_long_double))
+	  else if (len == 16
+		   && ((TYPE_CODE (type) == TYPE_CODE_FLT
+			&& (gdbarch_long_double_format (gdbarch)
+			    == floatformats_ibm_long_double))
+		       || (TYPE_CODE (type) == TYPE_CODE_DECFLOAT
+			   && tdep->soft_float)))
 	    {
-	      /* Soft-float IBM long double passed in four consecutive
-		 registers, or on the stack.  The registers are not
-		 necessarily odd/even pairs.  */
+	      /* Soft-float IBM long double or _Decimal128 passed in
+		 four consecutive registers, or on the stack.  The
+		 registers are not necessarily odd/even pairs.  */
 	      if (greg > 7)
 		{
 		  greg = 11;
@@ -596,11 +602,13 @@ do_ppc_sysv_return_value (struct gdbarch *gdbarch, struct type *type,
 	}
       return RETURN_VALUE_REGISTER_CONVENTION;
     }
-  if (TYPE_CODE (type) == TYPE_CODE_FLT
-      && TYPE_LENGTH (type) == 16
-      && (gdbarch_long_double_format (gdbarch) == floatformats_ibm_long_double))
+  if (TYPE_LENGTH (type) == 16
+      && ((TYPE_CODE (type) == TYPE_CODE_FLT
+	   && (gdbarch_long_double_format (gdbarch) == floatformats_ibm_long_double))
+	  || (TYPE_CODE (type) == TYPE_CODE_DECFLOAT && tdep->soft_float)))
     {
-      /* Soft-float IBM long double stored in r3, r4, r5, r6.  */
+      /* Soft-float IBM long double or _Decimal128 stored in r3, r4,
+	 r5, r6.  */
       if (readbuf)
 	{
 	  regcache_cooked_read (regcache, tdep->ppc_gp0_regnum + 3, readbuf);
@@ -624,11 +632,14 @@ do_ppc_sysv_return_value (struct gdbarch *gdbarch, struct type *type,
       return RETURN_VALUE_REGISTER_CONVENTION;
     }
   if ((TYPE_CODE (type) == TYPE_CODE_INT && TYPE_LENGTH (type) == 8)
-      || (TYPE_CODE (type) == TYPE_CODE_FLT && TYPE_LENGTH (type) == 8))
+      || (TYPE_CODE (type) == TYPE_CODE_FLT && TYPE_LENGTH (type) == 8)
+      || (TYPE_CODE (type) == TYPE_CODE_DECFLOAT && TYPE_LENGTH (type) == 8
+	  && tdep->soft_float))
     {
       if (readbuf)
 	{
-	  /* A long long, or a double stored in the 32 bit r3/r4.  */
+	  /* A long long, double or _Decimal64 stored in the 32 bit
+	     r3/r4.  */
 	  regcache_cooked_read (regcache, tdep->ppc_gp0_regnum + 3,
 				readbuf + 0);
 	  regcache_cooked_read (regcache, tdep->ppc_gp0_regnum + 4,
@@ -636,7 +647,8 @@ do_ppc_sysv_return_value (struct gdbarch *gdbarch, struct type *type,
 	}
       if (writebuf)
 	{
-	  /* A long long, or a double stored in the 32 bit r3/r4.  */
+	  /* A long long, double or _Decimal64 stored in the 32 bit
+	     r3/r4.  */
 	  regcache_cooked_write (regcache, tdep->ppc_gp0_regnum + 3,
 				 writebuf + 0);
 	  regcache_cooked_write (regcache, tdep->ppc_gp0_regnum + 4,
@@ -805,9 +817,9 @@ do_ppc_sysv_return_value (struct gdbarch *gdbarch, struct type *type,
 }
 
 enum return_value_convention
-ppc_sysv_abi_return_value (struct gdbarch *gdbarch, struct type *valtype,
-			   struct regcache *regcache, gdb_byte *readbuf,
-			   const gdb_byte *writebuf)
+ppc_sysv_abi_return_value (struct gdbarch *gdbarch, struct type *func_type,
+			   struct type *valtype, struct regcache *regcache,
+			   gdb_byte *readbuf, const gdb_byte *writebuf)
 {
   return do_ppc_sysv_return_value (gdbarch, valtype, regcache, readbuf,
 				   writebuf, 0);
@@ -815,6 +827,7 @@ ppc_sysv_abi_return_value (struct gdbarch *gdbarch, struct type *valtype,
 
 enum return_value_convention
 ppc_sysv_abi_broken_return_value (struct gdbarch *gdbarch,
+				  struct type *func_type,
 				  struct type *valtype,
 				  struct regcache *regcache,
 				  gdb_byte *readbuf, const gdb_byte *writebuf)
@@ -938,7 +951,7 @@ ppc64_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	{
 	  /* During the first pass, GPARAM and VPARAM are more like
 	     offsets (start address zero) than addresses.  That way
-	     the accumulate the total stack space each region
+	     they accumulate the total stack space each region
 	     requires.  */
 	  gparam = 0;
 	  vparam = 0;
@@ -1148,7 +1161,10 @@ ppc64_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	    }
 	  else if ((TYPE_CODE (type) == TYPE_CODE_INT
 		    || TYPE_CODE (type) == TYPE_CODE_ENUM
-		    || TYPE_CODE (type) == TYPE_CODE_PTR)
+		    || TYPE_CODE (type) == TYPE_CODE_BOOL
+		    || TYPE_CODE (type) == TYPE_CODE_CHAR
+		    || TYPE_CODE (type) == TYPE_CODE_PTR
+		    || TYPE_CODE (type) == TYPE_CODE_REF)
 		   && TYPE_LENGTH (type) <= 8)
 	    {
 	      /* Scalars and Pointers get sign[un]extended and go in
@@ -1160,11 +1176,18 @@ ppc64_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		  /* Convert any function code addresses into
 		     descriptors.  */
 		  if (TYPE_CODE (type) == TYPE_CODE_PTR
-		      && TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_FUNC)
+		      || TYPE_CODE (type) == TYPE_CODE_REF)
 		    {
-		      CORE_ADDR desc = word;
-		      convert_code_addr_to_desc_addr (word, &desc);
-		      word = desc;
+		      struct type *target_type;
+		      target_type = check_typedef (TYPE_TARGET_TYPE (type));
+
+		      if (TYPE_CODE (target_type) == TYPE_CODE_FUNC
+			  || TYPE_CODE (target_type) == TYPE_CODE_METHOD)
+			{
+			  CORE_ADDR desc = word;
+			  convert_code_addr_to_desc_addr (word, &desc);
+			  word = desc;
+			}
 		    }
 		  if (greg <= 10)
 		    regcache_cooked_write_unsigned (regcache,
@@ -1205,14 +1228,20 @@ ppc64_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		  greg++;
 		}
 	      if (write_pass)
-		/* WARNING: cagney/2003-09-21: Strictly speaking, this
-		   isn't necessary, unfortunately, GCC appears to get
-		   "struct convention" parameter passing wrong putting
-		   odd sized structures in memory instead of in a
-		   register.  Work around this by always writing the
-		   value to memory.  Fortunately, doing this
-		   simplifies the code.  */
-		write_memory (gparam, val, TYPE_LENGTH (type));
+		{
+		  /* WARNING: cagney/2003-09-21: Strictly speaking, this
+		     isn't necessary, unfortunately, GCC appears to get
+		     "struct convention" parameter passing wrong putting
+		     odd sized structures in memory instead of in a
+		     register.  Work around this by always writing the
+		     value to memory.  Fortunately, doing this
+		     simplifies the code.  */
+		  int len = TYPE_LENGTH (type);
+		  if (len < tdep->wordsize)
+		    write_memory (gparam + tdep->wordsize - len, val, len);
+		  else
+		    write_memory (gparam, val, len);
+		}
 	      if (freg <= 13
 		  && TYPE_CODE (type) == TYPE_CODE_STRUCT
 		  && TYPE_NFIELDS (type) == 1
@@ -1322,9 +1351,9 @@ ppc64_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
    location; when READBUF is non-NULL, fill the buffer from the
    corresponding register return-value location.  */
 enum return_value_convention
-ppc64_sysv_abi_return_value (struct gdbarch *gdbarch, struct type *valtype,
-			     struct regcache *regcache, gdb_byte *readbuf,
-			     const gdb_byte *writebuf)
+ppc64_sysv_abi_return_value (struct gdbarch *gdbarch, struct type *func_type,
+			     struct type *valtype, struct regcache *regcache,
+			     gdb_byte *readbuf, const gdb_byte *writebuf)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
@@ -1355,7 +1384,9 @@ ppc64_sysv_abi_return_value (struct gdbarch *gdbarch, struct type *valtype,
 					   writebuf);
   /* Integers in r3.  */
   if ((TYPE_CODE (valtype) == TYPE_CODE_INT
-       || TYPE_CODE (valtype) == TYPE_CODE_ENUM)
+       || TYPE_CODE (valtype) == TYPE_CODE_ENUM
+       || TYPE_CODE (valtype) == TYPE_CODE_CHAR
+       || TYPE_CODE (valtype) == TYPE_CODE_BOOL)
       && TYPE_LENGTH (valtype) <= 8)
     {
       if (writebuf != NULL)
@@ -1376,7 +1407,8 @@ ppc64_sysv_abi_return_value (struct gdbarch *gdbarch, struct type *valtype,
       return RETURN_VALUE_REGISTER_CONVENTION;
     }
   /* All pointers live in r3.  */
-  if (TYPE_CODE (valtype) == TYPE_CODE_PTR)
+  if (TYPE_CODE (valtype) == TYPE_CODE_PTR
+      || TYPE_CODE (valtype) == TYPE_CODE_REF)
     {
       /* All pointers live in r3.  */
       if (writebuf != NULL)
@@ -1490,20 +1522,3 @@ ppc64_sysv_abi_return_value (struct gdbarch *gdbarch, struct type *valtype,
   return RETURN_VALUE_STRUCT_CONVENTION;
 }
 
-CORE_ADDR
-ppc64_sysv_abi_adjust_breakpoint_address (struct gdbarch *gdbarch,
-					  CORE_ADDR bpaddr)
-{
-  /* PPC64 SYSV specifies that the minimal-symbol "FN" should point at
-     a function-descriptor while the corresponding minimal-symbol
-     ".FN" should point at the entry point.  Consequently, a command
-     like "break FN" applied to an object file with only minimal
-     symbols, will insert the breakpoint into the descriptor at "FN"
-     and not the function at ".FN".  Avoid this confusion by adjusting
-     any attempt to set a descriptor breakpoint into a corresponding
-     function breakpoint.  Note that GDB warns the user when this
-     adjustment is applied - that's ok as otherwise the user will have
-     no way of knowing why their breakpoint at "FN" resulted in the
-     program stopping at ".FN".  */
-  return gdbarch_convert_from_func_ptr_addr (gdbarch, bpaddr, &current_target);
-}

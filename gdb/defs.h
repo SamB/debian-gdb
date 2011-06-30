@@ -28,6 +28,21 @@
 #include <stdio.h>
 #include <errno.h>		/* System call error return status.  */
 #include <limits.h>
+#include <stdint.h>
+
+/* The libdecnumber library, on which GDB depends, includes a header file
+   called gstdint.h instead of relying directly on stdint.h.  GDB, on the
+   other hand, includes stdint.h directly, relying on the fact that gnulib
+   generates a copy if the system doesn't provide one or if it is missing
+   some features.  Unfortunately, gstdint.h and stdint.h cannot be included
+   at the same time, which may happen when we include a file from
+   libdecnumber.
+
+   The following macro definition effectively prevents the inclusion of
+   gstdint.h, as all the definitions it provides are guarded against
+   the GCC_GENERATED_STDINT_H macro.  We already have gnulib/stdint.h
+   included, so it's ok to blank out gstdint.h.  */
+#define GCC_GENERATED_STDINT_H 1
 
 #ifdef HAVE_STDDEF_H
 #include <stddef.h>
@@ -136,6 +151,9 @@ extern int dbx_commands;
 /* System root path, used to find libraries etc.  */
 extern char *gdb_sysroot;
 
+/* GDB datadir, used to store data files.  */
+extern char *gdb_datadir;
+
 /* Search path for separate debug files.  */
 extern char *debug_file_directory;
 
@@ -152,16 +170,10 @@ extern void quit (void);
    [kingdon].  A profile analyzing the current situtation is
    needed. */
 
-#ifdef QUIT
-/* do twice to force compiler warning */
-#define QUIT_FIXME "FIXME"
-#define QUIT_FIXME "ignoring redefinition of QUIT"
-#else
 #define QUIT { \
   if (quit_flag) quit (); \
   if (deprecated_interactive_hook) deprecated_interactive_hook (); \
 }
-#endif
 
 /* Languages represented in the symbol table and elsewhere.
    This should probably be in language.h, but since enum's can't
@@ -236,12 +248,18 @@ enum return_value_convention
    Use make_cleanup to add an element to the cleanup chain.
    Use do_cleanups to do all cleanup actions back to a given
    point in the chain.  Use discard_cleanups to remove cleanups
-   from the chain back to a given point, not doing them.  */
+   from the chain back to a given point, not doing them.  
+
+   If the argument is pointer to allocated memory, then you need to
+   to additionally set the 'free_arg' member to a function that will
+   free that memory.  This function will be called both when the cleanup
+   is executed and when it's discarded.  */
 
 struct cleanup
   {
     struct cleanup *next;
     void (*function) (void *);
+    void (*free_arg) (void *);
     void *arg;
   };
 
@@ -297,6 +315,7 @@ struct cleanup
 struct symtab;
 struct breakpoint;
 struct frame_info;
+struct gdbarch;
 
 /* From utils.c */
 
@@ -318,12 +337,9 @@ extern char *safe_strerror (int);
 
 extern void do_cleanups (struct cleanup *);
 extern void do_final_cleanups (struct cleanup *);
-extern void do_exec_cleanups (struct cleanup *);
-extern void do_exec_error_cleanups (struct cleanup *);
 
 extern void discard_cleanups (struct cleanup *);
 extern void discard_final_cleanups (struct cleanup *);
-extern void discard_exec_error_cleanups (struct cleanup *);
 extern void discard_my_cleanups (struct cleanup **, struct cleanup *);
 
 /* NOTE: cagney/2000-03-04: This typedef is strictly for the
@@ -334,6 +350,9 @@ extern void discard_my_cleanups (struct cleanup **, struct cleanup *);
 typedef void (make_cleanup_ftype) (void *);
 
 extern struct cleanup *make_cleanup (make_cleanup_ftype *, void *);
+
+extern struct cleanup *make_cleanup_dtor (make_cleanup_ftype *, void *,
+					  void (*dtor) (void *));
 
 extern struct cleanup *make_cleanup_freeargv (char **);
 
@@ -346,15 +365,20 @@ extern struct cleanup *(make_cleanup_free_section_addr_info
 
 extern struct cleanup *make_cleanup_close (int fd);
 
+extern struct cleanup *make_cleanup_fclose (FILE *file);
+
 extern struct cleanup *make_cleanup_bfd_close (bfd *abfd);
+
+extern struct cleanup *make_cleanup_restore_integer (int *variable);
 
 extern struct cleanup *make_final_cleanup (make_cleanup_ftype *, void *);
 
 extern struct cleanup *make_my_cleanup (struct cleanup **,
 					make_cleanup_ftype *, void *);
 
-extern struct cleanup *make_exec_cleanup (make_cleanup_ftype *, void *);
-extern struct cleanup *make_exec_error_cleanup (make_cleanup_ftype *, void *);
+extern struct cleanup *make_my_cleanup2 (struct cleanup **,
+					 make_cleanup_ftype *, void *,
+					 void (*free_arg) (void *));
 
 extern struct cleanup *save_cleanups (void);
 extern struct cleanup *save_final_cleanups (void);
@@ -385,6 +409,8 @@ extern unsigned long gnu_debuglink_crc32 (unsigned long crc,
 ULONGEST strtoulst (const char *num, const char **trailer, int base);
 
 char *ldirname (const char *filename);
+
+char **gdb_buildargv (const char *);
 
 /* From demangle.c */
 
@@ -482,17 +508,21 @@ extern void fputstrn_unfiltered (const char *str, int n, int quotr, struct ui_fi
 /* Display the host ADDR on STREAM formatted as ``0x%x''. */
 extern void gdb_print_host_address (const void *addr, struct ui_file *stream);
 
+extern const char *host_address_to_string (const void *addr);
+
 /* Convert a CORE_ADDR into a HEX string.  paddr() is like %08lx.
-   paddr_nz() is like %lx.  paddr_u() is like %lu. paddr_width() is
-   for ``%*''. */
+   paddr_nz() is like %lx.  */
 extern int strlen_paddr (void);
 extern char *paddr (CORE_ADDR addr);
 extern char *paddr_nz (CORE_ADDR addr);
-extern char *paddr_u (CORE_ADDR addr);
-extern char *paddr_d (LONGEST addr);
 
-/* Like 0x%lx, replaces deprecated_print_address_numeric.  */
+/* Like 0x%lx.  */
 extern const char *paddress (CORE_ADDR addr);
+
+/* %d for LONGEST */
+extern char *plongest (LONGEST l);
+/* %u for ULONGEST */
+extern char *pulongest (ULONGEST l);
 
 extern char *phex (ULONGEST l, int sizeof_l);
 extern char *phex_nz (ULONGEST l, int sizeof_l);
@@ -564,7 +594,7 @@ extern int info_verbose;
 
 /* From printcmd.c */
 
-extern void set_next_address (CORE_ADDR);
+extern void set_next_address (struct gdbarch *, CORE_ADDR);
 
 extern void print_address_symbolic (CORE_ADDR, struct ui_file *, int,
 				    char *);
@@ -576,8 +606,6 @@ extern int build_address_symbolic (CORE_ADDR addr,
 				   char **filename, 
 				   int *line, 	
 				   int *unmapped);
-
-extern void deprecated_print_address_numeric (CORE_ADDR, int, struct ui_file *);
 
 extern void print_address (CORE_ADDR, struct ui_file *);
 
@@ -605,10 +633,6 @@ extern void init_source_path (void);
 extern void init_last_source_visited (void);
 
 /* From exec.c */
-
-extern void exec_set_section_offsets (bfd_signed_vma text_off,
-				      bfd_signed_vma data_off,
-				      bfd_signed_vma bss_off);
 
 /* Take over the 'find_mapped_memory' vector from exec.c. */
 extern void exec_set_find_memory_regions (int (*) (int (*) (CORE_ADDR, 
@@ -652,6 +676,7 @@ enum command_control_type
     while_control,
     if_control,
     commands_control,
+    python_control,
     invalid_control
   };
 
@@ -667,7 +692,7 @@ struct command_line
     struct command_line **body_list;
   };
 
-extern struct command_line *read_command_lines (char *, int);
+extern struct command_line *read_command_lines (char *, int, int);
 
 extern void free_command_lines (struct command_line **);
 
@@ -677,38 +702,37 @@ extern void free_command_lines (struct command_line **);
    used by the finish and until commands, and in the remote protocol
    when opening an extended-remote connection. */
 
-struct continuation_arg
-  {
-    struct continuation_arg *next;
-    union continuation_data {
-      void *pointer;
-      int   integer;
-      long  longint;
-    } data;
-  };
-
-struct continuation
-  {
-    void (*continuation_hook) (struct continuation_arg *);
-    struct continuation_arg *arg_list;
-    struct continuation *next;
-  };
-
-/* In infrun.c. */
-extern struct continuation *cmd_continuation;
-/* Used only by the step_1 function. */
-extern struct continuation *intermediate_continuation;
+struct continuation;
+struct thread_info;
+struct inferior;
 
 /* From utils.c */
-extern void add_continuation (void (*)(struct continuation_arg *),
-			      struct continuation_arg *);
-extern void do_all_continuations (void);
-extern void discard_all_continuations (void);
 
-extern void add_intermediate_continuation (void (*)(struct continuation_arg *),
-			      struct continuation_arg *);
+/* Thread specific continuations.  */
+
+extern void add_continuation (struct thread_info *,
+			      void (*)(void *), void *,
+			      void (*)(void *));
+extern void do_all_continuations (void);
+extern void do_all_continuations_thread (struct thread_info *);
+extern void discard_all_continuations (void);
+extern void discard_all_continuations_thread (struct thread_info *);
+
+extern void add_intermediate_continuation (struct thread_info *,
+					   void (*)(void *), void *,
+					   void (*)(void *));
 extern void do_all_intermediate_continuations (void);
+extern void do_all_intermediate_continuations_thread (struct thread_info *);
 extern void discard_all_intermediate_continuations (void);
+extern void discard_all_intermediate_continuations_thread (struct thread_info *);
+
+/* Inferior specific (any thread) continuations.  */
+
+extern void add_inferior_continuation (void (*) (void *),
+				       void *,
+				       void (*) (void *));
+extern void do_all_inferior_continuations (void);
+extern void discard_all_inferior_continuations (struct inferior *inf);
 
 /* String containing the current directory (what getwd would return).  */
 
@@ -745,6 +769,7 @@ enum val_prettyprint
       ptid_get_lwp	- Fetch the lwp component of a ptid.
       ptid_get_tid	- Fetch the tid component of a ptid.
       ptid_equal	- Test to see if two ptids are equal.
+      ptid_is_pid	- Test to see if this ptid represents a process id.
 
    Please do NOT access the struct ptid members directly (except, of
    course, in the implementation of the above ptid manipulation
@@ -934,6 +959,7 @@ enum gdb_osabi
 
   GDB_OSABI_CYGWIN,
   GDB_OSABI_AIX,
+  GDB_OSABI_DICOS,
 
   GDB_OSABI_INVALID		/* keep this last */
 };
@@ -1067,9 +1093,6 @@ extern int (*deprecated_query_hook) (const char *, va_list)
 extern void (*deprecated_warning_hook) (const char *, va_list)
      ATTRIBUTE_FPTR_PRINTF(1,0);
 extern void (*deprecated_flush_hook) (struct ui_file * stream);
-extern void (*deprecated_create_breakpoint_hook) (struct breakpoint * b);
-extern void (*deprecated_delete_breakpoint_hook) (struct breakpoint * bpt);
-extern void (*deprecated_modify_breakpoint_hook) (struct breakpoint * bpt);
 extern void (*deprecated_interactive_hook) (void);
 extern void (*deprecated_readline_begin_hook) (char *, ...)
      ATTRIBUTE_FPTR_PRINTF_1;

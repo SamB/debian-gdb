@@ -234,7 +234,8 @@ START_RELOC_NUMBERS (elf_arm_reloc_type)
   FAKE_RELOC (R_ARM_GOT32,              R_ARM_GOT_BREL)   /* 32 bit GOT entry.  */
   FAKE_RELOC (R_ARM_ROSEGREL32,         R_ARM_SBREL31)    /* ??? */
   FAKE_RELOC (R_ARM_AMP_VCALL9,         R_ARM_BREL_ADJ)   /* Thumb-something.  Not used.  */
-END_RELOC_NUMBERS (R_ARM_max)
+
+END_RELOC_NUMBERS (R_ARM_max = 256)
 
 #ifdef BFD_ARCH_SIZE
 /* EABI object attributes.  */
@@ -271,6 +272,12 @@ enum
   Tag_ABI_optimization_goals,
   Tag_ABI_FP_optimization_goals,
   /* 32 is generic.  */
+  Tag_undefined33 = 33,
+  Tag_CPU_unaligned_access,
+  Tag_undefined35, 
+  Tag_VFP_HP_extension,
+  Tag_undefined37,
+  Tag_ABI_FP_16bit_format = 38,
 };
 
 #endif

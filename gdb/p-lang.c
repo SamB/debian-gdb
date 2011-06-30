@@ -207,7 +207,8 @@ pascal_printchar (int c, struct ui_file *stream)
 
 void
 pascal_printstr (struct ui_file *stream, const gdb_byte *string,
-		 unsigned int length, int width, int force_ellipses)
+		 unsigned int length, int width, int force_ellipses,
+		 const struct value_print_options *options)
 {
   unsigned int i;
   unsigned int things_printed = 0;
@@ -226,7 +227,7 @@ pascal_printstr (struct ui_file *stream, const gdb_byte *string,
       return;
     }
 
-  for (i = 0; i < length && things_printed < print_max; ++i)
+  for (i = 0; i < length && things_printed < options->print_max; ++i)
     {
       /* Position of the character we are examining
          to see whether it is repeated.  */
@@ -250,11 +251,11 @@ pascal_printstr (struct ui_file *stream, const gdb_byte *string,
 	  ++reps;
 	}
 
-      if (reps > repeat_count_threshold)
+      if (reps > options->repeat_count_threshold)
 	{
 	  if (in_quotes)
 	    {
-	      if (inspect_it)
+	      if (options->inspect_it)
 		fputs_filtered ("\\', ", stream);
 	      else
 		fputs_filtered ("', ", stream);
@@ -263,7 +264,7 @@ pascal_printstr (struct ui_file *stream, const gdb_byte *string,
 	  pascal_printchar (string[i], stream);
 	  fprintf_filtered (stream, " <repeats %u times>", reps);
 	  i = rep1 - 1;
-	  things_printed += repeat_count_threshold;
+	  things_printed += options->repeat_count_threshold;
 	  need_comma = 1;
 	}
       else
@@ -271,7 +272,7 @@ pascal_printstr (struct ui_file *stream, const gdb_byte *string,
 	  int c = string[i];
 	  if ((!in_quotes) && (PRINT_LITERAL_FORM (c)))
 	    {
-	      if (inspect_it)
+	      if (options->inspect_it)
 		fputs_filtered ("\\'", stream);
 	      else
 		fputs_filtered ("'", stream);
@@ -285,7 +286,7 @@ pascal_printstr (struct ui_file *stream, const gdb_byte *string,
   /* Terminate the quotes if necessary.  */
   if (in_quotes)
     {
-      if (inspect_it)
+      if (options->inspect_it)
 	fputs_filtered ("\\'", stream);
       else
 	fputs_filtered ("'", stream);
@@ -393,6 +394,9 @@ pascal_language_arch_info (struct gdbarch *gdbarch,
     = builtin->builtin_complex;
   lai->primitive_type_vector [pascal_primitive_type_double_complex]
     = builtin->builtin_double_complex;
+
+  lai->bool_type_symbol = "boolean";
+  lai->bool_type_default = builtin->builtin_bool;
 }
 
 const struct language_defn pascal_language_defn =
@@ -403,6 +407,7 @@ const struct language_defn pascal_language_defn =
   type_check_on,
   case_sensitive_on,
   array_row_major,
+  macro_expansion_no,
   &exp_descriptor_standard,
   pascal_parse,
   pascal_error,
@@ -411,10 +416,11 @@ const struct language_defn pascal_language_defn =
   pascal_printstr,		/* Function to print string constant */
   pascal_emit_char,		/* Print a single char */
   pascal_print_type,		/* Print a type using appropriate syntax */
+  pascal_print_typedef,		/* Print a typedef using appropriate syntax */
   pascal_val_print,		/* Print a value using appropriate syntax */
   pascal_value_print,		/* Print a top-level value */
   NULL,				/* Language specific skip_trampoline */
-  value_of_this,		/* value_of_this */
+  "this",		        /* name_of_this */
   basic_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   NULL,				/* Language specific symbol demangler */
@@ -427,6 +433,7 @@ const struct language_defn pascal_language_defn =
   pascal_language_arch_info,
   default_print_array_index,
   default_pass_by_reference,
+  default_get_string,
   LANG_MAGIC
 };
 

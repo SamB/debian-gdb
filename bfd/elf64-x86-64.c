@@ -503,6 +503,9 @@ struct elf64_x86_64_link_hash_table
 
   /* Small local sym to section mapping cache.  */
   struct sym_sec_cache sym_sec;
+
+  /* _TLS_MODULE_BASE_ symbol.  */
+  struct bfd_link_hash_entry *tls_module_base;
 };
 
 /* Get the x86-64 ELF linker hash table from a link_info structure.  */
@@ -575,6 +578,7 @@ elf64_x86_64_link_hash_table_create (bfd *abfd)
   ret->tlsdesc_got = 0;
   ret->tls_ld_got.refcount = 0;
   ret->sgotplt_jump_table_size = 0;
+  ret->tls_module_base = NULL;
 
   return &ret->elf.root;
 }
@@ -2239,6 +2243,9 @@ elf64_x86_64_always_size_sections (bfd *output_bfd,
 		 tls_sec, 0, NULL, FALSE,
 		 bed->collect, &bh)))
 	    return FALSE;
+
+	  elf64_x86_64_hash_table (info)->tls_module_base = bh;
+
 	  tlsbase = (struct elf_link_hash_entry *)bh;
 	  tlsbase->def_regular = 1;
 	  tlsbase->other = STV_HIDDEN;
@@ -2247,6 +2254,27 @@ elf64_x86_64_always_size_sections (bfd *output_bfd,
     }
 
   return TRUE;
+}
+
+/* _TLS_MODULE_BASE_ needs to be treated especially when linking
+   executables.  Rather than setting it to the beginning of the TLS
+   section, we have to set it to the end.  This function may be called
+   multiple times, it is idempotent.  */
+
+static void
+set_tls_module_base (struct bfd_link_info *info)
+{
+  struct bfd_link_hash_entry *base;
+
+  if (!info->executable)
+    return;
+
+  base = elf64_x86_64_hash_table (info)->tls_module_base;
+
+  if (!base)
+    return;
+
+  base->u.def.value = elf_hash_table (info)->tls_size;
 }
 
 /* Return the base VMA address which should be subtracted from real addresses
@@ -2318,6 +2346,8 @@ elf64_x86_64_relocate_section (bfd *output_bfd, struct bfd_link_info *info,
   sym_hashes = elf_sym_hashes (input_bfd);
   local_got_offsets = elf_local_got_offsets (input_bfd);
   local_tlsdesc_gotents = elf64_x86_64_local_tlsdesc_gotent (input_bfd);
+
+  set_tls_module_base (info);
 
   rel = relocs;
   relend = relocs + input_section->reloc_count;
@@ -2595,30 +2625,63 @@ elf64_x86_64_relocate_section (bfd *output_bfd, struct bfd_link_info *info,
 	case R_X86_64_PC16:
 	case R_X86_64_PC32:
 	  if (info->shared
-	      && !SYMBOL_REFERENCES_LOCAL (info, h)
 	      && (input_section->flags & SEC_ALLOC) != 0
 	      && (input_section->flags & SEC_READONLY) != 0
-	      && (!h->def_regular
-		  || r_type != R_X86_64_PC32
-		  || h->type != STT_FUNC
-		  || ELF_ST_VISIBILITY (h->other) != STV_PROTECTED
-		  || !is_32bit_relative_branch (contents,
-						rel->r_offset)))
+	      && h != NULL)
 	    {
-	      if (h->def_regular
-		  && r_type == R_X86_64_PC32
-		  && h->type == STT_FUNC
-		  && ELF_ST_VISIBILITY (h->other) == STV_PROTECTED)
-		(*_bfd_error_handler)
-		   (_("%B: relocation R_X86_64_PC32 against protected function `%s' can not be used when making a shared object"),
-		    input_bfd, h->root.root.string);
+	      bfd_boolean fail = FALSE;
+	      bfd_boolean branch
+		= (r_type == R_X86_64_PC32
+		   && is_32bit_relative_branch (contents, rel->r_offset));
+
+	      if (SYMBOL_REFERENCES_LOCAL (info, h))
+		{
+		  /* Symbol is referenced locally.  Make sure it is
+		     defined locally or for a branch.  */
+		  fail = !h->def_regular && !branch;
+		}
 	      else
-		(*_bfd_error_handler)
-		  (_("%B: relocation %s against `%s' can not be used when making a shared object; recompile with -fPIC"),
-		   input_bfd, x86_64_elf_howto_table[r_type].name,
-		   h->root.root.string);
-	      bfd_set_error (bfd_error_bad_value);
-	      return FALSE;
+		{
+		  /* Symbol isn't referenced locally.  We only allow
+		     branch to symbol with non-default visibility. */
+		  fail = (!branch
+			  || ELF_ST_VISIBILITY (h->other) == STV_DEFAULT);
+		}
+
+	      if (fail)
+		{
+		  const char *fmt;
+		  const char *v;
+		  const char *pic = "";
+
+		  switch (ELF_ST_VISIBILITY (h->other))
+		    {
+		    case STV_HIDDEN:
+		      v = _("hidden symbol");
+		      break;
+		    case STV_INTERNAL:
+		      v = _("internal symbol");
+		      break;
+		    case STV_PROTECTED:
+		      v = _("protected symbol");
+		      break;
+		    default:
+		      v = _("symbol");
+		      pic = _("; recompile with -fPIC");
+		      break;
+		    }
+
+		  if (h->def_regular)
+		    fmt = _("%B: relocation %s against %s `%s' can not be used when making a shared object%s");
+		  else
+		    fmt = _("%B: relocation %s against undefined %s `%s' can not be used when making a shared object%s");
+
+		  (*_bfd_error_handler) (fmt, input_bfd,
+					 x86_64_elf_howto_table[r_type].name,
+					 v,  h->root.root.string, pic);
+		  bfd_set_error (bfd_error_bad_value);
+		  return FALSE;
+		}
 	    }
 	  /* Fall through.  */
 
@@ -3343,6 +3406,8 @@ elf64_x86_64_finish_dynamic_symbol (bfd *output_bfd,
       if (info->shared
 	  && SYMBOL_REFERENCES_LOCAL (info, h))
 	{
+	  if (!h->def_regular)
+	    return FALSE;
 	  BFD_ASSERT((h->got.offset & 1) != 0);
 	  rela.r_info = ELF64_R_INFO (0, R_X86_64_RELATIVE);
 	  rela.r_addend = (h->root.u.def.value

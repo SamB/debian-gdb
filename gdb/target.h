@@ -61,7 +61,6 @@ enum strata
     dummy_stratum,		/* The lowest of the low */
     file_stratum,		/* Executable files, etc */
     core_stratum,		/* Core dump files */
-    download_stratum,		/* Downloading of remote targets */
     process_stratum,		/* Executing processes */
     thread_stratum		/* Executing threads */
   };
@@ -70,7 +69,6 @@ enum thread_control_capabilities
   {
     tc_none = 0,		/* Default: can't control thread execution.  */
     tc_schedlock = 1,		/* Can lock the thread scheduler.  */
-    tc_switch = 2		/* Can switch the running thread on demand.  */
   };
 
 /* Stuff for target_wait.  */
@@ -93,13 +91,13 @@ enum target_waitkind
        (e.g. it called load(2) on AIX).  */
     TARGET_WAITKIND_LOADED,
 
-    /* The program has forked.  A "related" process' ID is in
+    /* The program has forked.  A "related" process' PTID is in
        value.related_pid.  I.e., if the child forks, value.related_pid
        is the parent's ID.  */
 
     TARGET_WAITKIND_FORKED,
 
-    /* The program has vforked.  A "related" process's ID is in
+    /* The program has vforked.  A "related" process's PTID is in
        value.related_pid.  */
 
     TARGET_WAITKIND_VFORKED,
@@ -130,7 +128,11 @@ enum target_waitkind
        inferior, rather than being stuck in the remote_async_wait()
        function. This way the event loop is responsive to other events,
        like for instance the user typing.  */
-    TARGET_WAITKIND_IGNORE
+    TARGET_WAITKIND_IGNORE,
+
+    /* The target has run out of history information,
+       and cannot run backward any further.  */
+    TARGET_WAITKIND_NO_HISTORY
   };
 
 struct target_waitstatus
@@ -142,7 +144,7 @@ struct target_waitstatus
       {
 	int integer;
 	enum target_signal sig;
-	int related_pid;
+	ptid_t related_pid;
 	char *execd_pathname;
 	int syscall_id;
       }
@@ -232,6 +234,11 @@ extern LONGEST target_read (struct target_ops *ops,
 			    const char *annex, gdb_byte *buf,
 			    ULONGEST offset, LONGEST len);
 
+extern LONGEST target_read_until_error (struct target_ops *ops,
+					enum target_object object,
+					const char *annex, gdb_byte *buf,
+					ULONGEST offset, LONGEST len);
+  
 extern LONGEST target_write (struct target_ops *ops,
 			     enum target_object object,
 			     const char *annex, const gdb_byte *buf,
@@ -320,9 +327,9 @@ struct target_ops
        to xfree everything (including the "struct target_ops").  */
     void (*to_xclose) (struct target_ops *targ, int quitting);
     void (*to_close) (int);
-    void (*to_attach) (char *, int);
+    void (*to_attach) (struct target_ops *ops, char *, int);
     void (*to_post_attach) (int);
-    void (*to_detach) (char *, int);
+    void (*to_detach) (struct target_ops *ops, char *, int);
     void (*to_disconnect) (struct target_ops *, char *, int);
     void (*to_resume) (ptid_t, int, enum target_signal);
     ptid_t (*to_wait) (ptid_t, struct target_waitstatus *);
@@ -368,6 +375,8 @@ struct target_ops
     int to_have_steppable_watchpoint;
     int to_have_continuable_watchpoint;
     int (*to_stopped_data_address) (struct target_ops *, CORE_ADDR *);
+    int (*to_watchpoint_addr_within_range) (struct target_ops *,
+					    CORE_ADDR, CORE_ADDR, int);
     int (*to_region_ok_for_hw_watchpoint) (CORE_ADDR, int);
     void (*to_terminal_init) (void);
     void (*to_terminal_inferior) (void);
@@ -378,7 +387,8 @@ struct target_ops
     void (*to_kill) (void);
     void (*to_load) (char *, int);
     int (*to_lookup_symbol) (char *, CORE_ADDR *);
-    void (*to_create_inferior) (char *, char *, char **, int);
+    void (*to_create_inferior) (struct target_ops *, 
+				char *, char *, char **, int);
     void (*to_post_startup_inferior) (ptid_t);
     void (*to_acknowledge_created_inferior) (int);
     void (*to_insert_fork_catchpoint) (int);
@@ -388,16 +398,15 @@ struct target_ops
     int (*to_follow_fork) (struct target_ops *, int);
     void (*to_insert_exec_catchpoint) (int);
     int (*to_remove_exec_catchpoint) (int);
-    int (*to_reported_exec_events_per_exec_call) (void);
     int (*to_has_exited) (int, int, int *);
-    void (*to_mourn_inferior) (void);
+    void (*to_mourn_inferior) (struct target_ops *);
     int (*to_can_run) (void);
     void (*to_notice_signals) (ptid_t ptid);
     int (*to_thread_alive) (ptid_t ptid);
     void (*to_find_new_threads) (void);
     char *(*to_pid_to_str) (ptid_t);
     char *(*to_extra_thread_info) (struct thread_info *);
-    void (*to_stop) (void);
+    void (*to_stop) (ptid_t);
     void (*to_rcmd) (char *command, struct ui_file *output);
     char *(*to_pid_to_exec_file) (int pid);
     void (*to_log_command) (const char *);
@@ -408,6 +417,7 @@ struct target_ops
     int to_has_registers;
     int to_has_execution;
     int to_has_thread_control;	/* control thread execution */
+    int to_attach_no_wait;
     struct section_table
      *to_sections;
     struct section_table
@@ -415,9 +425,9 @@ struct target_ops
     /* ASYNC target controls */
     int (*to_can_async_p) (void);
     int (*to_is_async_p) (void);
-    void (*to_async) (void (*cb) (enum inferior_event_type, void *context),
-		      void *context);
-    int to_async_mask_value;
+    void (*to_async) (void (*) (enum inferior_event_type, void *), void *);
+    int (*to_async_mask) (int);
+    int (*to_supports_non_stop) (void);
     int (*to_find_memory_regions) (int (*) (CORE_ADDR,
 					    unsigned long,
 					    int, int, int,
@@ -500,6 +510,37 @@ struct target_ops
        was available.  */
     const struct target_desc *(*to_read_description) (struct target_ops *ops);
 
+    /* Build the PTID of the thread on which a given task is running,
+       based on LWP and THREAD.  These values are extracted from the
+       task Private_Data section of the Ada Task Control Block, and
+       their interpretation depends on the target.  */
+    ptid_t (*to_get_ada_task_ptid) (long lwp, long thread);
+
+    /* Read one auxv entry from *READPTR, not reading locations >= ENDPTR.
+       Return 0 if *READPTR is already at the end of the buffer.
+       Return -1 if there is insufficient buffer for a whole entry.
+       Return 1 if an entry was read into *TYPEP and *VALP.  */
+    int (*to_auxv_parse) (struct target_ops *ops, gdb_byte **readptr,
+                         gdb_byte *endptr, CORE_ADDR *typep, CORE_ADDR *valp);
+
+    /* Search SEARCH_SPACE_LEN bytes beginning at START_ADDR for the
+       sequence of bytes in PATTERN with length PATTERN_LEN.
+
+       The result is 1 if found, 0 if not found, and -1 if there was an error
+       requiring halting of the search (e.g. memory read error).
+       If the pattern is found the address is recorded in FOUND_ADDRP.  */
+    int (*to_search_memory) (struct target_ops *ops,
+			     CORE_ADDR start_addr, ULONGEST search_space_len,
+			     const gdb_byte *pattern, ULONGEST pattern_len,
+			     CORE_ADDR *found_addrp);
+
+    /* Can target execute in reverse?  */
+    int (*to_can_execute_reverse) ();
+
+    /* Does this target support debugging multiple processes
+       simultaneously?  */
+    int (*to_supports_multi_process) (void);
+
     int to_magic;
     /* Need sub-structure for target machine related rather than comm related?
      */
@@ -540,8 +581,14 @@ void target_close (struct target_ops *targ, int quitting);
    should be ready to deliver the status of the process immediately
    (without waiting) to an upcoming target_wait call.  */
 
-#define	target_attach(args, from_tty)	\
-     (*current_target.to_attach) (args, from_tty)
+void target_attach (char *, int);
+
+/* Some targets don't generate traps when attaching to the inferior,
+   or their target_attach implementation takes care of the waiting.
+   These targets must set to_attach_no_wait.  */
+
+#define target_attach_no_wait \
+     (current_target.to_attach_no_wait)
 
 /* The target_attach operation places a process under debugger control,
    and stops the process.
@@ -570,11 +617,7 @@ extern void target_disconnect (char *, int);
    the target, or TARGET_SIGNAL_0 for no signal.  The caller may not
    pass TARGET_SIGNAL_DEFAULT.  */
 
-#define	target_resume(ptid, step, siggnal)				\
-  do {									\
-    dcache_invalidate(target_dcache);					\
-    (*current_target.to_resume) (ptid, step, siggnal);			\
-  } while (0)
+extern void target_resume (ptid_t ptid, int step, enum target_signal signal);
 
 /* Wait for process pid to do something.  PTID = -1 to wait for any
    pid to do something.  Return pid of child, or -1 in case of error;
@@ -607,6 +650,12 @@ extern void target_disconnect (char *, int);
 
 #define	target_prepare_to_store(regcache)	\
      (*current_target.to_prepare_to_store) (regcache)
+
+/* Returns true if this target can debug multiple processes
+   simultaneously.  */
+
+#define	target_supports_multi_process()	\
+     (*current_target.to_supports_multi_process) ()
 
 extern DCACHE *target_dcache;
 
@@ -676,11 +725,11 @@ int target_write_memory_blocks (VEC(memory_write_request_s) *requests,
 
 /* From infrun.c.  */
 
-extern int inferior_has_forked (int pid, int *child_pid);
+extern int inferior_has_forked (ptid_t pid, ptid_t *child_pid);
 
-extern int inferior_has_vforked (int pid, int *child_pid);
+extern int inferior_has_vforked (ptid_t pid, ptid_t *child_pid);
 
-extern int inferior_has_execd (int pid, char **execd_pathname);
+extern int inferior_has_execd (ptid_t pid, char **execd_pathname);
 
 /* From exec.c */
 
@@ -782,9 +831,8 @@ extern void target_load (char *arg, int from_tty);
    ENV is the environment vector to pass.  Errors reported with error().
    On VxWorks and various standalone systems, we ignore exec_file.  */
 
-#define	target_create_inferior(exec_file, args, env, FROM_TTY)	\
-     (*current_target.to_create_inferior) (exec_file, args, env, (FROM_TTY))
-
+void target_create_inferior (char *exec_file, char *args,
+			     char **env, int from_tty);
 
 /* Some targets (such as ttrace-based HPUX) don't allow us to request
    notification of inferior events such as fork and vork immediately
@@ -841,13 +889,6 @@ int target_follow_fork (int follow_child);
 #define target_remove_exec_catchpoint(pid) \
      (*current_target.to_remove_exec_catchpoint) (pid)
 
-/* Returns the number of exec events that are reported when a process
-   invokes a flavor of the exec() system call on this target, if exec
-   events are being reported.  */
-
-#define target_reported_exec_events_per_exec_call() \
-     (*current_target.to_reported_exec_events_per_exec_call) ()
-
 /* Returns TRUE if PID has exited.  And, also sets EXIT_STATUS to the
    exit code of PID, if any.  */
 
@@ -861,8 +902,7 @@ int target_follow_fork (int follow_child);
 
 /* The inferior process has died.  Do what is right.  */
 
-#define	target_mourn_inferior()	\
-     (*current_target.to_mourn_inferior) ()
+void target_mourn_inferior (void);
 
 /* Does target have enough data to do a run or attach command? */
 
@@ -888,7 +928,7 @@ int target_follow_fork (int follow_child);
    Unix, this should act like SIGSTOP).  This function is normally
    used by GUIs to implement a stop button.  */
 
-#define target_stop current_target.to_stop
+#define target_stop(ptid) (*current_target.to_stop) (ptid)
 
 /* Send the specified COMMAND to the target's monitor
    (shell,interpreter) for execution.  The result of the query is
@@ -933,24 +973,26 @@ int target_follow_fork (int follow_child);
      (current_target.to_has_execution)
 
 /* Can the target support the debugger control of thread execution?
-   a) Can it lock the thread scheduler?
-   b) Can it switch the currently running thread?  */
+   Can it lock the thread scheduler?  */
 
 #define target_can_lock_scheduler \
      (current_target.to_has_thread_control & tc_schedlock)
 
-#define target_can_switch_threads \
-     (current_target.to_has_thread_control & tc_switch)
+/* Should the target enable async mode if it is supported?  Temporary
+   cludge until async mode is a strict superset of sync mode.  */
+extern int target_async_permitted;
 
 /* Can the target support asynchronous execution? */
 #define target_can_async_p() (current_target.to_can_async_p ())
 
 /* Is the target in asynchronous execution mode? */
-#define target_is_async_p() (current_target.to_is_async_p())
+#define target_is_async_p() (current_target.to_is_async_p ())
+
+int target_supports_non_stop (void);
 
 /* Put the target in async mode with the specified callback function. */
 #define target_async(CALLBACK,CONTEXT) \
-     (current_target.to_async((CALLBACK), (CONTEXT)))
+     (current_target.to_async ((CALLBACK), (CONTEXT)))
 
 /* This is to be used ONLY within call_function_by_hand(). It provides
    a workaround, to have inferior function calls done in sychronous
@@ -966,10 +1008,8 @@ int target_follow_fork (int follow_child);
    the turning async on and off to the single execution commands,
    from where it is done currently, in remote_resume().  */
 
-#define	target_async_mask_value	\
-     (current_target.to_async_mask_value)
-
-extern int target_async_mask (int mask);
+#define target_async_mask(MASK)	\
+  (current_target.to_async_mask (MASK))
 
 /* Converts a process id to a string.  Usually, the string just contains
    `process xyz', but on some systems it may contain
@@ -1105,7 +1145,33 @@ extern int target_stopped_data_address_p (struct target_ops *);
 #define target_stopped_data_address_p(CURRENT_TARGET) (1)
 #endif
 
+#define target_watchpoint_addr_within_range(target, addr, start, length) \
+  (*target.to_watchpoint_addr_within_range) (target, addr, start, length)
+
+/* Target can execute in reverse?  */
+#define target_can_execute_reverse \
+     (current_target.to_can_execute_reverse ? \
+      current_target.to_can_execute_reverse () : 0)
+
 extern const struct target_desc *target_read_description (struct target_ops *);
+
+#define target_get_ada_task_ptid(lwp, tid) \
+     (*current_target.to_get_ada_task_ptid) (lwp,tid)
+
+/* Utility implementation of searching memory.  */
+extern int simple_search_memory (struct target_ops* ops,
+                                 CORE_ADDR start_addr,
+                                 ULONGEST search_space_len,
+                                 const gdb_byte *pattern,
+                                 ULONGEST pattern_len,
+                                 CORE_ADDR *found_addrp);
+
+/* Main entry point for searching memory.  */
+extern int target_search_memory (CORE_ADDR start_addr,
+                                 ULONGEST search_space_len,
+                                 const gdb_byte *pattern,
+                                 ULONGEST pattern_len,
+                                 CORE_ADDR *found_addrp);
 
 /* Command logging facility.  */
 
@@ -1141,6 +1207,17 @@ extern void target_pre_inferior (int);
 extern void target_preopen (int);
 
 extern void pop_target (void);
+
+/* Does whatever cleanup is required to get rid of all pushed targets.
+   QUITTING is propagated to target_close; it indicates that GDB is
+   exiting and should not get hung on an error (otherwise it is
+   important to perform clean termination, even if it takes a
+   while).  */
+extern void pop_all_targets (int quitting);
+
+/* Like pop_all_targets, but pops only targets whose stratum is
+   strictly above ABOVE_STRATUM.  */
+extern void pop_all_targets_above (enum strata above_stratum, int quitting);
 
 extern CORE_ADDR target_translate_tls_address (struct objfile *objfile,
 					       CORE_ADDR offset);
@@ -1188,9 +1265,12 @@ extern void initialize_targets (void);
 
 extern void noprocess (void);
 
-extern void find_default_attach (char *, int);
+extern void target_require_runnable (void);
 
-extern void find_default_create_inferior (char *, char *, char **, int);
+extern void find_default_attach (struct target_ops *, char *, int);
+
+extern void find_default_create_inferior (struct target_ops *,
+					  char *, char *, char **, int);
 
 extern struct target_ops *find_run_target (void);
 
@@ -1243,11 +1323,18 @@ extern int target_signal_to_host_p (enum target_signal signo);
 extern enum target_signal target_signal_from_host (int);
 extern int target_signal_to_host (enum target_signal);
 
+extern enum target_signal default_target_signal_from_host (struct gdbarch *,
+							   int);
+extern int default_target_signal_to_host (struct gdbarch *, 
+					  enum target_signal);
+
 /* Convert from a number used in a GDB command to an enum target_signal.  */
 extern enum target_signal target_signal_from_command (int);
 
-/* Any target can call this to switch to remote protocol (in remote.c). */
-extern void push_remote_target (char *name, int from_tty);
+/* Set the show memory breakpoints mode to show, and installs a cleanup
+   to restore it back to the current value.  */
+extern struct cleanup *make_show_memory_breakpoints_cleanup (int show);
+
 
 /* Imported from machine dependent code */
 

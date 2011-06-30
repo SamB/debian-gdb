@@ -1,6 +1,6 @@
 dnl Autoconf configure script for GDB, the GNU debugger.
 dnl Copyright (C) 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
-dnl 2005, 2006
+dnl 2005, 2006, 2007, 2008
 dnl Free Software Foundation, Inc.
 dnl
 dnl This file is part of GDB.
@@ -29,10 +29,26 @@ AC_PROG_CC
 AC_GNU_SOURCE
 AC_AIX
 AC_ISC_POSIX
+gl_EARLY
 AM_PROG_CC_STDC
 
-AC_CONFIG_AUX_DIR(`cd $srcdir;pwd`/..)
+AC_CONFIG_AUX_DIR(..)
 AC_CANONICAL_SYSTEM
+
+# Dependency checking.
+ZW_CREATE_DEPDIR
+ZW_PROG_COMPILER_DEPENDENCIES([CC])
+
+# Check for the 'make' the user wants to use.
+AC_CHECK_PROGS(MAKE, make)
+MAKE_IS_GNU=
+case "`$MAKE --version 2>&1 | sed 1q`" in
+  *GNU*)
+    MAKE_IS_GNU=yes
+    ;;
+esac
+AM_CONDITIONAL(GMAKE, test "$MAKE_IS_GNU" = yes)
+AC_PROG_MAKE_SET
 
 dnl List of object files and targets accumulated by configure.
 
@@ -59,9 +75,22 @@ if test x"$USE_NLS" = xyes; then
    CONFIG_UNINSTALL="$CONFIG_UNINSTALL uninstall-po"
 fi
 
+gl_INIT
+
+# For Makefile dependencies.
+GNULIB_STDINT_H=
+if test x"$STDINT_H" != x; then
+  GNULIB_STDINT_H=gnulib/$STDINT_H
+fi
+AC_SUBST(GNULIB_STDINT_H)
+
 PACKAGE=gdb
 AC_DEFINE_UNQUOTED(PACKAGE, "$PACKAGE", [Name of this package. ])
 AC_SUBST(PACKAGE)
+
+# GDB does not use automake, but gnulib does.  This line lets us
+# generate its Makefile.in.
+AM_INIT_AUTOMAKE(gdb, UNUSED-VERSION, [no-define])
 
 debugdir=${libdir}/debug
 	 
@@ -88,6 +117,36 @@ case ${debugdir} in
   AC_DEFINE(DEBUGDIR_RELOCATABLE, 1, [Define if the debug directory should be relocated when GDB is moved.])
   ;;
 esac
+
+# GDB's datadir relocation
+
+gdbdatadir=${datadir}/gdb
+
+AC_ARG_WITH([gdb-datadir],
+  [AS_HELP_STRING([--with-gdb-datadir],
+                  [look for global separate data files in this path [DATADIR/gdb]])], [gdbdatadir="${withval}"])
+
+AC_DEFINE_DIR(GDB_DATADIR, gdbdatadir,
+              [Global directory for GDB data files. ])
+
+if test "x$exec_prefix" = xNONE || test "x$exec_prefix" = 'x${prefix}'; then
+  if test "x$prefix" = xNONE; then
+    test_prefix=/usr/local
+  else
+    test_prefix=$prefix
+  fi
+else
+  test_prefix=$exec_prefix
+fi
+
+case ${gdbdatadir} in
+  "${test_prefix}"|"${test_prefix}/"*|\
+  '${exec_prefix}'|'${exec_prefix}/'*)
+    AC_DEFINE(GDB_DATADIR_RELOCATABLE, 1, [Define if GDB datadir should be relocated when GDB is moved.])
+  ;;
+esac
+GDB_DATADIR_PATH=${gdbdatadir}
+AC_SUBST(GDB_DATADIR_PATH)
 
 AC_CONFIG_SUBDIRS(doc testsuite)
 
@@ -207,8 +266,6 @@ if test "x$targ_defvec" != x; then
     [Define to BFD's default target vector. ])
 fi
 
-AC_ARG_PROGRAM
-
 # The CLI cannot be disabled yet, but may be in the future.
 
 # Enable CLI.
@@ -255,11 +312,11 @@ fi
 AC_ARG_ENABLE(tui,
 [  --enable-tui            enable full-screen terminal user interface (TUI)],
   [case $enableval in
-    yes | no)
+    yes | no | auto)
       ;;
     *)
       AC_MSG_ERROR([bad value $enableval for --enable-tui]) ;;
-  esac],enable_tui=yes)
+  esac],enable_tui=auto)
 
 # Enable gdbtk.
 AC_ARG_ENABLE(gdbtk,
@@ -270,7 +327,7 @@ AC_ARG_ENABLE(gdbtk,
     *)
       AC_MSG_ERROR([bad value $enableval for --enable-gdbtk]) ;;
   esac],
-  [if test -d $srcdir/gdbtk -a -d $srcdir/../itcl; then
+  [if test -d $srcdir/gdbtk; then
     enable_gdbtk=yes
   else
     enable_gdbtk=no
@@ -357,6 +414,11 @@ if test "$enable_profiling" = yes ; then
   CFLAGS="$OLD_CFLAGS"
 fi
 
+ACX_PKGVERSION([GDB])
+ACX_BUGURL([http://www.gnu.org/software/gdb/bugs/])
+AC_DEFINE_UNQUOTED([PKGVERSION], ["$PKGVERSION"], [Additional package description])
+AC_DEFINE_UNQUOTED([REPORT_BUGS_TO], ["$REPORT_BUGS_TO"], [Bug reporting address])
+
 # --------------------- #
 # Checks for programs.  #
 # --------------------- #
@@ -394,19 +456,72 @@ AC_SEARCH_LIBS(gethostbyname, nsl)
 # Some systems (e.g. Solaris) have `socketpair' in libsocket.
 AC_SEARCH_LIBS(socketpair, socket)
 
-# For the TUI, we need enhanced curses functionality.
-#
-# FIXME: kettenis/20040905: We prefer ncurses over the vendor-supplied
-# curses library because the latter might not provide all the
-# functionality we need.  However, this leads to problems on systems
-# where the linker searches /usr/local/lib, but the compiler doesn't
-# search /usr/local/include, if ncurses is installed in /usr/local.  A
-# default installation of ncurses on alpha*-dec-osf* will lead to such
-# a situation.
-AC_SEARCH_LIBS(waddstr, [ncurses cursesX curses])
+# Link in zlib if we can.  This allows us to read compressed debug sections.
+AC_SEARCH_LIBS(zlibVersion, z, [AC_CHECK_HEADERS(zlib.h)])
 
 # On HP/UX we may need libxpdl for dlgetmodinfo (used by solib-pa64.c).
 AC_SEARCH_LIBS(dlgetmodinfo, [dl xpdl])
+
+# On alpha-osf, it appears that libtermcap and libcurses are not compatible.
+# There is a very specific comment in /usr/include/curses.h explaining that
+# termcap routines built into libcurses must not be used.
+# 
+# The symptoms we observed so far is GDB unexpectedly changing
+# the terminal settings when tgetent is called - this is particularly
+# visible as the output is missing carriage returns, and so rapidly
+# becomes very hard to read.
+#
+# The readline configure script has already decided that libtermcap
+# was enough for its purposes, and so decided to build readline using
+# libtermcap.  Since the TUI mode requires curses, building GDB with
+# TUI enabled results in both libraries to be used at the same time,
+# which is not allowed.  This basically means that GDB with TUI is
+# broken on alpha-osf.
+
+case $host_os in
+  alpha*-*-osf* )
+    if "$enable_tui" = "yes"; then
+      AC_MSG_ERROR([Building GDB with TUI mode is not supported on this host])
+    fi
+    if "$enable_tui" = "auto"; then
+      enable_tui=no
+    fi
+    ;;
+esac
+
+# Check whether we should enable the TUI, but only do so if we really
+# can.
+if test x"$enable_tui" != xno; then
+  if test -d $srcdir/tui; then
+    # For the TUI, we need enhanced curses functionality.
+    #
+    # FIXME: kettenis/20040905: We prefer ncurses over the vendor-supplied
+    # curses library because the latter might not provide all the
+    # functionality we need.  However, this leads to problems on systems
+    # where the linker searches /usr/local/lib, but the compiler doesn't
+    # search /usr/local/include, if ncurses is installed in /usr/local.  A
+    # default installation of ncurses on alpha*-dec-osf* will lead to such
+    # a situation.
+    AC_SEARCH_LIBS(waddstr, [ncurses cursesX curses])
+
+    if test "$ac_cv_search_waddstr" != no; then
+      CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_TUI_OBS)"
+      CONFIG_DEPS="$CONFIG_DEPS \$(SUBDIR_TUI_DEPS)"
+      CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_TUI_SRCS)"
+      ENABLE_CFLAGS="$ENABLE_CFLAGS \$(SUBDIR_TUI_CFLAGS)"
+      CONFIG_ALL="${CONFIG_ALL} all-tui"
+      CONFIG_CLEAN="${CONFIG_CLEAN} clean-tui"
+      CONFIG_INSTALL="${CONFIG_INSTALL} install-tui"
+      CONFIG_UNINSTALL="${CONFIG_UNINSTALL} uninstall-tui"
+    else
+      if test x"$enable_tui" = xyes; then
+	AC_MSG_ERROR([no enhanced curses library found; disable TUI])
+      else
+	AC_MSG_WARN([no enhanced curses library found; disabling TUI])
+      fi
+    fi
+  fi
+fi
 
 # Since GDB uses Readline, we need termcap functionality.  In many
 # cases this will be provided by the curses library, but some systems
@@ -477,6 +592,127 @@ else
   fi
 fi
 
+dnl Utility to simplify finding libpython.
+AC_DEFUN([AC_TRY_LIBPYTHON],
+[
+  version=$1
+  define([have_libpython_var],$2)
+  define([VERSION],[translit([$1],[abcdefghijklmnopqrstuvwxyz./-],
+                                  [ABCDEFGHIJKLMNOPQRSTUVWXYZ___])])
+  [HAVE_LIB]VERSION=no
+  AC_MSG_CHECKING([for ${version}])
+  save_LIBS=$LIBS
+  LIBS="$LIBS -l${version}"
+  AC_LINK_IFELSE(AC_LANG_PROGRAM([[#include "${version}/Python.h"]],
+                                 [[Py_Initialize ();]]),
+                 [[HAVE_LIB]VERSION=yes
+                  have_libpython_var=yes],
+                 [LIBS=$save_LIBS])
+  AC_MSG_RESULT([$[HAVE_LIB]VERSION])
+])
+
+AC_ARG_WITH(python,
+  AS_HELP_STRING([--with-python], [include python support (auto/yes/no/<path>)]),
+  [], [with_python=auto])
+AC_MSG_CHECKING([whether to use python])
+AC_MSG_RESULT([$with_python])
+
+if test "${with_python}" = no; then
+  AC_MSG_WARN([python support disabled; some features may be unavailable.])
+  have_libpython=no
+else
+  case "${with_python}" in
+  yes | auto)
+    # Leave as empty, use defaults.
+    python_includes=
+    python_libs=
+    ;;
+  /*)
+    python_includes="-I${with_python}/include"
+    python_libs="-L${with_python}/lib"
+    ;;
+  *)
+    AC_ERROR(invalid value for --with-python)
+    ;;
+  esac
+
+  save_CPPFLAGS=$CPPFLAGS
+  CPPFLAGS="$CPPFLAGS ${python_includes}"
+  save_LIBS=$LIBS
+  LIBS="$LIBS ${python_libs}"
+  have_libpython=no
+  if test "${have_libpython}" = no; then
+    AC_TRY_LIBPYTHON(python2.6, have_libpython)
+    if test "${HAVE_LIBPYTHON2_6}" = yes; then
+      AC_DEFINE(HAVE_LIBPYTHON2_6, 1, [Define if Python 2.6 is being used.])
+    fi
+  fi
+  if test ${have_libpython} = no; then
+    AC_TRY_LIBPYTHON(python2.5, have_libpython)
+    if test "${HAVE_LIBPYTHON2_5}" = yes; then
+      AC_DEFINE(HAVE_LIBPYTHON2_5, 1, [Define if Python 2.5 is being used.])
+    fi
+  fi
+  if test ${have_libpython} = no; then
+    AC_TRY_LIBPYTHON(python2.4, have_libpython)
+    if test "${HAVE_LIBPYTHON2_4}" = yes; then
+      AC_DEFINE(HAVE_LIBPYTHON2_4, 1, [Define if Python 2.4 is being used.])
+    fi
+  fi
+  if test ${have_libpython} = no; then
+    case "${with_python}" in
+    yes)
+      AC_MSG_ERROR([python is missing or unusable])
+      ;;
+    auto)
+      AC_MSG_WARN([python is missing or unusable; some features may be unavailable.])
+      ;;
+    *)
+      AC_MSG_ERROR([no usable python found at ${with_python}])
+      ;;
+    esac
+    CPPFLAGS=$save_CPPFLAGS
+    LIBS=$save_LIBS
+  fi
+fi
+
+if test "${have_libpython}" = yes; then
+  AC_DEFINE(HAVE_PYTHON, 1, [Define if Python interpreter is being linked in.])
+  CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_PYTHON_OBS)"
+  CONFIG_DEPS="$CONFIG_DEPS \$(SUBDIR_PYTHON_DEPS)"
+  CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_PYTHON_SRCS)"
+  CONFIG_INSTALL="$CONFIG_INSTALL install-python"
+  CONFIG_UNINSTALL="$CONFIG_UNINSTALL uninstall-python"
+  ENABLE_CFLAGS="$ENABLE_CFLAGS \$(SUBDIR_PYTHON_CFLAGS)"
+
+  # Flags needed to compile Python code (taken from python-config --cflags).
+  # We cannot call python-config directly because it will output whatever was
+  # used when compiling the Python interpreter itself, including flags which
+  # would make the python-related objects be compiled differently from the
+  # rest of GDB (e.g., -O2 and -fPIC).
+  if test "${GCC}" = yes; then
+    tentative_python_cflags="-fno-strict-aliasing -DNDEBUG -fwrapv"
+  fi
+
+  if test "x${tentative_python_cflags}" != x; then
+    AC_MSG_CHECKING(compiler flags for python code)
+    for flag in ${tentative_python_cflags}; do
+      # Check that the compiler accepts it
+      saved_CFLAGS="$CFLAGS"
+      CFLAGS="$CFLAGS $flag"
+      AC_TRY_COMPILE([],[],PYTHON_CFLAGS="${PYTHON_CFLAGS} $flag",)
+      CFLAGS="$saved_CFLAGS"
+    done
+    AC_MSG_RESULT(${PYTHON_CFLAGS})
+  fi
+else
+  # Even if Python support is not compiled in, we need to have these files
+  # included in order to recognize the GDB command "python".
+  CONFIG_OBS="$CONFIG_OBS python.o python-value.o"
+  CONFIG_SRCS="$CONFIG_SRCS python/python.c python/python-value.c"
+fi
+AC_SUBST(PYTHON_CFLAGS)
+
 # ------------------------- #
 # Checks for header files.  #
 # ------------------------- #
@@ -499,7 +735,6 @@ AC_CHECK_HEADERS(proc_service.h thread_db.h gnu/libc-version.h)
 AC_CHECK_HEADERS(signal.h)
 AC_CHECK_HEADERS(stddef.h)
 AC_CHECK_HEADERS(stdlib.h)
-AC_CHECK_HEADERS(stdint.h)
 AC_CHECK_HEADERS(string.h memory.h strings.h)
 AC_CHECK_HEADERS(sys/fault.h)
 AC_CHECK_HEADERS(sys/file.h)
@@ -553,9 +788,6 @@ AC_CHECK_HEADERS(elf_hp.h)
 # unconditionally, so what's the point in checking these?
 AC_CHECK_HEADERS(ctype.h time.h)
 
-# Create a header we can use portably to get the standard integer types.
-GCC_HEADER_STDINT(gdb_stdint.h)
-
 # ------------------------- #
 # Checks for declarations.  #
 # ------------------------- #
@@ -580,7 +812,6 @@ AC_CHECK_TYPES(socklen_t, [], [],
 [#include <sys/types.h>
 #include <sys/socket.h>
 ])
-AC_CHECK_TYPES(uintptr_t, [], [], [#include <stdint.h>])
 
 # ------------------------------------- #
 # Checks for compiler characteristics.  #
@@ -603,7 +834,7 @@ AC_CHECK_FUNCS(getuid getgid)
 AC_CHECK_FUNCS(poll)
 AC_CHECK_FUNCS(pread64)
 AC_CHECK_FUNCS(sbrk)
-AC_CHECK_FUNCS(setpgid setpgrp)
+AC_CHECK_FUNCS(setpgid setpgrp setsid)
 AC_CHECK_FUNCS(sigaction sigprocmask sigsetmask)
 AC_CHECK_FUNCS(socketpair)
 AC_CHECK_FUNCS(syscall)
@@ -628,16 +859,23 @@ AC_CHECK_DECLS(ptrace, [], [
   : ${gdb_cv_func_ptrace_ret='int'}
   : ${gdb_cv_func_ptrace_args='int,int,long,long'}
 ], $gdb_ptrace_headers)
-# Check return type.
+# Check return type.  Varargs (used on GNU/Linux) conflict with the
+# empty argument list, so check for that explicitly.
 AC_CACHE_CHECK([return type of ptrace], gdb_cv_func_ptrace_ret,
   AC_TRY_COMPILE($gdb_ptrace_headers,
-    [extern int ptrace ();],
-    gdb_cv_func_ptrace_ret='int',
-    gdb_cv_func_ptrace_ret='long'))
+    [extern long ptrace (enum __ptrace_request, ...);],
+    gdb_cv_func_ptrace_ret='long',
+    AC_TRY_COMPILE($gdb_ptrace_headers,
+      [extern int ptrace ();],
+      gdb_cv_func_ptrace_ret='int',
+      gdb_cv_func_ptrace_ret='long')))
 AC_DEFINE_UNQUOTED(PTRACE_TYPE_RET, $gdb_cv_func_ptrace_ret,
   [Define as the return type of ptrace.])
 # Check argument types.
 AC_CACHE_CHECK([types of arguments for ptrace], gdb_cv_func_ptrace_args, [
+  AC_TRY_COMPILE($gdb_ptrace_headers,
+    [extern long ptrace (enum __ptrace_request, ...);],
+    [gdb_cv_func_ptrace_args='int,int,long,long'],[
 for gdb_arg1 in 'int' 'long'; do
  for gdb_arg2 in 'pid_t' 'int' 'long'; do
   for gdb_arg3 in 'int *' 'caddr_t' 'int' 'long' 'void *'; do
@@ -661,7 +899,7 @@ gdb_cv_func_ptrace_args="$gdb_arg1,$gdb_arg2,$gdb_arg3,$gdb_arg4,$gdb_arg5";
 done
 # Provide a safe default value.
 : ${gdb_cv_func_ptrace_args='int,int,long,long'}
-])
+])])
 ac_save_IFS=$IFS; IFS=','
 set dummy `echo "$gdb_cv_func_ptrace_args" | sed 's/\*/\*/g'`
 IFS=$ac_save_IFS
@@ -1253,6 +1491,29 @@ if test "x$gdb_cv_sys_syscall_h_has_tkill" = "xyes" && test "x$ac_cv_func_syscal
   AC_DEFINE(HAVE_TKILL_SYSCALL, 1, [Define if you support the tkill syscall.])
 fi
 
+dnl Check if we can disable the virtual address space randomization.
+dnl The functionality of setarch -R.
+AC_CHECK_DECLS([ADDR_NO_RANDOMIZE],,, [#include <sys/personality.h>])
+define([PERSONALITY_TEST], [AC_LANG_PROGRAM([#include <sys/personality.h>], [
+#      if !HAVE_DECL_ADDR_NO_RANDOMIZE
+#       define ADDR_NO_RANDOMIZE 0x0040000
+#      endif
+       /* Test the flag could be set and stays set.  */
+       personality (personality (0xffffffff) | ADDR_NO_RANDOMIZE);
+       if (!(personality (personality (0xffffffff)) & ADDR_NO_RANDOMIZE))
+	   return 1])])
+AC_RUN_IFELSE([PERSONALITY_TEST],
+	      [have_personality=true],
+	      [have_personality=false],
+	      [AC_LINK_IFELSE([PERSONALITY_TEST],
+			      [have_personality=true],
+			      [have_personality=false])])
+if $have_personality
+then
+    AC_DEFINE([HAVE_PERSONALITY], 1,
+	      [Define if you support the personality syscall.])
+fi
+
 dnl Handle optional features that can be enabled.
 
 AC_ARG_WITH(sysroot,
@@ -1317,6 +1578,12 @@ fi
 build_warnings="-Wall -Wdeclaration-after-statement -Wpointer-arith \
 -Wformat-nonliteral -Wno-pointer-sign \
 -Wno-unused -Wno-switch -Wno-char-subscripts"
+
+# Enable -Wno-format by default when using gcc on mingw since many
+# GCC versions complain about %I64.
+case "${host}" in
+  *-*-mingw32*) build_warnings="$build_warnings -Wno-format" ;;
+esac
 
 AC_ARG_ENABLE(build-warnings,
 [  --enable-build-warnings Enable build-time compiler warnings if gcc is used],
@@ -1414,7 +1681,7 @@ OLD_LIBS=$LIBS
 CFLAGS="$CFLAGS -I${srcdir}/../include -I../bfd -I${srcdir}/../bfd"
 LDFLAGS="$LDFLAGS -L../bfd -L../libiberty"
 intl=`echo $LIBINTL | sed 's,${top_builddir}/,,g'`
-LIBS="$LIBS -lbfd -liberty $intl"
+LIBS="-lbfd -liberty $intl $LIBS"
 AC_CACHE_CHECK([for ELF support in BFD], gdb_cv_var_elf,
 [AC_TRY_LINK(
 [#include <stdlib.h>
@@ -1445,7 +1712,7 @@ AC_SUBST(WIN32LIBS)
 AC_SUBST(WIN32LDAPP)
 
 case "${host}" in
-*-*-cygwin*)
+*-*-cygwin* | *-*-mingw* )
     configdir="win"
     ;;
 *)
@@ -1463,57 +1730,71 @@ if test "${enable_gdbtk}" = "yes"; then
     GDBTK_SRC_DIR=`pwd`
     cd $here
 
-    CY_AC_PATH_TCLCONFIG
+    SC_PATH_TCLCONFIG
     if test -z "${no_tcl}"; then
-	CY_AC_LOAD_TCLCONFIG
-	CY_AC_PATH_TKCONFIG
+	SC_LOAD_TCLCONFIG
 
-	# now look for Tcl library stuff
+        # Check for in-tree tcl
+        here=`pwd`
+        cd ${srcdir}/..
+        topdir=`pwd`
+        cd ${here}
 
-	tcldir="../tcl/${configdir}/"
+        intree="no"
+        if test "${TCL_SRC_DIR}" = "${topdir}/tcl"; then
+          intree="yes"
+        fi
 
-	TCL_DEPS="${tcldir}${TCL_LIB_FILE}"
+        # Find Tcl private headers
+        if test x"${intree}" = xno; then
+          CY_AC_TCL_PRIVATE_HEADERS
+	  TCL_INCLUDE="${TCL_INCLUDE_SPEC} ${TCL_PRIVATE_INCLUDE}"
+          TCL_LIBRARY="${TCL_LIB_SPEC}"
+          TCL_DEPS=""
+        else
+          # If building tcl in the same src tree, private headers
+          # are not needed, but we need to be sure to use the right
+          # headers library
+	  TCL_INCLUDE="-I${TCL_SRC_DIR}/generic"          
+          TCL_LIBRARY="${TCL_BUILD_LIB_SPEC}"
+          TCL_DEPS="../tcl/${configdir}${TCL_LIB_FILE}"
+        fi
+	AC_SUBST(TCL_INCLUDE)
+	AC_SUBST(TCL_LIBRARY)
+        AC_SUBST(TCL_DEPS)
 
 	# If $no_tk is nonempty, then we can't do Tk, and there is no
 	# point to doing Tcl.
 	if test -z "${no_tk}"; then
-	   CY_AC_LOAD_TKCONFIG
-	   CY_AC_PATH_TCLH
-	   CY_AC_PATH_TKH
-	   CY_AC_PATH_ITCLH
-	   CY_AC_PATH_ITKH
+           SC_PATH_TKCONFIG
+	   SC_LOAD_TKCONFIG
 
-
-	   # now look for Tk library stuff
-
-	   tkdir="../tk/${configdir}/"
-
-	   TK_DEPS="${tkdir}${TK_LIB_FILE}"
-
-	   # now look for Itcl library stuff
-
-	   CY_AC_PATH_ITCLCONFIG
-           if test -z "${no_itcl}"; then
-             CY_AC_LOAD_ITCLCONFIG 
-
-	     ITCLLIB="${ITCL_BUILD_LIB_SPEC}"
-	     ITCL_DEPS="${ITCL_LIB_FULL_PATH}"
+           # Check for in-tree Tk
+           intree="no"
+           if test "${TK_SRC_DIR}" = "${topdir}/tk"; then
+             intree="yes" 
            fi
 
-	   
-	   # now look for Itk library stuff
-	   CY_AC_PATH_ITKCONFIG
-           if test -z "${no_itcl}"; then
-             CY_AC_LOAD_ITKCONFIG
-
-	     ITKLIB="${ITK_BUILD_LIB_SPEC}"
-	     ITK_DEPS="${ITK_LIB_FULL_PATH}"
+           # Find Tk private headers
+           if test x"${intree}" = xno; then
+             CY_AC_TK_PRIVATE_HEADERS
+	     TK_INCLUDE="${TK_INCLUDE_SPEC} ${TK_PRIVATE_INCLUDE}"
+	     TK_LIBRARY=${TK_LIB_SPEC}
+             TK_DEPS=""
+           else
+             TK_INCLUDE="-I${TK_SRC_DIR}/generic"
+             TK_LIBRARY="${TK_BUILD_LIB_SPEC}"
+             TK_DEPS="../tk/${configdir}/${TK_LIB_FILE}"
            fi
+	   AC_SUBST(TK_INCLUDE)
+	   AC_SUBST(TK_LIBRARY)
+           AC_SUBST(TK_DEPS)
+	   AC_SUBST(TK_XINCLUDES)
 
            ENABLE_CFLAGS="${ENABLE_CFLAGS} \$(SUBDIR_GDBTK_CFLAGS)"
 
 	   # Include some libraries that Tcl and Tk want.
-	   TCL_LIBS='$(LIBGUI) $(ITCL) $(ITK) $(TK) $(TCL) $(X11_LDFLAGS) $(X11_LIBS)'
+	   TCL_LIBS='$(LIBGUI) $(TK) $(TCL) $(X11_LDFLAGS) $(X11_LIBS)'
 	   # Yes, the ordering seems wrong here.  But it isn't.
 	   # TK_LIBS is the list of libraries that need to be linked
 	   # after Tcl/Tk.  Note that this isn't put into LIBS.  If it
@@ -1543,37 +1824,11 @@ fi
 AC_SUBST(X_CFLAGS)
 AC_SUBST(X_LDFLAGS)
 AC_SUBST(X_LIBS)
-AC_SUBST(TCL_DEPS)
-AC_SUBST(TK_DEPS)
-AC_SUBST(ITCLLIB)
-AC_SUBST(ITCL_DEPS)
-AC_SUBST(ITKLIB)
-AC_SUBST(ITK_DEPS)
 AC_SUBST(GDBTKLIBS)
 AC_SUBST(GDBTK_CFLAGS)
 AC_SUBST(GDBTK_SRC_DIR)
 
 AC_PATH_X
-
-# Check whether we should enable the TUI, but only do so if we really
-# can.
-if test x"$enable_tui" = xyes; then
-  if test -d $srcdir/tui; then
-    if test "$ac_cv_search_waddstr" != no; then
-      CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_TUI_OBS)"
-      CONFIG_DEPS="$CONFIG_DEPS \$(SUBDIR_TUI_DEPS)"
-      CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_TUI_SRCS)"
-      CONFIG_INITS="$CONFIG_INITS \$(SUBDIR_TUI_INITS)"
-      ENABLE_CFLAGS="$ENABLE_CFLAGS \$(SUBDIR_TUI_CFLAGS)"
-      CONFIG_ALL="${CONFIG_ALL} all-tui"
-      CONFIG_CLEAN="${CONFIG_CLEAN} clean-tui"
-      CONFIG_INSTALL="${CONFIG_INSTALL} install-tui"
-      CONFIG_UNINSTALL="${CONFIG_UNINSTALL} uninstall-tui"
-    else
-      AC_MSG_WARN([no enhanced curses library found; disabling TUI])
-    fi
-  fi
-fi
 
 # Unlike the sim directory, whether a simulator is linked is controlled by 
 # presence of a gdb_sim definition in the target configure.tgt entry.  
@@ -1721,7 +1976,7 @@ AC_DEFINE(GDB_DEFAULT_HOST_CHARSET, "ISO-8859-1",
 
 AM_ICONV
 
-AC_OUTPUT(Makefile .gdbinit:gdbinit.in,
+AC_OUTPUT(Makefile .gdbinit:gdbinit.in gnulib/Makefile,
 [
 dnl Autoconf doesn't provide a mechanism for modifying definitions 
 dnl provided by makefile fragments.

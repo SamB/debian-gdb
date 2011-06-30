@@ -36,7 +36,6 @@
 #include "ppc-tdep.h"
 #include "rs6000-tdep.h"
 #include "exec.h"
-#include "gdb_stdint.h"
 #include "observer.h"
 
 #include <sys/ptrace.h>
@@ -578,7 +577,7 @@ rs6000_wait (ptid_t ptid, struct target_waitstatus *ourstatus)
 static void
 exec_one_dummy_insn (struct gdbarch *gdbarch)
 {
-#define	DUMMY_INSN_ADDR	gdbarch_tdep (gdbarch)->text_segment_base+0x200
+#define	DUMMY_INSN_ADDR	AIX_TEXT_SEGMENT_BASE+0x200
 
   int ret, status, pid;
   CORE_ADDR prev_pc;
@@ -967,17 +966,18 @@ vmap_exec (void)
 /* Set the current architecture from the host running GDB.  Called when
    starting a child process. */
 
-static void (*super_create_inferior) (char *exec_file, char *allargs,
-				      char **env, int from_tty);
+static void (*super_create_inferior) (struct target_ops *,char *exec_file, 
+				      char *allargs, char **env, int from_tty);
 static void
-rs6000_create_inferior (char *exec_file, char *allargs, char **env, int from_tty)
+rs6000_create_inferior (struct target_ops * ops, char *exec_file,
+			char *allargs, char **env, int from_tty)
 {
   enum bfd_architecture arch;
   unsigned long mach;
   bfd abfd;
   struct gdbarch_info info;
 
-  super_create_inferior (exec_file, allargs, env, from_tty);
+  super_create_inferior (ops, exec_file, allargs, env, from_tty);
 
   if (__power_rs ())
     {

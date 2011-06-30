@@ -35,6 +35,7 @@
 #include "infcall.h"
 #include "dummy-frame.h"
 #include "ada-lang.h"
+#include "gdbthread.h"
 
 /* NOTE: cagney/2003-04-16: What's the future of this code?
 
@@ -100,9 +101,10 @@ Unwinding of stack if a signal is received while in a call dummy is %s.\n"),
    its value as needed).  */
 
 static struct value *
-value_arg_coerce (struct value *arg, struct type *param_type,
-		  int is_prototyped, CORE_ADDR *sp)
+value_arg_coerce (struct gdbarch *gdbarch, struct value *arg,
+		  struct type *param_type, int is_prototyped, CORE_ADDR *sp)
 {
+  const struct builtin_type *builtin = builtin_type (gdbarch);
   struct type *arg_type = check_typedef (value_type (arg));
   struct type *type
     = param_type ? check_typedef (param_type) : arg_type;
@@ -110,6 +112,12 @@ value_arg_coerce (struct value *arg, struct type *param_type,
   /* Perform any Ada-specific coercion first.  */
   if (current_language->la_language == language_ada)
     arg = ada_convert_actual (arg, type, sp);
+
+  /* Force the value to the target if we will need its address.  At
+     this point, we could allocate arguments on the stack instead of
+     calling malloc if we knew that their addresses would not be
+     saved by the called function.  */
+  arg = value_coerce_to_target (arg);
 
   switch (TYPE_CODE (type))
     {
@@ -135,22 +143,22 @@ value_arg_coerce (struct value *arg, struct type *param_type,
       /* If we don't have a prototype, coerce to integer type if necessary.  */
       if (!is_prototyped)
 	{
-	  if (TYPE_LENGTH (type) < TYPE_LENGTH (builtin_type_int))
-	    type = builtin_type_int;
+	  if (TYPE_LENGTH (type) < TYPE_LENGTH (builtin->builtin_int))
+	    type = builtin->builtin_int;
 	}
       /* Currently all target ABIs require at least the width of an integer
          type for an argument.  We may have to conditionalize the following
          type coercion for future targets.  */
-      if (TYPE_LENGTH (type) < TYPE_LENGTH (builtin_type_int))
-	type = builtin_type_int;
+      if (TYPE_LENGTH (type) < TYPE_LENGTH (builtin->builtin_int))
+	type = builtin->builtin_int;
       break;
     case TYPE_CODE_FLT:
       if (!is_prototyped && coerce_float_to_double_p)
 	{
-	  if (TYPE_LENGTH (type) < TYPE_LENGTH (builtin_type_double))
-	    type = builtin_type_double;
-	  else if (TYPE_LENGTH (type) > TYPE_LENGTH (builtin_type_double))
-	    type = builtin_type_long_double;
+	  if (TYPE_LENGTH (type) < TYPE_LENGTH (builtin->builtin_double))
+	    type = builtin->builtin_double;
+	  else if (TYPE_LENGTH (type) > TYPE_LENGTH (builtin->builtin_double))
+	    type = builtin->builtin_long_double;
 	}
       break;
     case TYPE_CODE_FUNC:
@@ -193,7 +201,7 @@ find_function_addr (struct value *function, struct type **retval_type)
 {
   struct type *ftype = check_typedef (value_type (function));
   enum type_code code = TYPE_CODE (ftype);
-  struct type *value_type;
+  struct type *value_type = NULL;
   CORE_ADDR funaddr;
 
   /* If it's a member function, just look at the function
@@ -202,7 +210,7 @@ find_function_addr (struct value *function, struct type **retval_type)
   /* Determine address to call.  */
   if (code == TYPE_CODE_FUNC || code == TYPE_CODE_METHOD)
     {
-      funaddr = VALUE_ADDRESS (function);
+      funaddr = value_address (function);
       value_type = TYPE_TARGET_TYPE (ftype);
     }
   else if (code == TYPE_CODE_PTR)
@@ -217,8 +225,6 @@ find_function_addr (struct value *function, struct type **retval_type)
 							&current_target);
 	  value_type = TYPE_TARGET_TYPE (ftype);
 	}
-      else
-	value_type = builtin_type_int;
     }
   else if (code == TYPE_CODE_INT)
     {
@@ -245,8 +251,6 @@ find_function_addr (struct value *function, struct type **retval_type)
 	    /* Handle integer used as address of a function.  */
 	    funaddr = (CORE_ADDR) value_as_long (function);
 	}
-
-      value_type = builtin_type_int;
     }
   else
     error (_("Invalid data type for function to be called."));
@@ -257,49 +261,13 @@ find_function_addr (struct value *function, struct type **retval_type)
 }
 
 /* Call breakpoint_auto_delete on the current contents of the bpstat
-   pointed to by arg (which is really a bpstat *).  */
+   of the current thread.  */
 
 static void
 breakpoint_auto_delete_contents (void *arg)
 {
-  breakpoint_auto_delete (*(bpstat *) arg);
-}
-
-static CORE_ADDR
-generic_push_dummy_code (struct gdbarch *gdbarch,
-			 CORE_ADDR sp, CORE_ADDR funaddr,
-			 struct value **args, int nargs,
-			 struct type *value_type,
-			 CORE_ADDR *real_pc, CORE_ADDR *bp_addr,
-			 struct regcache *regcache)
-{
-  /* Something here to findout the size of a breakpoint and then
-     allocate space for it on the stack.  */
-  int bplen;
-  /* This code assumes frame align.  */
-  gdb_assert (gdbarch_frame_align_p (gdbarch));
-  /* Force the stack's alignment.  The intent is to ensure that the SP
-     is aligned to at least a breakpoint instruction's boundary.  */
-  sp = gdbarch_frame_align (gdbarch, sp);
-  /* Allocate space for, and then position the breakpoint on the
-     stack.  */
-  if (gdbarch_inner_than (gdbarch, 1, 2))
-    {
-      CORE_ADDR bppc = sp;
-      gdbarch_breakpoint_from_pc (gdbarch, &bppc, &bplen);
-      sp = gdbarch_frame_align (gdbarch, sp - bplen);
-      (*bp_addr) = sp;
-      /* Should the breakpoint size/location be re-computed here?  */
-    }      
-  else
-    {
-      (*bp_addr) = sp;
-      gdbarch_breakpoint_from_pc (gdbarch, bp_addr, &bplen);
-      sp = gdbarch_frame_align (gdbarch, sp + bplen);
-    }
-  /* Inferior resumes at the function entry point.  */
-  (*real_pc) = funaddr;
-  return sp;
+  if (!ptid_equal (inferior_ptid, null_ptid))
+    breakpoint_auto_delete (inferior_thread ()->stop_bpstat);
 }
 
 /* For CALL_DUMMY_ON_STACK, push a breakpoint sequence that the called
@@ -313,14 +281,11 @@ push_dummy_code (struct gdbarch *gdbarch,
 		 CORE_ADDR *real_pc, CORE_ADDR *bp_addr,
 		 struct regcache *regcache)
 {
-  if (gdbarch_push_dummy_code_p (gdbarch))
-    return gdbarch_push_dummy_code (gdbarch, sp, funaddr,
-				    args, nargs, value_type, real_pc, bp_addr,
-				    regcache);
-  else    
-    return generic_push_dummy_code (gdbarch, sp, funaddr,
-				    args, nargs, value_type, real_pc, bp_addr,
-				    regcache);
+  gdb_assert (gdbarch_push_dummy_code_p (gdbarch));
+
+  return gdbarch_push_dummy_code (gdbarch, sp, funaddr,
+				  args, nargs, value_type, real_pc, bp_addr,
+				  regcache);
 }
 
 /* All this stuff with a dummy frame may seem unnecessarily complicated
@@ -374,7 +339,7 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
   gdbarch = get_frame_arch (frame);
 
   if (!gdbarch_push_dummy_call_p (gdbarch))
-    error (_("This target does not support function calls"));
+    error (_("This target does not support function calls."));
 
   /* Create a cleanup chain that contains the retbuf (buffer
      containing the register values).  This chain is create BEFORE the
@@ -456,7 +421,7 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
 	 pushed) GDB won't be able to correctly perform back traces.
 	 If a target is having trouble with backtraces, first thing to
 	 do is add FRAME_ALIGN() to the architecture vector. If that
-	 fails, try unwind_dummy_id().
+	 fails, try dummy_id().
 
          If the ABI specifies a "Red Zone" (see the doco) the code
          below will quietly trash it.  */
@@ -464,6 +429,9 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
   }
 
   funaddr = find_function_addr (function, &values_type);
+  if (!values_type)
+    values_type = builtin_type (gdbarch)->builtin_int;
+
   CHECK_TYPEDEF (values_type);
 
   /* Are we returning a value using a structure return (passing a
@@ -487,7 +455,7 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
     }
   else
     {
-      struct_return = using_struct_return (values_type);
+      struct_return = using_struct_return (value_type (function), values_type);
       target_values_type = values_type;
     }
 
@@ -561,7 +529,7 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
     }
 
   if (nargs < TYPE_NFIELDS (ftype))
-    error (_("too few arguments in function call"));
+    error (_("Too few arguments in function call."));
 
   {
     int i;
@@ -584,7 +552,8 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
 	else
 	  param_type = NULL;
 
-	args[i] = value_arg_coerce (args[i], param_type, prototyped, &sp);
+	args[i] = value_arg_coerce (gdbarch, args[i],
+				    param_type, prototyped, &sp);
 
 	if (param_type != NULL && language_pass_by_reference (param_type))
 	  args[i] = value_addr (args[i]);
@@ -650,7 +619,7 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
      ID so that the breakpoint code can correctly re-identify the
      dummy breakpoint.  */
   /* Sanity.  The exact same SP value is returned by PUSH_DUMMY_CALL,
-     saved as the dummy-frame TOS, and used by unwind_dummy_id to form
+     saved as the dummy-frame TOS, and used by dummy_id to form
      the frame ID's stack address.  */
   dummy_id = frame_id_build (sp, bp_addr);
 
@@ -665,7 +634,7 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
     sal.section = find_pc_overlay (sal.pc);
     /* Sanity.  The exact same SP value is returned by
        PUSH_DUMMY_CALL, saved as the dummy-frame TOS, and used by
-       unwind_dummy_id to form the frame ID's stack address.  */
+       dummy_id to form the frame ID's stack address.  */
     bpt = set_momentary_breakpoint (sal, dummy_id, bp_call_dummy);
     bpt->disposition = disp_del;
   }
@@ -700,20 +669,27 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
 
   {
     struct cleanup *old_cleanups = make_cleanup (null_cleanup, 0);
+    struct cleanup *old_cleanups2;
     int saved_async = 0;
+    struct thread_info *tp = inferior_thread ();
 
     /* If all error()s out of proceed ended up calling normal_stop
        (and perhaps they should; it already does in the special case
        of error out of resume()), then we wouldn't need this.  */
-    make_cleanup (breakpoint_auto_delete_contents, &stop_bpstat);
+    make_cleanup (breakpoint_auto_delete_contents, NULL);
 
     disable_watchpoints_before_interactive_call_start ();
-    proceed_to_finish = 1;	/* We want stop_registers, please... */
+    tp->proceed_to_finish = 1;	/* We want stop_registers, please... */
 
     if (target_can_async_p ())
       saved_async = target_async_mask (0);
-    
+
+    old_cleanups2 = make_cleanup_restore_integer (&suppress_resume_observer);
+    suppress_resume_observer = 1;
+    make_cleanup_restore_integer (&suppress_stop_observer);
+    suppress_stop_observer = 1;
     proceed (real_pc, TARGET_SIGNAL_0, 0);
+    do_cleanups (old_cleanups2);
     
     if (saved_async)
       target_async_mask (saved_async);
@@ -722,6 +698,16 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
       
     discard_cleanups (old_cleanups);
   }
+
+  if (! target_has_execution)
+    {
+      /* If we try to restore the inferior status (via the cleanup),
+	 we'll crash as the inferior is no longer running.  */
+      discard_cleanups (inf_status_cleanup);
+      discard_inferior_status (inf_status);
+      error (_("\
+The program being debugged exited while in a function called from GDB."));
+    }
 
   if (stopped_by_random_signal || !stop_stack_dummy)
     {
@@ -768,7 +754,7 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
 	      error (_("\
 The program being debugged was signaled while in a function called from GDB.\n\
 GDB has restored the context to what it was before the call.\n\
-To change this behavior use \"set unwindonsignal off\"\n\
+To change this behavior use \"set unwindonsignal off\".\n\
 Evaluation of the expression containing the function (%s) will be abandoned."),
 		     name);
 	    }
@@ -788,7 +774,7 @@ Evaluation of the expression containing the function (%s) will be abandoned."),
 	      error (_("\
 The program being debugged was signaled while in a function called from GDB.\n\
 GDB remains in the frame where the signal was received.\n\
-To change this behavior use \"set unwindonsignal on\"\n\
+To change this behavior use \"set unwindonsignal on\".\n\
 Evaluation of the expression containing the function (%s) will be abandoned."),
 		     name);
 	    }
@@ -846,15 +832,15 @@ the function call)."), name);
       }
     else
       {
-	switch (gdbarch_return_value (gdbarch, target_values_type,
-				      NULL, NULL, NULL))
+	switch (gdbarch_return_value (gdbarch, value_type (function),
+				      target_values_type, NULL, NULL, NULL))
 	  {
 	  case RETURN_VALUE_REGISTER_CONVENTION:
 	  case RETURN_VALUE_ABI_RETURNS_ADDRESS:
 	  case RETURN_VALUE_ABI_PRESERVES_ADDRESS:
 	    retval = allocate_value (values_type);
-	    gdbarch_return_value (gdbarch, values_type, retbuf,
-				  value_contents_raw (retval), NULL);
+	    gdbarch_return_value (gdbarch, value_type (function), values_type,
+				  retbuf, value_contents_raw (retval), NULL);
 	    break;
 	  case RETURN_VALUE_STRUCT_CONVENTION:
 	    retval = value_at (values_type, struct_addr);

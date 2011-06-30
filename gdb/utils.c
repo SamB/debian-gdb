@@ -25,6 +25,7 @@
 #include "gdb_string.h"
 #include "event-top.h"
 #include "exceptions.h"
+#include "gdbthread.h"
 
 #ifdef TUI
 #include "tui/tui.h"		/* For tui_get_command_dimension.   */
@@ -63,6 +64,9 @@
 
 #include "readline/readline.h"
 
+#include <sys/time.h>
+#include <time.h>
+
 #if !HAVE_DECL_MALLOC
 extern PTR malloc ();		/* OK: PTR */
 #endif
@@ -92,21 +96,15 @@ static void prompt_for_continue (void);
 static void set_screen_size (void);
 static void set_width (void);
 
+/* A flag indicating whether to timestamp debugging messages.  */
+
+static int debug_timestamp = 0;
+
 /* Chain of cleanup actions established with make_cleanup,
    to be executed if an error happens.  */
 
 static struct cleanup *cleanup_chain;	/* cleaned up after a failed command */
 static struct cleanup *final_cleanup_chain;	/* cleaned up when gdb exits */
-static struct cleanup *exec_cleanup_chain;	/* cleaned up on each execution command */
-/* cleaned up on each error from within an execution command */
-static struct cleanup *exec_error_cleanup_chain;
-
-/* Pointer to what is left to do for an execution command after the
-   target stops. Used only in asynchronous mode, by targets that
-   support async execution.  The finish and until commands use it. So
-   does the target extended-remote command. */
-struct continuation *cmd_continuation;
-struct continuation *intermediate_continuation;
 
 /* Nonzero if we have job control. */
 
@@ -204,21 +202,17 @@ make_cleanup (make_cleanup_ftype *function, void *arg)
 }
 
 struct cleanup *
+make_cleanup_dtor (make_cleanup_ftype *function, void *arg,
+		   void (*dtor) (void *))
+{
+  return make_my_cleanup2 (&cleanup_chain,
+			   function, arg, dtor);
+}
+
+struct cleanup *
 make_final_cleanup (make_cleanup_ftype *function, void *arg)
 {
   return make_my_cleanup (&final_cleanup_chain, function, arg);
-}
-
-struct cleanup *
-make_exec_cleanup (make_cleanup_ftype *function, void *arg)
-{
-  return make_my_cleanup (&exec_cleanup_chain, function, arg);
-}
-
-struct cleanup *
-make_exec_error_cleanup (make_cleanup_ftype *function, void *arg)
-{
-  return make_my_cleanup (&exec_error_cleanup_chain, function, arg);
 }
 
 static void
@@ -250,7 +244,6 @@ do_close_cleanup (void *arg)
 {
   int *fd = arg;
   close (*fd);
-  xfree (fd);
 }
 
 struct cleanup *
@@ -258,7 +251,24 @@ make_cleanup_close (int fd)
 {
   int *saved_fd = xmalloc (sizeof (fd));
   *saved_fd = fd;
-  return make_cleanup (do_close_cleanup, saved_fd);
+  return make_cleanup_dtor (do_close_cleanup, saved_fd, xfree);
+}
+
+/* Helper function which does the work for make_cleanup_fclose.  */
+
+static void
+do_fclose_cleanup (void *arg)
+{
+  FILE *file = arg;
+  fclose (arg);
+}
+
+/* Return a new cleanup that closes FILE.  */
+
+struct cleanup *
+make_cleanup_fclose (FILE *file)
+{
+  return make_cleanup (do_fclose_cleanup, file);
 }
 
 static void
@@ -285,10 +295,36 @@ make_cleanup_free_section_addr_info (struct section_addr_info *addrs)
   return make_my_cleanup (&cleanup_chain, do_free_section_addr_info, addrs);
 }
 
+struct restore_integer_closure
+{
+  int *variable;
+  int value;
+};
+
+static void
+restore_integer (void *p)
+{
+  struct restore_integer_closure *closure = p;
+  *(closure->variable) = closure->value;
+}
+
+/* Remember the current value of *VARIABLE and make it restored when the cleanup
+   is run.  */
+struct cleanup *
+make_cleanup_restore_integer (int *variable)
+{
+  struct restore_integer_closure *c =
+    xmalloc (sizeof (struct restore_integer_closure));
+  c->variable = variable;
+  c->value = *variable;
+
+  return make_my_cleanup2 (&cleanup_chain, restore_integer, (void *)c,
+			   xfree);
+}
 
 struct cleanup *
-make_my_cleanup (struct cleanup **pmy_chain, make_cleanup_ftype *function,
-		 void *arg)
+make_my_cleanup2 (struct cleanup **pmy_chain, make_cleanup_ftype *function,
+		  void *arg,  void (*free_arg) (void *))
 {
   struct cleanup *new
     = (struct cleanup *) xmalloc (sizeof (struct cleanup));
@@ -296,10 +332,18 @@ make_my_cleanup (struct cleanup **pmy_chain, make_cleanup_ftype *function,
 
   new->next = *pmy_chain;
   new->function = function;
+  new->free_arg = free_arg;
   new->arg = arg;
   *pmy_chain = new;
 
   return old_chain;
+}
+
+struct cleanup *
+make_my_cleanup (struct cleanup **pmy_chain, make_cleanup_ftype *function,
+		 void *arg)
+{
+  return make_my_cleanup2 (pmy_chain, function, arg, NULL);
 }
 
 /* Discard cleanups and do the actions they describe
@@ -317,18 +361,6 @@ do_final_cleanups (struct cleanup *old_chain)
   do_my_cleanups (&final_cleanup_chain, old_chain);
 }
 
-void
-do_exec_cleanups (struct cleanup *old_chain)
-{
-  do_my_cleanups (&exec_cleanup_chain, old_chain);
-}
-
-void
-do_exec_error_cleanups (struct cleanup *old_chain)
-{
-  do_my_cleanups (&exec_error_cleanup_chain, old_chain);
-}
-
 static void
 do_my_cleanups (struct cleanup **pmy_chain,
 		struct cleanup *old_chain)
@@ -338,6 +370,8 @@ do_my_cleanups (struct cleanup **pmy_chain,
     {
       *pmy_chain = ptr->next;	/* Do this first incase recursion */
       (*ptr->function) (ptr->arg);
+      if (ptr->free_arg)
+	(*ptr->free_arg) (ptr->arg);
       xfree (ptr);
     }
 }
@@ -358,12 +392,6 @@ discard_final_cleanups (struct cleanup *old_chain)
 }
 
 void
-discard_exec_error_cleanups (struct cleanup *old_chain)
-{
-  discard_my_cleanups (&exec_error_cleanup_chain, old_chain);
-}
-
-void
 discard_my_cleanups (struct cleanup **pmy_chain,
 		     struct cleanup *old_chain)
 {
@@ -371,6 +399,8 @@ discard_my_cleanups (struct cleanup **pmy_chain,
   while ((ptr = *pmy_chain) != old_chain)
     {
       *pmy_chain = ptr->next;
+      if (ptr->free_arg)
+	(*ptr->free_arg) (ptr->arg);
       xfree (ptr);
     }
 }
@@ -450,84 +480,205 @@ null_cleanup (void *arg)
 {
 }
 
-/* Add a continuation to the continuation list, the global list
-   cmd_continuation. The new continuation will be added at the front.*/
-void
-add_continuation (void (*continuation_hook) (struct continuation_arg *),
-		  struct continuation_arg *arg_list)
+/* Continuations are implemented as cleanups internally.  Inherit from
+   cleanups.  */
+struct continuation
 {
-  struct continuation *continuation_ptr;
+  struct cleanup base;
+};
 
-  continuation_ptr =
-    (struct continuation *) xmalloc (sizeof (struct continuation));
-  continuation_ptr->continuation_hook = continuation_hook;
-  continuation_ptr->arg_list = arg_list;
-  continuation_ptr->next = cmd_continuation;
-  cmd_continuation = continuation_ptr;
+/* Add a continuation to the continuation list of THREAD.  The new
+   continuation will be added at the front.  */
+void
+add_continuation (struct thread_info *thread,
+		  void (*continuation_hook) (void *), void *args,
+		  void (*continuation_free_args) (void *))
+{
+  struct cleanup *as_cleanup = &thread->continuations->base;
+  make_cleanup_ftype *continuation_hook_fn = continuation_hook;
+
+  make_my_cleanup2 (&as_cleanup,
+		    continuation_hook_fn,
+		    args,
+		    continuation_free_args);
+
+  thread->continuations = (struct continuation *) as_cleanup;
 }
 
-/* Walk down the cmd_continuation list, and execute all the
-   continuations. There is a problem though. In some cases new
-   continuations may be added while we are in the middle of this
-   loop. If this happens they will be added in the front, and done
-   before we have a chance of exhausting those that were already
-   there. We need to then save the beginning of the list in a pointer
-   and do the continuations from there on, instead of using the
-   global beginning of list as our iteration pointer.  */
+/* Add a continuation to the continuation list of INFERIOR.  The new
+   continuation will be added at the front.  */
+
 void
-do_all_continuations (void)
+add_inferior_continuation (void (*continuation_hook) (void *), void *args,
+			   void (*continuation_free_args) (void *))
 {
-  struct continuation *continuation_ptr;
-  struct continuation *saved_continuation;
+  struct inferior *inf = current_inferior ();
+  struct cleanup *as_cleanup = &inf->continuations->base;
+  make_cleanup_ftype *continuation_hook_fn = continuation_hook;
+
+  make_my_cleanup2 (&as_cleanup,
+		    continuation_hook_fn,
+		    args,
+		    continuation_free_args);
+
+  inf->continuations = (struct continuation *) as_cleanup;
+}
+
+/* Do all continuations of the current inferior.  */
+
+void
+do_all_inferior_continuations (void)
+{
+  struct cleanup *old_chain;
+  struct cleanup *as_cleanup;
+  struct inferior *inf = current_inferior ();
+
+  if (inf->continuations == NULL)
+    return;
 
   /* Copy the list header into another pointer, and set the global
      list header to null, so that the global list can change as a side
-     effect of invoking the continuations and the processing of
-     the preexisting continuations will not be affected. */
-  continuation_ptr = cmd_continuation;
-  cmd_continuation = NULL;
+     effect of invoking the continuations and the processing of the
+     preexisting continuations will not be affected.  */
+
+  as_cleanup = &inf->continuations->base;
+  inf->continuations = NULL;
 
   /* Work now on the list we have set aside.  */
-  while (continuation_ptr)
-    {
-      (continuation_ptr->continuation_hook) (continuation_ptr->arg_list);
-      saved_continuation = continuation_ptr;
-      continuation_ptr = continuation_ptr->next;
-      xfree (saved_continuation);
-    }
+  do_my_cleanups (&as_cleanup, NULL);
 }
 
-/* Walk down the cmd_continuation list, and get rid of all the
-   continuations. */
+/* Get rid of all the inferior-wide continuations of INF.  */
+
+void
+discard_all_inferior_continuations (struct inferior *inf)
+{
+  struct cleanup *continuation_ptr = &inf->continuations->base;
+  discard_my_cleanups (&continuation_ptr, NULL);
+  inf->continuations = NULL;
+}
+
+static void
+restore_thread_cleanup (void *arg)
+{
+  ptid_t *ptid_p = arg;
+  switch_to_thread (*ptid_p);
+}
+
+/* Walk down the continuation list of PTID, and execute all the
+   continuations.  There is a problem though.  In some cases new
+   continuations may be added while we are in the middle of this loop.
+   If this happens they will be added in the front, and done before we
+   have a chance of exhausting those that were already there.  We need
+   to then save the beginning of the list in a pointer and do the
+   continuations from there on, instead of using the global beginning
+   of list as our iteration pointer.  */
+static void
+do_all_continuations_ptid (ptid_t ptid,
+			   struct continuation **continuations_p)
+{
+  struct cleanup *old_chain;
+  ptid_t current_thread;
+  struct cleanup *as_cleanup;
+
+  if (*continuations_p == NULL)
+    return;
+
+  current_thread = inferior_ptid;
+
+  /* Restore selected thread on exit.  Don't try to restore the frame
+     as well, because:
+
+    - When running continuations, the selected frame is always #0.
+
+    - The continuations may trigger symbol file loads, which may
+      change the frame layout (frame ids change), which would trigger
+      a warning if we used make_cleanup_restore_current_thread.  */
+
+  old_chain = make_cleanup (restore_thread_cleanup, &current_thread);
+
+  /* Let the continuation see this thread as selected.  */
+  switch_to_thread (ptid);
+
+  /* Copy the list header into another pointer, and set the global
+     list header to null, so that the global list can change as a side
+     effect of invoking the continuations and the processing of the
+     preexisting continuations will not be affected.  */
+
+  as_cleanup = &(*continuations_p)->base;
+  *continuations_p = NULL;
+
+  /* Work now on the list we have set aside.  */
+  do_my_cleanups (&as_cleanup, NULL);
+
+  do_cleanups (old_chain);
+}
+
+/* Callback for iterate over threads.  */
+static int
+do_all_continuations_thread_callback (struct thread_info *thread, void *data)
+{
+  do_all_continuations_ptid (thread->ptid, &thread->continuations);
+  return 0;
+}
+
+/* Do all continuations of thread THREAD.  */
+void
+do_all_continuations_thread (struct thread_info *thread)
+{
+  do_all_continuations_thread_callback (thread, NULL);
+}
+
+/* Do all continuations of all threads.  */
+void
+do_all_continuations (void)
+{
+  iterate_over_threads (do_all_continuations_thread_callback, NULL);
+}
+
+/* Callback for iterate over threads.  */
+static int
+discard_all_continuations_thread_callback (struct thread_info *thread,
+					   void *data)
+{
+  struct cleanup *continuation_ptr = &thread->continuations->base;
+  discard_my_cleanups (&continuation_ptr, NULL);
+  thread->continuations = NULL;
+  return 0;
+}
+
+/* Get rid of all the continuations of THREAD.  */
+void
+discard_all_continuations_thread (struct thread_info *thread)
+{
+  discard_all_continuations_thread_callback (thread, NULL);
+}
+
+/* Get rid of all the continuations of all threads.  */
 void
 discard_all_continuations (void)
 {
-  struct continuation *continuation_ptr;
-
-  while (cmd_continuation)
-    {
-      continuation_ptr = cmd_continuation;
-      cmd_continuation = continuation_ptr->next;
-      xfree (continuation_ptr);
-    }
+  iterate_over_threads (discard_all_continuations_thread_callback, NULL);
 }
 
-/* Add a continuation to the continuation list, the global list
-   intermediate_continuation.  The new continuation will be added at
-   the front.  */
-void
-add_intermediate_continuation (void (*continuation_hook)
-			       (struct continuation_arg *),
-			       struct continuation_arg *arg_list)
-{
-  struct continuation *continuation_ptr;
 
-  continuation_ptr =
-    (struct continuation *) xmalloc (sizeof (struct continuation));
-  continuation_ptr->continuation_hook = continuation_hook;
-  continuation_ptr->arg_list = arg_list;
-  continuation_ptr->next = intermediate_continuation;
-  intermediate_continuation = continuation_ptr;
+/* Add a continuation to the intermediate continuation list of THREAD.
+   The new continuation will be added at the front.  */
+void
+add_intermediate_continuation (struct thread_info *thread,
+			       void (*continuation_hook)
+			       (void *), void *args,
+			       void (*continuation_free_args) (void *))
+{
+  struct cleanup *as_cleanup = &thread->intermediate_continuations->base;
+  make_cleanup_ftype *continuation_hook_fn = continuation_hook;
+
+  make_my_cleanup2 (&as_cleanup,
+		    continuation_hook_fn,
+		    args,
+		    continuation_free_args);
+
+  thread->intermediate_continuations = (struct continuation *) as_cleanup;
 }
 
 /* Walk down the cmd_continuation list, and execute all the
@@ -538,42 +689,52 @@ add_intermediate_continuation (void (*continuation_hook)
    there. We need to then save the beginning of the list in a pointer
    and do the continuations from there on, instead of using the
    global beginning of list as our iteration pointer.*/
+static int
+do_all_intermediate_continuations_thread_callback (struct thread_info *thread,
+						   void *data)
+{
+  do_all_continuations_ptid (thread->ptid,
+			     &thread->intermediate_continuations);
+  return 0;
+}
+
+/* Do all intermediate continuations of thread THREAD.  */
+void
+do_all_intermediate_continuations_thread (struct thread_info *thread)
+{
+  do_all_intermediate_continuations_thread_callback (thread, NULL);
+}
+
+/* Do all intermediate continuations of all threads.  */
 void
 do_all_intermediate_continuations (void)
 {
-  struct continuation *continuation_ptr;
-  struct continuation *saved_continuation;
-
-  /* Copy the list header into another pointer, and set the global
-     list header to null, so that the global list can change as a side
-     effect of invoking the continuations and the processing of
-     the preexisting continuations will not be affected. */
-  continuation_ptr = intermediate_continuation;
-  intermediate_continuation = NULL;
-
-  /* Work now on the list we have set aside.  */
-  while (continuation_ptr)
-    {
-      (continuation_ptr->continuation_hook) (continuation_ptr->arg_list);
-      saved_continuation = continuation_ptr;
-      continuation_ptr = continuation_ptr->next;
-      xfree (saved_continuation);
-    }
+  iterate_over_threads (do_all_intermediate_continuations_thread_callback, NULL);
 }
 
-/* Walk down the cmd_continuation list, and get rid of all the
-   continuations. */
+/* Callback for iterate over threads.  */
+static int
+discard_all_intermediate_continuations_thread_callback (struct thread_info *thread,
+							void *data)
+{
+  struct cleanup *continuation_ptr = &thread->intermediate_continuations->base;
+  discard_my_cleanups (&continuation_ptr, NULL);
+  thread->intermediate_continuations = NULL;
+  return 0;
+}
+
+/* Get rid of all the intermediate continuations of THREAD.  */
+void
+discard_all_intermediate_continuations_thread (struct thread_info *thread)
+{
+  discard_all_intermediate_continuations_thread_callback (thread, NULL);
+}
+
+/* Get rid of all the intermediate continuations of all threads.  */
 void
 discard_all_intermediate_continuations (void)
 {
-  struct continuation *continuation_ptr;
-
-  while (intermediate_continuation)
-    {
-      continuation_ptr = intermediate_continuation;
-      intermediate_continuation = continuation_ptr->next;
-      xfree (continuation_ptr);
-    }
+  iterate_over_threads (discard_all_intermediate_continuations_thread_callback, NULL);
 }
 
 
@@ -2121,7 +2282,26 @@ vfprintf_unfiltered (struct ui_file *stream, const char *format, va_list args)
 
   linebuffer = xstrvprintf (format, args);
   old_cleanups = make_cleanup (xfree, linebuffer);
-  fputs_unfiltered (linebuffer, stream);
+  if (debug_timestamp && stream == gdb_stdlog)
+    {
+      struct timeval tm;
+      char *timestamp;
+      int len, need_nl;
+
+      gettimeofday (&tm, NULL);
+
+      len = strlen (linebuffer);
+      need_nl = (len > 0 && linebuffer[len - 1] != '\n');
+
+      timestamp = xstrprintf ("%ld:%ld %s%s",
+			      (long) tm.tv_sec, (long) tm.tv_usec,
+			      linebuffer,
+			      need_nl ? "\n": "");
+      make_cleanup (xfree, timestamp);
+      fputs_unfiltered (timestamp, stream);
+    }
+  else
+    fputs_unfiltered (linebuffer, stream);
   do_cleanups (old_cleanups);
 }
 
@@ -2437,6 +2617,13 @@ pagination_off_command (char *arg, int from_tty)
 {
   pagination_enabled = 0;
 }
+
+static void
+show_debug_timestamp (struct ui_file *file, int from_tty,
+		      struct cmd_list_element *c, const char *value)
+{
+  fprintf_filtered (file, _("Timestamping debugging messages is %s.\n"), value);
+}
 
 
 void
@@ -2497,6 +2684,15 @@ Show demangling of C++/ObjC names in disassembly listings."), NULL,
 			   NULL,
 			   show_asm_demangle,
 			   &setprintlist, &showprintlist);
+
+  add_setshow_boolean_cmd ("timestamp", class_maintenance,
+			    &debug_timestamp, _("\
+Set timestamping of debugging messages."), _("\
+Show timestamping of debugging messages."), _("\
+When set, debugging messages will be marked with seconds and microseconds."),
+			   NULL,
+			   show_debug_timestamp,
+			   &setdebuglist, &showdebuglist);
 }
 
 /* Machine specific function to handle SIGWINCH signal. */
@@ -2642,18 +2838,18 @@ octal2str (ULONGEST addr, int width)
 }
 
 char *
-paddr_u (CORE_ADDR addr)
+pulongest (ULONGEST u)
 {
-  return decimal2str ("", addr, 0);
+  return decimal2str ("", u, 0);
 }
 
 char *
-paddr_d (LONGEST addr)
+plongest (LONGEST l)
 {
-  if (addr < 0)
-    return decimal2str ("-", -addr, 0);
+  if (l < 0)
+    return decimal2str ("-", -l, 0);
   else
-    return decimal2str ("", addr, 0);
+    return decimal2str ("", l, 0);
 }
 
 /* Eliminate warning from compiler on 32-bit systems.  */
@@ -2867,6 +3063,14 @@ string_to_core_addr (const char *my_string)
     }
 
   return addr;
+}
+
+const char *
+host_address_to_string (const void *addr)
+{
+  char *str = get_cell ();
+  sprintf (str, "0x%lx", (unsigned long) addr);
+  return str;
 }
 
 char *
@@ -3222,4 +3426,18 @@ ldirname (const char *filename)
 
   dirname[base - filename] = '\0';
   return dirname;
+}
+
+/* Call libiberty's buildargv, and return the result.
+   If buildargv fails due to out-of-memory, call nomem.
+   Therefore, the returned value is guaranteed to be non-NULL,
+   unless the parameter itself is NULL.  */
+
+char **
+gdb_buildargv (const char *s)
+{
+  char **argv = buildargv (s);
+  if (s != NULL && argv == NULL)
+    nomem (0);
+  return argv;
 }

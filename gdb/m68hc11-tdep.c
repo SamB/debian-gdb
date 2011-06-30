@@ -59,18 +59,16 @@
    MSYMBOL_IS_RTI       Tests the "RTC" bit in a minimal symbol.  */
 
 #define MSYMBOL_SET_RTC(msym)                                           \
-        MSYMBOL_INFO (msym) = (char *) (((long) MSYMBOL_INFO (msym))	\
-					| 0x80000000)
+        MSYMBOL_TARGET_FLAG_1 (msym) = 1
 
 #define MSYMBOL_SET_RTI(msym)                                           \
-        MSYMBOL_INFO (msym) = (char *) (((long) MSYMBOL_INFO (msym))	\
-					| 0x40000000)
+        MSYMBOL_TARGET_FLAG_2 (msym) = 1
 
 #define MSYMBOL_IS_RTC(msym)				\
-	(((long) MSYMBOL_INFO (msym) & 0x80000000) != 0)
+	MSYMBOL_TARGET_FLAG_1 (msym)
 
 #define MSYMBOL_IS_RTI(msym)				\
-	(((long) MSYMBOL_INFO (msym) & 0x40000000) != 0)
+	MSYMBOL_TARGET_FLAG_2 (msym)
 
 enum insn_return_kind {
   RETURN_RTS,
@@ -774,10 +772,10 @@ m68hc11_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
    for it IS the sp for the next frame. */
 
 struct m68hc11_unwind_cache *
-m68hc11_frame_unwind_cache (struct frame_info *next_frame,
+m68hc11_frame_unwind_cache (struct frame_info *this_frame,
                             void **this_prologue_cache)
 {
-  struct gdbarch *gdbarch = get_frame_arch (next_frame);
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
   ULONGEST prev_sp;
   ULONGEST this_base;
   struct m68hc11_unwind_cache *info;
@@ -789,9 +787,9 @@ m68hc11_frame_unwind_cache (struct frame_info *next_frame,
 
   info = FRAME_OBSTACK_ZALLOC (struct m68hc11_unwind_cache);
   (*this_prologue_cache) = info;
-  info->saved_regs = trad_frame_alloc_saved_regs (next_frame);
+  info->saved_regs = trad_frame_alloc_saved_regs (this_frame);
 
-  info->pc = frame_func_unwind (next_frame, NORMAL_FRAME);
+  info->pc = get_frame_func (this_frame);
 
   info->size = 0;
   info->return_kind = m68hc11_get_return_insn (info->pc);
@@ -799,14 +797,14 @@ m68hc11_frame_unwind_cache (struct frame_info *next_frame,
   /* The SP was moved to the FP.  This indicates that a new frame
      was created.  Get THIS frame's FP value by unwinding it from
      the next frame.  */
-  this_base = frame_unwind_register_unsigned (next_frame, SOFT_FP_REGNUM);
+  this_base = get_frame_register_unsigned (this_frame, SOFT_FP_REGNUM);
   if (this_base == 0)
     {
       info->base = 0;
       return info;
     }
 
-  current_pc = frame_pc_unwind (next_frame);
+  current_pc = get_frame_pc (this_frame);
   if (info->pc != 0)
     m68hc11_scan_prologue (gdbarch, info->pc, current_pc, info);
 
@@ -815,7 +813,7 @@ m68hc11_frame_unwind_cache (struct frame_info *next_frame,
   if (info->sp_offset != (CORE_ADDR) -1)
     {
       info->saved_regs[HARD_PC_REGNUM].addr = info->sp_offset;
-      this_base = frame_unwind_register_unsigned (next_frame, HARD_SP_REGNUM);
+      this_base = get_frame_register_unsigned (this_frame, HARD_SP_REGNUM);
       prev_sp = this_base + info->sp_offset + 2;
       this_base += STACK_CORRECTION (gdbarch);
     }
@@ -874,18 +872,18 @@ m68hc11_frame_unwind_cache (struct frame_info *next_frame,
    frame.  This will be used to create a new GDB frame struct.  */
 
 static void
-m68hc11_frame_this_id (struct frame_info *next_frame,
+m68hc11_frame_this_id (struct frame_info *this_frame,
                        void **this_prologue_cache,
                        struct frame_id *this_id)
 {
   struct m68hc11_unwind_cache *info
-    = m68hc11_frame_unwind_cache (next_frame, this_prologue_cache);
+    = m68hc11_frame_unwind_cache (this_frame, this_prologue_cache);
   CORE_ADDR base;
   CORE_ADDR func;
   struct frame_id id;
 
   /* The FUNC is easy.  */
-  func = frame_func_unwind (next_frame, NORMAL_FRAME);
+  func = get_frame_func (this_frame);
 
   /* Hopefully the prologue analysis either correctly determined the
      frame's base (which is the SP from the previous frame), or set
@@ -898,67 +896,69 @@ m68hc11_frame_this_id (struct frame_info *next_frame,
   (*this_id) = id;
 }
 
-static void
-m68hc11_frame_prev_register (struct frame_info *next_frame,
-                             void **this_prologue_cache,
-                             int regnum, int *optimizedp,
-                             enum lval_type *lvalp, CORE_ADDR *addrp,
-                             int *realnump, gdb_byte *bufferp)
+static struct value *
+m68hc11_frame_prev_register (struct frame_info *this_frame,
+                             void **this_prologue_cache, int regnum)
 {
+  struct value *value;
   struct m68hc11_unwind_cache *info
-    = m68hc11_frame_unwind_cache (next_frame, this_prologue_cache);
+    = m68hc11_frame_unwind_cache (this_frame, this_prologue_cache);
 
-  trad_frame_get_prev_register (next_frame, info->saved_regs, regnum,
-				optimizedp, lvalp, addrp, realnump, bufferp);
+  value = trad_frame_get_prev_register (this_frame, info->saved_regs, regnum);
 
-  if (regnum == HARD_PC_REGNUM)
+  /* Take into account the 68HC12 specific call (PC + page).  */
+  if (regnum == HARD_PC_REGNUM
+      && info->return_kind == RETURN_RTC
+      && USE_PAGE_REGISTER (get_frame_arch (this_frame)))
     {
-      /* Take into account the 68HC12 specific call (PC + page).  */
-      if (info->return_kind == RETURN_RTC
-          && *addrp >= 0x08000 && *addrp < 0x0c000
-          && USE_PAGE_REGISTER (get_frame_arch (next_frame)))
+      CORE_ADDR pc = value_as_long (value);
+      if (pc >= 0x08000 && pc < 0x0c000)
         {
-          int page_optimized;
-
           CORE_ADDR page;
 
-          trad_frame_get_prev_register (next_frame, info->saved_regs,
-					HARD_PAGE_REGNUM, &page_optimized,
-					0, &page, 0, 0);
-          *addrp -= 0x08000;
-          *addrp += ((page & 0x0ff) << 14);
-          *addrp += 0x1000000;
+	  release_value (value);
+	  value_free (value);
+
+	  value = trad_frame_get_prev_register (this_frame, info->saved_regs,
+						HARD_PAGE_REGNUM);
+	  page = value_as_long (value);
+	  release_value (value);
+	  value_free (value);
+
+          pc -= 0x08000;
+          pc += ((page & 0x0ff) << 14);
+          pc += 0x1000000;
+
+	  return frame_unwind_got_constant (this_frame, regnum, pc);
         }
     }
+
+  return value;
 }
 
 static const struct frame_unwind m68hc11_frame_unwind = {
   NORMAL_FRAME,
   m68hc11_frame_this_id,
-  m68hc11_frame_prev_register
+  m68hc11_frame_prev_register,
+  NULL,
+  default_frame_sniffer
 };
 
-const struct frame_unwind *
-m68hc11_frame_sniffer (struct frame_info *next_frame)
-{
-  return &m68hc11_frame_unwind;
-}
-
 static CORE_ADDR
-m68hc11_frame_base_address (struct frame_info *next_frame, void **this_cache)
+m68hc11_frame_base_address (struct frame_info *this_frame, void **this_cache)
 {
   struct m68hc11_unwind_cache *info
-    = m68hc11_frame_unwind_cache (next_frame, this_cache);
+    = m68hc11_frame_unwind_cache (this_frame, this_cache);
 
   return info->base;
 }
 
 static CORE_ADDR
-m68hc11_frame_args_address (struct frame_info *next_frame, void **this_cache)
+m68hc11_frame_args_address (struct frame_info *this_frame, void **this_cache)
 {
   CORE_ADDR addr;
   struct m68hc11_unwind_cache *info
-    = m68hc11_frame_unwind_cache (next_frame, this_cache);
+    = m68hc11_frame_unwind_cache (this_frame, this_cache);
 
   addr = info->base + info->size;
   if (info->return_kind == RETURN_RTC)
@@ -984,18 +984,17 @@ m68hc11_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
   return sp;
 }
 
-/* Assuming NEXT_FRAME->prev is a dummy, return the frame ID of that
-   dummy frame.  The frame ID's base needs to match the TOS value
-   saved by save_dummy_frame_tos(), and the PC match the dummy frame's
-   breakpoint.  */
+/* Assuming THIS_FRAME is a dummy, return the frame ID of that dummy
+   frame.  The frame ID's base needs to match the TOS value saved by
+   save_dummy_frame_tos(), and the PC match the dummy frame's breakpoint.  */
 
 static struct frame_id
-m68hc11_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
+m68hc11_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
 {
   ULONGEST tos;
-  CORE_ADDR pc = frame_pc_unwind (next_frame);
+  CORE_ADDR pc = get_frame_pc (this_frame);
 
-  tos = frame_unwind_register_unsigned (next_frame, SOFT_FP_REGNUM);
+  tos = get_frame_register_unsigned (this_frame, SOFT_FP_REGNUM);
   tos += 2;
   return frame_id_build (tos, pc);
 }
@@ -1311,9 +1310,9 @@ m68hc11_extract_return_value (struct type *type, struct regcache *regcache,
 }
 
 enum return_value_convention
-m68hc11_return_value (struct gdbarch *gdbarch, struct type *valtype,
-		      struct regcache *regcache, gdb_byte *readbuf,
-		      const gdb_byte *writebuf)
+m68hc11_return_value (struct gdbarch *gdbarch, struct type *func_type,
+		      struct type *valtype, struct regcache *regcache,
+		      gdb_byte *readbuf, const gdb_byte *writebuf)
 {
   if (TYPE_CODE (valtype) == TYPE_CODE_STRUCT
       || TYPE_CODE (valtype) == TYPE_CODE_UNION
@@ -1348,7 +1347,7 @@ m68hc11_elf_make_msymbol_special (asymbol *sym, struct minimal_symbol *msym)
 static int
 gdb_print_insn_m68hc11 (bfd_vma memaddr, disassemble_info *info)
 {
-  if (gdbarch_bfd_arch_info (current_gdbarch)->arch == bfd_arch_m68hc11)
+  if (info->arch == bfd_arch_m68hc11)
     return print_insn_m68hc11 (memaddr, info);
   else
     return print_insn_m68hc12 (memaddr, info);
@@ -1520,15 +1519,15 @@ m68hc11_gdbarch_init (struct gdbarch_info info,
   set_gdbarch_print_registers_info (gdbarch, m68hc11_print_registers_info);
 
   /* Hook in the DWARF CFI frame unwinder.  */
-  frame_unwind_append_sniffer (gdbarch, dwarf2_frame_sniffer);
+  dwarf2_append_unwinders (gdbarch);
 
-  frame_unwind_append_sniffer (gdbarch, m68hc11_frame_sniffer);
+  frame_unwind_append_unwinder (gdbarch, &m68hc11_frame_unwind);
   frame_base_set_default (gdbarch, &m68hc11_frame_base);
   
   /* Methods for saving / extracting a dummy frame's ID.  The ID's
      stack address must match the SP value returned by
      PUSH_DUMMY_CALL, and saved by generic_save_dummy_frame_tos.  */
-  set_gdbarch_unwind_dummy_id (gdbarch, m68hc11_unwind_dummy_id);
+  set_gdbarch_dummy_id (gdbarch, m68hc11_dummy_id);
 
   /* Return the unwound PC value.  */
   set_gdbarch_unwind_pc (gdbarch, m68hc11_unwind_pc);

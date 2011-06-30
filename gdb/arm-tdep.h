@@ -38,6 +38,7 @@ enum gdb_regnum {
   ARM_F7_REGNUM = 23, 		/* last floating point register */
   ARM_FPS_REGNUM = 24,		/* floating point status register */
   ARM_PS_REGNUM = 25,		/* Contains processor status */
+  ARM_CPSR_REGNUM = ARM_PS_REGNUM,
   ARM_WR0_REGNUM,		/* WMMX data registers.  */
   ARM_WR15_REGNUM = ARM_WR0_REGNUM + 15,
   ARM_WC0_REGNUM,		/* WMMX control registers.  */
@@ -66,11 +67,6 @@ enum gdb_regnum {
    code readability in this header.  IEEE extended doubles are 80
    bits.  DWORD aligned they use 96 bits.  */
 #define FP_REGISTER_SIZE	12
-
-/* Status registers are the same size as general purpose registers.
-   Used for documentation purposes and code readability in this
-   header.  */
-#define STATUS_REGISTER_SIZE	4
 
 /* Number of machine registers.  The only define actually required 
    is gdbarch_num_regs.  The other definitions are used for documentation
@@ -106,6 +102,8 @@ enum gdb_regnum {
 #define FLAG_Z		0x40000000
 #define FLAG_C		0x20000000
 #define FLAG_V		0x10000000
+
+#define CPSR_T		0x20
 
 /* Type of floating-point code in use by inferior.  There are really 3 models
    that are traditionally supported (plus the endianness issue), but gcc can

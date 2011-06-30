@@ -1,6 +1,187 @@
 		What has changed in GDB?
 	     (Organized release by release)
 
+*** Changes since GDB 6.8
+
+* GDB now supports automatic retrieval of shared library files from
+remote targets.  To use this feature, specify a system root that begins
+with the `remote:' prefix, either via the `set sysroot' command or via
+the `--with-sysroot' configure-time option.
+
+* Commands `set debug-file-directory', `set solib-search-path' and `set args'
+now complete on file names.
+
+* When completing in expressions, gdb will attempt to limit
+completions to allowable structure or union fields, where appropriate.
+For instance, consider:
+
+    # struct example { int f1; double f2; };
+    # struct example variable;
+    (gdb) p variable.
+
+If the user types TAB at the end of this command line, the available
+completions will be "f1" and "f2".
+
+* GDB now supports the token-splicing (##) and stringification (#)
+operators when expanding macros.  It also supports variable-arity
+macros.
+
+* New remote packets
+
+qSearch:memory:
+  Search memory for a sequence of bytes.
+
+QStartNoAckMode
+  Turn off `+'/`-' protocol acknowledgments to permit more efficient
+  operation over reliable transport links.  Use of this packet is
+  controlled by the `set remote noack-packet' command.
+
+* Removed remote protocol undocumented extension
+
+  An undocumented extension to the remote protocol's `S' stop reply
+  packet that permited the stub to pass a process id was removed.
+  Remote servers should use the `T' stop reply packet instead.
+
+* The "disassemble" command now supports an optional /m modifier to print mixed
+source+assembly.
+
+* GDB now supports multiple function calling conventions according to the
+DWARF-2 DW_AT_calling_convention function attribute.
+  
+* The SH target utilizes the aforementioned change to distinguish between gcc
+and Renesas calling convention.  It also adds the new CLI commands
+`set/show sh calling-convention'.
+
+* GDB can now read compressed debug sections, as produced by GNU gold
+with the --compress-debug-sections=zlib flag.
+
+* 64-bit core files are now supported on AIX.
+
+* Thread switching is now supported on Tru64.
+
+* Watchpoints can now be set on unreadable memory locations, e.g. addresses
+which will be allocated using malloc later in program execution.
+
+* The qXfer:libraries:read remote procotol packet now allows passing a
+list of section offsets.
+
+* On GNU/Linux, GDB can now attach to stopped processes.  Several race
+conditions handling signals delivered during attach or thread creation
+have also been fixed.
+
+* GDB now supports the use of DWARF boolean types for Ada's type Boolean.
+From the user's standpoint, all unqualified instances of True and False
+are treated as the standard definitions, regardless of context.
+
+* New features in the GDB remote stub, gdbserver
+
+  - The "--wrapper" command-line argument tells gdbserver to use a
+  wrapper program to launch programs for debugging.
+
+  - On PowerPC and S/390 targets, it is now possible to use a single
+  gdbserver executable to debug both 32-bit and 64-bit programs.
+  (This requires gdbserver itself to be built as a 64-bit executable.)
+
+  - gdbserver uses the new noack protocol mode for TCP connections to
+  reduce communications latency, if also supported and enabled in GDB.
+
+  - Support for the sparc64-linux-gnu target is now included in
+  gdbserver.
+
+* Python scripting
+
+  GDB now has support for scripting using Python.  Whether this is
+  available is determined at configure time.
+
+* Ada tasking support
+
+  Ada tasks can now be inspected in GDB. The following commands have
+  been introduced:
+
+    info tasks
+      Print the list of Ada tasks.
+    info task N
+      Print detailed information about task number N.
+    task
+      Print the task number of the current task.
+    task N
+      Switch the context of debugging to task number N.
+
+* New commands
+
+find [/size-char] [/max-count] start-address, end-address|+search-space-size,
+    val1 [, val2, ...]
+  Search memory for a sequence of bytes.
+
+maint set python print-stack
+maint show python print-stack
+  Show a stack trace when an error is encountered in a Python script.
+
+python [CODE]
+  Invoke CODE by passing it to the Python interpreter.
+
+set print symbol-loading
+show print symbol-loading
+  Control printing of symbol loading messages.
+
+set debug timestamp
+show debug timestamp
+  Display timestamps with GDB debugging output.
+
+set exec-wrapper
+show exec-wrapper
+unset exec-wrapper
+  Use a wrapper program to launch programs for debugging.
+
+set multiple-symbols (all|ask|cancel)
+show multiple-symbols
+  The value of this variable can be changed to adjust the debugger behavior
+  when an expression or a breakpoint location contains an ambiguous symbol
+  name (an overloaded function name, for instance).
+  
+set breakpoint always-inserted
+show breakpoint always-inserted
+  Keep breakpoints always inserted in the target, as opposed to inserting
+  them when resuming the target, and removing them when the target stops.
+  This option can improve debugger performance on slow remote targets.
+
+set arm fallback-mode (arm|thumb|auto)
+show arm fallback-mode
+set arm force-mode (arm|thumb|auto)
+show arm force-mode
+  These commands control how ARM GDB determines whether instructions
+  are ARM or Thumb.  The default for both settings is auto, which uses
+  the current CPSR value for instructions without symbols; previous
+  versions of GDB behaved as if "set arm fallback-mode arm".
+
+set disable-randomization
+show disable-randomization
+  Standalone programs run with the virtual address space randomization enabled
+  by default on some platforms.  This option keeps the addresses stable across
+  multiple debugging sessions.
+
+set target-async
+  Requests that asynchronous execution is enabled in the target, if available.
+  In this case, it's possible to resume target in the background, and interact
+  with GDB while the target is running.  "show target-async" displays the
+  current state of asynchronous execution of the target.
+
+macro define
+macro list
+macro undef
+  These allow macros to be defined, undefined, and listed
+  interactively.
+
+* New targets
+
+x86 DICOS			i[34567]86-*-dicos*
+
+* Removed commands
+
+catch load
+catch unload
+  These commands were actually not implemented on any target.
+
 *** Changes in GDB 6.8
 
 * New native configurations
@@ -49,9 +230,9 @@ commands (remote put, remote get, and remote delete).
 extended-remote mode.
 
 * hppa*64*-*-hpux11* target broken
-  The debugger is unable to start a program and fails with the following
-  error: "Error trying to get information about dynamic linker".
-  The gdb-6.7 release is also affected.
+The debugger is unable to start a program and fails with the following
+error: "Error trying to get information about dynamic linker".
+The gdb-6.7 release is also affected.
 
 * GDB now supports the --enable-targets= configure option to allow
 building a single GDB executable that supports multiple remote
@@ -66,8 +247,8 @@ stored in two consecutive float registers.
 breakpoints now.
 
 * Improved support for debugging Ada
-  Many improvements to the Ada language support have been made.  These
-  include:
+Many improvements to the Ada language support have been made.  These
+include:
     - Better support for Ada2005 interface types
     - Improved handling of arrays and slices in general
     - Better support for Taft-amendment types
@@ -75,6 +256,9 @@ breakpoints now.
       of an assignment
     - Improved command completion in Ada
     - Several bug fixes
+
+* GDB on GNU/Linux and HP/UX can now debug through "exec" of a new
+process.
 
 * New commands
 
@@ -103,9 +287,6 @@ vFile:pread:
 vFile:pwrite:
 vFile:unlink:
   Open, close, read, write, and delete files on the remote system.
-
-* GDB on GNU/Linux and HP/UX can now debug through "exec" of a new
-process.
 
 vAttach
   Attach to an existing process on the remote system, in extended-remote

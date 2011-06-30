@@ -29,6 +29,8 @@
 #include "stack.h"
 #include "dictionary.h"
 #include "gdb_string.h"
+#include "language.h"
+#include "valprint.h"
 
 static void list_args_or_locals (int locals, int values, struct frame_info *fi);
 
@@ -37,7 +39,7 @@ static void list_args_or_locals (int locals, int values, struct frame_info *fi);
    specifying the frame numbers at which to start and stop the
    display. If the two numbers are equal, a single frame will be
    displayed. */
-enum mi_cmd_result
+void
 mi_cmd_stack_list_frames (char *command, char **argv, int argc)
 {
   int frame_low;
@@ -87,11 +89,9 @@ mi_cmd_stack_list_frames (char *command, char **argv, int argc)
     }
 
   do_cleanups (cleanup_stack);
-
-  return MI_CMD_DONE;
 }
 
-enum mi_cmd_result
+void
 mi_cmd_stack_info_depth (char *command, char **argv, int argc)
 {
   int frame_high;
@@ -114,14 +114,12 @@ mi_cmd_stack_info_depth (char *command, char **argv, int argc)
     QUIT;
 
   ui_out_field_int (uiout, "depth", i);
-
-  return MI_CMD_DONE;
 }
 
 /* Print a list of the locals for the current frame. With argument of
    0, print only the names, with argument of 1 print also the
    values. */
-enum mi_cmd_result
+void
 mi_cmd_stack_list_locals (char *command, char **argv, int argc)
 {
   struct frame_info *frame;
@@ -146,13 +144,12 @@ mi_cmd_stack_list_locals (char *command, char **argv, int argc)
 0 or \"%s\", 1 or \"%s\", 2 or \"%s\""),
 	    mi_no_values, mi_all_values, mi_simple_values);
   list_args_or_locals (1, print_values, frame);
-  return MI_CMD_DONE;
 }
 
 /* Print a list of the arguments for the current frame. With argument
    of 0, print only the names, with argument of 1 print also the
    values. */
-enum mi_cmd_result
+void
 mi_cmd_stack_list_args (char *command, char **argv, int argc)
 {
   int frame_low;
@@ -204,8 +201,6 @@ mi_cmd_stack_list_args (char *command, char **argv, int argc)
     }
 
   do_cleanups (cleanup_stack_args);
-
-  return MI_CMD_DONE;
 }
 
 /* Print a list of the locals or the arguments for the currently
@@ -251,21 +246,12 @@ list_args_or_locals (int locals, int values, struct frame_info *fi)
 
 	    case LOC_ARG:	/* argument              */
 	    case LOC_REF_ARG:	/* reference arg         */
-	    case LOC_REGPARM:	/* register arg          */
 	    case LOC_REGPARM_ADDR:	/* indirect register arg */
-	    case LOC_LOCAL_ARG:	/* stack arg             */
-	    case LOC_BASEREG_ARG:	/* basereg arg           */
-	    case LOC_COMPUTED_ARG:	/* arg with computed location */
-	      if (!locals)
-		print_me = 1;
-	      break;
-
 	    case LOC_LOCAL:	/* stack local           */
-	    case LOC_BASEREG:	/* basereg local         */
 	    case LOC_STATIC:	/* static                */
 	    case LOC_REGISTER:	/* register              */
 	    case LOC_COMPUTED:	/* computed location     */
-	      if (locals)
+	      if (SYMBOL_IS_ARGUMENT (sym) ? !locals : locals)
 		print_me = 1;
 	      break;
 	    }
@@ -282,10 +268,9 @@ list_args_or_locals (int locals, int values, struct frame_info *fi)
 	      if (!locals)
 		sym2 = lookup_symbol (SYMBOL_NATURAL_NAME (sym),
 				      block, VAR_DOMAIN,
-				      (int *) NULL,
-				      (struct symtab **) NULL);
+				      (int *) NULL);
 	      else
-		    sym2 = sym;
+		sym2 = sym;
 	      switch (values)
 		{
 		case PRINT_SIMPLE_VALUES:
@@ -296,19 +281,29 @@ list_args_or_locals (int locals, int values, struct frame_info *fi)
 		      && TYPE_CODE (type) != TYPE_CODE_STRUCT
 		      && TYPE_CODE (type) != TYPE_CODE_UNION)
 		    {
+		      struct value_print_options opts;
 		      val = read_var_value (sym2, fi);
+		      get_raw_print_options (&opts);
+		      opts.deref_ref = 1;
 		      common_val_print
-			(val, stb->stream, 0, 1, 0, Val_no_prettyprint);
+			(val, stb->stream, 0, &opts,
+			 language_def (SYMBOL_LANGUAGE (sym2)));
 		      ui_out_field_stream (uiout, "value", stb);
 		    }
 		  do_cleanups (cleanup_tuple);
 		  break;
 		case PRINT_ALL_VALUES:
-		  val = read_var_value (sym2, fi);
-		  common_val_print
-		    (val, stb->stream, 0, 1, 0, Val_no_prettyprint);
-		  ui_out_field_stream (uiout, "value", stb);
-		  do_cleanups (cleanup_tuple);
+		  {
+		    struct value_print_options opts;
+		    val = read_var_value (sym2, fi);
+		    get_raw_print_options (&opts);
+		    opts.deref_ref = 1;
+		    common_val_print
+		      (val, stb->stream, 0, &opts,
+		       language_def (SYMBOL_LANGUAGE (sym2)));
+		    ui_out_field_stream (uiout, "value", stb);
+		    do_cleanups (cleanup_tuple);
+		  }
 		  break;
 		}
 	    }
@@ -322,22 +317,20 @@ list_args_or_locals (int locals, int values, struct frame_info *fi)
   ui_out_stream_delete (stb);
 }
 
-enum mi_cmd_result
+void
 mi_cmd_stack_select_frame (char *command, char **argv, int argc)
 {
   if (argc == 0 || argc > 1)
     error (_("mi_cmd_stack_select_frame: Usage: FRAME_SPEC"));
 
   select_frame_command (argv[0], 1 /* not used */ );
-  return MI_CMD_DONE;
 }
 
-enum mi_cmd_result
+void
 mi_cmd_stack_info_frame (char *command, char **argv, int argc)
 {
   if (argc > 0)
     error (_("mi_cmd_stack_info_frame: No arguments required"));
-  
+
   print_frame_info (get_selected_frame (NULL), 1, LOC_AND_ADDRESS, 0);
-  return MI_CMD_DONE;
 }

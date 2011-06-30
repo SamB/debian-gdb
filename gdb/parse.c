@@ -52,6 +52,8 @@
 #include "block.h"
 #include "source.h"
 #include "objfiles.h"
+#include "exceptions.h"
+#include "user-regs.h"
 
 /* Standard set of definitions for printing, dumping, prefixifying,
  * and evaluating expressions.  */
@@ -80,6 +82,15 @@ char *prev_lexptr;
 int paren_depth;
 int comma_terminates;
 
+/* True if parsing an expression to find a field reference.  This is
+   only used by completion.  */
+int in_parse_field;
+
+/* The index of the last struct expression directly before a '.' or
+   '->'.  This is set when parsing and is only used when completing a
+   field name.  It is -1 if no dereference operation was found.  */
+static int expout_last_struct = -1;
+
 /* A temporary buffer for identifiers, so we can null-terminate them.
 
    We allocate this with xrealloc.  parse_exp_1 used to allocate with
@@ -100,13 +111,13 @@ show_expressiondebug (struct ui_file *file, int from_tty,
 
 static void free_funcalls (void *ignore);
 
-static void prefixify_expression (struct expression *);
+static int prefixify_expression (struct expression *);
 
-static void prefixify_subexp (struct expression *, struct expression *, int,
-			      int);
+static int prefixify_subexp (struct expression *, struct expression *, int,
+			     int);
 
 static struct expression *parse_exp_in_context (char **, struct block *, int, 
-						int);
+						int, int *);
 
 void _initialize_parse (void);
 
@@ -295,7 +306,7 @@ write_exp_elt_intern (struct internalvar *expelt)
    strings with embedded null bytes, as is required for some languages.
 
    Don't be fooled by the fact that the string is null byte terminated,
-   this is strictly for the convenience of debugging gdb itself.  Gdb
+   this is strictly for the convenience of debugging gdb itself.
    Gdb does not depend up the string being null terminated, since the
    actual length is recorded in expression elements at each end of the
    string.  The null byte is taken into consideration when computing how
@@ -389,50 +400,51 @@ write_exp_bitstring (struct stoken str)
 }
 
 /* Add the appropriate elements for a minimal symbol to the end of
-   the expression.  The rationale behind passing in text_symbol_type and
-   data_symbol_type was so that Modula-2 could pass in WORD for
-   data_symbol_type.  Perhaps it still is useful to have those types vary
-   based on the language, but they no longer have names like "int", so
-   the initial rationale is gone.  */
+   the expression.  */
 
 void
-write_exp_msymbol (struct minimal_symbol *msymbol, 
-		   struct type *text_symbol_type, 
-		   struct type *data_symbol_type)
+write_exp_msymbol (struct minimal_symbol *msymbol)
 {
-  struct gdbarch *gdbarch = current_gdbarch;
-  CORE_ADDR addr;
+  struct objfile *objfile = msymbol_objfile (msymbol);
+  struct gdbarch *gdbarch = get_objfile_arch (objfile);
+
+  CORE_ADDR addr = SYMBOL_VALUE_ADDRESS (msymbol);
+  struct obj_section *section = SYMBOL_OBJ_SECTION (msymbol);
+  enum minimal_symbol_type type = MSYMBOL_TYPE (msymbol);
+  CORE_ADDR pc;
+
+  /* The minimal symbol might point to a function descriptor;
+     resolve it to the actual code address instead.  */
+  pc = gdbarch_convert_from_func_ptr_addr (gdbarch, addr, &current_target);
+  if (pc != addr)
+    {
+      /* In this case, assume we have a code symbol instead of
+	 a data symbol.  */
+      type = mst_text;
+      section = NULL;
+      addr = pc;
+    }
+
+  if (overlay_debugging)
+    addr = symbol_overlayed_address (addr, section);
 
   write_exp_elt_opcode (OP_LONG);
   /* Let's make the type big enough to hold a 64-bit address.  */
-  write_exp_elt_type (builtin_type_CORE_ADDR);
-
-  addr = SYMBOL_VALUE_ADDRESS (msymbol);
-  if (overlay_debugging)
-    addr = symbol_overlayed_address (addr, SYMBOL_BFD_SECTION (msymbol));
+  write_exp_elt_type (builtin_type (gdbarch)->builtin_core_addr);
   write_exp_elt_longcst ((LONGEST) addr);
-
   write_exp_elt_opcode (OP_LONG);
 
-  if (SYMBOL_BFD_SECTION (msymbol)
-      && SYMBOL_BFD_SECTION (msymbol)->flags & SEC_THREAD_LOCAL)
+  if (section && section->the_bfd_section->flags & SEC_THREAD_LOCAL)
     {
-      bfd *bfd = SYMBOL_BFD_SECTION (msymbol)->owner;
-      struct objfile *ofp;
-
-      ALL_OBJFILES (ofp)
-	if (ofp->obfd == bfd)
-	  break;
-
       write_exp_elt_opcode (UNOP_MEMVAL_TLS);
-      write_exp_elt_objfile (ofp);
+      write_exp_elt_objfile (objfile);
       write_exp_elt_type (builtin_type (gdbarch)->nodebug_tls_symbol);
       write_exp_elt_opcode (UNOP_MEMVAL_TLS);
       return;
     }
 
   write_exp_elt_opcode (UNOP_MEMVAL);
-  switch (msymbol->type)
+  switch (type)
     {
     case mst_text:
     case mst_file_text:
@@ -453,6 +465,16 @@ write_exp_msymbol (struct minimal_symbol *msymbol,
     }
   write_exp_elt_opcode (UNOP_MEMVAL);
 }
+
+/* Mark the current index as the starting location of a structure
+   expression.  This is used when completing on field names.  */
+
+void
+mark_struct_expression (void)
+{
+  expout_last_struct = expout_ptr;
+}
+
 
 /* Recognize tokens that start with '$'.  These include:
 
@@ -516,8 +538,8 @@ write_dollar_variable (struct stoken str)
 
   /* Handle tokens that refer to machine registers:
      $ followed by a register name.  */
-  i = frame_map_name_to_regnum (deprecated_safe_get_selected_frame (),
-				str.ptr + 1, str.length - 1);
+  i = user_reg_map_name_to_regnum (current_gdbarch,
+				   str.ptr + 1, str.length - 1);
   if (i >= 0)
     goto handle_register;
 
@@ -536,7 +558,7 @@ write_dollar_variable (struct stoken str)
      have names beginning with $ or $$.  Check for those, first. */
 
   sym = lookup_symbol (copy_name (str), (struct block *) NULL,
-		       VAR_DOMAIN, (int *) NULL, (struct symtab **) NULL);
+		       VAR_DOMAIN, (int *) NULL);
   if (sym)
     {
       write_exp_elt_opcode (OP_VAR_VALUE);
@@ -548,9 +570,7 @@ write_dollar_variable (struct stoken str)
   msym = lookup_minimal_symbol (copy_name (str), NULL, NULL);
   if (msym)
     {
-      write_exp_msymbol (msym,
-			 lookup_function_type (builtin_type_int),
-			 builtin_type_int);
+      write_exp_msymbol (msym);
       return;
     }
 
@@ -657,9 +677,13 @@ copy_name (struct stoken token)
 }
 
 /* Reverse an expression from suffix form (in which it is constructed)
-   to prefix form (in which we can conveniently print or execute it).  */
+   to prefix form (in which we can conveniently print or execute it).
+   Ordinarily this always returns -1.  However, if EXPOUT_LAST_STRUCT
+   is not -1 (i.e., we are trying to complete a field name), it will
+   return the index of the subexpression which is the left-hand-side
+   of the struct operation at EXPOUT_LAST_STRUCT.  */
 
-static void
+static int
 prefixify_expression (struct expression *expr)
 {
   int len = sizeof (struct expression) + EXP_ELEM_TO_BYTES (expr->nelts);
@@ -671,7 +695,7 @@ prefixify_expression (struct expression *expr)
   /* Copy the original expression into temp.  */
   memcpy (temp, expr, len);
 
-  prefixify_subexp (temp, expr, inpos, outpos);
+  return prefixify_subexp (temp, expr, inpos, outpos);
 }
 
 /* Return the number of exp_elements in the postfix subexpression 
@@ -743,7 +767,7 @@ operator_length_standard (struct expression *expr, int endpos,
       break;
 
     case OP_COMPLEX:
-      oplen = 1;
+      oplen = 3;
       args = 2;
       break;
 
@@ -868,9 +892,12 @@ operator_length_standard (struct expression *expr, int endpos,
 
 /* Copy the subexpression ending just before index INEND in INEXPR
    into OUTEXPR, starting at index OUTBEG.
-   In the process, convert it from suffix to prefix form.  */
+   In the process, convert it from suffix to prefix form.
+   If EXPOUT_LAST_STRUCT is -1, then this function always returns -1.
+   Otherwise, it returns the index of the subexpression which is the
+   left-hand-side of the expression at EXPOUT_LAST_STRUCT.  */
 
-static void
+static int
 prefixify_subexp (struct expression *inexpr,
 		  struct expression *outexpr, int inend, int outbeg)
 {
@@ -879,6 +906,7 @@ prefixify_subexp (struct expression *inexpr,
   int i;
   int *arglens;
   enum exp_opcode opcode;
+  int result = -1;
 
   operator_length (inexpr, inend, &oplen, &args);
 
@@ -888,6 +916,9 @@ prefixify_subexp (struct expression *inexpr,
   memcpy (&outexpr->elts[outbeg], &inexpr->elts[inend],
 	  EXP_ELEM_TO_BYTES (oplen));
   outbeg += oplen;
+
+  if (expout_last_struct == inend)
+    result = outbeg - oplen;
 
   /* Find the lengths of the arg subexpressions.  */
   arglens = (int *) alloca (args * sizeof (int));
@@ -906,11 +937,21 @@ prefixify_subexp (struct expression *inexpr,
      outbeg does similarly in the output.  */
   for (i = 0; i < args; i++)
     {
+      int r;
       oplen = arglens[i];
       inend += oplen;
-      prefixify_subexp (inexpr, outexpr, inend, outbeg);
+      r = prefixify_subexp (inexpr, outexpr, inend, outbeg);
+      if (r != -1)
+	{
+	  /* Return immediately.  We probably have only parsed a
+	     partial expression, so we don't want to try to reverse
+	     the other operands.  */
+	  return r;
+	}
       outbeg += oplen;
     }
+
+  return result;
 }
 
 /* This page contains the two entry points to this file.  */
@@ -928,23 +969,30 @@ prefixify_subexp (struct expression *inexpr,
 struct expression *
 parse_exp_1 (char **stringptr, struct block *block, int comma)
 {
-  return parse_exp_in_context (stringptr, block, comma, 0);
+  return parse_exp_in_context (stringptr, block, comma, 0, NULL);
 }
 
 /* As for parse_exp_1, except that if VOID_CONTEXT_P, then
-   no value is expected from the expression.  */
+   no value is expected from the expression.
+   OUT_SUBEXP is set when attempting to complete a field name; in this
+   case it is set to the index of the subexpression on the
+   left-hand-side of the struct op.  If not doing such completion, it
+   is left untouched.  */
 
 static struct expression *
 parse_exp_in_context (char **stringptr, struct block *block, int comma, 
-		      int void_context_p)
+		      int void_context_p, int *out_subexp)
 {
+  volatile struct gdb_exception except;
   struct cleanup *old_chain;
+  int subexp;
 
   lexptr = *stringptr;
   prev_lexptr = NULL;
 
   paren_depth = 0;
   type_stack_depth = 0;
+  expout_last_struct = -1;
 
   comma_terminates = comma;
 
@@ -954,26 +1002,24 @@ parse_exp_in_context (char **stringptr, struct block *block, int comma,
   old_chain = make_cleanup (free_funcalls, 0 /*ignore*/);
   funcall_chain = 0;
 
-  /* If no context specified, try using the current frame, if any. */
+  expression_context_block = block;
 
-  if (!block)
-    block = get_selected_block (&expression_context_pc);
+  /* If no context specified, try using the current frame, if any.  */
+  if (!expression_context_block)
+    expression_context_block = get_selected_block (&expression_context_pc);
+  else
+    expression_context_pc = BLOCK_START (expression_context_block);
 
-  /* Fall back to using the current source static context, if any. */
+  /* Fall back to using the current source static context, if any.  */
 
-  if (!block)
+  if (!expression_context_block)
     {
       struct symtab_and_line cursal = get_current_source_symtab_and_line ();
       if (cursal.symtab)
-	block = BLOCKVECTOR_BLOCK (BLOCKVECTOR (cursal.symtab), STATIC_BLOCK);
-    }
-
-  /* Save the context, if specified by caller, or found above. */
-
-  if (block)
-    {
-      expression_context_block = block;
-      expression_context_pc = BLOCK_START (block);
+	expression_context_block
+	  = BLOCKVECTOR_BLOCK (BLOCKVECTOR (cursal.symtab), STATIC_BLOCK);
+      if (expression_context_block)
+	expression_context_pc = BLOCK_START (expression_context_block);
     }
 
   expout_size = 10;
@@ -981,10 +1027,21 @@ parse_exp_in_context (char **stringptr, struct block *block, int comma,
   expout = (struct expression *)
     xmalloc (sizeof (struct expression) + EXP_ELEM_TO_BYTES (expout_size));
   expout->language_defn = current_language;
-  make_cleanup (free_current_contents, &expout);
+  expout->gdbarch = current_gdbarch;
 
-  if (current_language->la_parser ())
-    current_language->la_error (NULL);
+  TRY_CATCH (except, RETURN_MASK_ALL)
+    {
+      if (current_language->la_parser ())
+	current_language->la_error (NULL);
+    }
+  if (except.reason < 0)
+    {
+      if (! in_parse_field)
+	{
+	  xfree (expout);
+	  throw_exception (except);
+	}
+    }
 
   discard_cleanups (old_chain);
 
@@ -1004,7 +1061,9 @@ parse_exp_in_context (char **stringptr, struct block *block, int comma,
     dump_raw_expression (expout, gdb_stdlog,
 			 "before conversion to prefix form");
 
-  prefixify_expression (expout);
+  subexp = prefixify_expression (expout);
+  if (out_subexp)
+    *out_subexp = subexp;
 
   current_language->la_post_parser (&expout, void_context_p);
 
@@ -1026,6 +1085,45 @@ parse_expression (char *string)
   if (*string)
     error (_("Junk after end of expression."));
   return exp;
+}
+
+/* Parse STRING as an expression.  If parsing ends in the middle of a
+   field reference, return the type of the left-hand-side of the
+   reference; furthermore, if the parsing ends in the field name,
+   return the field name in *NAME.  In all other cases, return NULL.  */
+
+struct type *
+parse_field_expression (char *string, char **name)
+{
+  struct expression *exp = NULL;
+  struct value *val;
+  int subexp;
+  volatile struct gdb_exception except;
+
+  TRY_CATCH (except, RETURN_MASK_ALL)
+    {
+      in_parse_field = 1;
+      exp = parse_exp_in_context (&string, 0, 0, 0, &subexp);
+    }
+  in_parse_field = 0;
+  if (except.reason < 0 || ! exp)
+    return NULL;
+  if (expout_last_struct == -1)
+    {
+      xfree (exp);
+      return NULL;
+    }
+
+  *name = extract_field_op (exp, &subexp);
+  if (!*name)
+    {
+      xfree (exp);
+      return NULL;
+    }
+  val = evaluate_subexpression_type (exp, subexp);
+  xfree (exp);
+
+  return value_type (val);
 }
 
 /* A post-parser that does nothing */
@@ -1164,14 +1262,13 @@ follow_types (struct type *follow_type)
 	   done with it.  */
 	range_type =
 	  create_range_type ((struct type *) NULL,
-			     builtin_type_int, 0,
+			     builtin_type_int32, 0,
 			     array_size >= 0 ? array_size - 1 : 0);
 	follow_type =
 	  create_array_type ((struct type *) NULL,
 			     follow_type, range_type);
 	if (array_size < 0)
-	  TYPE_ARRAY_UPPER_BOUND_TYPE (follow_type)
-	    = BOUND_CANNOT_BE_DETERMINED;
+	  TYPE_ARRAY_UPPER_BOUND_IS_UNDEFINED (follow_type) = 1;
 	break;
       case tp_function:
 	/* FIXME-type-allocation: need a way to free this type when we are

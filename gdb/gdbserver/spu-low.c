@@ -57,6 +57,9 @@
 /* These are used in remote-utils.c.  */
 int using_threads = 0;
 
+/* Defined in auto-generated file reg-spu.c.  */
+void init_registers_spu (void);
+
 
 /* Fetch PPU register REGNO.  */
 static CORE_ADDR
@@ -560,12 +563,6 @@ spu_request_interrupt (void)
   syscall (SYS_tkill, current_tid, SIGINT);
 }
 
-static const char *
-spu_arch_string (void)
-{
-  return "spu";
-}
-
 static struct target_ops spu_target_ops = {
   spu_create_inferior,
   spu_attach,
@@ -588,7 +585,6 @@ static struct target_ops spu_target_ops = {
   NULL,
   NULL,
   NULL,
-  spu_arch_string,
   spu_proc_xfer_spu,
   hostio_last_error_from_errno,
 };
@@ -600,5 +596,5 @@ initialize_low (void)
 
   set_target_ops (&spu_target_ops);
   set_breakpoint_data (breakpoint, sizeof breakpoint);
-  init_registers ();
+  init_registers_spu ();
 }

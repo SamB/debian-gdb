@@ -90,11 +90,11 @@ amd64_register_type (struct gdbarch *gdbarch, int regnum)
   if (regnum >= AMD64_RAX_REGNUM && regnum <= AMD64_RDI_REGNUM)
     return builtin_type_int64;
   if (regnum == AMD64_RBP_REGNUM || regnum == AMD64_RSP_REGNUM)
-    return builtin_type_void_data_ptr;
+    return builtin_type (gdbarch)->builtin_data_ptr;
   if (regnum >= AMD64_R8_REGNUM && regnum <= AMD64_R15_REGNUM)
     return builtin_type_int64;
   if (regnum == AMD64_RIP_REGNUM)
-    return builtin_type_void_func_ptr;
+    return builtin_type (gdbarch)->builtin_func_ptr;
   if (regnum == AMD64_EFLAGS_REGNUM)
     return i386_eflags_type;
   if (regnum >= AMD64_CS_REGNUM && regnum <= AMD64_GS_REGNUM)
@@ -316,7 +316,7 @@ amd64_classify_aggregate (struct type *type, enum amd64_reg_class class[2])
 	  enum amd64_reg_class subclass[2];
 
 	  /* Ignore static fields.  */
-	  if (TYPE_FIELD_STATIC (type, i))
+	  if (field_is_static (&TYPE_FIELD (type, i)))
 	    continue;
 
 	  gdb_assert (pos == 0 || pos == 1);
@@ -392,8 +392,8 @@ amd64_classify (struct type *type, enum amd64_reg_class class[2])
 }
 
 static enum return_value_convention
-amd64_return_value (struct gdbarch *gdbarch, struct type *type,
-		    struct regcache *regcache,
+amd64_return_value (struct gdbarch *gdbarch, struct type *func_type,
+		    struct type *type, struct regcache *regcache,
 		    gdb_byte *readbuf, const gdb_byte *writebuf)
 {
   enum amd64_reg_class class[2];
@@ -680,6 +680,7 @@ struct amd64_frame_cache
   /* Saved registers.  */
   CORE_ADDR saved_regs[AMD64_NUM_SAVED_REGS];
   CORE_ADDR saved_sp;
+  int saved_sp_reg;
 
   /* Do we have a frame?  */
   int frameless_p;
@@ -702,6 +703,7 @@ amd64_init_frame_cache (struct amd64_frame_cache *cache)
   for (i = 0; i < AMD64_NUM_SAVED_REGS; i++)
     cache->saved_regs[i] = -1;
   cache->saved_sp = 0;
+  cache->saved_sp_reg = -1;
 
   /* Frameless until proven otherwise.  */
   cache->frameless_p = 1;
@@ -717,6 +719,179 @@ amd64_alloc_frame_cache (void)
   cache = FRAME_OBSTACK_ZALLOC (struct amd64_frame_cache);
   amd64_init_frame_cache (cache);
   return cache;
+}
+
+/* GCC 4.4 and later, can put code in the prologue to realign the
+   stack pointer.  Check whether PC points to such code, and update
+   CACHE accordingly.  Return the first instruction after the code
+   sequence or CURRENT_PC, whichever is smaller.  If we don't
+   recognize the code, return PC.  */
+
+static CORE_ADDR
+amd64_analyze_stack_align (CORE_ADDR pc, CORE_ADDR current_pc,
+			   struct amd64_frame_cache *cache)
+{
+  /* There are 2 code sequences to re-align stack before the frame
+     gets set up:
+
+	1. Use a caller-saved saved register:
+
+		leaq  8(%rsp), %reg
+		andq  $-XXX, %rsp
+		pushq -8(%reg)
+
+	2. Use a callee-saved saved register:
+
+		pushq %reg
+		leaq  16(%rsp), %reg
+		andq  $-XXX, %rsp
+		pushq -8(%reg)
+
+     "andq $-XXX, %rsp" can be either 4 bytes or 7 bytes:
+     
+     	0x48 0x83 0xe4 0xf0			andq $-16, %rsp
+     	0x48 0x81 0xe4 0x00 0xff 0xff 0xff	andq $-256, %rsp
+   */
+
+  gdb_byte buf[18];
+  int reg, r;
+  int offset, offset_and;
+  static int regnums[16] = {
+    AMD64_RAX_REGNUM,		/* %rax */
+    AMD64_RCX_REGNUM,		/* %rcx */
+    AMD64_RDX_REGNUM,		/* %rdx */
+    AMD64_RBX_REGNUM,		/* %rbx */
+    AMD64_RSP_REGNUM,		/* %rsp */
+    AMD64_RBP_REGNUM,		/* %rbp */
+    AMD64_RSI_REGNUM,		/* %rsi */
+    AMD64_RDI_REGNUM,		/* %rdi */
+    AMD64_R8_REGNUM,		/* %r8 */
+    AMD64_R9_REGNUM,		/* %r9 */
+    AMD64_R10_REGNUM,		/* %r10 */
+    AMD64_R11_REGNUM,		/* %r11 */
+    AMD64_R12_REGNUM,		/* %r12 */
+    AMD64_R13_REGNUM,		/* %r13 */
+    AMD64_R14_REGNUM,		/* %r14 */
+    AMD64_R15_REGNUM,		/* %r15 */
+  };
+
+  if (target_read_memory (pc, buf, sizeof buf))
+    return pc;
+
+  /* Check caller-saved saved register.  The first instruction has
+     to be "leaq 8(%rsp), %reg".  */
+  if ((buf[0] & 0xfb) == 0x48
+      && buf[1] == 0x8d
+      && buf[3] == 0x24
+      && buf[4] == 0x8)
+    {
+      /* MOD must be binary 10 and R/M must be binary 100.  */
+      if ((buf[2] & 0xc7) != 0x44)
+	return pc;
+
+      /* REG has register number.  */
+      reg = (buf[2] >> 3) & 7;
+
+      /* Check the REX.R bit.  */
+      if (buf[0] == 0x4c)
+	reg += 8;
+
+      offset = 5;
+    }
+  else
+    {
+      /* Check callee-saved saved register.  The first instruction
+	 has to be "pushq %reg".  */
+      reg = 0;
+      if ((buf[0] & 0xf8) == 0x50)
+	offset = 0;
+      else if ((buf[0] & 0xf6) == 0x40
+	       && (buf[1] & 0xf8) == 0x50)
+	{
+	  /* Check the REX.B bit.  */
+	  if ((buf[0] & 1) != 0)
+	    reg = 8;
+
+	  offset = 1;
+	}
+      else
+	return pc;
+
+      /* Get register.  */
+      reg += buf[offset] & 0x7;
+
+      offset++;
+
+      /* The next instruction has to be "leaq 16(%rsp), %reg".  */
+      if ((buf[offset] & 0xfb) != 0x48
+	  || buf[offset + 1] != 0x8d
+	  || buf[offset + 3] != 0x24
+	  || buf[offset + 4] != 0x10)
+	return pc;
+
+      /* MOD must be binary 10 and R/M must be binary 100.  */
+      if ((buf[offset + 2] & 0xc7) != 0x44)
+	return pc;
+      
+      /* REG has register number.  */
+      r = (buf[offset + 2] >> 3) & 7;
+
+      /* Check the REX.R bit.  */
+      if (buf[offset] == 0x4c)
+	r += 8;
+
+      /* Registers in pushq and leaq have to be the same.  */
+      if (reg != r)
+	return pc;
+
+      offset += 5;
+    }
+
+  /* Rigister can't be %rsp nor %rbp.  */
+  if (reg == 4 || reg == 5)
+    return pc;
+
+  /* The next instruction has to be "andq $-XXX, %rsp".  */
+  if (buf[offset] != 0x48
+      || buf[offset + 2] != 0xe4
+      || (buf[offset + 1] != 0x81 && buf[offset + 1] != 0x83))
+    return pc;
+
+  offset_and = offset;
+  offset += buf[offset + 1] == 0x81 ? 7 : 4;
+
+  /* The next instruction has to be "pushq -8(%reg)".  */
+  r = 0;
+  if (buf[offset] == 0xff)
+    offset++;
+  else if ((buf[offset] & 0xf6) == 0x40
+	   && buf[offset + 1] == 0xff)
+    {
+      /* Check the REX.B bit.  */
+      if ((buf[offset] & 0x1) != 0)
+	r = 8;
+      offset += 2;
+    }
+  else
+    return pc;
+
+  /* 8bit -8 is 0xf8.  REG must be binary 110 and MOD must be binary
+     01.  */
+  if (buf[offset + 1] != 0xf8
+      || (buf[offset] & 0xf8) != 0x70)
+    return pc;
+
+  /* R/M has register.  */
+  r += buf[offset] & 7;
+
+  /* Registers in leaq and pushq have to be the same.  */
+  if (reg != r)
+    return pc;
+
+  if (current_pc > pc + offset_and)
+    cache->saved_sp_reg = regnums[reg];
+
+  return min (pc + offset + 2, current_pc);
 }
 
 /* Do a limited analysis of the prologue at PC and update CACHE
@@ -741,6 +916,8 @@ amd64_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
 
   if (current_pc <= pc)
     return current_pc;
+
+  pc = amd64_analyze_stack_align (pc, current_pc, cache);
 
   op = read_memory_unsigned_integer (pc, 1);
 
@@ -788,7 +965,7 @@ amd64_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR start_pc)
 /* Normal frames.  */
 
 static struct amd64_frame_cache *
-amd64_frame_cache (struct frame_info *next_frame, void **this_cache)
+amd64_frame_cache (struct frame_info *this_frame, void **this_cache)
 {
   struct amd64_frame_cache *cache;
   gdb_byte buf[8];
@@ -800,9 +977,16 @@ amd64_frame_cache (struct frame_info *next_frame, void **this_cache)
   cache = amd64_alloc_frame_cache ();
   *this_cache = cache;
 
-  cache->pc = frame_func_unwind (next_frame, NORMAL_FRAME);
+  cache->pc = get_frame_func (this_frame);
   if (cache->pc != 0)
-    amd64_analyze_prologue (cache->pc, frame_pc_unwind (next_frame), cache);
+    amd64_analyze_prologue (cache->pc, get_frame_pc (this_frame), cache);
+
+  if (cache->saved_sp_reg != -1)
+    {
+      /* Stack pointer has been saved.  */
+      get_frame_register (this_frame, cache->saved_sp_reg, buf);
+      cache->saved_sp = extract_unsigned_integer(buf, 8);
+    }
 
   if (cache->frameless_p)
     {
@@ -813,12 +997,24 @@ amd64_frame_cache (struct frame_info *next_frame, void **this_cache)
 	 at the stack pointer.  For truly "frameless" functions this
 	 might work too.  */
 
-      frame_unwind_register (next_frame, AMD64_RSP_REGNUM, buf);
-      cache->base = extract_unsigned_integer (buf, 8) + cache->sp_offset;
+      if (cache->saved_sp_reg != -1)
+	{
+	  /* We're halfway aligning the stack.  */
+	  cache->base = ((cache->saved_sp - 8) & 0xfffffffffffffff0LL) - 8;
+	  cache->saved_regs[AMD64_RIP_REGNUM] = cache->saved_sp - 8;
+
+	  /* This will be added back below.  */
+	  cache->saved_regs[AMD64_RIP_REGNUM] -= cache->base;
+	}
+      else
+	{
+	  get_frame_register (this_frame, AMD64_RSP_REGNUM, buf);
+	  cache->base = extract_unsigned_integer (buf, 8) + cache->sp_offset;
+	}
     }
   else
     {
-      frame_unwind_register (next_frame, AMD64_RBP_REGNUM, buf);
+      get_frame_register (this_frame, AMD64_RBP_REGNUM, buf);
       cache->base = extract_unsigned_integer (buf, 8);
     }
 
@@ -828,8 +1024,10 @@ amd64_frame_cache (struct frame_info *next_frame, void **this_cache)
 
   /* For normal frames, %rip is stored at 8(%rbp).  If we don't have a
      frame we find it at the same offset from the reconstructed base
-     address.  */
-  cache->saved_regs[AMD64_RIP_REGNUM] = 8;
+     address.  If we're halfway aligning the stack, %rip is handled
+     differently (see above).  */
+  if (!cache->frameless_p || cache->saved_sp_reg == -1)
+    cache->saved_regs[AMD64_RIP_REGNUM] = 8;
 
   /* Adjust all the saved registers such that they contain addresses
      instead of offsets.  */
@@ -841,11 +1039,11 @@ amd64_frame_cache (struct frame_info *next_frame, void **this_cache)
 }
 
 static void
-amd64_frame_this_id (struct frame_info *next_frame, void **this_cache,
+amd64_frame_this_id (struct frame_info *this_frame, void **this_cache,
 		     struct frame_id *this_id)
 {
   struct amd64_frame_cache *cache =
-    amd64_frame_cache (next_frame, this_cache);
+    amd64_frame_cache (this_frame, this_cache);
 
   /* This marks the outermost frame.  */
   if (cache->base == 0)
@@ -854,67 +1052,34 @@ amd64_frame_this_id (struct frame_info *next_frame, void **this_cache,
   (*this_id) = frame_id_build (cache->base + 16, cache->pc);
 }
 
-static void
-amd64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
-			   int regnum, int *optimizedp,
-			   enum lval_type *lvalp, CORE_ADDR *addrp,
-			   int *realnump, gdb_byte *valuep)
+static struct value *
+amd64_frame_prev_register (struct frame_info *this_frame, void **this_cache,
+			   int regnum)
 {
-  struct gdbarch *gdbarch = get_frame_arch (next_frame);
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
   struct amd64_frame_cache *cache =
-    amd64_frame_cache (next_frame, this_cache);
+    amd64_frame_cache (this_frame, this_cache);
 
   gdb_assert (regnum >= 0);
 
   if (regnum == gdbarch_sp_regnum (gdbarch) && cache->saved_sp)
-    {
-      *optimizedp = 0;
-      *lvalp = not_lval;
-      *addrp = 0;
-      *realnump = -1;
-      if (valuep)
-	{
-	  /* Store the value.  */
-	  store_unsigned_integer (valuep, 8, cache->saved_sp);
-	}
-      return;
-    }
+    return frame_unwind_got_constant (this_frame, regnum, cache->saved_sp);
 
   if (regnum < AMD64_NUM_SAVED_REGS && cache->saved_regs[regnum] != -1)
-    {
-      *optimizedp = 0;
-      *lvalp = lval_memory;
-      *addrp = cache->saved_regs[regnum];
-      *realnump = -1;
-      if (valuep)
-	{
-	  /* Read the value in from memory.  */
-	  read_memory (*addrp, valuep,
-		       register_size (gdbarch, regnum));
-	}
-      return;
-    }
+    return frame_unwind_got_memory (this_frame, regnum,
+				    cache->saved_regs[regnum]);
 
-  *optimizedp = 0;
-  *lvalp = lval_register;
-  *addrp = 0;
-  *realnump = regnum;
-  if (valuep)
-    frame_unwind_register (next_frame, (*realnump), valuep);
+  return frame_unwind_got_register (this_frame, regnum, regnum);
 }
 
 static const struct frame_unwind amd64_frame_unwind =
 {
   NORMAL_FRAME,
   amd64_frame_this_id,
-  amd64_frame_prev_register
+  amd64_frame_prev_register,
+  NULL,
+  default_frame_sniffer
 };
-
-static const struct frame_unwind *
-amd64_frame_sniffer (struct frame_info *next_frame)
-{
-  return &amd64_frame_unwind;
-}
 
 
 /* Signal trampolines.  */
@@ -924,10 +1089,10 @@ amd64_frame_sniffer (struct frame_info *next_frame)
    on both platforms.  */
 
 static struct amd64_frame_cache *
-amd64_sigtramp_frame_cache (struct frame_info *next_frame, void **this_cache)
+amd64_sigtramp_frame_cache (struct frame_info *this_frame, void **this_cache)
 {
   struct amd64_frame_cache *cache;
-  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (next_frame));
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (this_frame));
   CORE_ADDR addr;
   gdb_byte buf[8];
   int i;
@@ -937,10 +1102,10 @@ amd64_sigtramp_frame_cache (struct frame_info *next_frame, void **this_cache)
 
   cache = amd64_alloc_frame_cache ();
 
-  frame_unwind_register (next_frame, AMD64_RSP_REGNUM, buf);
+  get_frame_register (this_frame, AMD64_RSP_REGNUM, buf);
   cache->base = extract_unsigned_integer (buf, 8) - 8;
 
-  addr = tdep->sigcontext_addr (next_frame);
+  addr = tdep->sigcontext_addr (this_frame);
   gdb_assert (tdep->sc_reg_offset);
   gdb_assert (tdep->sc_num_regs <= AMD64_NUM_SAVED_REGS);
   for (i = 0; i < tdep->sc_num_regs; i++)
@@ -952,70 +1117,70 @@ amd64_sigtramp_frame_cache (struct frame_info *next_frame, void **this_cache)
 }
 
 static void
-amd64_sigtramp_frame_this_id (struct frame_info *next_frame,
+amd64_sigtramp_frame_this_id (struct frame_info *this_frame,
 			      void **this_cache, struct frame_id *this_id)
 {
   struct amd64_frame_cache *cache =
-    amd64_sigtramp_frame_cache (next_frame, this_cache);
+    amd64_sigtramp_frame_cache (this_frame, this_cache);
 
-  (*this_id) = frame_id_build (cache->base + 16, frame_pc_unwind (next_frame));
+  (*this_id) = frame_id_build (cache->base + 16, get_frame_pc (this_frame));
 }
 
-static void
-amd64_sigtramp_frame_prev_register (struct frame_info *next_frame,
-				    void **this_cache,
-				    int regnum, int *optimizedp,
-				    enum lval_type *lvalp, CORE_ADDR *addrp,
-				    int *realnump, gdb_byte *valuep)
+static struct value *
+amd64_sigtramp_frame_prev_register (struct frame_info *this_frame,
+				    void **this_cache, int regnum)
 {
   /* Make sure we've initialized the cache.  */
-  amd64_sigtramp_frame_cache (next_frame, this_cache);
+  amd64_sigtramp_frame_cache (this_frame, this_cache);
 
-  amd64_frame_prev_register (next_frame, this_cache, regnum,
-			     optimizedp, lvalp, addrp, realnump, valuep);
+  return amd64_frame_prev_register (this_frame, this_cache, regnum);
+}
+
+static int
+amd64_sigtramp_frame_sniffer (const struct frame_unwind *self,
+			      struct frame_info *this_frame,
+			      void **this_cache)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (this_frame));
+
+  /* We shouldn't even bother if we don't have a sigcontext_addr
+     handler.  */
+  if (tdep->sigcontext_addr == NULL)
+    return 0;
+
+  if (tdep->sigtramp_p != NULL)
+    {
+      if (tdep->sigtramp_p (this_frame))
+	return 1;
+    }
+
+  if (tdep->sigtramp_start != 0)
+    {
+      CORE_ADDR pc = get_frame_pc (this_frame);
+
+      gdb_assert (tdep->sigtramp_end != 0);
+      if (pc >= tdep->sigtramp_start && pc < tdep->sigtramp_end)
+	return 1;
+    }
+
+  return 0;
 }
 
 static const struct frame_unwind amd64_sigtramp_frame_unwind =
 {
   SIGTRAMP_FRAME,
   amd64_sigtramp_frame_this_id,
-  amd64_sigtramp_frame_prev_register
+  amd64_sigtramp_frame_prev_register,
+  NULL,
+  amd64_sigtramp_frame_sniffer
 };
-
-static const struct frame_unwind *
-amd64_sigtramp_frame_sniffer (struct frame_info *next_frame)
-{
-  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (next_frame));
-
-  /* We shouldn't even bother if we don't have a sigcontext_addr
-     handler.  */
-  if (tdep->sigcontext_addr == NULL)
-    return NULL;
-
-  if (tdep->sigtramp_p != NULL)
-    {
-      if (tdep->sigtramp_p (next_frame))
-	return &amd64_sigtramp_frame_unwind;
-    }
-
-  if (tdep->sigtramp_start != 0)
-    {
-      CORE_ADDR pc = frame_pc_unwind (next_frame);
-
-      gdb_assert (tdep->sigtramp_end != 0);
-      if (pc >= tdep->sigtramp_start && pc < tdep->sigtramp_end)
-	return &amd64_sigtramp_frame_unwind;
-    }
-
-  return NULL;
-}
 
 
 static CORE_ADDR
-amd64_frame_base_address (struct frame_info *next_frame, void **this_cache)
+amd64_frame_base_address (struct frame_info *this_frame, void **this_cache)
 {
   struct amd64_frame_cache *cache =
-    amd64_frame_cache (next_frame, this_cache);
+    amd64_frame_cache (this_frame, this_cache);
 
   return cache->base;
 }
@@ -1029,15 +1194,13 @@ static const struct frame_base amd64_frame_base =
 };
 
 static struct frame_id
-amd64_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
+amd64_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
 {
-  gdb_byte buf[8];
   CORE_ADDR fp;
 
-  frame_unwind_register (next_frame, AMD64_RBP_REGNUM, buf);
-  fp = extract_unsigned_integer (buf, 8);
+  fp = get_frame_register_unsigned (this_frame, AMD64_RBP_REGNUM);
 
-  return frame_id_build (fp + 16, frame_pc_unwind (next_frame));
+  return frame_id_build (fp + 16, get_frame_pc (this_frame));
 }
 
 /* 16 byte align the SP per frame requirements.  */
@@ -1101,6 +1264,37 @@ amd64_regset_from_core_section (struct gdbarch *gdbarch,
 }
 
 
+/* Figure out where the longjmp will land.  Slurp the jmp_buf out of
+   %rdi.  We expect its value to be a pointer to the jmp_buf structure
+   from which we extract the address that we will land at.  This
+   address is copied into PC.  This routine returns non-zero on
+   success.  */
+
+static int
+amd64_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
+{
+  gdb_byte buf[8];
+  CORE_ADDR jb_addr;
+  struct gdbarch *gdbarch = get_frame_arch (frame);
+  int jb_pc_offset = gdbarch_tdep (gdbarch)->jb_pc_offset;
+  int len = TYPE_LENGTH (builtin_type (gdbarch)->builtin_func_ptr);
+
+  /* If JB_PC_OFFSET is -1, we have no way to find out where the
+     longjmp will land.	 */
+  if (jb_pc_offset == -1)
+    return 0;
+
+  get_frame_register (frame, AMD64_RDI_REGNUM, buf);
+  jb_addr= extract_typed_address
+	    (buf, builtin_type (gdbarch)->builtin_data_ptr);
+  if (target_read_memory (jb_addr + jb_pc_offset, buf, len))
+    return 0;
+
+  *pc = extract_typed_address (buf, builtin_type (gdbarch)->builtin_func_ptr);
+
+  return 1;
+}
+
 void
 amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
@@ -1141,7 +1335,6 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
      DWARF-1), but we provide the same mapping just in case.  This
      mapping is also used for stabs, which GCC does support.  */
   set_gdbarch_stab_reg_to_regnum (gdbarch, amd64_dwarf_reg_to_regnum);
-  set_gdbarch_dwarf_reg_to_regnum (gdbarch, amd64_dwarf_reg_to_regnum);
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, amd64_dwarf_reg_to_regnum);
 
   /* We don't override SDB_REG_RO_REGNUM, since COFF doesn't seem to
@@ -1164,20 +1357,20 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_num_pseudo_regs (gdbarch, 0);
   tdep->mm0_regnum = -1;
 
-  set_gdbarch_unwind_dummy_id (gdbarch, amd64_unwind_dummy_id);
+  set_gdbarch_dummy_id (gdbarch, amd64_dummy_id);
 
-  frame_unwind_append_sniffer (gdbarch, amd64_sigtramp_frame_sniffer);
-  frame_unwind_append_sniffer (gdbarch, amd64_frame_sniffer);
+  frame_unwind_append_unwinder (gdbarch, &amd64_sigtramp_frame_unwind);
+  frame_unwind_append_unwinder (gdbarch, &amd64_frame_unwind);
   frame_base_set_default (gdbarch, &amd64_frame_base);
 
   /* If we have a register mapping, enable the generic core file support.  */
   if (tdep->gregset_reg_offset)
     set_gdbarch_regset_from_core_section (gdbarch,
 					  amd64_regset_from_core_section);
+
+  set_gdbarch_get_longjmp_target (gdbarch, amd64_get_longjmp_target);
 }
 
-
-#define I387_ST0_REGNUM AMD64_ST0_REGNUM
 
 /* The 64-bit FXSAVE format differs from the 32-bit format in the
    sense that the instruction pointer and data pointer are simply
@@ -1193,18 +1386,21 @@ amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
 void
 amd64_supply_fxsave (struct regcache *regcache, int regnum,
-		      const void *fxsave)
+		     const void *fxsave)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
   i387_supply_fxsave (regcache, regnum, fxsave);
 
-  if (fxsave && gdbarch_ptr_bit (get_regcache_arch (regcache)) == 64)
+  if (fxsave && gdbarch_ptr_bit (gdbarch) == 64)
     {
       const gdb_byte *regs = fxsave;
 
-      if (regnum == -1 || regnum == I387_FISEG_REGNUM)
-	regcache_raw_supply (regcache, I387_FISEG_REGNUM, regs + 12);
-      if (regnum == -1 || regnum == I387_FOSEG_REGNUM)
-	regcache_raw_supply (regcache, I387_FOSEG_REGNUM, regs + 20);
+      if (regnum == -1 || regnum == I387_FISEG_REGNUM (tdep))
+	regcache_raw_supply (regcache, I387_FISEG_REGNUM (tdep), regs + 12);
+      if (regnum == -1 || regnum == I387_FOSEG_REGNUM (tdep))
+	regcache_raw_supply (regcache, I387_FOSEG_REGNUM (tdep), regs + 20);
     }
 }
 
@@ -1217,15 +1413,17 @@ void
 amd64_collect_fxsave (const struct regcache *regcache, int regnum,
 		      void *fxsave)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   gdb_byte *regs = fxsave;
 
   i387_collect_fxsave (regcache, regnum, fxsave);
 
-  if (gdbarch_ptr_bit (get_regcache_arch (regcache)) == 64)
+  if (gdbarch_ptr_bit (gdbarch) == 64)
     {
-      if (regnum == -1 || regnum == I387_FISEG_REGNUM)
-	regcache_raw_collect (regcache, I387_FISEG_REGNUM, regs + 12);
-      if (regnum == -1 || regnum == I387_FOSEG_REGNUM)
-	regcache_raw_collect (regcache, I387_FOSEG_REGNUM, regs + 20);
+      if (regnum == -1 || regnum == I387_FISEG_REGNUM (tdep))
+	regcache_raw_collect (regcache, I387_FISEG_REGNUM (tdep), regs + 12);
+      if (regnum == -1 || regnum == I387_FOSEG_REGNUM (tdep))
+	regcache_raw_collect (regcache, I387_FOSEG_REGNUM (tdep), regs + 20);
     }
 }

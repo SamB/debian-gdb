@@ -453,6 +453,16 @@ regcache_observer_target_changed (struct target_ops *target)
   registers_changed ();
 }
 
+/* Update global variables old ptids to hold NEW_PTID if they were
+   holding OLD_PTID.  */
+static void
+regcache_thread_ptid_changed (ptid_t old_ptid, ptid_t new_ptid)
+{
+  if (current_regcache != NULL
+      && ptid_equal (current_regcache->ptid, old_ptid))
+    current_regcache->ptid = new_ptid;
+}
+
 /* Low level examining and depositing of registers.
 
    The caller is responsible for making sure that the inferior is
@@ -805,22 +815,11 @@ regcache_raw_collect (const struct regcache *regcache, int regnum, void *buf)
 }
 
 
-/* read_pc, write_pc, etc.  Special handling for register PC.  */
-
-/* NOTE: cagney/2001-02-18: The functions read_pc_pid(), read_pc() and
-   read_sp(), will eventually be replaced by per-frame methods.
-   Instead of relying on the global INFERIOR_PTID, they will use the
-   contextual information provided by the FRAME.  These functions do
-   not belong in the register cache.  */
-
-/* NOTE: cagney/2003-06-07: The functions generic_target_write_pc(),
-   write_pc_pid() and write_pc(), all need to be replaced by something
-   that does not rely on global state.  But what?  */
+/* Special handling for register PC.  */
 
 CORE_ADDR
-read_pc_pid (ptid_t ptid)
+regcache_read_pc (struct regcache *regcache)
 {
-  struct regcache *regcache = get_thread_regcache (ptid);
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
 
   CORE_ADDR pc_val;
@@ -837,21 +836,20 @@ read_pc_pid (ptid_t ptid)
       pc_val = gdbarch_addr_bits_remove (gdbarch, raw_val);
     }
   else
-    internal_error (__FILE__, __LINE__, _("read_pc_pid: Unable to find PC"));
-
+    internal_error (__FILE__, __LINE__,
+		    _("regcache_read_pc: Unable to find PC"));
   return pc_val;
 }
 
 CORE_ADDR
 read_pc (void)
 {
-  return read_pc_pid (inferior_ptid);
+  return regcache_read_pc (get_current_regcache ());
 }
 
 void
-write_pc_pid (CORE_ADDR pc, ptid_t ptid)
+regcache_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
-  struct regcache *regcache = get_thread_regcache (ptid);
   struct gdbarch *gdbarch = get_regcache_arch (regcache);
 
   if (gdbarch_write_pc_p (gdbarch))
@@ -861,13 +859,13 @@ write_pc_pid (CORE_ADDR pc, ptid_t ptid)
 				    gdbarch_pc_regnum (gdbarch), pc);
   else
     internal_error (__FILE__, __LINE__,
-		    _("write_pc_pid: Unable to update PC"));
+		    _("regcache_write_pc: Unable to update PC"));
 }
 
 void
 write_pc (CORE_ADDR pc)
 {
-  write_pc_pid (pc, inferior_ptid);
+  regcache_write_pc (get_current_regcache (), pc);
 }
 
 
@@ -1106,11 +1104,13 @@ regcache_print (char *args, enum regcache_dump_what what_to_dump)
     regcache_dump (get_current_regcache (), gdb_stdout, what_to_dump);
   else
     {
+      struct cleanup *cleanups;
       struct ui_file *file = gdb_fopen (args, "w");
       if (file == NULL)
 	perror_with_name (_("maintenance print architecture"));
+      cleanups = make_cleanup_ui_file_delete (file);
       regcache_dump (get_current_regcache (), file, what_to_dump);
-      ui_file_delete (file);
+      do_cleanups (cleanups);
     }
 }
 
@@ -1146,6 +1146,7 @@ _initialize_regcache (void)
   regcache_descr_handle = gdbarch_data_register_post_init (init_regcache_descr);
 
   observer_attach_target_changed (regcache_observer_target_changed);
+  observer_attach_thread_ptid_changed (regcache_thread_ptid_changed);
 
   add_com ("flushregs", class_maintenance, reg_flush_command,
 	   _("Force gdb to flush its register cache (maintainer command)"));

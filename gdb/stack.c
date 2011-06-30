@@ -43,6 +43,8 @@
 #include "regcache.h"
 #include "solib.h"
 #include "valprint.h"
+#include "gdbthread.h"
+#include "cp-support.h"
 
 #include "gdb_assert.h"
 #include <ctype.h>
@@ -200,9 +202,9 @@ print_this_frame_argument_p (struct symbol *sym)
    of arguments according to the stack frame (or -1 if the number of
    arguments is unknown).  */
 
-/* Note that currently the "number of argumentss according to the
+/* Note that currently the "number of arguments according to the
    stack frame" is only known on VAX where i refers to the "number of
-   ints of argumentss according to the stack frame".  */
+   ints of arguments according to the stack frame".  */
 
 static void
 print_frame_args (struct symbol *func, struct frame_info *frame,
@@ -235,6 +237,9 @@ print_frame_args (struct symbol *func, struct frame_info *frame,
 	  /* Keep track of the highest stack argument offset seen, and
 	     skip over any kinds of symbols we don't care about.  */
 
+	  if (!SYMBOL_IS_ARGUMENT (sym))
+	    continue;
+
 	  switch (SYMBOL_CLASS (sym))
 	    {
 	    case LOC_ARG:
@@ -262,16 +267,12 @@ print_frame_args (struct symbol *func, struct frame_info *frame,
 
 	      /* We care about types of symbols, but don't need to
 		 keep track of stack offsets in them.  */
-	    case LOC_REGPARM:
+	    case LOC_REGISTER:
 	    case LOC_REGPARM_ADDR:
-	    case LOC_LOCAL_ARG:
-	    case LOC_BASEREG_ARG:
-	    case LOC_COMPUTED_ARG:
-	      break;
-
-	    /* Other types of symbols we just skip over.  */
+	    case LOC_COMPUTED:
+	    case LOC_OPTIMIZED_OUT:
 	    default:
-	      continue;
+	      break;
 	    }
 
 	  /* We have to look up the symbol because arguments can have
@@ -287,13 +288,14 @@ print_frame_args (struct symbol *func, struct frame_info *frame,
 	     parameter names occur on the RS/6000, for traceback
 	     tables.  FIXME, should we even print them?  */
 
-	  if (*DEPRECATED_SYMBOL_NAME (sym))
+	  if (*SYMBOL_LINKAGE_NAME (sym))
 	    {
 	      struct symbol *nsym;
-	      nsym = lookup_symbol (DEPRECATED_SYMBOL_NAME (sym),
-				    b, VAR_DOMAIN, NULL, NULL);
+	      nsym = lookup_symbol (SYMBOL_LINKAGE_NAME (sym),
+				    b, VAR_DOMAIN, NULL);
 	      gdb_assert (nsym != NULL);
-	      if (SYMBOL_CLASS (nsym) == LOC_REGISTER)
+	      if (SYMBOL_CLASS (nsym) == LOC_REGISTER
+		  && !SYMBOL_IS_ARGUMENT (nsym))
 		{
 		  /* There is a LOC_ARG/LOC_REGISTER pair.  This means
 		     that it was passed on the stack and loaded into a
@@ -365,8 +367,21 @@ print_frame_args (struct symbol *func, struct frame_info *frame,
 
 	      if (val)
 	        {
-		  common_val_print (val, stb->stream, 0, 0, 2,
-				    Val_no_prettyprint);
+                  const struct language_defn *language;
+		  struct value_print_options opts;
+
+                  /* Use the appropriate language to display our symbol,
+                     unless the user forced the language to a specific
+                     language.  */
+                  if (language_mode == language_mode_auto)
+                    language = language_def (SYMBOL_LANGUAGE (sym));
+                  else
+                    language = current_language;
+
+		  get_raw_print_options (&opts);
+		  opts.deref_ref = 0;
+		  common_val_print (val, stb->stream, 2,
+				    &opts, language);
 		  ui_out_field_stream (uiout, "value", stb);
 	        }
 	      else
@@ -535,6 +550,8 @@ print_frame_info (struct frame_info *frame, int print_level,
 						      sal.line + 1, 0);
 	  else
 	    {
+	      struct value_print_options opts;
+	      get_user_print_options (&opts);
 	      /* We used to do this earlier, but that is clearly
 		 wrong. This function is used by many different
 		 parts of gdb, including normal_stop in infrun.c,
@@ -543,7 +560,7 @@ print_frame_info (struct frame_info *frame, int print_level,
 		 line. Only the command line really wants this
 		 behavior. Other UIs probably would like the
 		 ability to decide for themselves if it is desired.  */
-	      if (addressprint && mid_statement)
+	      if (opts.addressprint && mid_statement)
 		{
 		  ui_out_field_core_addr (uiout, "addr", get_frame_pc (frame));
 		  ui_out_text (uiout, "\t");
@@ -562,19 +579,16 @@ print_frame_info (struct frame_info *frame, int print_level,
   gdb_flush (gdb_stdout);
 }
 
-static void
-print_frame (struct frame_info *frame, int print_level,
-	     enum print_what print_what, int print_args,
-	     struct symtab_and_line sal)
+/* Attempt to obtain the FUNNAME and FUNLANG of the function corresponding
+   to FRAME.  */
+void
+find_frame_funname (struct frame_info *frame, char **funname,
+		    enum language *funlang)
 {
   struct symbol *func;
-  char *funname = NULL;
-  enum language funlang = language_unknown;
-  struct ui_stream *stb;
-  struct cleanup *old_chain, *list_chain;
 
-  stb = ui_out_stream_new (uiout);
-  old_chain = make_cleanup_ui_out_stream_delete (stb);
+  *funname = NULL;
+  *funlang = language_unknown;
 
   func = find_pc_function (get_frame_address_in_block (frame));
   if (func)
@@ -607,36 +621,26 @@ print_frame (struct frame_info *frame, int print_level,
 	  /* We also don't know anything about the function besides
 	     its address and name.  */
 	  func = 0;
-	  funname = DEPRECATED_SYMBOL_NAME (msymbol);
-	  funlang = SYMBOL_LANGUAGE (msymbol);
+	  *funname = SYMBOL_PRINT_NAME (msymbol);
+	  *funlang = SYMBOL_LANGUAGE (msymbol);
 	}
       else
 	{
-	  funname = DEPRECATED_SYMBOL_NAME (func);
-	  funlang = SYMBOL_LANGUAGE (func);
-	  if (funlang == language_cplus)
+	  *funname = SYMBOL_PRINT_NAME (func);
+	  *funlang = SYMBOL_LANGUAGE (func);
+	  if (*funlang == language_cplus)
 	    {
 	      /* It seems appropriate to use SYMBOL_PRINT_NAME() here,
 		 to display the demangled name that we already have
 		 stored in the symbol table, but we stored a version
 		 with DMGL_PARAMS turned on, and here we don't want to
-		 display parameters. So call the demangler again, with
-		 DMGL_ANSI only.
-
-		 Yes, printf_symbol_filtered() will again try to
-		 demangle the name on the fly, but the issue is that
-		 if cplus_demangle() fails here, it will fail there
-		 too. So we want to catch the failure (where DEMANGLED
-		 is NULL below) here, while we still have our hands on
-		 the function symbol.)  */
-	      char *demangled = cplus_demangle (funname, DMGL_ANSI);
-	      if (demangled == NULL)
-		/* If the demangler fails, try the demangled name from
-		   the symbol table. That'll have parameters, but
-		   that's preferable to displaying a mangled name.  */
-		funname = SYMBOL_PRINT_NAME (func);
-	      else
-		xfree (demangled);
+		 display parameters.  So remove the parameters.  */
+	      char *func_only = cp_remove_params (*funname);
+	      if (func_only)
+		{
+		  *funname = func_only;
+		  make_cleanup (xfree, func_only);
+		}
 	    }
 	}
     }
@@ -647,10 +651,27 @@ print_frame (struct frame_info *frame, int print_level,
 
       if (msymbol != NULL)
 	{
-	  funname = DEPRECATED_SYMBOL_NAME (msymbol);
-	  funlang = SYMBOL_LANGUAGE (msymbol);
+	  *funname = SYMBOL_PRINT_NAME (msymbol);
+	  *funlang = SYMBOL_LANGUAGE (msymbol);
 	}
     }
+}
+
+static void
+print_frame (struct frame_info *frame, int print_level,
+	     enum print_what print_what, int print_args,
+	     struct symtab_and_line sal)
+{
+  char *funname = NULL;
+  enum language funlang = language_unknown;
+  struct ui_stream *stb;
+  struct cleanup *old_chain, *list_chain;
+  struct value_print_options opts;
+
+  stb = ui_out_stream_new (uiout);
+  old_chain = make_cleanup_ui_out_stream_delete (stb);
+
+  find_frame_funname (frame, &funname, &funlang);
 
   annotate_frame_begin (print_level ? frame_relative_level (frame) : 0,
 			get_frame_pc (frame));
@@ -663,7 +684,8 @@ print_frame (struct frame_info *frame, int print_level,
       ui_out_field_fmt_int (uiout, 2, ui_left, "level",
 			    frame_relative_level (frame));
     }
-  if (addressprint)
+  get_user_print_options (&opts);
+  if (opts.addressprint)
     if (get_frame_pc (frame) != sal.pc || !sal.symtab
 	|| print_what == LOC_AND_ADDRESS)
       {
@@ -685,7 +707,7 @@ print_frame (struct frame_info *frame, int print_level,
       struct print_args_args args;
       struct cleanup *args_list_chain;
       args.frame = frame;
-      args.func = func;
+      args.func = find_pc_function (get_frame_address_in_block (frame));
       args.stream = gdb_stdout;
       args_list_chain = make_cleanup_ui_out_list_begin_end (uiout, "args");
       catch_errors (print_args_stub, &args, "", RETURN_MASK_ERROR);
@@ -736,14 +758,6 @@ print_frame (struct frame_info *frame, int print_level,
   do_cleanups (list_chain);
   ui_out_text (uiout, "\n");
   do_cleanups (old_chain);
-}
-
-/* Show the frame info.  If this is the tui, it will be shown in the
-   source display otherwise, nothing is done.  */
-
-void
-show_stack_frame (struct frame_info *frame)
-{
 }
 
 
@@ -892,6 +906,7 @@ frame_info (char *addr_exp, int from_tty)
   const char *pc_regname;
   int selected_frame_p;
   struct gdbarch *gdbarch;
+  struct cleanup *back_to = make_cleanup (null_cleanup, NULL);
 
   fi = parse_frame_specification_1 (addr_exp, "No stack.", &selected_frame_p);
   gdbarch = get_frame_arch (fi);
@@ -917,29 +932,21 @@ frame_info (char *addr_exp, int from_tty)
   s = find_pc_symtab (get_frame_pc (fi));
   if (func)
     {
-      /* It seems appropriate to use SYMBOL_PRINT_NAME() here, to
-	 display the demangled name that we already have stored in the
-	 symbol table, but we stored a version with DMGL_PARAMS turned
-	 on, and here we don't want to display parameters. So call the
-	 demangler again, with DMGL_ANSI only.
-
-	 Yes, printf_symbol_filtered() will again try to demangle the
-	 name on the fly, but the issue is that if cplus_demangle()
-	 fails here, it will fail there too. So we want to catch the
-	 failure (where DEMANGLED is NULL below) here, while we still
-	 have our hands on the function symbol.)  */
-      funname = DEPRECATED_SYMBOL_NAME (func);
+      funname = SYMBOL_PRINT_NAME (func);
       funlang = SYMBOL_LANGUAGE (func);
       if (funlang == language_cplus)
 	{
-	  char *demangled = cplus_demangle (funname, DMGL_ANSI);
-	  /* If the demangler fails, try the demangled name from the
-	     symbol table. That'll have parameters, but that's
-	     preferable to displaying a mangled name.  */
-	  if (demangled == NULL)
-	    funname = SYMBOL_PRINT_NAME (func);
-	  else
-	    xfree (demangled);
+	  /* It seems appropriate to use SYMBOL_PRINT_NAME() here,
+	     to display the demangled name that we already have
+	     stored in the symbol table, but we stored a version
+	     with DMGL_PARAMS turned on, and here we don't want to
+	     display parameters.  So remove the parameters.  */
+	  char *func_only = cp_remove_params (funname);
+	  if (func_only)
+	    {
+	      funname = func_only;
+	      make_cleanup (xfree, func_only);
+	    }
 	}
     }
   else
@@ -949,7 +956,7 @@ frame_info (char *addr_exp, int from_tty)
       msymbol = lookup_minimal_symbol_by_pc (get_frame_pc (fi));
       if (msymbol != NULL)
 	{
-	  funname = DEPRECATED_SYMBOL_NAME (msymbol);
+	  funname = SYMBOL_PRINT_NAME (msymbol);
 	  funlang = SYMBOL_LANGUAGE (msymbol);
 	}
     }
@@ -1151,6 +1158,8 @@ frame_info (char *addr_exp, int from_tty)
     if (count || need_nl)
       puts_filtered ("\n");
   }
+
+  do_cleanups (back_to);
 }
 
 /* Print briefly all stack frames or just the innermost COUNT_EXP
@@ -1293,7 +1302,7 @@ backtrace_command (char *arg, int from_tty)
       char **argv;
       int i;
 
-      argv = buildargv (arg);
+      argv = gdb_buildargv (arg);
       old_chain = make_cleanup_freeargv (argv);
       argc = 0;
       for (i = 0; argv[i]; i++)
@@ -1374,8 +1383,9 @@ print_block_frame_locals (struct block *b, struct frame_info *frame,
 	case LOC_LOCAL:
 	case LOC_REGISTER:
 	case LOC_STATIC:
-	case LOC_BASEREG:
 	case LOC_COMPUTED:
+	  if (SYMBOL_IS_ARGUMENT (sym))
+	    break;
 	  values_printed = 1;
 	  for (j = 0; j < num_tabs; j++)
 	    fputs_filtered ("\t", stream);
@@ -1406,7 +1416,7 @@ print_block_frame_labels (struct block *b, int *have_default,
 
   ALL_BLOCK_SYMBOLS (b, iter, sym)
     {
-      if (strcmp (DEPRECATED_SYMBOL_NAME (sym), "default") == 0)
+      if (strcmp (SYMBOL_LINKAGE_NAME (sym), "default") == 0)
 	{
 	  if (*have_default)
 	    continue;
@@ -1415,10 +1425,12 @@ print_block_frame_labels (struct block *b, int *have_default,
       if (SYMBOL_CLASS (sym) == LOC_LABEL)
 	{
 	  struct symtab_and_line sal;
+	  struct value_print_options opts;
 	  sal = find_pc_line (SYMBOL_VALUE_ADDRESS (sym), 0);
 	  values_printed = 1;
 	  fputs_filtered (SYMBOL_PRINT_NAME (sym), stream);
-	  if (addressprint)
+	  get_user_print_options (&opts);
+	  if (opts.addressprint)
 	    {
 	      fprintf_filtered (stream, " ");
 	      fputs_filtered (paddress (SYMBOL_VALUE_ADDRESS (sym)), stream);
@@ -1572,15 +1584,9 @@ print_frame_arg_vars (struct frame_info *frame, struct ui_file *stream)
   b = SYMBOL_BLOCK_VALUE (func);
   ALL_BLOCK_SYMBOLS (b, iter, sym)
     {
-      switch (SYMBOL_CLASS (sym))
+      /* Don't worry about things which aren't arguments.  */
+      if (SYMBOL_IS_ARGUMENT (sym))
 	{
-	case LOC_ARG:
-	case LOC_LOCAL_ARG:
-	case LOC_REF_ARG:
-	case LOC_REGPARM:
-	case LOC_REGPARM_ADDR:
-	case LOC_BASEREG_ARG:
-	case LOC_COMPUTED_ARG:
 	  values_printed = 1;
 	  fputs_filtered (SYMBOL_PRINT_NAME (sym), stream);
 	  fputs_filtered (" = ", stream);
@@ -1596,15 +1602,10 @@ print_frame_arg_vars (struct frame_info *frame, struct ui_file *stream)
 	     float).  There are also LOC_ARG/LOC_REGISTER pairs which
 	     are not combined in symbol-reading.  */
 
-	  sym2 = lookup_symbol (DEPRECATED_SYMBOL_NAME (sym),
-				b, VAR_DOMAIN, NULL, NULL);
+	  sym2 = lookup_symbol (SYMBOL_LINKAGE_NAME (sym),
+				b, VAR_DOMAIN, NULL);
 	  print_variable_value (sym2, frame, stream);
 	  fprintf_filtered (stream, "\n");
-	  break;
-
-	default:
-	  /* Don't worry about things which aren't arguments.  */
-	  break;
 	}
     }
 
@@ -1649,6 +1650,12 @@ struct block *
 get_selected_block (CORE_ADDR *addr_in_block)
 {
   if (!target_has_stack)
+    return 0;
+
+  if (is_exited (inferior_ptid))
+    return 0;
+
+  if (is_executing (inferior_ptid))
     return 0;
 
   return get_frame_block (get_selected_frame (NULL), addr_in_block);
@@ -1795,11 +1802,13 @@ down_command (char *count_exp, int from_tty)
 void
 return_command (char *retval_exp, int from_tty)
 {
+  struct frame_info *thisframe;
   struct symbol *thisfun;
   struct value *return_value = NULL;
   const char *query_prefix = "";
 
-  thisfun = get_frame_function (get_selected_frame ("No selected frame."));
+  thisframe = get_selected_frame ("No selected frame.");
+  thisfun = get_frame_function (thisframe);
 
   /* Compute the return value.  If the computation triggers an error,
      let it bail.  If the return type can't be handled, set
@@ -1818,7 +1827,7 @@ return_command (char *retval_exp, int from_tty)
       if (thisfun != NULL)
 	return_type = TYPE_TARGET_TYPE (SYMBOL_TYPE (thisfun));
       if (return_type == NULL)
-	return_type = builtin_type_int;
+	return_type = builtin_type (get_frame_arch (thisframe))->builtin_int;
       CHECK_TYPEDEF (return_type);
       return_value = value_cast (return_type, return_value);
 
@@ -1834,7 +1843,7 @@ return_command (char *retval_exp, int from_tty)
            is discarded, side effects such as "return i++" still
            occur.  */
 	return_value = NULL;
-      else if (using_struct_return (return_type))
+      else if (using_struct_return (SYMBOL_TYPE (thisfun), return_type))
 	{
 	  query_prefix = "\
 The location at which to store the function's return value is unknown.\n\
@@ -1859,38 +1868,18 @@ If you continue, the return value that you specified will be ignored.\n";
 	error (_("Not confirmed"));
     }
 
-  /* NOTE: cagney/2003-01-18: Is this silly?  Rather than pop each
-     frame in turn, should this code just go straight to the relevant
-     frame and pop that?  */
-
-  /* First discard all frames inner-to the selected frame (making the
-     selected frame current).  */
-  {
-    struct frame_id selected_id = get_frame_id (get_selected_frame (NULL));
-    while (!frame_id_eq (selected_id, get_frame_id (get_current_frame ())))
-      {
-	struct frame_info *frame = get_current_frame ();
-	if (frame_id_inner (get_frame_arch (frame), selected_id,
-			    get_frame_id (frame)))
-	  /* Caught in the safety net, oops!  We've gone way past the
-             selected frame.  */
-	  error (_("Problem while popping stack frames (corrupt stack?)"));
-	frame_pop (get_current_frame ());
-      }
-  }
-
-  /* Second discard the selected frame (which is now also the current
-     frame).  */
-  frame_pop (get_current_frame ());
+  /* Discard the selected frame and all frames inner-to it.  */
+  frame_pop (get_selected_frame (NULL));
 
   /* Store RETURN_VALUE in the just-returned register set.  */
   if (return_value != NULL)
     {
       struct type *return_type = value_type (return_value);
       struct gdbarch *gdbarch = get_regcache_arch (get_current_regcache ());
-      gdb_assert (gdbarch_return_value (gdbarch, return_type, NULL, NULL, NULL)
+      gdb_assert (gdbarch_return_value (gdbarch, SYMBOL_TYPE (thisfun),
+      					return_type, NULL, NULL, NULL)
 		  == RETURN_VALUE_REGISTER_CONVENTION);
-      gdbarch_return_value (gdbarch, return_type,
+      gdbarch_return_value (gdbarch, SYMBOL_TYPE (thisfun), return_type,
 			    get_current_regcache (), NULL /*read*/,
 			    value_contents (return_value) /*write*/);
     }

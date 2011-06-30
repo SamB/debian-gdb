@@ -222,7 +222,7 @@ tdesc_end_union (struct gdb_xml_parser *parser,
   for (i = 0; i < TYPE_NFIELDS (data->current_union); i++)
     if (TYPE_VECTOR (TYPE_FIELD_TYPE (data->current_union, i)))
       {
-        TYPE_FLAGS (data->current_union) |= TYPE_FLAG_VECTOR;
+        TYPE_VECTOR (data->current_union) = 1;
         break;
       }
 }
@@ -421,14 +421,6 @@ tdesc_parse_xml (const char *document, xml_fetch_another fetcher,
 #endif /* HAVE_LIBEXPAT */
 
 
-/* Close FILE.  */
-
-static void
-do_cleanup_fclose (void *file)
-{
-  fclose (file);
-}
-
 /* Open FILENAME, read all its text into memory, close it, and return
    the text.  If something goes wrong, return NULL and warn.  */
 
@@ -443,7 +435,7 @@ fetch_xml_from_file (const char *filename, void *baton)
 
   if (dirname && *dirname)
     {
-      char *fullname = concat (dirname, "/", filename, NULL);
+      char *fullname = concat (dirname, "/", filename, (char *) NULL);
       if (fullname == NULL)
 	nomem (0);
       file = fopen (fullname, FOPEN_RT);
@@ -455,7 +447,7 @@ fetch_xml_from_file (const char *filename, void *baton)
   if (file == NULL)
     return NULL;
 
-  back_to = make_cleanup (do_cleanup_fclose, file);
+  back_to = make_cleanup_fclose (file);
 
   /* Read in the whole file, one chunk at a time.  */
   len = 4096;

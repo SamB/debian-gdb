@@ -174,20 +174,6 @@ struct gdbarch_tdep
   int cris_dwarf2_cfi;
 };
 
-/* Functions for accessing target dependent data.  */
-
-static int
-cris_version (void)
-{
-  return (gdbarch_tdep (current_gdbarch)->cris_version);
-}
-
-static const char *
-cris_mode (void)
-{
-  return (gdbarch_tdep (current_gdbarch)->cris_mode);
-}
-
 /* Sigtramp identification code copied from i386-linux-tdep.c.  */
 
 #define SIGTRAMP_INSN0    0x9c5f  /* movu.w 0xXX, $r9 */
@@ -215,12 +201,12 @@ static const unsigned short rt_sigtramp_code[] =
    the routine.  Otherwise, return 0.  */
 
 static CORE_ADDR
-cris_sigtramp_start (struct frame_info *next_frame)
+cris_sigtramp_start (struct frame_info *this_frame)
 {
-  CORE_ADDR pc = frame_pc_unwind (next_frame);
+  CORE_ADDR pc = get_frame_pc (this_frame);
   gdb_byte buf[SIGTRAMP_LEN];
 
-  if (!safe_frame_unwind_memory (next_frame, pc, buf, SIGTRAMP_LEN))
+  if (!safe_frame_unwind_memory (this_frame, pc, buf, SIGTRAMP_LEN))
     return 0;
 
   if (((buf[1] << 8) + buf[0]) != SIGTRAMP_INSN0)
@@ -229,7 +215,7 @@ cris_sigtramp_start (struct frame_info *next_frame)
 	return 0;
 
       pc -= SIGTRAMP_OFFSET1;
-      if (!safe_frame_unwind_memory (next_frame, pc, buf, SIGTRAMP_LEN))
+      if (!safe_frame_unwind_memory (this_frame, pc, buf, SIGTRAMP_LEN))
 	return 0;
     }
 
@@ -243,12 +229,12 @@ cris_sigtramp_start (struct frame_info *next_frame)
    the routine.  Otherwise, return 0.  */
 
 static CORE_ADDR
-cris_rt_sigtramp_start (struct frame_info *next_frame)
+cris_rt_sigtramp_start (struct frame_info *this_frame)
 {
-  CORE_ADDR pc = frame_pc_unwind (next_frame);
+  CORE_ADDR pc = get_frame_pc (this_frame);
   gdb_byte buf[SIGTRAMP_LEN];
 
-  if (!safe_frame_unwind_memory (next_frame, pc, buf, SIGTRAMP_LEN))
+  if (!safe_frame_unwind_memory (this_frame, pc, buf, SIGTRAMP_LEN))
     return 0;
 
   if (((buf[1] << 8) + buf[0]) != SIGTRAMP_INSN0)
@@ -257,7 +243,7 @@ cris_rt_sigtramp_start (struct frame_info *next_frame)
 	return 0;
 
       pc -= SIGTRAMP_OFFSET1;
-      if (!safe_frame_unwind_memory (next_frame, pc, buf, SIGTRAMP_LEN))
+      if (!safe_frame_unwind_memory (this_frame, pc, buf, SIGTRAMP_LEN))
 	return 0;
     }
 
@@ -267,22 +253,22 @@ cris_rt_sigtramp_start (struct frame_info *next_frame)
   return pc;
 }
 
-/* Assuming NEXT_FRAME is a frame following a GNU/Linux sigtramp
-   routine, return the address of the associated sigcontext structure.  */
+/* Assuming THIS_FRAME is a frame for a GNU/Linux sigtramp routine,
+   return the address of the associated sigcontext structure.  */
 
 static CORE_ADDR
-cris_sigcontext_addr (struct frame_info *next_frame)
+cris_sigcontext_addr (struct frame_info *this_frame)
 {
   CORE_ADDR pc;
   CORE_ADDR sp;
   char buf[4];
 
-  frame_unwind_register (next_frame,
-			 gdbarch_sp_regnum (get_frame_arch (next_frame)), buf);
+  get_frame_register (this_frame,
+		      gdbarch_sp_regnum (get_frame_arch (this_frame)), buf);
   sp = extract_unsigned_integer (buf, 4);
 
   /* Look for normal sigtramp frame first.  */
-  pc = cris_sigtramp_start (next_frame);
+  pc = cris_sigtramp_start (this_frame);
   if (pc)
     {
       /* struct signal_frame (arch/cris/kernel/signal.c) contains
@@ -291,7 +277,7 @@ cris_sigcontext_addr (struct frame_info *next_frame)
       return sp;
     }
 
-  pc = cris_rt_sigtramp_start (next_frame);
+  pc = cris_rt_sigtramp_start (this_frame);
   if (pc)
     {
       /* struct rt_signal_frame (arch/cris/kernel/signal.c) contains
@@ -330,10 +316,10 @@ struct cris_unwind_cache
 };
 
 static struct cris_unwind_cache *
-cris_sigtramp_frame_unwind_cache (struct frame_info *next_frame,
+cris_sigtramp_frame_unwind_cache (struct frame_info *this_frame,
 				  void **this_cache)
 {
-  struct gdbarch *gdbarch = get_frame_arch (next_frame);
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   struct cris_unwind_cache *info;
   CORE_ADDR pc;
@@ -347,7 +333,7 @@ cris_sigtramp_frame_unwind_cache (struct frame_info *next_frame,
 
   info = FRAME_OBSTACK_ZALLOC (struct cris_unwind_cache);
   (*this_cache) = info;
-  info->saved_regs = trad_frame_alloc_saved_regs (next_frame);
+  info->saved_regs = trad_frame_alloc_saved_regs (this_frame);
 
   /* Zero all fields.  */
   info->prev_sp = 0;
@@ -359,10 +345,10 @@ cris_sigtramp_frame_unwind_cache (struct frame_info *next_frame,
   info->return_pc = 0;
   info->leaf_function = 0;
 
-  frame_unwind_register (next_frame, gdbarch_sp_regnum (gdbarch), buf);
+  get_frame_register (this_frame, gdbarch_sp_regnum (gdbarch), buf);
   info->base = extract_unsigned_integer (buf, 4);
 
-  addr = cris_sigcontext_addr (next_frame);
+  addr = cris_sigcontext_addr (this_frame);
   
   /* Layout of the sigcontext struct:
      struct sigcontext {
@@ -425,50 +411,47 @@ cris_sigtramp_frame_unwind_cache (struct frame_info *next_frame,
 }
 
 static void
-cris_sigtramp_frame_this_id (struct frame_info *next_frame, void **this_cache,
+cris_sigtramp_frame_this_id (struct frame_info *this_frame, void **this_cache,
                              struct frame_id *this_id)
 {
   struct cris_unwind_cache *cache =
-    cris_sigtramp_frame_unwind_cache (next_frame, this_cache);
-  (*this_id) = frame_id_build (cache->base, frame_pc_unwind (next_frame));
+    cris_sigtramp_frame_unwind_cache (this_frame, this_cache);
+  (*this_id) = frame_id_build (cache->base, get_frame_pc (this_frame));
 }
 
 /* Forward declaration.  */
 
-static void cris_frame_prev_register (struct frame_info *next_frame,
-				      void **this_prologue_cache,
-				      int regnum, int *optimizedp,
-				      enum lval_type *lvalp, CORE_ADDR *addrp,
-				      int *realnump, gdb_byte *bufferp);
-static void
-cris_sigtramp_frame_prev_register (struct frame_info *next_frame,
-                                   void **this_cache,
-                                   int regnum, int *optimizedp,
-                                   enum lval_type *lvalp, CORE_ADDR *addrp,
-                                   int *realnump, gdb_byte *valuep)
+static struct value *cris_frame_prev_register (struct frame_info *this_frame,
+					       void **this_cache, int regnum);
+static struct value *
+cris_sigtramp_frame_prev_register (struct frame_info *this_frame,
+                                   void **this_cache, int regnum)
 {
   /* Make sure we've initialized the cache.  */
-  cris_sigtramp_frame_unwind_cache (next_frame, this_cache);
-  cris_frame_prev_register (next_frame, this_cache, regnum,
-                            optimizedp, lvalp, addrp, realnump, valuep);
+  cris_sigtramp_frame_unwind_cache (this_frame, this_cache);
+  return cris_frame_prev_register (this_frame, this_cache, regnum);
+}
+
+static int
+cris_sigtramp_frame_sniffer (const struct frame_unwind *self,
+			     struct frame_info *this_frame,
+			     void **this_cache)
+{
+  if (cris_sigtramp_start (this_frame) 
+      || cris_rt_sigtramp_start (this_frame))
+    return 1;
+
+  return 0;
 }
 
 static const struct frame_unwind cris_sigtramp_frame_unwind =
 {
   SIGTRAMP_FRAME,
   cris_sigtramp_frame_this_id,
-  cris_sigtramp_frame_prev_register
+  cris_sigtramp_frame_prev_register,
+  NULL,
+  cris_sigtramp_frame_sniffer
 };
-
-static const struct frame_unwind *
-cris_sigtramp_frame_sniffer (struct frame_info *next_frame)
-{
-  if (cris_sigtramp_start (next_frame) 
-      || cris_rt_sigtramp_start (next_frame))
-    return &cris_sigtramp_frame_unwind;
-
-  return NULL;
-}
 
 int
 crisv32_single_step_through_delay (struct gdbarch *gdbarch,
@@ -477,18 +460,11 @@ crisv32_single_step_through_delay (struct gdbarch *gdbarch,
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   ULONGEST erp;
   int ret = 0;
-  char buf[4];
 
-  if (cris_mode () == cris_mode_guru)
-    {
-      frame_unwind_register (this_frame, NRP_REGNUM, buf);
-    }
+  if (tdep->cris_mode == cris_mode_guru)
+    erp = get_frame_register_unsigned (this_frame, NRP_REGNUM);
   else
-    {
-      frame_unwind_register (this_frame, ERP_REGNUM, buf);
-    }
-
-  erp = extract_unsigned_integer (buf, 4);
+    erp = get_frame_register_unsigned (this_frame, ERP_REGNUM);
 
   if (erp & 0x1)
     {
@@ -508,7 +484,7 @@ crisv32_single_step_through_delay (struct gdbarch *gdbarch,
 int
 cris_can_use_hardware_watchpoint (int type, int count, int other)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (target_gdbarch);
 
   /* No bookkeeping is done here; it is handled by the remote debug agent.  */
 
@@ -717,11 +693,11 @@ static void set_cris_dwarf2_cfi (char *ignore_args, int from_tty,
 				 struct cmd_list_element *c);
 
 static CORE_ADDR cris_scan_prologue (CORE_ADDR pc, 
-				     struct frame_info *next_frame,
+				     struct frame_info *this_frame,
 				     struct cris_unwind_cache *info);
 
 static CORE_ADDR crisv32_scan_prologue (CORE_ADDR pc, 
-					struct frame_info *next_frame,
+					struct frame_info *this_frame,
 					struct cris_unwind_cache *info);
 
 static CORE_ADDR cris_unwind_pc (struct gdbarch *gdbarch, 
@@ -770,9 +746,11 @@ pop_stack_item (struct stack_item *si)
    for it IS the sp for the next frame.  */
 
 struct cris_unwind_cache *
-cris_frame_unwind_cache (struct frame_info *next_frame,
+cris_frame_unwind_cache (struct frame_info *this_frame,
 			 void **this_prologue_cache)
 {
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   CORE_ADDR pc;
   struct cris_unwind_cache *info;
   int i;
@@ -782,7 +760,7 @@ cris_frame_unwind_cache (struct frame_info *next_frame,
 
   info = FRAME_OBSTACK_ZALLOC (struct cris_unwind_cache);
   (*this_prologue_cache) = info;
-  info->saved_regs = trad_frame_alloc_saved_regs (next_frame);
+  info->saved_regs = trad_frame_alloc_saved_regs (this_frame);
 
   /* Zero all fields.  */
   info->prev_sp = 0;
@@ -795,12 +773,10 @@ cris_frame_unwind_cache (struct frame_info *next_frame,
   info->leaf_function = 0;
 
   /* Prologue analysis does the rest...  */
-  if (cris_version () == 32)
-    crisv32_scan_prologue (frame_func_unwind (next_frame, NORMAL_FRAME),
-			   next_frame, info);
+  if (tdep->cris_version == 32)
+    crisv32_scan_prologue (get_frame_func (this_frame), this_frame, info);
   else
-    cris_scan_prologue (frame_func_unwind (next_frame, NORMAL_FRAME),
-			next_frame, info);
+    cris_scan_prologue (get_frame_func (this_frame), this_frame, info);
 
   return info;
 }
@@ -809,18 +785,18 @@ cris_frame_unwind_cache (struct frame_info *next_frame,
    frame.  This will be used to create a new GDB frame struct.  */
 
 static void
-cris_frame_this_id (struct frame_info *next_frame,
+cris_frame_this_id (struct frame_info *this_frame,
 		    void **this_prologue_cache,
 		    struct frame_id *this_id)
 {
   struct cris_unwind_cache *info
-    = cris_frame_unwind_cache (next_frame, this_prologue_cache);
+    = cris_frame_unwind_cache (this_frame, this_prologue_cache);
   CORE_ADDR base;
   CORE_ADDR func;
   struct frame_id id;
 
   /* The FUNC is easy.  */
-  func = frame_func_unwind (next_frame, NORMAL_FRAME);
+  func = get_frame_func (this_frame);
 
   /* Hopefully the prologue analysis either correctly determined the
      frame's base (which is the SP from the previous frame), or set
@@ -834,29 +810,25 @@ cris_frame_this_id (struct frame_info *next_frame,
   (*this_id) = id;
 }
 
-static void
-cris_frame_prev_register (struct frame_info *next_frame,
-			  void **this_prologue_cache,
-			  int regnum, int *optimizedp,
-			  enum lval_type *lvalp, CORE_ADDR *addrp,
-			  int *realnump, gdb_byte *bufferp)
+static struct value *
+cris_frame_prev_register (struct frame_info *this_frame,
+			  void **this_prologue_cache, int regnum)
 {
   struct cris_unwind_cache *info
-    = cris_frame_unwind_cache (next_frame, this_prologue_cache);
-  trad_frame_get_prev_register (next_frame, info->saved_regs, regnum,
-				optimizedp, lvalp, addrp, realnump, bufferp);
+    = cris_frame_unwind_cache (this_frame, this_prologue_cache);
+  return trad_frame_get_prev_register (this_frame, info->saved_regs, regnum);
 }
 
-/* Assuming NEXT_FRAME->prev is a dummy, return the frame ID of that
-   dummy frame.  The frame ID's base needs to match the TOS value
-   saved by save_dummy_frame_tos(), and the PC match the dummy frame's
-   breakpoint.  */
+/* Assuming THIS_FRAME is a dummy, return the frame ID of that dummy
+   frame.  The frame ID's base needs to match the TOS value saved by
+   save_dummy_frame_tos(), and the PC match the dummy frame's breakpoint.  */
 
 static struct frame_id
-cris_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
+cris_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
 {
-  return frame_id_build (cris_unwind_sp (gdbarch, next_frame),
-			 frame_pc_unwind (next_frame));
+  CORE_ADDR sp;
+  sp = get_frame_register_unsigned (this_frame, gdbarch_sp_regnum (gdbarch));
+  return frame_id_build (sp, get_frame_pc (this_frame));
 }
 
 static CORE_ADDR
@@ -1011,20 +983,16 @@ static const struct frame_unwind cris_frame_unwind =
 {
   NORMAL_FRAME,
   cris_frame_this_id,
-  cris_frame_prev_register
+  cris_frame_prev_register,
+  NULL,
+  default_frame_sniffer
 };
 
-const struct frame_unwind *
-cris_frame_sniffer (struct frame_info *next_frame)
-{
-  return &cris_frame_unwind;
-}
-
 static CORE_ADDR
-cris_frame_base_address (struct frame_info *next_frame, void **this_cache)
+cris_frame_base_address (struct frame_info *this_frame, void **this_cache)
 {
   struct cris_unwind_cache *info
-    = cris_frame_unwind_cache (next_frame, this_cache);
+    = cris_frame_unwind_cache (this_frame, this_cache);
   return info->base;
 }
 
@@ -1113,10 +1081,10 @@ static const struct frame_base cris_frame_base =
    determine that it is a prologue (1).  */
 
 static CORE_ADDR 
-cris_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
+cris_scan_prologue (CORE_ADDR pc, struct frame_info *this_frame,
 		    struct cris_unwind_cache *info)
 {
-  struct gdbarch *gdbarch = get_frame_arch (next_frame);
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
   /* Present instruction.  */
   unsigned short insn;
 
@@ -1149,11 +1117,11 @@ cris_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
   val = 0;
   regsave = -1;
 
-  /* If we were called without a next_frame, that means we were called
+  /* If we were called without a this_frame, that means we were called
      from cris_skip_prologue which already tried to find the end of the
      prologue through the symbol information.  64 instructions past current
      pc is arbitrarily chosen, but at least it means we'll stop eventually.  */
-  limit = next_frame ? frame_pc_unwind (next_frame) : pc + 64;
+  limit = this_frame ? get_frame_pc (this_frame) : pc + 64;
 
   /* Find the prologue instructions.  */
   while (pc > 0 && pc < limit)
@@ -1322,9 +1290,9 @@ cris_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
         }
     }
 
-  /* We only want to know the end of the prologue when next_frame and info
+  /* We only want to know the end of the prologue when this_frame and info
      are NULL (called from cris_skip_prologue i.e.).  */
-  if (next_frame == NULL && info == NULL)
+  if (this_frame == NULL && info == NULL)
     {
       return pc;
     }
@@ -1339,7 +1307,7 @@ cris_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
       /* The SP was moved to the FP.  This indicates that a new frame
          was created.  Get THIS frame's FP value by unwinding it from
          the next frame.  */
-      this_base = frame_unwind_register_unsigned (next_frame, CRIS_FP_REGNUM);
+      this_base = get_frame_register_unsigned (this_frame, CRIS_FP_REGNUM);
       info->base = this_base;
       info->saved_regs[CRIS_FP_REGNUM].addr = info->base;
   
@@ -1352,8 +1320,8 @@ cris_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
       ULONGEST this_base;      
       /* Assume that the FP is this frame's SP but with that pushed
          stack space added back.  */
-      this_base = frame_unwind_register_unsigned (next_frame,
-						  gdbarch_sp_regnum (gdbarch));
+      this_base = get_frame_register_unsigned (this_frame,
+					       gdbarch_sp_regnum (gdbarch));
       info->base = this_base;
       info->prev_sp = info->base + info->size;
     }
@@ -1398,10 +1366,10 @@ cris_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
 }
 
 static CORE_ADDR 
-crisv32_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
+crisv32_scan_prologue (CORE_ADDR pc, struct frame_info *this_frame,
 		    struct cris_unwind_cache *info)
 {
-  struct gdbarch *gdbarch = get_frame_arch (next_frame);
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
   ULONGEST this_base;
 
   /* Unlike the CRISv10 prologue scanner (cris_scan_prologue), this is not
@@ -1416,16 +1384,16 @@ crisv32_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
      the stack pointer is not adjusted, and (as a consequence) the return
      address is not pushed onto the stack.  */
 
-  /* We only want to know the end of the prologue when next_frame and info
+  /* We only want to know the end of the prologue when this_frame and info
      are NULL (called from cris_skip_prologue i.e.).  */
-  if (next_frame == NULL && info == NULL)
+  if (this_frame == NULL && info == NULL)
     {
       return pc;
     }
 
   /* The SP is assumed to be unaltered.  */
-  this_base = frame_unwind_register_unsigned (next_frame,
-					      gdbarch_sp_regnum (gdbarch));
+  this_base = get_frame_register_unsigned (this_frame,
+					   gdbarch_sp_regnum (gdbarch));
   info->base = this_base;
   info->prev_sp = this_base;
       
@@ -1445,6 +1413,7 @@ crisv32_scan_prologue (CORE_ADDR pc, struct frame_info *next_frame,
 static CORE_ADDR
 cris_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   CORE_ADDR func_addr, func_end;
   struct symtab_and_line sal;
   CORE_ADDR pc_after_prologue;
@@ -1458,7 +1427,7 @@ cris_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 	return sal.end;
     }
 
-  if (cris_version () == 32)
+  if (tdep->cris_version == 32)
     pc_after_prologue = crisv32_scan_prologue (pc, NULL, NULL);
   else
     pc_after_prologue = cris_scan_prologue (pc, NULL, NULL);
@@ -1493,11 +1462,12 @@ cris_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
 static const unsigned char *
 cris_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr, int *lenptr)
 {
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   static unsigned char break8_insn[] = {0x38, 0xe9};
   static unsigned char break15_insn[] = {0x3f, 0xe9};
   *lenptr = 2;
 
-  if (cris_mode () == cris_mode_guru)
+  if (tdep->cris_mode == cris_mode_guru)
     return break15_insn;
   else
     return break8_insn;
@@ -1507,9 +1477,11 @@ cris_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr, int *lenptr)
    0 otherwise.  */
 
 static int
-cris_spec_reg_applicable (struct cris_spec_reg spec_reg)
+cris_spec_reg_applicable (struct gdbarch *gdbarch,
+			  struct cris_spec_reg spec_reg)
 {
-  int version = cris_version ();
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int version = tdep->cris_version;
   
   switch (spec_reg.applicable_version)
     {
@@ -1568,7 +1540,7 @@ cris_register_size (struct gdbarch *gdbarch, int regno)
       for (i = 0; cris_spec_regs[i].name != NULL; i++)
         {
           if (cris_spec_regs[i].number == spec_regno 
-              && cris_spec_reg_applicable (cris_spec_regs[i]))
+              && cris_spec_reg_applicable (gdbarch, cris_spec_regs[i]))
             /* Go with the first applicable register.  */
             return cris_spec_regs[i].reg_size;
         }
@@ -1678,10 +1650,10 @@ static struct type *
 cris_register_type (struct gdbarch *gdbarch, int regno)
 {
   if (regno == gdbarch_pc_regnum (gdbarch))
-    return builtin_type_void_func_ptr;
+    return builtin_type (gdbarch)->builtin_func_ptr;
   else if (regno == gdbarch_sp_regnum (gdbarch)
 	   || regno == CRIS_FP_REGNUM)
-    return builtin_type_void_data_ptr;
+    return builtin_type (gdbarch)->builtin_data_ptr;
   else if ((regno >= 0 && regno < gdbarch_sp_regnum (gdbarch))
 	   || (regno >= MOF_REGNUM && regno <= USP_REGNUM))
     /* Note: R8 taken care of previous clause.  */
@@ -1699,10 +1671,10 @@ static struct type *
 crisv32_register_type (struct gdbarch *gdbarch, int regno)
 {
   if (regno == gdbarch_pc_regnum (gdbarch))
-    return builtin_type_void_func_ptr;
+    return builtin_type (gdbarch)->builtin_func_ptr;
   else if (regno == gdbarch_sp_regnum (gdbarch)
 	   || regno == CRIS_FP_REGNUM)
-    return builtin_type_void_data_ptr;
+    return builtin_type (gdbarch)->builtin_data_ptr;
   else if ((regno >= 0 && regno <= ACR_REGNUM)
 	   || (regno >= EXS_REGNUM && regno <= SPC_REGNUM)
 	   || (regno == PID_REGNUM)
@@ -1756,7 +1728,7 @@ cris_store_return_value (struct type *type, struct regcache *regcache,
    unimplemented register.  */
 
 static const char *
-cris_special_register_name (int regno)
+cris_special_register_name (struct gdbarch *gdbarch, int regno)
 {
   int spec_regno;
   int i;
@@ -1770,7 +1742,7 @@ cris_special_register_name (int regno)
   for (i = 0; cris_spec_regs[i].name != NULL; i++)
     {
       if (cris_spec_regs[i].number == spec_regno 
-	  && cris_spec_reg_applicable (cris_spec_regs[i]))
+	  && cris_spec_reg_applicable (gdbarch, cris_spec_regs[i]))
 	/* Go with the first applicable register.  */
 	return cris_spec_regs[i].name;
     }
@@ -1794,7 +1766,7 @@ cris_register_name (struct gdbarch *gdbarch, int regno)
     }
   else if (regno >= NUM_GENREGS && regno < gdbarch_num_regs (gdbarch))
     {
-      return cris_special_register_name (regno);
+      return cris_special_register_name (gdbarch, regno);
     }
   else
     {
@@ -1827,7 +1799,7 @@ crisv32_register_name (struct gdbarch *gdbarch, int regno)
     }
   else if (regno >= NUM_GENREGS && regno < (NUM_GENREGS + NUM_SPECREGS))
     {
-      return cris_special_register_name (regno);
+      return cris_special_register_name (gdbarch, regno);
     }
   else if (regno == gdbarch_pc_regnum (gdbarch))
     {
@@ -1879,7 +1851,7 @@ cris_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 static void
 cris_dwarf2_frame_init_reg (struct gdbarch *gdbarch, int regnum,
                             struct dwarf2_frame_state_reg *reg,
-			    struct frame_info *next_frame)
+			    struct frame_info *this_frame)
 {
   /* The return address column.  */
   if (regnum == gdbarch_pc_regnum (gdbarch))
@@ -1924,9 +1896,9 @@ cris_extract_return_value (struct type *type, struct regcache *regcache,
 /* Handle the CRIS return value convention.  */
 
 static enum return_value_convention
-cris_return_value (struct gdbarch *gdbarch, struct type *type,
-		   struct regcache *regcache, gdb_byte *readbuf,
-		   const gdb_byte *writebuf)
+cris_return_value (struct gdbarch *gdbarch, struct type *func_type,
+		   struct type *type, struct regcache *regcache,
+		   gdb_byte *readbuf, const gdb_byte *writebuf)
 {
   if (TYPE_CODE (type) == TYPE_CODE_STRUCT 
       || TYPE_CODE (type) == TYPE_CODE_UNION
@@ -4207,22 +4179,22 @@ cris_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   
   set_gdbarch_unwind_pc (gdbarch, cris_unwind_pc);
   set_gdbarch_unwind_sp (gdbarch, cris_unwind_sp);
-  set_gdbarch_unwind_dummy_id (gdbarch, cris_unwind_dummy_id);
+  set_gdbarch_dummy_id (gdbarch, cris_dummy_id);
 
   if (tdep->cris_dwarf2_cfi == 1)
     {
       /* Hook in the Dwarf-2 frame sniffer.  */
       set_gdbarch_dwarf2_reg_to_regnum (gdbarch, cris_dwarf2_reg_to_regnum);
       dwarf2_frame_set_init_reg (gdbarch, cris_dwarf2_frame_init_reg);
-      frame_unwind_append_sniffer (gdbarch, dwarf2_frame_sniffer);
+      dwarf2_append_unwinders (gdbarch);
     }
 
   if (tdep->cris_mode != cris_mode_guru)
     {
-      frame_unwind_append_sniffer (gdbarch, cris_sigtramp_frame_sniffer);
+      frame_unwind_append_unwinder (gdbarch, &cris_sigtramp_frame_unwind);
     }
 
-  frame_unwind_append_sniffer (gdbarch, cris_frame_sniffer);
+  frame_unwind_append_unwinder (gdbarch, &cris_frame_unwind);
   frame_base_set_default (gdbarch, &cris_frame_base);
 
   set_solib_svr4_fetch_link_map_offsets

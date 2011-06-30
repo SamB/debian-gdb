@@ -52,6 +52,8 @@ Boston, MA 02110-1301, USA.  */
 #include "frame.h"
 #include "block.h"
 
+#define parse_type builtin_type (parse_gdbarch)
+
 /* Remap normal yacc parser interface names (yyparse, yylex, yyerror, etc),
    as well as gratuitiously global symbol names, so we can have multiple
    yacc generated parsers in gdb.  These are only the variables
@@ -153,6 +155,8 @@ static struct type *type_long_double (void);
 
 static struct type *type_char (void);
 
+static struct type *type_boolean (void);
+
 static struct type *type_system_address (void);
 
 %}
@@ -180,6 +184,7 @@ static struct type *type_system_address (void);
 
 %token <typed_val> INT NULL_PTR CHARLIT
 %token <typed_val_float> FLOAT
+%token TRUEKEYWORD FALSEKEYWORD
 %token COLONCOLON
 %token <sval> STRING NAME DOT_ID 
 %type <bval> block
@@ -568,7 +573,7 @@ opt_type_prefix :
 		type_prefix
 	| 	/* EMPTY */
 			{ write_exp_elt_opcode (OP_TYPE);
-			  write_exp_elt_type (builtin_type_void);
+			  write_exp_elt_type (parse_type->builtin_void);
 			  write_exp_elt_opcode (OP_TYPE); }
 	;
 
@@ -600,6 +605,12 @@ primary	:	STRING
 			{ 
 			  write_exp_op_with_string (OP_STRING, $1);
 			}
+	;
+
+primary :	TRUEKEYWORD
+			{ write_int (1, type_boolean ()); }
+        |	FALSEKEYWORD
+			{ write_int (0, type_boolean ()); }
 	;
 
 primary	: 	NEW NAME
@@ -820,7 +831,7 @@ write_var_from_sym (struct block *orig_left_context,
   write_exp_elt_opcode (OP_VAR_VALUE);
 }
 
-/* Write integer constant ARG of type TYPE.  */
+/* Write integer or boolean constant ARG of type TYPE.  */
 
 static void
 write_int (LONGEST arg, struct type *type)
@@ -869,7 +880,7 @@ write_object_renaming (struct block *orig_left_context,
 
   name = obsavestring (renamed_entity, renamed_entity_len, &temp_parse_space);
   sym = ada_lookup_encoded_symbol (name, orig_left_context, VAR_DOMAIN, 
-				   &block, NULL);
+				   &block);
   if (sym == NULL)
     error (_("Could not find renamed variable: %s"), ada_decode (name));
   else if (SYMBOL_CLASS (sym) == LOC_TYPEDEF)
@@ -941,8 +952,7 @@ write_object_renaming (struct block *orig_left_context,
 	    renaming_expr = end;
 
 	    index_sym = ada_lookup_encoded_symbol (index_name, NULL,
-						   VAR_DOMAIN, &block,
-						   NULL);
+						   VAR_DOMAIN, &block);
 	    if (index_sym == NULL)
 	      error (_("Could not find %s"), index_name);
 	    else if (SYMBOL_CLASS (index_sym) == LOC_TYPEDEF)
@@ -977,7 +987,7 @@ write_object_renaming (struct block *orig_left_context,
 	  if (end == NULL)
 	    end = renaming_expr + strlen (renaming_expr);
 	  field_name.length = end - renaming_expr;
-	  field_name.ptr = xmalloc (end - renaming_expr + 1);
+	  field_name.ptr = malloc (end - renaming_expr + 1);
 	  strncpy (field_name.ptr, renaming_expr, end - renaming_expr);
 	  field_name.ptr[end - renaming_expr] = '\000';
 	  renaming_expr = end;
@@ -1057,14 +1067,9 @@ select_possible_type_sym (struct ada_symbol_info *syms, int nsyms)
       case LOC_REGISTER:
       case LOC_ARG:
       case LOC_REF_ARG:
-      case LOC_REGPARM:
       case LOC_REGPARM_ADDR:
       case LOC_LOCAL:
-      case LOC_LOCAL_ARG:
-      case LOC_BASEREG:
-      case LOC_BASEREG_ARG:
       case LOC_COMPUTED:
-      case LOC_COMPUTED_ARG:
 	return NULL;
       default:
 	break;
@@ -1078,8 +1083,8 @@ static struct type*
 find_primitive_type (char *name)
 {
   struct type *type;
-  type = language_lookup_primitive_type_by_name (current_language,
-						 current_gdbarch,
+  type = language_lookup_primitive_type_by_name (parse_language,
+						 parse_gdbarch,
 						 name);
   if (type == NULL && strcmp ("system__address", name) == 0)
     type = type_system_address ();
@@ -1094,7 +1099,7 @@ find_primitive_type (char *name)
 	(char *) alloca (strlen (name) + sizeof ("standard__"));
       strcpy (expanded_name, "standard__");
       strcat (expanded_name, name);
-      sym = ada_lookup_symbol (expanded_name, NULL, VAR_DOMAIN, NULL, NULL);
+      sym = ada_lookup_symbol (expanded_name, NULL, VAR_DOMAIN, NULL);
       if (sym != NULL && SYMBOL_CLASS (sym) == LOC_TYPEDEF)
 	type = SYMBOL_TYPE (sym);
     }
@@ -1367,8 +1372,7 @@ write_var_or_type (struct block *block, struct stoken name0)
 		= ada_lookup_simple_minsym (encoded_name);
 	      if (msym != NULL)
 		{
-		  write_exp_msymbol (msym, lookup_function_type (type_int ()),
-				     type_int ());
+		  write_exp_msymbol (msym);
 		  /* Maybe cause error here rather than later? FIXME? */
 		  write_selectors (encoded_name + tail_index);
 		  return NULL;
@@ -1461,53 +1465,59 @@ convert_char_literal (struct type *type, LONGEST val)
 static struct type *
 type_int (void)
 {
-  return builtin_type (current_gdbarch)->builtin_int;
+  return parse_type->builtin_int;
 }
 
 static struct type *
 type_long (void)
 {
-  return builtin_type (current_gdbarch)->builtin_long;
+  return parse_type->builtin_long;
 }
 
 static struct type *
 type_long_long (void)
 {
-  return builtin_type (current_gdbarch)->builtin_long_long;
+  return parse_type->builtin_long_long;
 }
 
 static struct type *
 type_float (void)
 {
-  return builtin_type (current_gdbarch)->builtin_float;
+  return parse_type->builtin_float;
 }
 
 static struct type *
 type_double (void)
 {
-  return builtin_type (current_gdbarch)->builtin_double;
+  return parse_type->builtin_double;
 }
 
 static struct type *
 type_long_double (void)
 {
-  return builtin_type (current_gdbarch)->builtin_long_double;
+  return parse_type->builtin_long_double;
 }
 
 static struct type *
 type_char (void)
 {
-  return language_string_char_type (current_language, current_gdbarch);
+  return language_string_char_type (parse_language, parse_gdbarch);
+}
+
+static struct type *
+type_boolean (void)
+{
+  return parse_type->builtin_bool;
 }
 
 static struct type *
 type_system_address (void)
 {
   struct type *type 
-    = language_lookup_primitive_type_by_name (current_language,
-					      current_gdbarch, 
+    = language_lookup_primitive_type_by_name (parse_language,
+					      parse_gdbarch,
 					      "system__address");
-  return  type != NULL ? type : lookup_pointer_type (builtin_type_void);
+  return  type != NULL ? type : parse_type->builtin_data_ptr;
 }
 
 void

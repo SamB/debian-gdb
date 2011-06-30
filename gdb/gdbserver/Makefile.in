@@ -70,17 +70,6 @@ CC-LD=${CC}
 INCLUDE_DIR =  ${srcdir}/../../include
 INCLUDE_DEP = $$(INCLUDE_DIR)
 
-# Where are the BFD library?
-BFD_DIR = ../../bfd
-BFD = $(BFD_DIR)/libbfd.a
-BFD_SRC = $(srcdir)/$(BFD_DIR)
-BFD_CFLAGS = -I$(BFD_DIR) -I$(BFD_SRC)
-
-# Where is the source dir for the READLINE library?  Traditionally in .. or .
-# (For the binary library built from it, we use ${READLINE_DIR}${subdir}.)
-READLINE_DIR = ${srcdir}/../readline
-READLINE_DEP = $$(READLINE_DIR)
-
 # All the includes used for CFLAGS and for lint.
 # -I. for config files.
 # -I${srcdir} for our headers.
@@ -100,7 +89,7 @@ CFLAGS = @CFLAGS@
 
 # INTERNAL_CFLAGS is the aggregate of all other *CFLAGS macros.
 INTERNAL_CFLAGS =  $(WARN_CFLAGS) ${CFLAGS} ${GLOBAL_CFLAGS} \
-	${PROFILE_CFLAGS} ${INCLUDE_CFLAGS} ${BFD_CFLAGS}
+	${PROFILE_CFLAGS} ${INCLUDE_CFLAGS}
 
 # LDFLAGS is specifically reserved for setting from the command line
 # when running make.
@@ -112,7 +101,7 @@ VERSION = gdbserver-4.12.3
 DIST=gdb
 
 LINT=/usr/5bin/lint
-LINTFLAGS= $(BFD_CFLAGS)
+LINTFLAGS=
 
 # All source files that go into linking GDB remote server.
 
@@ -126,15 +115,18 @@ SFILES=	$(srcdir)/gdbreplay.c $(srcdir)/inferiors.c \
 	$(srcdir)/linux-ia64-low.c $(srcdir)/linux-low.c \
 	$(srcdir)/linux-m32r-low.c \
 	$(srcdir)/linux-m68k-low.c $(srcdir)/linux-mips-low.c \
-	$(srcdir)/linux-ppc-low.c $(srcdir)/linux-ppc64-low.c \
+	$(srcdir)/linux-ppc-low.c \
 	$(srcdir)/linux-s390-low.c \
-	$(srcdir)/linux-sh-low.c $(srcdir)/linux-x86-64-low.c \
+	$(srcdir)/linux-sh-low.c $(srcdir)/linux-sparc-low.c \
+	$(srcdir)/linux-x86-64-low.c \
 	$(srcdir)/linux-xtensa-low.c \
 	$(srcdir)/win32-arm-low.c $(srcdir)/win32-i386-low.c \
 	$(srcdir)/win32-low.c $(srcdir)/wincecompat.c \
 	$(srcdir)/hostio.c $(srcdir)/hostio-errno.c
 
 DEPFILES = @GDBSERVER_DEPFILES@
+
+LIBOBJS = @LIBOBJS@
 
 SOURCES = $(SFILES)
 TAGFILES = $(SOURCES) ${HFILES} ${ALLPARAM} ${POSSLIBS} 
@@ -143,13 +135,13 @@ OBS = inferiors.o regcache.o remote-utils.o server.o signals.o target.o \
 	utils.o version.o \
 	mem-break.o hostio.o \
 	$(XML_BUILTIN) \
-	$(DEPFILES)
+	$(DEPFILES) $(LIBOBJS)
+GDBREPLAY_OBS = gdbreplay.o version.o
 GDBSERVER_LIBS = @GDBSERVER_LIBS@
 XM_CLIBS = @LIBS@
 
 # XML files to compile in to gdbserver, if any.
 XML_DIR = $(srcdir)/../features
-XML_TARGET = @srv_xmltarget@
 XML_FILES = @srv_xmlfiles@
 XML_BUILTIN = @srv_xmlbuiltin@
 
@@ -177,7 +169,7 @@ install-only:
 uninstall: force
 	n=`echo gdbserver | sed '$(program_transform_name)'`; \
 	if [ x$$n = x ]; then n=gdbserver; else true; fi; \
-	rm -f $(bindir)/$$n $(DESTDIR)$(man1dir)/$$n.1
+	rm -f $(bindir)/$$n$(EXEEXT) $(DESTDIR)$(man1dir)/$$n.1
 
 installcheck:
 check:
@@ -193,9 +185,9 @@ gdbserver$(EXEEXT): $(OBS) ${ADD_DEPS} ${CDEPS}
 	${CC-LD} $(INTERNAL_CFLAGS) $(INTERNAL_LDFLAGS) -o gdbserver$(EXEEXT) $(OBS) \
 	  $(GDBSERVER_LIBS) $(XM_CLIBS)
 
-gdbreplay$(EXEEXT): gdbreplay.o
+gdbreplay$(EXEEXT): $(GDBREPLAY_OBS)
 	rm -f gdbreplay$(EXEEXT)
-	${CC-LD} $(INTERNAL_CFLAGS) $(INTERNAL_LDFLAGS) -o gdbreplay$(EXEEXT) gdbreplay.o \
+	${CC-LD} $(INTERNAL_CFLAGS) $(INTERNAL_LDFLAGS) -o gdbreplay$(EXEEXT) $(GDBREPLAY_OBS) \
 	  $(XM_CLIBS)
 
 # Put the proper machine-specific files first, so M-. on a machine
@@ -218,11 +210,16 @@ clean:
 	rm -f version.c
 	rm -f gdbserver$(EXEEXT) gdbreplay$(EXEEXT) core make.log
 	rm -f reg-arm.c reg-i386.c reg-ia64.c reg-m32r.c reg-m68k.c
-	rm -f reg-ppc.c reg-sh.c reg-spu.c reg-x86-64.c reg-i386-linux.c
+	rm -f reg-sh.c reg-sparc.c reg-spu.c reg-x86-64.c reg-i386-linux.c
 	rm -f reg-cris.c reg-crisv32.c reg-x86-64-linux.c reg-xtensa.c
 	rm -f arm-with-iwmmxt.c mips-linux.c mips64-linux.c
-	rm -f powerpc-32.c powerpc-64.c powerpc-e500.c
-	rm -f xml-builtin.c stamp-xml target.xml
+	rm -f powerpc-32l.c powerpc-64l.c powerpc-e500l.c
+	rm -f powerpc-altivec32l.c powerpc-vsx32l.c powerpc-altivec64l.c
+	rm -f powerpc-vsx64l.c
+	rm -f powerpc-isa205-32l.c powerpc-isa205-64l.c
+	rm -f powerpc-isa205-altivec32l.c powerpc-isa205-vsx32l.c powerpc-isa205-altivec64l.c
+	rm -f powerpc-isa205-vsx64l.c
+	rm -f xml-builtin.c stamp-xml
 
 maintainer-clean realclean distclean: clean
 	rm -f nm.h tm.h xm.h config.status config.h stamp-h config.log
@@ -248,10 +245,6 @@ version.c: Makefile $(srcdir)/../version.in
 	mv version.c-tmp version.c
 version.o: version.c $(server_h)
 
-target.xml: $(XML_TARGET)
-	rm -f target.xml
-	cp $(XML_TARGET) target.xml
-
 xml-builtin.c: stamp-xml; @true
 stamp-xml: $(XML_DIR)/feature_to_c.sh Makefile $(XML_FILES)
 	rm -f xml-builtin.tmp
@@ -259,7 +252,7 @@ stamp-xml: $(XML_DIR)/feature_to_c.sh Makefile $(XML_FILES)
 	$(SHELL) $(srcdir)/../../move-if-change xml-builtin.tmp xml-builtin.c
 	echo stamp > stamp-xml
 
-.PRECIOUS: target.xml xml-builtin.c
+.PRECIOUS: xml-builtin.c
 
 # GNU Make has an annoying habit of putting *all* the Makefile variables
 # into the environment, unless you include this target as a circumvention.
@@ -290,9 +283,13 @@ server.o: server.c $(server_h)
 target.o: target.c $(server_h)
 thread-db.o: thread-db.c $(server_h) $(gdb_proc_service_h)
 utils.o: utils.c $(server_h)
+gdbreplay.o: gdbreplay.c config.h
 
 signals.o: ../signals/signals.c $(server_h)
 	$(CC) -c $(CPPFLAGS) $(INTERNAL_CFLAGS) $< -DGDBSERVER
+
+memmem.o: ../gnulib/memmem.c
+	$(CC) -o memmem.o -c $(CPPFLAGS) $(INTERNAL_CFLAGS) $<
 
 i387-fp.o: i387-fp.c $(server_h)
 
@@ -312,7 +309,6 @@ linux-m32r-low.o: linux-m32r-low.c $(linux_low_h) $(server_h)
 linux-mips-low.o: linux-mips-low.c $(linux_low_h) $(server_h) \
 	$(gdb_proc_service_h)
 linux-ppc-low.o: linux-ppc-low.c $(linux_low_h) $(server_h)
-linux-ppc64-low.o: linux-ppc64-low.c $(linux_low_h) $(server_h)
 linux-s390-low.o: linux-s390-low.c $(linux_low_h) $(server_h)
 linux-sh-low.o: linux-sh-low.c $(linux_low_h) $(server_h)
 linux-x86-64-low.o: linux-x86-64-low.c $(linux_low_h) $(server_h) \
@@ -361,21 +357,45 @@ mips-linux.c : $(srcdir)/../regformats/mips-linux.dat $(regdat_sh)
 mips64-linux.o : mips64-linux.c $(regdef_h)
 mips64-linux.c : $(srcdir)/../regformats/mips64-linux.dat $(regdat_sh)
 	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/mips64-linux.dat mips64-linux.c
-reg-ppc.o : reg-ppc.c $(regdef_h)
-reg-ppc.c : $(srcdir)/../regformats/reg-ppc.dat $(regdat_sh)
-	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/reg-ppc.dat reg-ppc.c
-reg-ppc64.o : reg-ppc64.c $(regdef_h)
-reg-ppc64.c : $(srcdir)/../regformats/reg-ppc64.dat $(regdat_sh)
-	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/reg-ppc64.dat reg-ppc64.c
-powerpc-32.o : powerpc-32.c $(regdef_h)
-powerpc-32.c : $(srcdir)/../regformats/rs6000/powerpc-32.dat $(regdat_sh)
-	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/rs6000/powerpc-32.dat powerpc-32.c
-powerpc-e500.o : powerpc-e500.c $(regdef_h)
-powerpc-e500.c : $(srcdir)/../regformats/rs6000/powerpc-e500.dat $(regdat_sh)
-	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/rs6000/powerpc-e500.dat powerpc-e500.c
-powerpc-64.o : powerpc-64.c $(regdef_h)
-powerpc-64.c : $(srcdir)/../regformats/rs6000/powerpc-64.dat $(regdat_sh)
-	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/rs6000/powerpc-64.dat powerpc-64.c
+powerpc-32l.o : powerpc-32l.c $(regdef_h)
+powerpc-32l.c : $(srcdir)/../regformats/rs6000/powerpc-32l.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/rs6000/powerpc-32l.dat powerpc-32l.c
+powerpc-altivec32l.o : powerpc-altivec32l.c $(regdef_h)
+powerpc-altivec32l.c : $(srcdir)/../regformats/rs6000/powerpc-altivec32l.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/rs6000/powerpc-altivec32l.dat powerpc-altivec32l.c
+powerpc-vsx32l.o : powerpc-vsx32l.c $(regdef_h)
+powerpc-vsx32l.c : $(srcdir)/../regformats/rs6000/powerpc-vsx32l.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/rs6000/powerpc-vsx32l.dat powerpc-vsx32l.c
+powerpc-isa205-32l.o : powerpc-isa205-32l.c $(regdef_h)
+powerpc-isa205-32l.c : $(srcdir)/../regformats/rs6000/powerpc-isa205-32l.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/rs6000/powerpc-isa205-32l.dat powerpc-isa205-32l.c
+powerpc-isa205-altivec32l.o : powerpc-isa205-altivec32l.c $(regdef_h)
+powerpc-isa205-altivec32l.c : $(srcdir)/../regformats/rs6000/powerpc-isa205-altivec32l.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/rs6000/powerpc-isa205-altivec32l.dat powerpc-isa205-altivec32l.c
+powerpc-isa205-vsx32l.o : powerpc-isa205-vsx32l.c $(regdef_h)
+powerpc-isa205-vsx32l.c : $(srcdir)/../regformats/rs6000/powerpc-isa205-vsx32l.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/rs6000/powerpc-isa205-vsx32l.dat powerpc-isa205-vsx32l.c
+powerpc-e500l.o : powerpc-e500l.c $(regdef_h)
+powerpc-e500l.c : $(srcdir)/../regformats/rs6000/powerpc-e500l.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/rs6000/powerpc-e500l.dat powerpc-e500l.c
+powerpc-64l.o : powerpc-64l.c $(regdef_h)
+powerpc-64l.c : $(srcdir)/../regformats/rs6000/powerpc-64l.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/rs6000/powerpc-64l.dat powerpc-64l.c
+powerpc-altivec64l.o : powerpc-altivec64l.c $(regdef_h)
+powerpc-altivec64l.c : $(srcdir)/../regformats/rs6000/powerpc-altivec64l.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/rs6000/powerpc-altivec64l.dat powerpc-altivec64l.c
+powerpc-vsx64l.o : powerpc-vsx64l.c $(regdef_h)
+powerpc-vsx64l.c : $(srcdir)/../regformats/rs6000/powerpc-vsx64l.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/rs6000/powerpc-vsx64l.dat powerpc-vsx64l.c
+powerpc-isa205-64l.o : powerpc-isa205-64l.c $(regdef_h)
+powerpc-isa205-64l.c : $(srcdir)/../regformats/rs6000/powerpc-isa205-64l.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/rs6000/powerpc-isa205-64l.dat powerpc-isa205-64l.c
+powerpc-isa205-altivec64l.o : powerpc-isa205-altivec64l.c $(regdef_h)
+powerpc-isa205-altivec64l.c : $(srcdir)/../regformats/rs6000/powerpc-isa205-altivec64l.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/rs6000/powerpc-isa205-altivec64l.dat powerpc-isa205-altivec64l.c
+powerpc-isa205-vsx64l.o : powerpc-isa205-vsx64l.c $(regdef_h)
+powerpc-isa205-vsx64l.c : $(srcdir)/../regformats/rs6000/powerpc-isa205-vsx64l.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/rs6000/powerpc-isa205-vsx64l.dat powerpc-isa205-vsx64l.c
 reg-s390.o : reg-s390.c $(regdef_h)
 reg-s390.c : $(srcdir)/../regformats/reg-s390.dat $(regdat_sh)
 	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/reg-s390.dat reg-s390.c
@@ -385,6 +405,9 @@ reg-s390x.c : $(srcdir)/../regformats/reg-s390x.dat $(regdat_sh)
 reg-sh.o : reg-sh.c $(regdef_h)
 reg-sh.c : $(srcdir)/../regformats/reg-sh.dat $(regdat_sh)
 	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/reg-sh.dat reg-sh.c
+reg-sparc64.o : reg-sparc64.c $(regdef_h)
+reg-sparc64.c : $(srcdir)/../regformats/reg-sparc64.dat $(regdat_sh)
+	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/reg-sparc64.dat reg-sparc64.c
 reg-spu.o : reg-spu.c $(regdef_h)
 reg-spu.c : $(srcdir)/../regformats/reg-spu.dat $(regdat_sh)
 	$(SHELL) $(regdat_sh) $(srcdir)/../regformats/reg-spu.dat reg-spu.c

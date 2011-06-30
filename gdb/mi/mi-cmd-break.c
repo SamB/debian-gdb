@@ -24,31 +24,31 @@
 #include "breakpoint.h"
 #include "gdb_string.h"
 #include "mi-getopt.h"
-#include "gdb-events.h"
 #include "gdb.h"
 #include "exceptions.h"
+#include "observer.h"
 
 enum
   {
     FROM_TTY = 0
   };
 
-/* Output a single breakpoint. */
+/* True if MI breakpoint observers have been registered.  */
+
+static int mi_breakpoint_observers_installed;
+
+/* Control whether breakpoint_notify may act.  */
+
+static int mi_can_breakpoint_notify;
+
+/* Output a single breakpoint, when allowed. */
 
 static void
 breakpoint_notify (int b)
 {
-  gdb_breakpoint_query (uiout, b, NULL);
+  if (mi_can_breakpoint_notify)
+    gdb_breakpoint_query (uiout, b, NULL);
 }
-
-
-struct gdb_events breakpoint_hooks =
-{
-  breakpoint_notify,
-  breakpoint_notify,
-  breakpoint_notify,
-};
-
 
 enum bp_type
   {
@@ -60,7 +60,7 @@ enum bp_type
 /* Implements the -break-insert command.
    See the MI manual for the list of possible options.  */
 
-enum mi_cmd_result
+void
 mi_cmd_break_insert (char *command, char **argv, int argc)
 {
   char *address = NULL;
@@ -132,7 +132,15 @@ mi_cmd_break_insert (char *command, char **argv, int argc)
   address = argv[optind];
 
   /* Now we have what we need, let's insert the breakpoint! */
-  old_hooks = deprecated_set_gdb_event_hooks (&breakpoint_hooks);
+  if (! mi_breakpoint_observers_installed)
+    {
+      observer_attach_breakpoint_created (breakpoint_notify);
+      observer_attach_breakpoint_modified (breakpoint_notify);
+      observer_attach_breakpoint_deleted (breakpoint_notify);
+      mi_breakpoint_observers_installed = 1;
+    }
+
+  mi_can_breakpoint_notify = 1;
   /* Make sure we restore hooks even if exception is thrown.  */
   TRY_CATCH (e, RETURN_MASK_ALL)
     {
@@ -156,7 +164,6 @@ mi_cmd_break_insert (char *command, char **argv, int argc)
 	    error (_("mi_cmd_break_insert: Unsupported tempoary regexp breakpoint"));
 	  else
 	    rbreak_command_wrapper (address, FROM_TTY);
-	  return MI_CMD_DONE;
 	  break;
 #endif
 	default:
@@ -164,11 +171,9 @@ mi_cmd_break_insert (char *command, char **argv, int argc)
 			  _("mi_cmd_break_insert: Bad switch."));
 	}
     }
-  deprecated_set_gdb_event_hooks (old_hooks);
+  mi_can_breakpoint_notify = 0;
   if (e.reason < 0)
     throw_exception (e);
-
-  return MI_CMD_DONE;
 }
 
 enum wp_type
@@ -184,7 +189,7 @@ enum wp_type
    -break-watch -r <expr> --> insert a read watchpoint.
    -break-watch -a <expr> --> insert an access wp. */
 
-enum mi_cmd_result
+void
 mi_cmd_break_watch (char *command, char **argv, int argc)
 {
   char *expr = NULL;
@@ -239,5 +244,4 @@ mi_cmd_break_watch (char *command, char **argv, int argc)
     default:
       error (_("mi_cmd_break_watch: Unknown watchpoint type."));
     }
-  return MI_CMD_DONE;
 }

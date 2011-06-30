@@ -36,6 +36,9 @@
 #include "linespec.h"
 #include "exceptions.h"
 #include "language.h"
+#include "interps.h"
+#include "mi/mi-cmds.h"
+#include "target.h"
 
 /* We share this one with symtab.c, but it is not exported widely. */
 
@@ -133,8 +136,7 @@ symtabs_and_lines symbol_found (int funfirstline,
 				char ***canonical,
 				char *copy,
 				struct symbol *sym,
-				struct symtab *file_symtab,
-				struct symtab *sym_symtab);
+				struct symtab *file_symtab);
 
 static struct
 symtabs_and_lines minsym_found (int funfirstline,
@@ -211,8 +213,7 @@ find_methods (struct type *t, char *name, enum language language,
      the class, then the loop can't do any good.  */
   if (class_name
       && (lookup_symbol_in_language (class_name, (struct block *) NULL,
-			 STRUCT_DOMAIN, language, (int *) NULL,
-			 (struct symtab **) NULL)))
+			 STRUCT_DOMAIN, language, (int *) NULL)))
     {
       int method_counter;
       int name_len = strlen (name);
@@ -313,8 +314,7 @@ add_matching_methods (int method_counter, struct type *t,
       sym_arr[i1] = lookup_symbol_in_language (phys_name,
 				   NULL, VAR_DOMAIN,
 				   language,
-				   (int *) NULL,
-				   (struct symtab **) NULL);
+				   (int *) NULL);
       if (sym_arr[i1])
 	i1++;
       else
@@ -371,8 +371,7 @@ add_constructors (int method_counter, struct type *t,
       sym_arr[i1] = lookup_symbol_in_language (phys_name,
 				   NULL, VAR_DOMAIN,
 				   language,
-				   (int *) NULL,
-				   (struct symtab **) NULL);
+				   (int *) NULL);
       if (sym_arr[i1])
 	i1++;
     }
@@ -491,7 +490,13 @@ decode_line_2 (struct symbol *sym_arr[], int nelts, int funfirstline,
   char *symname;
   struct cleanup *old_chain;
   char **canonical_arr = (char **) NULL;
+  const char *select_mode = multiple_symbols_select_mode ();
 
+  if (select_mode == multiple_symbols_cancel)
+    error (_("\
+canceled because the command is ambiguous\n\
+See set/show multiple-symbol."));
+  
   values.sals = (struct symtab_and_line *)
     alloca (nelts * sizeof (struct symtab_and_line));
   return_values.sals = (struct symtab_and_line *)
@@ -507,38 +512,53 @@ decode_line_2 (struct symbol *sym_arr[], int nelts, int funfirstline,
     }
 
   i = 0;
-  printf_unfiltered (_("[0] cancel\n[1] all\n"));
   while (i < nelts)
     {
       init_sal (&return_values.sals[i]);	/* Initialize to zeroes.  */
       init_sal (&values.sals[i]);
       if (sym_arr[i] && SYMBOL_CLASS (sym_arr[i]) == LOC_BLOCK)
-	{
-	  values.sals[i] = find_function_start_sal (sym_arr[i], funfirstline);
-	  if (values.sals[i].symtab)
-	    printf_unfiltered ("[%d] %s at %s:%d\n",
-			       (i + 2),
-			       SYMBOL_PRINT_NAME (sym_arr[i]),
-			       values.sals[i].symtab->filename,
-			       values.sals[i].line);
-	  else
-	    printf_unfiltered (_("[%d] %s at ?FILE:%d [No symtab? Probably broken debug info...]\n"),
-			       (i + 2),
-			       SYMBOL_PRINT_NAME (sym_arr[i]),
-			       values.sals[i].line);
-
-	}
-      else
-	printf_unfiltered (_("?HERE\n"));
+	values.sals[i] = find_function_start_sal (sym_arr[i], funfirstline);
       i++;
     }
 
-  prompt = getenv ("PS2");
-  if (prompt == NULL)
+  /* If select_mode is "all", then do not print the multiple-choice
+     menu and act as if the user had chosen choice "1" (all).  */
+  if (select_mode == multiple_symbols_all
+      || ui_out_is_mi_like_p (interp_ui_out (top_level_interpreter ())))
+    args = "1";
+  else
     {
-      prompt = "> ";
+      i = 0;
+      printf_unfiltered (_("[0] cancel\n[1] all\n"));
+      while (i < nelts)
+        {
+          if (sym_arr[i] && SYMBOL_CLASS (sym_arr[i]) == LOC_BLOCK)
+            {
+              if (values.sals[i].symtab)
+                printf_unfiltered ("[%d] %s at %s:%d\n",
+                                   (i + 2),
+                                   SYMBOL_PRINT_NAME (sym_arr[i]),
+                                   values.sals[i].symtab->filename,
+                                   values.sals[i].line);
+              else
+                printf_unfiltered (_("[%d] %s at ?FILE:%d [No symtab? Probably broken debug info...]\n"),
+                                   (i + 2),
+                                   SYMBOL_PRINT_NAME (sym_arr[i]),
+                                   values.sals[i].line);
+
+            }
+          else
+            printf_unfiltered (_("?HERE\n"));
+          i++;
+        }
+
+      prompt = getenv ("PS2");
+      if (prompt == NULL)
+        {
+          prompt = "> ";
+        }
+      args = command_line_input (prompt, 0, "overload-choice");
     }
-  args = command_line_input (prompt, 0, "overload-choice");
 
   if (args == 0 || *args == 0)
     error_no_arg (_("one or more choice numbers"));
@@ -566,7 +586,7 @@ decode_line_2 (struct symbol *sym_arr[], int nelts, int funfirstline,
 		{
 		  if (canonical_arr[i] == NULL)
 		    {
-		      symname = DEPRECATED_SYMBOL_NAME (sym_arr[i]);
+		      symname = SYMBOL_LINKAGE_NAME (sym_arr[i]);
 		      canonical_arr[i] = savestring (symname, strlen (symname));
 		    }
 		}
@@ -589,7 +609,7 @@ decode_line_2 (struct symbol *sym_arr[], int nelts, int funfirstline,
 	    {
 	      if (canonical_arr)
 		{
-		  symname = DEPRECATED_SYMBOL_NAME (sym_arr[num]);
+		  symname = SYMBOL_LINKAGE_NAME (sym_arr[num]);
 		  make_cleanup (xfree, symname);
 		  canonical_arr[i] = savestring (symname, strlen (symname));
 		}
@@ -747,7 +767,7 @@ decode_line_1 (char **argptr, int funfirstline, struct symtab *default_symtab,
 	return decode_compound (argptr, funfirstline, canonical,
 				saved_arg, p);
 
-      /* No, the first part is a filename; set s to be that file's
+      /* No, the first part is a filename; set file_symtab to be that file's
 	 symtab.  Also, move argptr past the filename.  */
 
       file_symtab = symtab_from_filename (argptr, p, is_quote_enclosed, 
@@ -776,19 +796,18 @@ decode_line_1 (char **argptr, int funfirstline, struct symtab *default_symtab,
       copy = (char *) alloca (p - *argptr + 1);
       memcpy (copy, *argptr, p - *argptr);
       copy[p - *argptr] = '\000';
-      sym = lookup_symbol (copy, 0, VAR_DOMAIN, 0, &sym_symtab);
+      sym = lookup_symbol (copy, 0, VAR_DOMAIN, 0);
       if (sym)
 	{
 	  *argptr = (*p == '\'') ? p + 1 : p;
-	  return symbol_found (funfirstline, canonical, copy, sym,
-			       NULL, sym_symtab);
+	  return symbol_found (funfirstline, canonical, copy, sym, NULL);
 	}
       /* Otherwise fall out from here and go to file/line spec
          processing, etc. */
     }
 #endif
 
-  /* S is specified file's symtab, or 0 if no file specified.
+  /* file_symtab is specified file's symtab, or 0 if no file specified.
      arg no longer contains the file name.  */
 
   /* Check whether arg is all digits (and sign).  */
@@ -1097,8 +1116,16 @@ decode_objc (char **argptr, int funfirstline, struct symtab *file_symtab,
   if (file_symtab != NULL)
     block = BLOCKVECTOR_BLOCK (BLOCKVECTOR (file_symtab), STATIC_BLOCK);
   else
-    block = get_selected_block (0);
-    
+    {
+      enum language save_language;
+
+      /* get_selected_block can change the current language when there is
+	 no selected frame yet.  */
+      save_language = current_language->la_language;
+      block = get_selected_block (0);
+      set_language (save_language);
+    }
+
   copy = find_imps (file_symtab, block, *argptr, NULL, &i1, &i2); 
     
   if (i1 > 0)
@@ -1175,8 +1202,6 @@ decode_compound (char **argptr, int funfirstline, char ***canonical,
   char *saved_arg2 = *argptr;
   char *temp_end;
   struct symbol *sym;
-  /* The symtab that SYM was found in.  */
-  struct symtab *sym_symtab;
   char *copy;
   struct symbol *sym_class;
   struct symbol **sym_arr;
@@ -1354,10 +1379,9 @@ decode_compound (char **argptr, int funfirstline, char ***canonical,
   *argptr = (*p == '\'') ? p + 1 : p;
 
   /* Look up entire name */
-  sym = lookup_symbol (copy, 0, VAR_DOMAIN, 0, &sym_symtab);
+  sym = lookup_symbol (copy, 0, VAR_DOMAIN, 0);
   if (sym)
-    return symbol_found (funfirstline, canonical, copy, sym,
-			 NULL, sym_symtab);
+    return symbol_found (funfirstline, canonical, copy, sym, NULL);
 
   /* Couldn't find any interpretation as classes/namespaces, so give
      up.  The quotes are important if copy is empty.  */
@@ -1398,8 +1422,7 @@ lookup_prefix_sym (char **argptr, char *p)
   /* At this point p1->"::inA::fun", p->"inA::fun" copy->"AAA",
      argptr->"inA::fun" */
 
-  return lookup_symbol (copy, 0, STRUCT_DOMAIN, 0,
-			(struct symtab **) NULL);
+  return lookup_symbol (copy, 0, STRUCT_DOMAIN, 0);
 }
 
 /* This finds the method COPY in the class whose type is T and whose
@@ -1489,8 +1512,7 @@ collect_methods (char *copy, struct type *t,
 
 	  sym_arr[i1] =
 	    lookup_symbol (TYPE_FN_FIELD_PHYSNAME (f, f_index),
-			   NULL, VAR_DOMAIN, (int *) NULL,
-			   (struct symtab **) NULL);
+			   NULL, VAR_DOMAIN, (int *) NULL);
 	  if (sym_arr[i1])
 	    i1++;
 	}
@@ -1534,10 +1556,11 @@ symtab_from_filename (char **argptr, char *p, int is_quote_enclosed,
   file_symtab = lookup_symtab (copy);
   if (file_symtab == 0)
     {
-      if (!have_full_symbols () && !have_partial_symbols ())
-	error (_("No symbol table is loaded.  Use the \"file\" command."));
       if (not_found_ptr)
 	*not_found_ptr = 1;
+      if (!have_full_symbols () && !have_partial_symbols ())
+	throw_error (NOT_FOUND_ERROR,
+		     _("No symbol table is loaded.  Use the \"file\" command."));
       throw_error (NOT_FOUND_ERROR, _("No source file named %s."), copy);
     }
 
@@ -1653,8 +1676,6 @@ decode_dollar (char *copy, int funfirstline, struct symtab *default_symtab,
   struct symtab_and_line val;
   char *p;
   struct symbol *sym;
-  /* The symtab that SYM was found in.  */
-  struct symtab *sym_symtab;
   struct minimal_symbol *msymbol;
 
   p = (copy[1] == '$') ? copy + 2 : copy + 1;
@@ -1674,13 +1695,12 @@ decode_dollar (char *copy, int funfirstline, struct symtab *default_symtab,
 	 convenience variable.  */
 
       /* Look up entire name as a symbol first.  */
-      sym = lookup_symbol (copy, 0, VAR_DOMAIN, 0, &sym_symtab);
+      sym = lookup_symbol (copy, 0, VAR_DOMAIN, 0);
       file_symtab = (struct symtab *) NULL;
       need_canonical = 1;
       /* Symbol was found --> jump to normal symbol processing.  */
       if (sym)
-	return symbol_found (funfirstline, canonical, copy, sym,
-			     NULL, sym_symtab);
+	return symbol_found (funfirstline, canonical, copy, sym, NULL);
 
       /* If symbol was not found, look in minimal symbol tables.  */
       msymbol = lookup_minimal_symbol (copy, NULL, NULL);
@@ -1723,8 +1743,6 @@ decode_variable (char *copy, int funfirstline, char ***canonical,
 		 struct symtab *file_symtab, int *not_found_ptr)
 {
   struct symbol *sym;
-  /* The symtab that SYM was found in.  */
-  struct symtab *sym_symtab;
 
   struct minimal_symbol *msymbol;
 
@@ -1733,23 +1751,24 @@ decode_variable (char *copy, int funfirstline, char ***canonical,
 			? BLOCKVECTOR_BLOCK (BLOCKVECTOR (file_symtab),
 					     STATIC_BLOCK)
 			: get_selected_block (0)),
-		       VAR_DOMAIN, 0, &sym_symtab);
+		       VAR_DOMAIN, 0);
 
   if (sym != NULL)
-    return symbol_found (funfirstline, canonical, copy, sym,
-			 file_symtab, sym_symtab);
+    return symbol_found (funfirstline, canonical, copy, sym, file_symtab);
 
   msymbol = lookup_minimal_symbol (copy, NULL, NULL);
 
   if (msymbol != NULL)
     return minsym_found (funfirstline, msymbol);
 
-  if (!have_full_symbols () &&
-      !have_partial_symbols () && !have_minimal_symbols ())
-    error (_("No symbol table is loaded.  Use the \"file\" command."));
-
   if (not_found_ptr)
     *not_found_ptr = 1;
+
+  if (!have_full_symbols ()
+      && !have_partial_symbols ()
+      && !have_minimal_symbols ())
+    throw_error (NOT_FOUND_ERROR,
+		 _("No symbol table is loaded.  Use the \"file\" command."));
   throw_error (NOT_FOUND_ERROR, _("Function \"%s\" not defined."), copy);
 }
 
@@ -1764,8 +1783,7 @@ decode_variable (char *copy, int funfirstline, char ***canonical,
 
 static struct symtabs_and_lines
 symbol_found (int funfirstline, char ***canonical, char *copy,
-	      struct symbol *sym, struct symtab *file_symtab,
-	      struct symtab *sym_symtab)
+	      struct symbol *sym, struct symtab *file_symtab)
 {
   struct symtabs_and_lines values;
   
@@ -1785,7 +1803,7 @@ symbol_found (int funfirstline, char ***canonical, char *copy,
 	 function.  */
       if (file_symtab == 0)
 	{
-	  struct blockvector *bv = BLOCKVECTOR (sym_symtab);
+	  struct blockvector *bv = BLOCKVECTOR (SYMBOL_SYMTAB (sym));
 	  struct block *b = BLOCKVECTOR_BLOCK (bv, STATIC_BLOCK);
 	  if (lookup_block_symbol (b, copy, NULL, VAR_DOMAIN) != NULL)
 	    build_canonical_line_spec (values.sals, copy, canonical);
@@ -1803,7 +1821,7 @@ symbol_found (int funfirstline, char ***canonical, char *copy,
 	    xmalloc (sizeof (struct symtab_and_line));
 	  values.nelts = 1;
 	  memset (&values.sals[0], 0, sizeof (values.sals[0]));
-	  values.sals[0].symtab = sym_symtab;
+	  values.sals[0].symtab = SYMBOL_SYMTAB (sym);
 	  values.sals[0].line = SYMBOL_LINE (sym);
 	  return values;
 	}
@@ -1823,21 +1841,32 @@ symbol_found (int funfirstline, char ***canonical, char *copy,
 static struct symtabs_and_lines
 minsym_found (int funfirstline, struct minimal_symbol *msymbol)
 {
+  struct objfile *objfile = msymbol_objfile (msymbol);
+  struct gdbarch *gdbarch = get_objfile_arch (objfile);
   struct symtabs_and_lines values;
+  CORE_ADDR pc;
 
   values.sals = (struct symtab_and_line *)
     xmalloc (sizeof (struct symtab_and_line));
   values.sals[0] = find_pc_sect_line (SYMBOL_VALUE_ADDRESS (msymbol),
-				      (struct bfd_section *) 0, 0);
-  values.sals[0].section = SYMBOL_BFD_SECTION (msymbol);
+				      (struct obj_section *) 0, 0);
+  values.sals[0].section = SYMBOL_OBJ_SECTION (msymbol);
+
+  /* The minimal symbol might point to a function descriptor;
+     resolve it to the actual code address instead.  */
+  pc = gdbarch_convert_from_func_ptr_addr (gdbarch,
+                                           values.sals[0].pc,
+                                           &current_target);
+  if (pc != values.sals[0].pc)
+    values.sals[0] = find_pc_sect_line (pc, NULL, 0);
+
   if (funfirstline)
     {
       struct symtab_and_line sal;
 
-      values.sals[0].pc
-	+= gdbarch_deprecated_function_start_offset (current_gdbarch);
-      values.sals[0].pc = gdbarch_skip_prologue
-			    (current_gdbarch, values.sals[0].pc);
+      values.sals[0].pc = find_function_start_pc (gdbarch,
+						  values.sals[0].pc,
+						  values.sals[0].section);
 
       sal = find_pc_sect_line (values.sals[0].pc, values.sals[0].section, 0);
 

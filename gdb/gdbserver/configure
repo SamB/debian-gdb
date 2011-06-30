@@ -272,6 +272,7 @@ PACKAGE_STRING=
 PACKAGE_BUGREPORT=
 
 ac_unique_file="server.c"
+ac_config_libobj_dir=../gnulib
 # Factoring default headers for most tests.
 ac_includes_default="\
 #include <stdio.h>
@@ -309,8 +310,9 @@ ac_includes_default="\
 # include <unistd.h>
 #endif"
 
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA CPP EGREP RDYNAMIC GDBSERVER_DEPFILES GDBSERVER_LIBS USE_THREAD_DB srv_xmlbuiltin srv_xmlfiles srv_xmltarget LIBOBJS LTLIBOBJS'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA CPP EGREP LIBOBJS PKGVERSION REPORT_BUGS_TO REPORT_BUGS_TEXI RDYNAMIC GDBSERVER_DEPFILES GDBSERVER_LIBS USE_THREAD_DB srv_xmlbuiltin srv_xmlfiles LTLIBOBJS'
 ac_subst_files=''
+ac_pwd=`pwd`
 
 # Initialize some variables set by options.
 ac_init_help=
@@ -847,6 +849,12 @@ if test -n "$ac_init_help"; then
 
   cat <<\_ACEOF
 
+Optional Packages:
+  --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
+  --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
+  --with-pkgversion=PKG   Use PKG in the version string in place of "GDB"
+  --with-bugurl=URL       Direct users to URL to report a bug
+
 Some influential environment variables:
   CC          C compiler command
   CFLAGS      C compiler flags
@@ -1240,13 +1248,22 @@ echo "$as_me: error: \`$ac_var' was not set in the previous run" >&2;}
     ,);;
     *)
       if test "x$ac_old_val" != "x$ac_new_val"; then
-	{ echo "$as_me:$LINENO: error: \`$ac_var' has changed since the previous run:" >&5
+        # differences in whitespace do not lead to failure.
+        ac_old_val_w=`echo x $ac_old_val`
+        ac_new_val_w=`echo x $ac_new_val`
+        if test "$ac_old_val_w" != "$ac_new_val_w"; then
+          { echo "$as_me:$LINENO: error: \`$ac_var' has changed since the previous run:" >&5
 echo "$as_me: error: \`$ac_var' has changed since the previous run:" >&2;}
-	{ echo "$as_me:$LINENO:   former value:  $ac_old_val" >&5
-echo "$as_me:   former value:  $ac_old_val" >&2;}
-	{ echo "$as_me:$LINENO:   current value: $ac_new_val" >&5
-echo "$as_me:   current value: $ac_new_val" >&2;}
-	ac_cache_corrupted=:
+          ac_cache_corrupted=:
+        else
+          { echo "$as_me:$LINENO: warning: ignoring whitespace changes in \`$ac_var' since the previous run:" >&5
+echo "$as_me: warning: ignoring whitespace changes in \`$ac_var' since the previous run:" >&2;}
+          eval $ac_var=\$ac_old_val
+        fi
+        { echo "$as_me:$LINENO:   former value:  \`$ac_old_val'" >&5
+echo "$as_me:   former value:  \`$ac_old_val'" >&2;}
+        { echo "$as_me:$LINENO:   current value: \`$ac_new_val'" >&5
+echo "$as_me:   current value: \`$ac_new_val'" >&2;}
       fi;;
   esac
   # Pass precious variables to config.status.
@@ -1263,6 +1280,8 @@ echo "$as_me:   current value: $ac_new_val" >&2;}
   fi
 done
 if $ac_cache_corrupted; then
+  { echo "$as_me:$LINENO: error: in \`$ac_pwd':" >&5
+echo "$as_me: error: in \`$ac_pwd':" >&2;}
   { echo "$as_me:$LINENO: error: changes in the environment can compromise the build" >&5
 echo "$as_me: error: changes in the environment can compromise the build" >&2;}
   { { echo "$as_me:$LINENO: error: run \`make distclean' and/or \`rm $cache_file' and start over" >&5
@@ -1294,7 +1313,11 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
 
+
+
+
           ac_config_headers="$ac_config_headers config.h:config.in"
+
 
 
 ac_ext=c
@@ -1606,11 +1629,13 @@ fi
 fi
 
 
-test -z "$CC" && { { echo "$as_me:$LINENO: error: no acceptable C compiler found in \$PATH
+test -z "$CC" && { { echo "$as_me:$LINENO: error: in \`$ac_pwd':" >&5
+echo "$as_me: error: in \`$ac_pwd':" >&2;}
+{ { echo "$as_me:$LINENO: error: no acceptable C compiler found in \$PATH
 See \`config.log' for more details." >&5
 echo "$as_me: error: no acceptable C compiler found in \$PATH
 See \`config.log' for more details." >&2;}
-   { (exit 1); exit 1; }; }
+   { (exit 1); exit 1; }; }; }
 
 # Provide some information about the compiler.
 echo "$as_me:$LINENO:" \
@@ -1696,11 +1721,13 @@ else
   echo "$as_me: failed program was:" >&5
 sed 's/^/| /' conftest.$ac_ext >&5
 
+{ { echo "$as_me:$LINENO: error: in \`$ac_pwd':" >&5
+echo "$as_me: error: in \`$ac_pwd':" >&2;}
 { { echo "$as_me:$LINENO: error: C compiler cannot create executables
 See \`config.log' for more details." >&5
 echo "$as_me: error: C compiler cannot create executables
 See \`config.log' for more details." >&2;}
-   { (exit 77); exit 77; }; }
+   { (exit 77); exit 77; }; }; }
 fi
 
 ac_exeext=$ac_cv_exeext
@@ -1725,13 +1752,15 @@ if test "$cross_compiling" != yes; then
     if test "$cross_compiling" = maybe; then
 	cross_compiling=yes
     else
-	{ { echo "$as_me:$LINENO: error: cannot run C compiled programs.
+	{ { echo "$as_me:$LINENO: error: in \`$ac_pwd':" >&5
+echo "$as_me: error: in \`$ac_pwd':" >&2;}
+{ { echo "$as_me:$LINENO: error: cannot run C compiled programs.
 If you meant to cross compile, use \`--host'.
 See \`config.log' for more details." >&5
 echo "$as_me: error: cannot run C compiled programs.
 If you meant to cross compile, use \`--host'.
 See \`config.log' for more details." >&2;}
-   { (exit 1); exit 1; }; }
+   { (exit 1); exit 1; }; }; }
     fi
   fi
 fi
@@ -1769,11 +1798,13 @@ for ac_file in conftest.exe conftest conftest.*; do
   esac
 done
 else
-  { { echo "$as_me:$LINENO: error: cannot compute suffix of executables: cannot compile and link
+  { { echo "$as_me:$LINENO: error: in \`$ac_pwd':" >&5
+echo "$as_me: error: in \`$ac_pwd':" >&2;}
+{ { echo "$as_me:$LINENO: error: cannot compute suffix of executables: cannot compile and link
 See \`config.log' for more details." >&5
 echo "$as_me: error: cannot compute suffix of executables: cannot compile and link
 See \`config.log' for more details." >&2;}
-   { (exit 1); exit 1; }; }
+   { (exit 1); exit 1; }; }; }
 fi
 
 rm -f conftest$ac_cv_exeext
@@ -1820,11 +1851,13 @@ else
   echo "$as_me: failed program was:" >&5
 sed 's/^/| /' conftest.$ac_ext >&5
 
+{ { echo "$as_me:$LINENO: error: in \`$ac_pwd':" >&5
+echo "$as_me: error: in \`$ac_pwd':" >&2;}
 { { echo "$as_me:$LINENO: error: cannot compute suffix of object files: cannot compile
 See \`config.log' for more details." >&5
 echo "$as_me: error: cannot compute suffix of object files: cannot compile
 See \`config.log' for more details." >&2;}
-   { (exit 1); exit 1; }; }
+   { (exit 1); exit 1; }; }; }
 fi
 
 rm -f conftest.$ac_cv_objext conftest.$ac_ext
@@ -2658,11 +2691,13 @@ rm -f conftest.err conftest.$ac_ext
 if $ac_preproc_ok; then
   :
 else
-  { { echo "$as_me:$LINENO: error: C preprocessor \"$CPP\" fails sanity check
+  { { echo "$as_me:$LINENO: error: in \`$ac_pwd':" >&5
+echo "$as_me: error: in \`$ac_pwd':" >&2;}
+{ { echo "$as_me:$LINENO: error: C preprocessor \"$CPP\" fails sanity check
 See \`config.log' for more details." >&5
 echo "$as_me: error: C preprocessor \"$CPP\" fails sanity check
 See \`config.log' for more details." >&2;}
-   { (exit 1); exit 1; }; }
+   { (exit 1); exit 1; }; }; }
 fi
 
 ac_ext=c
@@ -3203,6 +3238,118 @@ fi
 done
 
 
+for ac_func in memmem
+do
+as_ac_var=`echo "ac_cv_func_$ac_func" | $as_tr_sh`
+echo "$as_me:$LINENO: checking for $ac_func" >&5
+echo $ECHO_N "checking for $ac_func... $ECHO_C" >&6
+if eval "test \"\${$as_ac_var+set}\" = set"; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+/* Define $ac_func to an innocuous variant, in case <limits.h> declares $ac_func.
+   For example, HP-UX 11i <limits.h> declares gettimeofday.  */
+#define $ac_func innocuous_$ac_func
+
+/* System header to define __stub macros and hopefully few prototypes,
+    which can conflict with char $ac_func (); below.
+    Prefer <limits.h> to <assert.h> if __STDC__ is defined, since
+    <limits.h> exists even on freestanding compilers.  */
+
+#ifdef __STDC__
+# include <limits.h>
+#else
+# include <assert.h>
+#endif
+
+#undef $ac_func
+
+/* Override any gcc2 internal prototype to avoid an error.  */
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+/* We use char because int might match the return type of a gcc2
+   builtin and then its argument prototype would still apply.  */
+char $ac_func ();
+/* The GNU C library defines this for functions which it implements
+    to always fail with ENOSYS.  Some functions are actually named
+    something starting with __ and the normal name is an alias.  */
+#if defined (__stub_$ac_func) || defined (__stub___$ac_func)
+choke me
+#else
+char (*f) () = $ac_func;
+#endif
+#ifdef __cplusplus
+}
+#endif
+
+int
+main ()
+{
+return f != $ac_func;
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest.$ac_objext conftest$ac_exeext
+if { (eval echo "$as_me:$LINENO: \"$ac_link\"") >&5
+  (eval $ac_link) 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } &&
+	 { ac_try='test -z "$ac_c_werror_flag"
+			 || test ! -s conftest.err'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; } &&
+	 { ac_try='test -s conftest$ac_exeext'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  eval "$as_ac_var=yes"
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+eval "$as_ac_var=no"
+fi
+rm -f conftest.err conftest.$ac_objext \
+      conftest$ac_exeext conftest.$ac_ext
+fi
+echo "$as_me:$LINENO: result: `eval echo '${'$as_ac_var'}'`" >&5
+echo "${ECHO_T}`eval echo '${'$as_ac_var'}'`" >&6
+if test `eval echo '${'$as_ac_var'}'` = yes; then
+  cat >>confdefs.h <<_ACEOF
+#define `echo "HAVE_$ac_func" | $as_tr_cpp` 1
+_ACEOF
+
+else
+  case $LIBOBJS in
+    "$ac_func.$ac_objext"   | \
+  *" $ac_func.$ac_objext"   | \
+    "$ac_func.$ac_objext "* | \
+  *" $ac_func.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS $ac_func.$ac_objext" ;;
+esac
+
+fi
+done
+
+
+
 have_errno=no
 echo "$as_me:$LINENO: checking for errno" >&5
 echo $ECHO_N "checking for errno... $ECHO_C" >&6
@@ -3461,6 +3608,76 @@ _ACEOF
 
 
 fi
+echo "$as_me:$LINENO: checking whether memmem is declared" >&5
+echo $ECHO_N "checking whether memmem is declared... $ECHO_C" >&6
+if test "${ac_cv_have_decl_memmem+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+$ac_includes_default
+int
+main ()
+{
+#ifndef memmem
+  char *p = (char *) memmem;
+#endif
+
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest.$ac_objext
+if { (eval echo "$as_me:$LINENO: \"$ac_compile\"") >&5
+  (eval $ac_compile) 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } &&
+	 { ac_try='test -z "$ac_c_werror_flag"
+			 || test ! -s conftest.err'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; } &&
+	 { ac_try='test -s conftest.$ac_objext'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  ac_cv_have_decl_memmem=yes
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+ac_cv_have_decl_memmem=no
+fi
+rm -f conftest.err conftest.$ac_objext conftest.$ac_ext
+fi
+echo "$as_me:$LINENO: result: $ac_cv_have_decl_memmem" >&5
+echo "${ECHO_T}$ac_cv_have_decl_memmem" >&6
+if test $ac_cv_have_decl_memmem = yes; then
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_DECL_MEMMEM 1
+_ACEOF
+
+
+else
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_DECL_MEMMEM 0
+_ACEOF
+
+
+fi
 
 
 
@@ -3533,107 +3750,65 @@ _ACEOF
 fi
 
 
-# Check for various supplementary target information (beyond the
-# triplet) which might affect the choices in configure.srv.
-case "${target}" in
-  arm*-*-linux*)
-    echo "$as_me:$LINENO: checking if iWMMXt is selected" >&5
-echo $ECHO_N "checking if iWMMXt is selected... $ECHO_C" >&6
-if test "${gdb_cv_arm_iwmmxt+set}" = set; then
-  echo $ECHO_N "(cached) $ECHO_C" >&6
+
+
+# Check whether --with-pkgversion or --without-pkgversion was given.
+if test "${with_pkgversion+set}" = set; then
+  withval="$with_pkgversion"
+  case "$withval" in
+      yes) { { echo "$as_me:$LINENO: error: package version not specified" >&5
+echo "$as_me: error: package version not specified" >&2;}
+   { (exit 1); exit 1; }; } ;;
+      no)  PKGVERSION= ;;
+      *)   PKGVERSION="($withval) " ;;
+     esac
 else
-  save_CPPFLAGS="$CPPFLAGS"
-		   CPPFLAGS="$CPPFLAGS $CFLAGS"
-		   cat >conftest.$ac_ext <<_ACEOF
-/* confdefs.h.  */
-_ACEOF
-cat confdefs.h >>conftest.$ac_ext
-cat >>conftest.$ac_ext <<_ACEOF
-/* end confdefs.h.  */
+  PKGVERSION="(GDB) "
 
-#ifdef __IWMMXT__
-got it
-#endif
+fi;
 
-_ACEOF
-if (eval "$ac_cpp conftest.$ac_ext") 2>&5 |
-  $EGREP "got it" >/dev/null 2>&1; then
-  gdb_cv_arm_iwmmxt=yes
+
+
+
+# Check whether --with-bugurl or --without-bugurl was given.
+if test "${with_bugurl+set}" = set; then
+  withval="$with_bugurl"
+  case "$withval" in
+      yes) { { echo "$as_me:$LINENO: error: bug URL not specified" >&5
+echo "$as_me: error: bug URL not specified" >&2;}
+   { (exit 1); exit 1; }; } ;;
+      no)  BUGURL=
+	   ;;
+      *)   BUGURL="$withval"
+	   ;;
+     esac
 else
-  gdb_cv_arm_iwmmxt=no
-fi
-rm -f conftest*
+  BUGURL="http://www.gnu.org/software/gdb/bugs/"
 
-		   CPPFLAGS="$save_CPPFLAGS"
-fi
-echo "$as_me:$LINENO: result: $gdb_cv_arm_iwmmxt" >&5
-echo "${ECHO_T}$gdb_cv_arm_iwmmxt" >&6
+fi;
+  case ${BUGURL} in
+  "")
+    REPORT_BUGS_TO=
+    REPORT_BUGS_TEXI=
     ;;
-  powerpc*-*-*)
-    echo "$as_me:$LINENO: checking if Altivec is selected" >&5
-echo $ECHO_N "checking if Altivec is selected... $ECHO_C" >&6
-if test "${gdb_cv_ppc_altivec+set}" = set; then
-  echo $ECHO_N "(cached) $ECHO_C" >&6
-else
-  save_CPPFLAGS="$CPPFLAGS"
-                    CPPFLAGS="$CPPFLAGS $CFLAGS"
-                    cat >conftest.$ac_ext <<_ACEOF
-/* confdefs.h.  */
-_ACEOF
-cat confdefs.h >>conftest.$ac_ext
-cat >>conftest.$ac_ext <<_ACEOF
-/* end confdefs.h.  */
-
-#ifdef __ALTIVEC__
-got it
-#endif
-
-_ACEOF
-if (eval "$ac_cpp conftest.$ac_ext") 2>&5 |
-  $EGREP "got it" >/dev/null 2>&1; then
-  gdb_cv_ppc_altivec=yes
-else
-  gdb_cv_ppc_altivec=no
-fi
-rm -f conftest*
-
-                    CPPFLAGS="$save_CPPFLAGS"
-fi
-echo "$as_me:$LINENO: result: $gdb_cv_ppc_altivec" >&5
-echo "${ECHO_T}$gdb_cv_ppc_altivec" >&6
-    echo "$as_me:$LINENO: checking if SPE is selected" >&5
-echo $ECHO_N "checking if SPE is selected... $ECHO_C" >&6
-if test "${gdb_cv_ppc_spe+set}" = set; then
-  echo $ECHO_N "(cached) $ECHO_C" >&6
-else
-  save_CPPFLAGS="$CPPFLAGS"
-                    CPPFLAGS="$CPPFLAGS $CFLAGS"
-                    cat >conftest.$ac_ext <<_ACEOF
-/* confdefs.h.  */
-_ACEOF
-cat confdefs.h >>conftest.$ac_ext
-cat >>conftest.$ac_ext <<_ACEOF
-/* end confdefs.h.  */
-
-#ifdef __SPE__
-got it
-#endif
-
-_ACEOF
-if (eval "$ac_cpp conftest.$ac_ext") 2>&5 |
-  $EGREP "got it" >/dev/null 2>&1; then
-  gdb_cv_ppc_spe=yes
-else
-  gdb_cv_ppc_spe=no
-fi
-rm -f conftest*
-
-                    CPPFLAGS="$save_CPPFLAGS"
-fi
-echo "$as_me:$LINENO: result: $gdb_cv_ppc_spe" >&5
-echo "${ECHO_T}$gdb_cv_ppc_spe" >&6
+  *)
+    REPORT_BUGS_TO="<$BUGURL>"
+    REPORT_BUGS_TEXI=@uref{`echo "$BUGURL" | sed 's/@/@@/g'`}
     ;;
-esac
+  esac;
+
+
+
+
+cat >>confdefs.h <<_ACEOF
+#define PKGVERSION "$PKGVERSION"
+_ACEOF
+
+
+cat >>confdefs.h <<_ACEOF
+#define REPORT_BUGS_TO "$REPORT_BUGS_TO"
+_ACEOF
+
 
 . ${srcdir}/configure.srv
 
@@ -4387,8 +4562,7 @@ _ACEOF
   fi
 fi
 
-if test "$srv_xmltarget" != ""; then
-  srv_xmltarget="\$(XML_DIR)/$srv_xmltarget"
+if test "$srv_xmlfiles" != ""; then
   srv_xmlbuiltin="xml-builtin.o"
 
 cat >>confdefs.h <<\_ACEOF
@@ -4397,7 +4571,7 @@ _ACEOF
 
 
   tmp_xmlfiles=$srv_xmlfiles
-  srv_xmlfiles="target.xml"
+  srv_xmlfiles=""
   for f in $tmp_xmlfiles; do
     srv_xmlfiles="$srv_xmlfiles \$(XML_DIR)/$f"
   done
@@ -4405,7 +4579,6 @@ fi
 
 GDBSERVER_DEPFILES="$srv_regobj $srv_tgtobj $srv_hostio_err_objs $srv_thread_depfiles"
 GDBSERVER_LIBS="$srv_libs"
-
 
 
 
@@ -5055,14 +5228,16 @@ s,@INSTALL_SCRIPT@,$INSTALL_SCRIPT,;t t
 s,@INSTALL_DATA@,$INSTALL_DATA,;t t
 s,@CPP@,$CPP,;t t
 s,@EGREP@,$EGREP,;t t
+s,@LIBOBJS@,$LIBOBJS,;t t
+s,@PKGVERSION@,$PKGVERSION,;t t
+s,@REPORT_BUGS_TO@,$REPORT_BUGS_TO,;t t
+s,@REPORT_BUGS_TEXI@,$REPORT_BUGS_TEXI,;t t
 s,@RDYNAMIC@,$RDYNAMIC,;t t
 s,@GDBSERVER_DEPFILES@,$GDBSERVER_DEPFILES,;t t
 s,@GDBSERVER_LIBS@,$GDBSERVER_LIBS,;t t
 s,@USE_THREAD_DB@,$USE_THREAD_DB,;t t
 s,@srv_xmlbuiltin@,$srv_xmlbuiltin,;t t
 s,@srv_xmlfiles@,$srv_xmlfiles,;t t
-s,@srv_xmltarget@,$srv_xmltarget,;t t
-s,@LIBOBJS@,$LIBOBJS,;t t
 s,@LTLIBOBJS@,$LTLIBOBJS,;t t
 CEOF
 

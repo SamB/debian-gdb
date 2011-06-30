@@ -28,6 +28,9 @@
 #if HAVE_SYS_WAIT_H
 #include <sys/wait.h>
 #endif
+#if HAVE_MALLOC_H
+#include <malloc.h>
+#endif
 
 unsigned long cont_thread;
 unsigned long general_thread;
@@ -41,7 +44,7 @@ static int attached;
 static int response_needed;
 static int exit_requested;
 
-static char **program_argv;
+static char **program_argv, **wrapper_argv;
 
 /* Enable miscellaneous debugging output.  The name is historical - it
    was originally used to debug LinuxThreads support.  */
@@ -50,6 +53,8 @@ int debug_threads;
 int pass_signals[TARGET_SIGNAL_LAST];
 
 jmp_buf toplevel;
+
+const char *gdbserver_xmltarget;
 
 /* The PID of the originally created or attached inferior.  Used to
    send signals to the process when GDB sends us an asynchronous interrupt
@@ -74,6 +79,14 @@ restore_old_foreground_pgrp (void)
 }
 #endif
 
+/* Set if you want to disable optional thread related packets support
+   in gdbserver, for the sake of testing GDB against stubs that don't
+   support them.  */
+int disable_packet_vCont;
+int disable_packet_Tthread;
+int disable_packet_qC;
+int disable_packet_qfThreadInfo;
+
 static int
 target_running (void)
 {
@@ -81,16 +94,34 @@ target_running (void)
 }
 
 static int
-start_inferior (char *argv[], char *statusptr)
+start_inferior (char **argv, char *statusptr)
 {
+  char **new_argv = argv;
   attached = 0;
+
+  if (wrapper_argv != NULL)
+    {
+      int i, count = 1;
+
+      for (i = 0; wrapper_argv[i] != NULL; i++)
+	count++;
+      for (i = 0; argv[i] != NULL; i++)
+	count++;
+      new_argv = alloca (sizeof (char *) * count);
+      count = 0;
+      for (i = 0; wrapper_argv[i] != NULL; i++)
+	new_argv[count++] = wrapper_argv[i];
+      for (i = 0; argv[i] != NULL; i++)
+	new_argv[count++] = argv[i];
+      new_argv[count] = NULL;
+    }
 
 #ifdef SIGTTOU
   signal (SIGTTOU, SIG_DFL);
   signal (SIGTTIN, SIG_DFL);
 #endif
 
-  signal_pid = create_inferior (argv[0], argv);
+  signal_pid = create_inferior (new_argv[0], new_argv);
 
   /* FIXME: we don't actually know at this point that the create
      actually succeeded.  We won't know that until we wait.  */
@@ -106,6 +137,33 @@ start_inferior (char *argv[], char *statusptr)
   tcsetpgrp (terminal_fd, signal_pid);
   atexit (restore_old_foreground_pgrp);
 #endif
+
+  if (wrapper_argv != NULL)
+    {
+      struct thread_resume resume_info;
+      int sig;
+
+      resume_info.thread = -1;
+      resume_info.step = 0;
+      resume_info.sig = 0;
+      resume_info.leave_stopped = 0;
+
+      sig = mywait (statusptr, 0);
+      if (*statusptr != 'T')
+	return sig;
+
+      do
+	{
+	  (*the_target->resume) (&resume_info);
+
+	  sig = mywait (statusptr, 0);
+	  if (*statusptr != 'T')
+	    return sig;
+	}
+      while (sig != TARGET_SIGNAL_TRAP);
+
+      return sig;
+    }
 
   /* Wait till we are at 1st instruction in program, return signal
      number (assuming success).  */
@@ -212,6 +270,19 @@ handle_general_set (char *own_buf)
       return;
     }
 
+  if (strcmp (own_buf, "QStartNoAckMode") == 0)
+    {
+      if (remote_debug)
+	{
+	  fprintf (stderr, "[noack mode enabled]\n");
+	  fflush (stderr);
+	}
+
+      noack_mode = 1;
+      write_ok (own_buf);
+      return;
+    }
+
   /* Otherwise we didn't know what packet it was.  Say we didn't
      understand it.  */
   own_buf[0] = 0;
@@ -220,44 +291,39 @@ handle_general_set (char *own_buf)
 static const char *
 get_features_xml (const char *annex)
 {
-  static int features_supported = -1;
-  static char *document;
+  /* gdbserver_xmltarget defines what to return when looking
+     for the "target.xml" file.  Its contents can either be
+     verbatim XML code (prefixed with a '@') or else the name
+     of the actual XML file to be used in place of "target.xml".
 
-#ifdef USE_XML
-  extern const char *const xml_builtin[][2];
-  int i;
+     This variable is set up from the auto-generated
+     init_registers_... routine for the current target.  */
 
-  /* Look for the annex.  */
-  for (i = 0; xml_builtin[i][0] != NULL; i++)
-    if (strcmp (annex, xml_builtin[i][0]) == 0)
-      break;
-
-  if (xml_builtin[i][0] != NULL)
-    return xml_builtin[i][1];
-#endif
-
-  if (strcmp (annex, "target.xml") != 0)
-    return NULL;
-
-  if (features_supported == -1)
+  if (gdbserver_xmltarget
+      && strcmp (annex, "target.xml") == 0)
     {
-      const char *arch = NULL;
-      if (the_target->arch_string != NULL)
-	arch = (*the_target->arch_string) ();
-
-      if (arch == NULL)
-	features_supported = 0;
+      if (*gdbserver_xmltarget == '@')
+	return gdbserver_xmltarget + 1;
       else
-	{
-	  features_supported = 1;
-	  document = malloc (64 + strlen (arch));
-	  snprintf (document, 64 + strlen (arch),
-		    "<target><architecture>%s</architecture></target>",
-		    arch);
-	}
+	annex = gdbserver_xmltarget;
     }
 
-  return document;
+#ifdef USE_XML
+  {
+    extern const char *const xml_builtin[][2];
+    int i;
+
+    /* Look for the annex.  */
+    for (i = 0; xml_builtin[i][0] != NULL; i++)
+      if (strcmp (annex, xml_builtin[i][0]) == 0)
+	break;
+
+    if (xml_builtin[i][0] != NULL)
+      return xml_builtin[i][1];
+  }
+#endif
+
+  return NULL;
 }
 
 void
@@ -270,6 +336,153 @@ monitor_show_help (void)
   monitor_output ("    Enable remote protocol debugging messages\n");
   monitor_output ("  exit\n");
   monitor_output ("    Quit GDBserver\n");
+}
+
+/* Subroutine of handle_search_memory to simplify it.  */
+
+static int
+handle_search_memory_1 (CORE_ADDR start_addr, CORE_ADDR search_space_len,
+			gdb_byte *pattern, unsigned pattern_len,
+			gdb_byte *search_buf,
+			unsigned chunk_size, unsigned search_buf_size,
+			CORE_ADDR *found_addrp)
+{
+  /* Prime the search buffer.  */
+
+  if (read_inferior_memory (start_addr, search_buf, search_buf_size) != 0)
+    {
+      warning ("Unable to access target memory at 0x%lx, halting search.",
+	       (long) start_addr);
+      return -1;
+    }
+
+  /* Perform the search.
+
+     The loop is kept simple by allocating [N + pattern-length - 1] bytes.
+     When we've scanned N bytes we copy the trailing bytes to the start and
+     read in another N bytes.  */
+
+  while (search_space_len >= pattern_len)
+    {
+      gdb_byte *found_ptr;
+      unsigned nr_search_bytes = (search_space_len < search_buf_size
+				  ? search_space_len
+				  : search_buf_size);
+
+      found_ptr = memmem (search_buf, nr_search_bytes, pattern, pattern_len);
+
+      if (found_ptr != NULL)
+	{
+	  CORE_ADDR found_addr = start_addr + (found_ptr - search_buf);
+	  *found_addrp = found_addr;
+	  return 1;
+	}
+
+      /* Not found in this chunk, skip to next chunk.  */
+
+      /* Don't let search_space_len wrap here, it's unsigned.  */
+      if (search_space_len >= chunk_size)
+	search_space_len -= chunk_size;
+      else
+	search_space_len = 0;
+
+      if (search_space_len >= pattern_len)
+	{
+	  unsigned keep_len = search_buf_size - chunk_size;
+	  CORE_ADDR read_addr = start_addr + keep_len;
+	  int nr_to_read;
+
+	  /* Copy the trailing part of the previous iteration to the front
+	     of the buffer for the next iteration.  */
+	  memcpy (search_buf, search_buf + chunk_size, keep_len);
+
+	  nr_to_read = (search_space_len - keep_len < chunk_size
+			? search_space_len - keep_len
+			: chunk_size);
+
+	  if (read_inferior_memory (read_addr, search_buf + keep_len,
+				    nr_to_read) != 0)
+	    {
+	      warning ("Unable to access target memory at 0x%lx, halting search.",
+		       (long) read_addr);
+	      return -1;
+	    }
+
+	  start_addr += chunk_size;
+	}
+    }
+
+  /* Not found.  */
+
+  return 0;
+}
+
+/* Handle qSearch:memory packets.  */
+
+static void
+handle_search_memory (char *own_buf, int packet_len)
+{
+  CORE_ADDR start_addr;
+  CORE_ADDR search_space_len;
+  gdb_byte *pattern;
+  unsigned int pattern_len;
+  /* NOTE: also defined in find.c testcase.  */
+#define SEARCH_CHUNK_SIZE 16000
+  const unsigned chunk_size = SEARCH_CHUNK_SIZE;
+  /* Buffer to hold memory contents for searching.  */
+  gdb_byte *search_buf;
+  unsigned search_buf_size;
+  int found;
+  CORE_ADDR found_addr;
+  int cmd_name_len = sizeof ("qSearch:memory:") - 1;
+
+  pattern = malloc (packet_len);
+  if (pattern == NULL)
+    {
+      error ("Unable to allocate memory to perform the search");
+      strcpy (own_buf, "E00");
+      return;
+    }
+  if (decode_search_memory_packet (own_buf + cmd_name_len,
+				   packet_len - cmd_name_len,
+				   &start_addr, &search_space_len,
+				   pattern, &pattern_len) < 0)
+    {
+      free (pattern);
+      error ("Error in parsing qSearch:memory packet");
+      strcpy (own_buf, "E00");
+      return;
+    }
+
+  search_buf_size = chunk_size + pattern_len - 1;
+
+  /* No point in trying to allocate a buffer larger than the search space.  */
+  if (search_space_len < search_buf_size)
+    search_buf_size = search_space_len;
+
+  search_buf = malloc (search_buf_size);
+  if (search_buf == NULL)
+    {
+      free (pattern);
+      error ("Unable to allocate memory to perform the search");
+      strcpy (own_buf, "E00");
+      return;
+    }
+
+  found = handle_search_memory_1 (start_addr, search_space_len,
+				  pattern, pattern_len,
+				  search_buf, chunk_size, search_buf_size,
+				  &found_addr);
+
+  if (found > 0)
+    sprintf (own_buf, "1,%lx", (long) found_addr);
+  else if (found == 0)
+    strcpy (own_buf, "0");
+  else
+    strcpy (own_buf, "E00");
+
+  free (search_buf);
+  free (pattern);
 }
 
 #define require_running(BUF)			\
@@ -286,12 +499,12 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
   static struct inferior_list_entry *thread_ptr;
 
   /* Reply the current thread id.  */
-  if (strcmp ("qC", own_buf) == 0)
+  if (strcmp ("qC", own_buf) == 0 && !disable_packet_qC)
     {
       require_running (own_buf);
       thread_ptr = all_threads.head;
       sprintf (own_buf, "QC%x",
-	thread_to_gdb_id ((struct thread_info *)thread_ptr));
+	       thread_to_gdb_id ((struct thread_info *)thread_ptr));
       return;
     }
 
@@ -304,28 +517,31 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
       return;
     }
 
-  if (strcmp ("qfThreadInfo", own_buf) == 0)
+  if (!disable_packet_qfThreadInfo)
     {
-      require_running (own_buf);
-      thread_ptr = all_threads.head;
-      sprintf (own_buf, "m%x", thread_to_gdb_id ((struct thread_info *)thread_ptr));
-      thread_ptr = thread_ptr->next;
-      return;
-    }
-
-  if (strcmp ("qsThreadInfo", own_buf) == 0)
-    {
-      require_running (own_buf);
-      if (thread_ptr != NULL)
+      if (strcmp ("qfThreadInfo", own_buf) == 0)
 	{
+	  require_running (own_buf);
+	  thread_ptr = all_threads.head;
 	  sprintf (own_buf, "m%x", thread_to_gdb_id ((struct thread_info *)thread_ptr));
 	  thread_ptr = thread_ptr->next;
 	  return;
 	}
-      else
+
+      if (strcmp ("qsThreadInfo", own_buf) == 0)
 	{
-	  sprintf (own_buf, "l");
-	  return;
+	  require_running (own_buf);
+	  if (thread_ptr != NULL)
+	    {
+	      sprintf (own_buf, "m%x", thread_to_gdb_id ((struct thread_info *)thread_ptr));
+	      thread_ptr = thread_ptr->next;
+	      return;
+	    }
+	  else
+	    {
+	      sprintf (own_buf, "l");
+	      return;
+	    }
 	}
     }
 
@@ -455,14 +671,6 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 
       require_running (own_buf);
 
-      /* Check for support.  */
-      document = get_features_xml ("target.xml");
-      if (document == NULL)
-	{
-	  own_buf[0] = '\0';
-	  return;
-	}
-
       /* Grab the annex, offset, and length.  */
       if (decode_xfer_read (own_buf + 20, &annex, &ofs, &len) < 0)
 	{
@@ -576,9 +784,14 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
       if (the_target->qxfer_spu != NULL)
 	strcat (own_buf, ";qXfer:spu:read+;qXfer:spu:write+");
 
-      if (get_features_xml ("target.xml") != NULL)
-	strcat (own_buf, ";qXfer:features:read+");
+      /* We always report qXfer:features:read, as targets may
+	 install XML files on a subsequent call to arch_setup.
+	 If we reported to GDB on startup that we don't support
+	 qXfer:feature:read at all, we will never be re-queried.  */
+      strcat (own_buf, ";qXfer:features:read+");
 
+      if (transport_is_reliable)
+	strcat (own_buf, ";QStartNoAckMode+");
       return;
     }
 
@@ -691,6 +904,13 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 	}
 
       free (mon);
+      return;
+    }
+
+  if (strncmp ("qSearch:memory:", own_buf, sizeof ("qSearch:memory:") - 1) == 0)
+    {
+      require_running (own_buf);
+      handle_search_memory (own_buf, packet_len);
       return;
     }
 
@@ -822,6 +1042,11 @@ handle_v_attach (char *own_buf, char *status, int *signal)
   pid = strtol (own_buf + 8, NULL, 16);
   if (pid != 0 && attach_inferior (pid, status, signal) == 0)
     {
+      /* Don't report shared library events after attaching, even if
+	 some libraries are preloaded.  GDB will always poll the
+	 library list.  Avoids the "stopped by shared library event"
+	 notice on the GDB side.  */
+      dlls_changed = 0;
       prepare_resume_reply (own_buf, *status, *signal);
       return 1;
     }
@@ -871,23 +1096,31 @@ handle_v_run (char *own_buf, char *status, int *signal)
 
   if (new_argv[0] == NULL)
     {
+      /* GDB didn't specify a program to run.  Try to use the argv
+	 from the last run: either from the last vRun with a non-empty
+	 argv, or from what the user specified if gdbserver was
+	 started as: `gdbserver :1234 PROG ARGS'.  */
+
       if (program_argv == NULL)
 	{
 	  write_enn (own_buf);
 	  return 0;
 	}
 
-      new_argv[0] = strdup (program_argv[0]);
+      /* We can reuse the old args.  We don't need this then.  */
+      free (new_argv);
     }
-
-  /* Free the old argv.  */
-  if (program_argv)
+  else
     {
-      for (pp = program_argv; *pp != NULL; pp++)
-	free (*pp);
-      free (program_argv);
+      /* Free the old argv.  */
+      if (program_argv)
+	{
+	  for (pp = program_argv; *pp != NULL; pp++)
+	    free (*pp);
+	  free (program_argv);
+	}
+      program_argv = new_argv;
     }
-  program_argv = new_argv;
 
   *signal = start_inferior (program_argv, status);
   if (*status == 'T')
@@ -907,17 +1140,20 @@ void
 handle_v_requests (char *own_buf, char *status, int *signal,
 		   int packet_len, int *new_packet_len)
 {
-  if (strncmp (own_buf, "vCont;", 6) == 0)
+  if (!disable_packet_vCont)
     {
-      require_running (own_buf);
-      handle_v_cont (own_buf, status, signal);
-      return;
-    }
+      if (strncmp (own_buf, "vCont;", 6) == 0)
+	{
+	  require_running (own_buf);
+	  handle_v_cont (own_buf, status, signal);
+	  return;
+	}
 
-  if (strncmp (own_buf, "vCont?", 6) == 0)
-    {
-      strcpy (own_buf, "vCont;c;C;s;S");
-      return;
+      if (strncmp (own_buf, "vCont?", 6) == 0)
+	{
+	  strcpy (own_buf, "vCont;c;C;s;S");
+	  return;
+	}
     }
 
   if (strncmp (own_buf, "vFile:", 6) == 0
@@ -987,26 +1223,42 @@ myresume (char *own_buf, int step, int *signalp, char *statusp)
 static void
 gdbserver_version (void)
 {
-  printf ("GNU gdbserver %s\n"
+  printf ("GNU gdbserver %s%s\n"
 	  "Copyright (C) 2007 Free Software Foundation, Inc.\n"
 	  "gdbserver is free software, covered by the GNU General Public License.\n"
 	  "This gdbserver was configured as \"%s\"\n",
-	  version, host_name);
+	  PKGVERSION, version, host_name);
 }
 
 static void
-gdbserver_usage (void)
+gdbserver_usage (FILE *stream)
 {
-  printf ("Usage:\tgdbserver [OPTIONS] COMM PROG [ARGS ...]\n"
-	  "\tgdbserver [OPTIONS] --attach COMM PID\n"
-	  "\tgdbserver [OPTIONS] --multi COMM\n"
-	  "\n"
-	  "COMM may either be a tty device (for serial debugging), or \n"
-	  "HOST:PORT to listen for a TCP connection.\n"
-	  "\n"
-	  "Options:\n"
-	  "  --debug\t\tEnable debugging output.\n");
+  fprintf (stream, "Usage:\tgdbserver [OPTIONS] COMM PROG [ARGS ...]\n"
+	   "\tgdbserver [OPTIONS] --attach COMM PID\n"
+	   "\tgdbserver [OPTIONS] --multi COMM\n"
+	   "\n"
+	   "COMM may either be a tty device (for serial debugging), or \n"
+	   "HOST:PORT to listen for a TCP connection.\n"
+	   "\n"
+	   "Options:\n"
+	   "  --debug\t\tEnable debugging output.\n"
+	   "  --version\t\tDisplay version information and exit.\n"
+	   "  --wrapper WRAPPER --\tRun WRAPPER to start new programs.\n");
+  if (REPORT_BUGS_TO[0] && stream == stdout)
+    fprintf (stream, "Report bugs to \"%s\".\n", REPORT_BUGS_TO);
 }
+
+static void
+gdbserver_show_disableable (FILE *stream)
+{
+  fprintf (stream, "Disableable packets:\n"
+	   "  vCont       \tAll vCont packets\n"
+	   "  qC          \tQuerying the current thread\n"
+	   "  qfThreadInfo\tThread listing\n"
+	   "  Tthread     \tPassing the thread specifier in the T stop reply packet\n"
+	   "  threads     \tAll of the above\n");
+}
+
 
 #undef require_running
 #define require_running(BUF)			\
@@ -1042,15 +1294,72 @@ main (int argc, char *argv[])
 	}
       else if (strcmp (*next_arg, "--help") == 0)
 	{
-	  gdbserver_usage ();
+	  gdbserver_usage (stdout);
 	  exit (0);
 	}
       else if (strcmp (*next_arg, "--attach") == 0)
 	attach = 1;
       else if (strcmp (*next_arg, "--multi") == 0)
 	multi_mode = 1;
+      else if (strcmp (*next_arg, "--wrapper") == 0)
+	{
+	  next_arg++;
+
+	  wrapper_argv = next_arg;
+	  while (*next_arg != NULL && strcmp (*next_arg, "--") != 0)
+	    next_arg++;
+
+	  if (next_arg == wrapper_argv || *next_arg == NULL)
+	    {
+	      gdbserver_usage (stderr);
+	      exit (1);
+	    }
+
+	  /* Consume the "--".  */
+	  *next_arg = NULL;
+	}
       else if (strcmp (*next_arg, "--debug") == 0)
 	debug_threads = 1;
+      else if (strcmp (*next_arg, "--disable-packet") == 0)
+	{
+	  gdbserver_show_disableable (stdout);
+	  exit (0);
+	}
+      else if (strncmp (*next_arg,
+			"--disable-packet=",
+			sizeof ("--disable-packet=") - 1) == 0)
+	{
+	  char *packets, *tok;
+
+	  packets = *next_arg += sizeof ("--disable-packet=") - 1;
+	  for (tok = strtok (packets, ",");
+	       tok != NULL;
+	       tok = strtok (NULL, ","))
+	    {
+	      if (strcmp ("vCont", tok) == 0)
+		disable_packet_vCont = 1;
+	      else if (strcmp ("Tthread", tok) == 0)
+		disable_packet_Tthread = 1;
+	      else if (strcmp ("qC", tok) == 0)
+		disable_packet_qC = 1;
+	      else if (strcmp ("qfThreadInfo", tok) == 0)
+		disable_packet_qfThreadInfo = 1;
+	      else if (strcmp ("threads", tok) == 0)
+		{
+		  disable_packet_vCont = 1;
+		  disable_packet_Tthread = 1;
+		  disable_packet_qC = 1;
+		  disable_packet_qfThreadInfo = 1;
+		}
+	      else
+		{
+		  fprintf (stderr, "Don't know how to disable \"%s\".\n\n",
+			   tok);
+		  gdbserver_show_disableable (stderr);
+		  exit (1);
+		}
+	    }
+	}
       else
 	{
 	  fprintf (stderr, "Unknown argument: %s\n", *next_arg);
@@ -1071,7 +1380,7 @@ main (int argc, char *argv[])
   next_arg++;
   if (port == NULL || (!attach && !multi_mode && *next_arg == NULL))
     {
-      gdbserver_usage ();
+      gdbserver_usage (stderr);
       exit (1);
     }
 
@@ -1096,7 +1405,7 @@ main (int argc, char *argv[])
 
   if (bad_attach)
     {
-      gdbserver_usage ();
+      gdbserver_usage (stderr);
       exit (1);
     }
 
@@ -1161,6 +1470,7 @@ main (int argc, char *argv[])
 
   while (1)
     {
+      noack_mode = 0;
       remote_open (port);
 
     restart:

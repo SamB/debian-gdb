@@ -264,7 +264,7 @@ me_module_register_set (CONFIG_ATTR me_module,
        mask contains any of the me_module's coprocessor ISAs,
        specifically excluding the generic coprocessor register sets.  */
 
-  CGEN_CPU_DESC desc = gdbarch_tdep (current_gdbarch)->cpu_desc;
+  CGEN_CPU_DESC desc = gdbarch_tdep (target_gdbarch)->cpu_desc;
   const CGEN_HW_ENTRY *hw;
 
   if (me_module == CONFIG_NONE)
@@ -855,7 +855,7 @@ current_me_module ()
       return regval;
     }
   else
-    return gdbarch_tdep (current_gdbarch)->me_module;
+    return gdbarch_tdep (target_gdbarch)->me_module;
 }
 
 
@@ -1097,14 +1097,14 @@ mep_register_type (struct gdbarch *gdbarch, int reg_nr)
       if (size == 32)
         {
           if (mep_pseudo_cr_is_float (reg_nr))
-            return builtin_type_float;
+            return builtin_type (gdbarch)->builtin_float;
           else
             return builtin_type_uint32;
         }
       else if (size == 64)
         {
           if (mep_pseudo_cr_is_float (reg_nr))
-            return builtin_type_double;
+            return builtin_type (gdbarch)->builtin_double;
           else
             return builtin_type_uint64;
         }
@@ -1584,6 +1584,9 @@ mep_get_insn (CORE_ADDR pc, long *insn)
 /* This structure holds the results of a prologue analysis.  */
 struct mep_prologue
 {
+  /* The architecture for which we generated this prologue info.  */
+  struct gdbarch *gdbarch;
+
   /* The offset from the frame base to the stack pointer --- always
      zero or negative.
 
@@ -1635,11 +1638,12 @@ is_arg_reg (pv_t value)
    - ADDR is a stack slot's address (e.g., relative to the original
      value of the SP).  */
 static int
-is_arg_spill (pv_t value, pv_t addr, struct pv_area *stack)
+is_arg_spill (struct gdbarch *gdbarch, pv_t value, pv_t addr,
+	      struct pv_area *stack)
 {
   return (is_arg_reg (value)
           && pv_is_register (addr, MEP_SP_REGNUM)
-          && ! pv_area_find_reg (stack, current_gdbarch, value.reg, 0));
+          && ! pv_area_find_reg (stack, gdbarch, value.reg, 0));
 }
 
 
@@ -1657,7 +1661,7 @@ check_for_saved (void *result_untyped, pv_t addr, CORE_ADDR size, pv_t value)
   if (value.kind == pvk_register
       && value.k == 0
       && pv_is_register (addr, MEP_SP_REGNUM)
-      && size == register_size (current_gdbarch, value.reg))
+      && size == register_size (result->gdbarch, value.reg))
     result->reg_offset[value.reg] = addr.k;
 }
 
@@ -1665,7 +1669,8 @@ check_for_saved (void *result_untyped, pv_t addr, CORE_ADDR size, pv_t value)
 /* Analyze a prologue starting at START_PC, going no further than
    LIMIT_PC.  Fill in RESULT as appropriate.  */
 static void
-mep_analyze_prologue (CORE_ADDR start_pc, CORE_ADDR limit_pc,
+mep_analyze_prologue (struct gdbarch *gdbarch,
+		      CORE_ADDR start_pc, CORE_ADDR limit_pc,
                       struct mep_prologue *result)
 {
   CORE_ADDR pc;
@@ -1678,6 +1683,7 @@ mep_analyze_prologue (CORE_ADDR start_pc, CORE_ADDR limit_pc,
   CORE_ADDR after_last_frame_setup_insn = start_pc;
 
   memset (result, 0, sizeof (*result));
+  result->gdbarch = gdbarch;
 
   for (rn = 0; rn < MEP_NUM_REGS; rn++)
     {
@@ -1741,7 +1747,7 @@ mep_analyze_prologue (CORE_ADDR start_pc, CORE_ADDR limit_pc,
           if (pv_area_store_would_trash (stack, reg[rm]))
             break;
           
-          if (is_arg_spill (reg[rn], reg[rm], stack))
+          if (is_arg_spill (gdbarch, reg[rn], reg[rm], stack))
             after_last_frame_setup_insn = next_pc;
 
           pv_area_store (stack, reg[rm], 4, reg[rn]);
@@ -1758,7 +1764,7 @@ mep_analyze_prologue (CORE_ADDR start_pc, CORE_ADDR limit_pc,
           if (pv_area_store_would_trash (stack, addr))
             break;
 
-          if (is_arg_spill (reg[rn], addr, stack))
+          if (is_arg_spill (gdbarch, reg[rn], addr, stack))
             after_last_frame_setup_insn = next_pc;
 
           pv_area_store (stack, addr, 4, reg[rn]);
@@ -1787,7 +1793,7 @@ mep_analyze_prologue (CORE_ADDR start_pc, CORE_ADDR limit_pc,
           if (pv_area_store_would_trash (stack, addr))
             break;
 
-          if (is_arg_spill (reg[rn], addr, stack))
+          if (is_arg_spill (gdbarch, reg[rn], addr, stack))
             after_last_frame_setup_insn = next_pc;
 
           pv_area_store (stack, addr, size, reg[rn]);
@@ -1904,7 +1910,7 @@ mep_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
   if (! find_pc_partial_function (pc, &name, &func_addr, &func_end))
     return pc;
 
-  mep_analyze_prologue (pc, func_end, &p);
+  mep_analyze_prologue (gdbarch, pc, func_end, &p);
   return p.prologue_end;
 }
 
@@ -1926,7 +1932,7 @@ mep_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR * pcptr, int *lenptr)
 
 
 static struct mep_prologue *
-mep_analyze_frame_prologue (struct frame_info *next_frame,
+mep_analyze_frame_prologue (struct frame_info *this_frame,
                             void **this_prologue_cache)
 {
   if (! *this_prologue_cache)
@@ -1936,15 +1942,16 @@ mep_analyze_frame_prologue (struct frame_info *next_frame,
       *this_prologue_cache 
         = FRAME_OBSTACK_ZALLOC (struct mep_prologue);
 
-      func_start = frame_func_unwind (next_frame, NORMAL_FRAME);
-      stop_addr = frame_pc_unwind (next_frame);
+      func_start = get_frame_func (this_frame);
+      stop_addr = get_frame_pc (this_frame);
 
       /* If we couldn't find any function containing the PC, then
          just initialize the prologue cache, but don't do anything.  */
       if (! func_start)
         stop_addr = func_start;
 
-      mep_analyze_prologue (func_start, stop_addr, *this_prologue_cache);
+      mep_analyze_prologue (get_frame_arch (this_frame),
+			    func_start, stop_addr, *this_prologue_cache);
     }
 
   return *this_prologue_cache;
@@ -1954,11 +1961,11 @@ mep_analyze_frame_prologue (struct frame_info *next_frame,
 /* Given the next frame and a prologue cache, return this frame's
    base.  */
 static CORE_ADDR
-mep_frame_base (struct frame_info *next_frame,
+mep_frame_base (struct frame_info *this_frame,
                 void **this_prologue_cache)
 {
   struct mep_prologue *p
-    = mep_analyze_frame_prologue (next_frame, this_prologue_cache);
+    = mep_analyze_frame_prologue (this_frame, this_prologue_cache);
 
   /* In functions that use alloca, the distance between the stack
      pointer and the frame base varies dynamically, so we can't use
@@ -1969,37 +1976,34 @@ mep_frame_base (struct frame_info *next_frame,
   if (p->has_frame_ptr)
     {
       CORE_ADDR fp
-        = frame_unwind_register_unsigned (next_frame, MEP_FP_REGNUM);
+        = get_frame_register_unsigned (this_frame, MEP_FP_REGNUM);
       return fp - p->frame_ptr_offset;
     }
   else
     {
       CORE_ADDR sp
-        = frame_unwind_register_unsigned (next_frame, MEP_SP_REGNUM);
+        = get_frame_register_unsigned (this_frame, MEP_SP_REGNUM);
       return sp - p->frame_size;
     }
 }
 
 
 static void
-mep_frame_this_id (struct frame_info *next_frame,
+mep_frame_this_id (struct frame_info *this_frame,
                    void **this_prologue_cache,
                    struct frame_id *this_id)
 {
-  *this_id = frame_id_build (mep_frame_base (next_frame, this_prologue_cache),
-                             frame_func_unwind (next_frame, NORMAL_FRAME));
+  *this_id = frame_id_build (mep_frame_base (this_frame, this_prologue_cache),
+                             get_frame_func (this_frame));
 }
 
 
-static void
-mep_frame_prev_register (struct frame_info *next_frame,
-                         void **this_prologue_cache,
-                         int regnum, int *optimizedp,
-                         enum lval_type *lvalp, CORE_ADDR *addrp,
-                         int *realnump, gdb_byte *bufferp)
+static struct value *
+mep_frame_prev_register (struct frame_info *this_frame,
+                         void **this_prologue_cache, int regnum)
 {
   struct mep_prologue *p
-    = mep_analyze_frame_prologue (next_frame, this_prologue_cache);
+    = mep_analyze_frame_prologue (this_frame, this_prologue_cache);
 
   /* There are a number of complications in unwinding registers on the
      MeP, having to do with core functions calling VLIW functions and
@@ -2021,68 +2025,59 @@ mep_frame_prev_register (struct frame_info *next_frame,
      do this.  */
   if (regnum == MEP_PC_REGNUM)
     {
-      mep_frame_prev_register (next_frame, this_prologue_cache, MEP_LP_REGNUM,
-                               optimizedp, lvalp, addrp, realnump, bufferp);
-      store_unsigned_integer (bufferp, MEP_LP_SIZE, 
-                              (extract_unsigned_integer (bufferp, MEP_LP_SIZE)
-                               & ~1));
-      *lvalp = not_lval;
+      struct value *value;
+      CORE_ADDR lp;
+      value = mep_frame_prev_register (this_frame, this_prologue_cache,
+				       MEP_LP_REGNUM);
+      lp = value_as_long (value);
+      release_value (value);
+      value_free (value);
+
+      return frame_unwind_got_constant (this_frame, regnum, lp & ~1);
     }
   else
     {
-      CORE_ADDR frame_base = mep_frame_base (next_frame, this_prologue_cache);
-      int reg_size = register_size (get_frame_arch (next_frame), regnum);
+      CORE_ADDR frame_base = mep_frame_base (this_frame, this_prologue_cache);
+      struct value *value;
 
       /* Our caller's SP is our frame base.  */
       if (regnum == MEP_SP_REGNUM)
-        {
-          *optimizedp = 0;
-          *lvalp = not_lval;
-          *addrp = 0;
-          *realnump = -1;
-          if (bufferp)
-            store_unsigned_integer (bufferp, reg_size, frame_base);
-        }
+	return frame_unwind_got_constant (this_frame, regnum, frame_base);
 
       /* If prologue analysis says we saved this register somewhere,
          return a description of the stack slot holding it.  */
-      else if (p->reg_offset[regnum] != 1)
-        {
-          *optimizedp = 0;
-          *lvalp = lval_memory;
-          *addrp = frame_base + p->reg_offset[regnum];
-          *realnump = -1;
-          if (bufferp)
-            get_frame_memory (next_frame, *addrp, bufferp, reg_size);
-        }
+      if (p->reg_offset[regnum] != 1)
+	value = frame_unwind_got_memory (this_frame, regnum,
+					 frame_base + p->reg_offset[regnum]);
 
       /* Otherwise, presume we haven't changed the value of this
          register, and get it from the next frame.  */
       else
-        frame_register_unwind (next_frame, regnum,
-                               optimizedp, lvalp, addrp, realnump, bufferp);
+	value = frame_unwind_got_register (this_frame, regnum, regnum);
 
       /* If we need to toggle the operating mode, do so.  */
       if (regnum == MEP_PSW_REGNUM)
         {
-          int lp_optimized;
-          enum lval_type lp_lval;
-          CORE_ADDR lp_addr;
-          int lp_realnum;
-          char lp_buffer[MEP_LP_SIZE];
+	  CORE_ADDR psw, lp;
+
+	  psw = value_as_long (value);
+	  release_value (value);
+	  value_free (value);
 
           /* Get the LP's value, too.  */
-          frame_register_unwind (next_frame, MEP_LP_REGNUM,
-                                 &lp_optimized, &lp_lval, &lp_addr,
-                                 &lp_realnum, lp_buffer);
+	  value = get_frame_register_value (this_frame, MEP_LP_REGNUM);
+	  lp = value_as_long (value);
+	  release_value (value);
+	  value_free (value);
 
           /* If LP.LTOM is set, then toggle PSW.OM.  */
-          if (extract_unsigned_integer (lp_buffer, MEP_LP_SIZE) & 0x1)
-            store_unsigned_integer
-              (bufferp, MEP_PSW_SIZE,
-               (extract_unsigned_integer (bufferp, MEP_PSW_SIZE) ^ 0x1000));
-          *lvalp = not_lval;
+	  if (lp & 0x1)
+	    psw ^= 0x1000;
+
+	  return frame_unwind_got_constant (this_frame, regnum, psw);
         }
+
+      return value;
     }
 }
 
@@ -2090,15 +2085,10 @@ mep_frame_prev_register (struct frame_info *next_frame,
 static const struct frame_unwind mep_frame_unwind = {
   NORMAL_FRAME,
   mep_frame_this_id,
-  mep_frame_prev_register
+  mep_frame_prev_register,
+  NULL,
+  default_frame_sniffer
 };
-
-
-static const struct frame_unwind *
-mep_frame_sniffer (struct frame_info *next_frame)
-{
-  return &mep_frame_unwind;
-}
 
 
 /* Our general unwinding function can handle unwinding the PC.  */
@@ -2195,9 +2185,9 @@ mep_store_return_value (struct gdbarch *arch,
 }
 
 enum return_value_convention
-mep_return_value (struct gdbarch *gdbarch, struct type *type,
-		  struct regcache *regcache, gdb_byte *readbuf,
-		  const gdb_byte *writebuf)
+mep_return_value (struct gdbarch *gdbarch, struct type *func_type,
+		  struct type *type, struct regcache *regcache,
+		  gdb_byte *readbuf, const gdb_byte *writebuf)
 {
   if (mep_use_struct_convention (type))
     {
@@ -2379,10 +2369,10 @@ mep_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
 
 static struct frame_id
-mep_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
+mep_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
 {
-  return frame_id_build (mep_unwind_sp (gdbarch, next_frame),
-                         frame_pc_unwind (next_frame));
+  CORE_ADDR sp = get_frame_register_unsigned (this_frame, MEP_SP_REGNUM);
+  return frame_id_build (sp, get_frame_pc (this_frame));
 }
 
 
@@ -2500,7 +2490,7 @@ mep_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_skip_prologue (gdbarch, mep_skip_prologue);
 
   /* Frames and frame unwinding.  */
-  frame_unwind_append_sniffer (gdbarch, mep_frame_sniffer);
+  frame_unwind_append_unwinder (gdbarch, &mep_frame_unwind);
   set_gdbarch_unwind_pc (gdbarch, mep_unwind_pc);
   set_gdbarch_unwind_sp (gdbarch, mep_unwind_sp);
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
@@ -2512,7 +2502,7 @@ mep_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   /* Inferior function calls.  */
   set_gdbarch_frame_align (gdbarch, mep_frame_align);
   set_gdbarch_push_dummy_call (gdbarch, mep_push_dummy_call);
-  set_gdbarch_unwind_dummy_id (gdbarch, mep_unwind_dummy_id);
+  set_gdbarch_dummy_id (gdbarch, mep_dummy_id);
 
   return gdbarch;
 }

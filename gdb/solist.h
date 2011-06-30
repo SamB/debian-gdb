@@ -112,8 +112,7 @@ struct target_so_ops
     struct symbol * (*lookup_lib_global_symbol) (const struct objfile *objfile,
 						 const char *name,
 						 const char *linkage_name,
-						 const domain_enum domain,
-						 struct symtab **symtab);
+						 const domain_enum domain);
 
     /* Given two so_list objects, one from the GDB thread list
        and another from the list returned by current_sos, return 1
@@ -128,7 +127,7 @@ void free_so (struct so_list *so);
 struct so_list *master_so_list (void);
 
 /* Find solib binary file and open it.  */
-extern int solib_open (char *in_pathname, char **found_pathname);
+extern bfd *solib_bfd_open (char *in_pathname);
 
 /* FIXME: gdbarch needs to control this variable */
 extern struct target_so_ops *current_target_so_ops;
@@ -137,7 +136,6 @@ extern struct target_so_ops *current_target_so_ops;
 struct symbol *solib_global_lookup (const struct objfile *objfile,
 				    const char *name,
 				    const char *linkage_name,
-				    const domain_enum domain,
-				    struct symtab **symtab);
+				    const domain_enum domain);
 
 #endif

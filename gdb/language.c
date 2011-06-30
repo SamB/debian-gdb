@@ -72,7 +72,8 @@ static void unk_lang_printchar (int c, struct ui_file *stream);
 static void unk_lang_print_type (struct type *, char *, struct ui_file *,
 				 int, int);
 
-static int unk_lang_value_print (struct value *, struct ui_file *, int, enum val_prettyprint);
+static int unk_lang_value_print (struct value *, struct ui_file *,
+				 const struct value_print_options *);
 
 static CORE_ADDR unk_lang_trampoline (struct frame_info *, CORE_ADDR pc);
 
@@ -787,51 +788,6 @@ structured_type (struct type *type)
 }
 #endif
 
-struct type *
-lang_bool_type (void)
-{
-  struct symbol *sym;
-  struct type *type;
-  switch (current_language->la_language)
-    {
-    case language_fortran:
-      sym = lookup_symbol ("logical", NULL, VAR_DOMAIN, NULL, NULL);
-      if (sym)
-	{
-	  type = SYMBOL_TYPE (sym);
-	  if (type && TYPE_CODE (type) == TYPE_CODE_BOOL)
-	    return type;
-	}
-      return builtin_type_f_logical_s2;
-    case language_cplus:
-    case language_pascal:
-    case language_ada:
-      if (current_language->la_language==language_cplus)
-        {sym = lookup_symbol ("bool", NULL, VAR_DOMAIN, NULL, NULL);}
-      else
-        {sym = lookup_symbol ("boolean", NULL, VAR_DOMAIN, NULL, NULL);}
-      if (sym)
-	{
-	  type = SYMBOL_TYPE (sym);
-	  if (type && TYPE_CODE (type) == TYPE_CODE_BOOL)
-	    return type;
-	}
-      return builtin_type_bool;
-    case language_java:
-      sym = lookup_symbol ("boolean", NULL, VAR_DOMAIN, NULL, NULL);
-      if (sym)
-	{
-	  type = SYMBOL_TYPE (sym);
-	  if (type && TYPE_CODE (type) == TYPE_CODE_BOOL)
-	    return type;
-	}
-      return java_boolean_type;
-      
-    default:
-      return builtin_type_int;
-    }
-}
-
 /* This page contains functions that return info about
    (struct value) values used in GDB. */
 
@@ -1080,11 +1036,18 @@ default_word_break_characters (void)
 
 void
 default_print_array_index (struct value *index_value, struct ui_file *stream,
-                           int format, enum val_prettyprint pretty)
+			   const struct value_print_options *options)
 {
   fprintf_filtered (stream, "[");
-  LA_VALUE_PRINT (index_value, stream, format, pretty);
+  LA_VALUE_PRINT (index_value, stream, options);
   fprintf_filtered (stream, "] = ");
+}
+
+int
+default_get_string (struct value *value, gdb_byte **buffer, int *length,
+		    const char **charset)
+{
+  error (_("Getting a string is unsupported in this language."));
 }
 
 /* Define the language that is no language.  */
@@ -1115,7 +1078,8 @@ unk_lang_printchar (int c, struct ui_file *stream)
 
 static void
 unk_lang_printstr (struct ui_file *stream, const gdb_byte *string,
-		   unsigned int length, int width, int force_ellipses)
+		   unsigned int length, int width, int force_ellipses,
+		   const struct value_print_options *options)
 {
   error (_("internal error - unimplemented function unk_lang_printstr called."));
 }
@@ -1130,15 +1094,15 @@ unk_lang_print_type (struct type *type, char *varstring, struct ui_file *stream,
 static int
 unk_lang_val_print (struct type *type, const gdb_byte *valaddr,
 		    int embedded_offset, CORE_ADDR address,
-		    struct ui_file *stream, int format,
-		    int deref_ref, int recurse, enum val_prettyprint pretty)
+		    struct ui_file *stream, int recurse,
+		    const struct value_print_options *options)
 {
   error (_("internal error - unimplemented function unk_lang_val_print called."));
 }
 
 static int
-unk_lang_value_print (struct value *val, struct ui_file *stream, int format,
-		      enum val_prettyprint pretty)
+unk_lang_value_print (struct value *val, struct ui_file *stream,
+		      const struct value_print_options *options)
 {
   error (_("internal error - unimplemented function unk_lang_value_print called."));
 }
@@ -1169,6 +1133,7 @@ unknown_language_arch_info (struct gdbarch *gdbarch,
 			    struct language_arch_info *lai)
 {
   lai->string_char_type = builtin_type (gdbarch)->builtin_char;
+  lai->bool_type_default = builtin_type (gdbarch)->builtin_int;
   lai->primitive_type_vector = GDBARCH_OBSTACK_CALLOC (gdbarch, 1,
 						       struct type *);
 }
@@ -1179,8 +1144,9 @@ const struct language_defn unknown_language_defn =
   language_unknown,
   range_check_off,
   type_check_off,
-  array_row_major,
   case_sensitive_on,
+  array_row_major,
+  macro_expansion_no,
   &exp_descriptor_standard,
   unk_lang_parser,
   unk_lang_error,
@@ -1189,10 +1155,11 @@ const struct language_defn unknown_language_defn =
   unk_lang_printstr,
   unk_lang_emit_char,
   unk_lang_print_type,		/* Print a type using appropriate syntax */
+  default_print_typedef,	/* Print a typedef using appropriate syntax */
   unk_lang_val_print,		/* Print a value using appropriate syntax */
   unk_lang_value_print,		/* Print a top-level value */
   unk_lang_trampoline,		/* Language specific skip_trampoline */
-  value_of_this,		/* value_of_this */
+  "this",        	    	/* name_of_this */
   basic_lookup_symbol_nonlocal, /* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   unk_lang_demangle,		/* Language specific symbol demangler */
@@ -1205,6 +1172,7 @@ const struct language_defn unknown_language_defn =
   unknown_language_arch_info,	/* la_language_arch_info.  */
   default_print_array_index,
   default_pass_by_reference,
+  default_get_string,
   LANG_MAGIC
 };
 
@@ -1215,8 +1183,9 @@ const struct language_defn auto_language_defn =
   language_auto,
   range_check_off,
   type_check_off,
-  array_row_major,
   case_sensitive_on,
+  array_row_major,
+  macro_expansion_no,
   &exp_descriptor_standard,
   unk_lang_parser,
   unk_lang_error,
@@ -1225,10 +1194,11 @@ const struct language_defn auto_language_defn =
   unk_lang_printstr,
   unk_lang_emit_char,
   unk_lang_print_type,		/* Print a type using appropriate syntax */
+  default_print_typedef,	/* Print a typedef using appropriate syntax */
   unk_lang_val_print,		/* Print a value using appropriate syntax */
   unk_lang_value_print,		/* Print a top-level value */
   unk_lang_trampoline,		/* Language specific skip_trampoline */
-  value_of_this,		/* value_of_this */
+  "this",		        /* name_of_this */
   basic_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   unk_lang_demangle,		/* Language specific symbol demangler */
@@ -1241,6 +1211,7 @@ const struct language_defn auto_language_defn =
   unknown_language_arch_info,	/* la_language_arch_info.  */
   default_print_array_index,
   default_pass_by_reference,
+  default_get_string,
   LANG_MAGIC
 };
 
@@ -1252,6 +1223,7 @@ const struct language_defn local_language_defn =
   type_check_off,
   case_sensitive_on,
   array_row_major,
+  macro_expansion_no,
   &exp_descriptor_standard,
   unk_lang_parser,
   unk_lang_error,
@@ -1260,10 +1232,11 @@ const struct language_defn local_language_defn =
   unk_lang_printstr,
   unk_lang_emit_char,
   unk_lang_print_type,		/* Print a type using appropriate syntax */
+  default_print_typedef,	/* Print a typedef using appropriate syntax */
   unk_lang_val_print,		/* Print a value using appropriate syntax */
   unk_lang_value_print,		/* Print a top-level value */
   unk_lang_trampoline,		/* Language specific skip_trampoline */
-  value_of_this,		/* value_of_this */
+  "this", 		        /* name_of_this */
   basic_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   unk_lang_demangle,		/* Language specific symbol demangler */
@@ -1276,6 +1249,7 @@ const struct language_defn local_language_defn =
   unknown_language_arch_info,	/* la_language_arch_info.  */
   default_print_array_index,
   default_pass_by_reference,
+  default_get_string,
   LANG_MAGIC
 };
 
@@ -1314,6 +1288,29 @@ language_string_char_type (const struct language_defn *la,
   struct language_gdbarch *ld = gdbarch_data (gdbarch,
 					      language_gdbarch_data);
   return ld->arch_info[la->la_language].string_char_type;
+}
+
+struct type *
+language_bool_type (const struct language_defn *la,
+		    struct gdbarch *gdbarch)
+{
+  struct language_gdbarch *ld = gdbarch_data (gdbarch,
+					      language_gdbarch_data);
+
+  if (ld->arch_info[la->la_language].bool_type_symbol)
+    {
+      struct symbol *sym;
+      sym = lookup_symbol (ld->arch_info[la->la_language].bool_type_symbol,
+			   NULL, VAR_DOMAIN, NULL);
+      if (sym)
+	{
+	  struct type *type = SYMBOL_TYPE (sym);
+	  if (type && TYPE_CODE (type) == TYPE_CODE_BOOL)
+	    return type;
+	}
+    }
+
+  return ld->arch_info[la->la_language].bool_type_default;
 }
 
 struct type *

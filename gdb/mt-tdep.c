@@ -36,6 +36,8 @@
 #include "dwarf2-frame.h"
 #include "infcall.h"
 #include "gdb_assert.h"
+#include "language.h"
+#include "valprint.h"
 
 enum mt_arch_constants
 {
@@ -225,9 +227,9 @@ mt_copro_register_type (struct gdbarch *arch, int regnum)
     case MT_MAC_REGNUM:
       return builtin_type_uint32;
     case MT_CONTEXT_REGNUM:
-      return builtin_type_long_long;
+      return builtin_type (arch)->builtin_long_long;
     case MT_FLAG_REGNUM:
-      return builtin_type_unsigned_char;
+      return builtin_type (arch)->builtin_unsigned_char;
     default:
       if (regnum >= MT_CPR0_REGNUM && regnum <= MT_CPR15_REGNUM)
 	return builtin_type_int16;
@@ -250,20 +252,14 @@ mt_copro_register_type (struct gdbarch *arch, int regnum)
 static struct type *
 mt_register_type (struct gdbarch *arch, int regnum)
 {
-  static struct type *void_func_ptr = NULL;
-  static struct type *void_ptr = NULL;
-  static struct type *copro_type;
+  static struct type *copro_type = NULL;
 
   if (regnum >= 0 && regnum < MT_NUM_REGS + MT_NUM_PSEUDO_REGS)
     {
-      if (void_func_ptr == NULL)
+      if (copro_type == NULL)
 	{
 	  struct type *temp;
-
-	  void_ptr = lookup_pointer_type (builtin_type_void);
-	  void_func_ptr =
-	    lookup_pointer_type (lookup_function_type (builtin_type_void));
-	  temp = create_range_type (NULL, builtin_type_unsigned_int, 0, 1);
+	  temp = create_range_type (NULL, builtin_type_int32, 0, 1);
 	  copro_type = create_array_type (NULL, builtin_type_int16, temp);
 	}
       switch (regnum)
@@ -271,10 +267,10 @@ mt_register_type (struct gdbarch *arch, int regnum)
 	case MT_PC_REGNUM:
 	case MT_RA_REGNUM:
 	case MT_IRA_REGNUM:
-	  return void_func_ptr;
+	  return builtin_type (arch)->builtin_func_ptr;
 	case MT_SP_REGNUM:
 	case MT_FP_REGNUM:
-	  return void_ptr;
+	  return builtin_type (arch)->builtin_data_ptr;
 	case MT_COPRO_REGNUM:
 	case MT_COPRO_PSEUDOREG_REGNUM:
 	  return copro_type;
@@ -332,9 +328,9 @@ mt_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
    values.  */
 
 static enum return_value_convention
-mt_return_value (struct gdbarch *gdbarch, struct type *type,
-		  struct regcache *regcache, gdb_byte *readbuf,
-		  const gdb_byte *writebuf)
+mt_return_value (struct gdbarch *gdbarch, struct type *func_type,
+		 struct type *type, struct regcache *regcache,
+		 gdb_byte *readbuf, const gdb_byte *writebuf)
 {
   if (TYPE_LENGTH (type) > 4)
     {
@@ -410,7 +406,7 @@ mt_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
       struct symbol *sym;
 
       /* Found a function.  */
-      sym = lookup_symbol (func_name, NULL, VAR_DOMAIN, NULL, NULL);
+      sym = lookup_symbol (func_name, NULL, VAR_DOMAIN, NULL);
       if (sym && SYMBOL_LANGUAGE (sym) != language_asm)
 	{
 	  /* Don't use this trick for assembly source files.  */
@@ -680,6 +676,7 @@ mt_registers_info (struct gdbarch *gdbarch,
 	{
 	  /* Special output handling for the 'coprocessor' register.  */
 	  gdb_byte *buf;
+	  struct value_print_options opts;
 
 	  buf = alloca (register_size (gdbarch, MT_COPRO_REGNUM));
 	  frame_register_read (frame, MT_COPRO_REGNUM, buf);
@@ -690,8 +687,11 @@ mt_registers_info (struct gdbarch *gdbarch,
 	  print_spaces_filtered (15 - strlen (gdbarch_register_name
 					        (gdbarch, regnum)),
 				 file);
+	  get_raw_print_options (&opts);
+	  opts.deref_ref = 1;
 	  val_print (register_type (gdbarch, regnum), buf,
-		     0, 0, file, 0, 1, 0, Val_no_prettyprint);
+		     0, 0, file, 0, &opts,
+		     current_language);
 	  fputs_filtered ("\n", file);
 	}
       else if (regnum == MT_MAC_REGNUM || regnum == MT_MAC_PSEUDOREG_REGNUM)
@@ -870,7 +870,7 @@ struct mt_unwind_cache
    the frame.  */
 
 static struct mt_unwind_cache *
-mt_frame_unwind_cache (struct frame_info *next_frame,
+mt_frame_unwind_cache (struct frame_info *this_frame,
 			void **this_prologue_cache)
 {
   struct gdbarch *gdbarch;
@@ -883,7 +883,7 @@ mt_frame_unwind_cache (struct frame_info *next_frame,
   if ((*this_prologue_cache))
     return (*this_prologue_cache);
 
-  gdbarch = get_frame_arch (next_frame);
+  gdbarch = get_frame_arch (this_frame);
   info = FRAME_OBSTACK_ZALLOC (struct mt_unwind_cache);
   (*this_prologue_cache) = info;
 
@@ -891,26 +891,26 @@ mt_frame_unwind_cache (struct frame_info *next_frame,
   info->framesize = 0;
   info->frame_base = 0;
   info->frameless_p = 1;
-  info->saved_regs = trad_frame_alloc_saved_regs (next_frame);
+  info->saved_regs = trad_frame_alloc_saved_regs (this_frame);
 
   /* Grab the frame-relative values of SP and FP, needed below. 
      The frame_saved_register function will find them on the
      stack or in the registers as appropriate.  */
-  sp = frame_unwind_register_unsigned (next_frame, MT_SP_REGNUM);
-  fp = frame_unwind_register_unsigned (next_frame, MT_FP_REGNUM);
+  sp = get_frame_register_unsigned (this_frame, MT_SP_REGNUM);
+  fp = get_frame_register_unsigned (this_frame, MT_FP_REGNUM);
 
-  start_addr = frame_func_unwind (next_frame, NORMAL_FRAME);
+  start_addr = get_frame_func (this_frame);
 
   /* Return early if GDB couldn't find the function.  */
   if (start_addr == 0)
     return info;
 
-  end_addr = frame_pc_unwind (next_frame);
+  end_addr = get_frame_pc (this_frame);
   prologue_end_addr = skip_prologue_using_sal (start_addr);
   if (end_addr == 0)
   for (next_addr = start_addr; next_addr < end_addr; next_addr += 4)
     {
-      instr = get_frame_memory_unsigned (next_frame, next_addr, 4);
+      instr = get_frame_memory_unsigned (this_frame, next_addr, 4);
       if (delayed_store)	/* previous instr was a push */
 	{
 	  upper_half = delayed_store >> 16;
@@ -1026,55 +1026,49 @@ mt_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
   return sp;
 }
 
-/* Assuming NEXT_FRAME->prev is a dummy, return the frame ID of that
-   dummy frame.  The frame ID's base needs to match the TOS value
-   saved by save_dummy_frame_tos(), and the PC match the dummy frame's
-   breakpoint.  */
+/* Assuming THIS_FRAME is a dummy, return the frame ID of that dummy
+   frame.  The frame ID's base needs to match the TOS value saved by
+   save_dummy_frame_tos(), and the PC match the dummy frame's breakpoint.  */
 
 static struct frame_id
-mt_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
+mt_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
 {
-  return frame_id_build (mt_unwind_sp (gdbarch, next_frame),
-			 frame_pc_unwind (next_frame));
+  CORE_ADDR sp = get_frame_register_unsigned (this_frame, MT_SP_REGNUM);
+  return frame_id_build (sp, get_frame_pc (this_frame));
 }
 
 /* Given a GDB frame, determine the address of the calling function's
    frame.  This will be used to create a new GDB frame struct.  */
 
 static void
-mt_frame_this_id (struct frame_info *next_frame,
+mt_frame_this_id (struct frame_info *this_frame,
 		   void **this_prologue_cache, struct frame_id *this_id)
 {
   struct mt_unwind_cache *info =
-    mt_frame_unwind_cache (next_frame, this_prologue_cache);
+    mt_frame_unwind_cache (this_frame, this_prologue_cache);
 
   if (!(info == NULL || info->prev_sp == 0))
-    (*this_id) = frame_id_build (info->prev_sp,
-				 frame_func_unwind (next_frame, NORMAL_FRAME));
+    (*this_id) = frame_id_build (info->prev_sp, get_frame_func (this_frame));
 
   return;
 }
 
-static void
-mt_frame_prev_register (struct frame_info *next_frame,
-			 void **this_prologue_cache,
-			 int regnum, int *optimizedp,
-			 enum lval_type *lvalp, CORE_ADDR *addrp,
-			 int *realnump, gdb_byte *bufferp)
+static struct value *
+mt_frame_prev_register (struct frame_info *this_frame,
+			 void **this_prologue_cache, int regnum)
 {
   struct mt_unwind_cache *info =
-    mt_frame_unwind_cache (next_frame, this_prologue_cache);
+    mt_frame_unwind_cache (this_frame, this_prologue_cache);
 
-  trad_frame_get_prev_register (next_frame, info->saved_regs, regnum,
-				optimizedp, lvalp, addrp, realnump, bufferp);
+  return trad_frame_get_prev_register (this_frame, info->saved_regs, regnum);
 }
 
 static CORE_ADDR
-mt_frame_base_address (struct frame_info *next_frame,
+mt_frame_base_address (struct frame_info *this_frame,
 			void **this_prologue_cache)
 {
   struct mt_unwind_cache *info =
-    mt_frame_unwind_cache (next_frame, this_prologue_cache);
+    mt_frame_unwind_cache (this_frame, this_prologue_cache);
 
   return info->frame_base;
 }
@@ -1088,17 +1082,10 @@ mt_frame_base_address (struct frame_info *next_frame,
 static const struct frame_unwind mt_frame_unwind = {
   NORMAL_FRAME,
   mt_frame_this_id,
-  mt_frame_prev_register
+  mt_frame_prev_register,
+  NULL,
+  default_frame_sniffer
 };
-
-/* The sniffer is a registered function that identifies our family of
-   frame unwind functions (this_id and prev_register).  */
-
-static const struct frame_unwind *
-mt_frame_sniffer (struct frame_info *next_frame)
-{
-  return &mt_frame_unwind;
-}
 
 /* Another shared interface:  the 'frame_base' object specifies how to
    unwind a frame and secure the base addresses for frame objects
@@ -1166,8 +1153,8 @@ mt_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* Register the DWARF 2 sniffer first, and then the traditional prologue
      based sniffer.  */
-  frame_unwind_append_sniffer (gdbarch, dwarf2_frame_sniffer);
-  frame_unwind_append_sniffer (gdbarch, mt_frame_sniffer);
+  dwarf2_append_unwinders (gdbarch);
+  frame_unwind_append_unwinder (gdbarch, &mt_frame_unwind);
   frame_base_set_default (gdbarch, &mt_frame_base);
 
   /* Register the 'unwind_pc' method.  */
@@ -1177,7 +1164,7 @@ mt_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   /* Methods for saving / extracting a dummy frame's ID.  
      The ID's stack address must match the SP value returned by
      PUSH_DUMMY_CALL, and saved by generic_save_dummy_frame_tos.  */
-  set_gdbarch_unwind_dummy_id (gdbarch, mt_unwind_dummy_id);
+  set_gdbarch_dummy_id (gdbarch, mt_dummy_id);
 
   return gdbarch;
 }

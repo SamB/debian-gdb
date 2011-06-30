@@ -99,7 +99,7 @@ struct frame_id
      lifetime of the frame.  While the PC (a.k.a. resume address)
      changes as the function is executed, this code address cannot.
      Typically, it is set to the address of the entry point of the
-     frame's function (as returned by frame_func_unwind().  
+     frame's function (as returned by get_frame_func).
 
      This field is valid only if code_addr_p is true.  Otherwise, this
      frame is considered to have a wildcard code address, i.e. one that
@@ -111,7 +111,7 @@ struct frame_id
      frames that do not change the stack but are still distinct and have 
      some form of distinct identifier (e.g. the ia64 which uses a 2nd 
      stack for registers).  This field is treated as unordered - i.e. will
-     not be used in frame ordering comparisons such as frame_id_inner().
+     not be used in frame ordering comparisons.
 
      This field is valid only if special_addr_p is true.  Otherwise, this
      frame is considered to have a wildcard special address, i.e. one that
@@ -124,25 +124,14 @@ struct frame_id
   unsigned int special_addr_p : 1;
 };
 
-/* Methods for constructing and comparing Frame IDs.
-
-   NOTE: Given stackless functions A and B, where A calls B (and hence
-   B is inner-to A).  The relationships: !eq(A,B); !eq(B,A);
-   !inner(A,B); !inner(B,A); all hold.
-
-   This is because, while B is inner-to A, B is not strictly inner-to A.  
-   Being stackless, they have an identical .stack_addr value, and differ 
-   only by their unordered .code_addr and/or .special_addr values.
-
-   Because frame_id_inner is only used as a safety net (e.g.,
-   detect a corrupt stack) the lack of strictness is not a problem.
-   Code needing to determine an exact relationship between two frames
-   must instead use frame_id_eq and frame_id_unwind.  For instance,
-   in the above, to determine that A stepped-into B, the equation
-   "A.id != B.id && A.id == id_unwind (B)" can be used.  */
+/* Methods for constructing and comparing Frame IDs.  */
 
 /* For convenience.  All fields are zero.  */
 extern const struct frame_id null_frame_id;
+
+/* Flag to control debugging.  */
+
+extern int frame_debug;
 
 /* Construct a frame ID.  The first parameter is the frame's constant
    stack address (typically the outer-bound), and the second the
@@ -171,12 +160,6 @@ extern int frame_id_p (struct frame_id l);
 /* Returns non-zero when L and R identify the same frame, or, if
    either L or R have a zero .func, then the same frame base.  */
 extern int frame_id_eq (struct frame_id l, struct frame_id r);
-
-/* Returns non-zero when L is strictly inner-than R (they have
-   different frame .bases).  Neither L, nor R can be `null'.  See note
-   above about frameless functions.  */
-extern int frame_id_inner (struct gdbarch *gdbarch, struct frame_id l,
-			   struct frame_id r);
 
 /* Write the internal representation of a frame ID on the specified
    stream.  */
@@ -277,29 +260,15 @@ extern CORE_ADDR get_frame_pc (struct frame_info *);
 
 extern CORE_ADDR get_frame_address_in_block (struct frame_info *this_frame);
 
-/* Similar to get_frame_address_in_block, find an address in the
-   block which logically called NEXT_FRAME, assuming it is a THIS_TYPE
-   frame.  */
-
-extern CORE_ADDR frame_unwind_address_in_block (struct frame_info *next_frame,
-						enum frame_type this_type);
-
 /* The frame's inner-most bound.  AKA the stack-pointer.  Confusingly
    known as top-of-stack.  */
 
 extern CORE_ADDR get_frame_sp (struct frame_info *);
-extern CORE_ADDR frame_sp_unwind (struct frame_info *);
-
 
 /* Following on from the `resume' address.  Return the entry point
    address of the function containing that resume address, or zero if
    that function isn't known.  */
 extern CORE_ADDR get_frame_func (struct frame_info *fi);
-
-/* Similar to get_frame_func, find the start of the function which
-   logically called NEXT_FRAME, assuming it is a THIS_TYPE frame.  */
-extern CORE_ADDR frame_func_unwind (struct frame_info *next_frame,
-				    enum frame_type this_type);
 
 /* Closely related to the resume address, various symbol table
    attributes that are determined by the PC.  Note that for a normal
@@ -460,12 +429,18 @@ extern void frame_register_unwind (struct frame_info *frame, int regnum,
 /* Fetch a register from this, or unwind a register from the next
    frame.  Note that the get_frame methods are wrappers to
    frame->next->unwind.  They all [potentially] throw an error if the
-   fetch fails.  */
+   fetch fails.  The value methods never return NULL, but usually
+   do return a lazy value.  */
 
 extern void frame_unwind_register (struct frame_info *frame,
 				   int regnum, gdb_byte *buf);
 extern void get_frame_register (struct frame_info *frame,
 				int regnum, gdb_byte *buf);
+
+struct value *frame_unwind_register_value (struct frame_info *frame,
+					   int regnum);
+struct value *get_frame_register_value (struct frame_info *frame,
+					int regnum);
 
 extern LONGEST frame_unwind_register_signed (struct frame_info *frame,
 					     int regnum);
@@ -504,16 +479,6 @@ extern int get_frame_register_bytes (struct frame_info *frame, int regnum,
 extern void put_frame_register_bytes (struct frame_info *frame, int regnum,
 				      CORE_ADDR offset, int len,
 				      const gdb_byte *myaddr);
-
-/* Map between a frame register number and its name.  A frame register
-   space is a superset of the cooked register space --- it also
-   includes builtin registers.  If NAMELEN is negative, use the NAME's
-   length when doing the comparison.  */
-
-extern int frame_map_name_to_regnum (struct frame_info *frame,
-				     const char *name, int namelen);
-extern const char *frame_map_regnum_to_name (struct frame_info *frame,
-					     int regnum);
 
 /* Unwind the PC.  Strictly speaking return the resume address of the
    calling frame.  For GDB, `pc' is the resume address and not a
@@ -569,18 +534,6 @@ enum print_what
     LOC_AND_ADDRESS 
   };
 
-/* Allocate additional space for appendices to a struct frame_info.
-   NOTE: Much of GDB's code works on the assumption that the allocated
-   saved_regs[] array is the size specified below.  If you try to make
-   that array smaller, GDB will happily walk off its end.  */
-
-#ifdef SIZEOF_FRAME_SAVED_REGS
-#error "SIZEOF_FRAME_SAVED_REGS can not be re-defined"
-#endif
-#define SIZEOF_FRAME_SAVED_REGS \
-        (sizeof (CORE_ADDR) * (gdbarch_num_regs (current_gdbarch)\
-			       + gdbarch_num_pseudo_regs (current_gdbarch)))
-
 /* Allocate zero initialized memory from the frame cache obstack.
    Appendices to the frame info (such as the unwind cache) should
    allocate memory using this method.  */
@@ -635,8 +588,6 @@ extern void show_and_print_stack_frame (struct frame_info *fi, int print_level,
 extern void print_stack_frame (struct frame_info *, int print_level,
 			       enum print_what print_what);
 
-extern void show_stack_frame (struct frame_info *);
-
 extern void print_frame_info (struct frame_info *, int print_level,
 			      enum print_what print_what, int args);
 
@@ -666,6 +617,12 @@ extern void (*deprecated_selected_frame_level_changed_hook) (int);
 
 extern void return_command (char *, int);
 
+/* Set FRAME's unwinder temporarily, so that we can call a sniffer.
+   Return a cleanup which should be called if unwinding fails, and
+   discarded if it succeeds.  */
+
+struct cleanup *frame_prepare_for_sniffer (struct frame_info *frame,
+					   const struct frame_unwind *unwind);
 
 /* Notes (cagney/2002-11-27, drow/2003-09-06):
 

@@ -35,10 +35,36 @@
 #include "regcache.h"
 #include "block.h"
 #include "dfp.h"
+#include "objfiles.h"
+#include "cli/cli-decode.h"
+#include "valprint.h"
+
+#include "python/python.h"
 
 /* Prototypes for exported functions. */
 
 void _initialize_values (void);
+
+/* Definition of a user function.  */
+struct internal_function
+{
+  /* The name of the function.  It is a bit odd to have this in the
+     function itself -- the user might use a differently-named
+     convenience variable to hold the function.  */
+  char *name;
+
+  /* The handler.  */
+  internal_function_fn handler;
+
+  /* User data for the handler.  */
+  void *cookie;
+
+  /* Function called to destroy the cookie when the function object is
+     destroyed.  */
+  void (*destroyer) (void *cookie);
+};
+
+static struct cmd_list_element *functionlist;
 
 struct value
 {
@@ -129,17 +155,17 @@ struct value
 
   /* Values are stored in a chain, so that they can be deleted easily
      over calls to the inferior.  Values assigned to internal
-     variables or put into the value history are taken off this
-     list.  */
+     variables, put into the value history or exposed to Python are
+     taken off this list.  */
   struct value *next;
 
   /* Register number if the value is from a register.  */
   short regnum;
 
   /* If zero, contents of this value are in the contents field.  If
-     nonzero, contents are in inferior memory at address in the
-     location.address field plus the offset field (and the lval field
-     should be lval_memory).
+     nonzero, contents are in inferior.  If the lval field is lval_memory,
+     the contents are in inferior memory at location.address plus offset.
+     The lval field may also be lval_register.
 
      WARNING: This field is used by the code which handles watchpoints
      (see breakpoint.c) to decide whether a particular value can be
@@ -202,6 +228,10 @@ struct value_history_chunk
 static struct value_history_chunk *value_history_chain;
 
 static int value_history_count;	/* Abs number of last entry stored */
+
+/* The type of internal functions.  */
+
+static struct type *internal_fn_type;
 
 /* List of all value objects currently allocated
    (except for those released by calls to release_value)
@@ -223,7 +253,7 @@ allocate_value (struct type *type)
   val->type = type;
   val->enclosing_type = type;
   VALUE_LVAL (val) = not_lval;
-  VALUE_ADDRESS (val) = 0;
+  val->location.address = 0;
   VALUE_FRAME_ID (val) = null_frame_id;
   val->offset = 0;
   val->bitpos = 0;
@@ -238,8 +268,16 @@ allocate_value (struct type *type)
   return val;
 }
 
+/* Deallocate a value and run destructors if needed.  */
+
+void
+value_free (struct value *value)
+{
+  xfree (value);
+}
+
 /* Allocate a  value  that has the correct length
-   for COUNT repetitions type TYPE.  */
+   for COUNT repetitions of type TYPE.  */
 
 struct value *
 allocate_repeat_value (struct type *type, int count)
@@ -248,12 +286,37 @@ allocate_repeat_value (struct type *type, int count)
   /* FIXME-type-allocation: need a way to free this type when we are
      done with it.  */
   struct type *range_type
-  = create_range_type ((struct type *) NULL, builtin_type_int,
+  = create_range_type ((struct type *) NULL, builtin_type_int32,
 		       low_bound, count + low_bound - 1);
   /* FIXME-type-allocation: need a way to free this type when we are
      done with it.  */
   return allocate_value (create_array_type ((struct type *) NULL,
 					    type, range_type));
+}
+
+/* Needed if another module needs to maintain its on list of values.  */
+void
+value_prepend_to_list (struct value **head, struct value *val)
+{
+  val->next = *head;
+  *head = val;
+}
+
+/* Needed if another module needs to maintain its on list of values.  */
+void
+value_remove_from_list (struct value **head, struct value *val)
+{
+  struct value *prev;
+
+  if (*head == val)
+    *head = (*head)->next;
+  else
+    for (prev = *head; prev->next; prev = prev->next)
+      if (prev->next == val)
+      {
+	prev->next = val->next;
+	break;
+      }
 }
 
 /* Accessor methods.  */
@@ -422,10 +485,30 @@ deprecated_value_lval_hack (struct value *value)
   return &value->lval;
 }
 
-CORE_ADDR *
-deprecated_value_address_hack (struct value *value)
+CORE_ADDR
+value_address (struct value *value)
 {
-  return &value->location.address;
+  if (value->lval == lval_internalvar
+      || value->lval == lval_internalvar_component)
+    return 0;
+  return value->location.address + value->offset;
+}
+
+CORE_ADDR
+value_raw_address (struct value *value)
+{
+  if (value->lval == lval_internalvar
+      || value->lval == lval_internalvar_component)
+    return 0;
+  return value->location.address;
+}
+
+void
+set_value_address (struct value *value, CORE_ADDR addr)
+{
+  gdb_assert (value->lval != lval_internalvar
+	      && value->lval != lval_internalvar_component);
+  value->location.address = addr;
 }
 
 struct internalvar **
@@ -664,14 +747,14 @@ show_values (char *num_exp, int from_tty)
 
   if (num_exp)
     {
-      /* "info history +" should print from the stored position.
-         "info history <exp>" should print around value number <exp>.  */
+      /* "show values +" should print from the stored position.
+         "show values <exp>" should print around value number <exp>.  */
       if (num_exp[0] != '+' || num_exp[1] != '\0')
 	num = parse_and_eval_long (num_exp) - 5;
     }
   else
     {
-      /* "info history" means print the last 10 values.  */
+      /* "show values" means print the last 10 values.  */
       num = value_history_count - 9;
     }
 
@@ -680,18 +763,20 @@ show_values (char *num_exp, int from_tty)
 
   for (i = num; i < num + 10 && i <= value_history_count; i++)
     {
+      struct value_print_options opts;
       val = access_value_history (i);
       printf_filtered (("$%d = "), i);
-      value_print (val, gdb_stdout, 0, Val_pretty_default);
+      get_user_print_options (&opts);
+      value_print (val, gdb_stdout, &opts);
       printf_filtered (("\n"));
     }
 
-  /* The next "info history +" should start after what we just printed.  */
+  /* The next "show values +" should start after what we just printed.  */
   num += 10;
 
   /* Hitting just return after this command should do the same thing as
-     "info history +".  If num_exp is null, this is unnecessary, since
-     "info history +" is not useful after "info history".  */
+     "show values +".  If num_exp is null, this is unnecessary, since
+     "show values +" is not useful after "show values".  */
   if (from_tty && num_exp)
     {
       num_exp[0] = '+';
@@ -746,7 +831,7 @@ init_if_undefined_command (char* args, int from_tty)
    the return value is NULL.  */
 
 struct internalvar *
-lookup_only_internalvar (char *name)
+lookup_only_internalvar (const char *name)
 {
   struct internalvar *var;
 
@@ -762,7 +847,7 @@ lookup_only_internalvar (char *name)
    NAME should not normally include a dollar sign.  */
 
 struct internalvar *
-create_internalvar (char *name)
+create_internalvar (const char *name)
 {
   struct internalvar *var;
   var = (struct internalvar *) xmalloc (sizeof (struct internalvar));
@@ -783,7 +868,7 @@ create_internalvar (char *name)
    one is created, with a void value.  */
 
 struct internalvar *
-lookup_internalvar (char *name)
+lookup_internalvar (const char *name)
 {
   struct internalvar *var;
 
@@ -870,7 +955,7 @@ set_internalvar (struct internalvar *var, struct value *val)
 
   /* Begin code which must not call error().  If var->value points to
      something free'd, an error() obviously leaves a dangling pointer.
-     But we also get a danling pointer if var->value points to
+     But we also get a dangling pointer if var->value points to
      something in the value chain (i.e., before release_value is
      called), because after the error free_all_values will get called before
      long.  */
@@ -885,6 +970,85 @@ char *
 internalvar_name (struct internalvar *var)
 {
   return var->name;
+}
+
+static struct value *
+value_create_internal_function (const char *name,
+				internal_function_fn handler,
+				void *cookie,
+				void (*destroyer) (void *))
+{
+  struct value *result = allocate_value (internal_fn_type);
+  gdb_byte *addr = value_contents_writeable (result);
+  struct internal_function **fnp = (struct internal_function **) addr;
+  /* The internal_function object is leaked here -- to make it truly
+     deletable, we would have to reference count it and add special
+     code to value_free and value_copy.  The setup here is a bit odd
+     in general.  It would be better to have a special case in
+     help_command.  */
+  struct internal_function *ifn = XNEW (struct internal_function);
+  ifn->name = xstrdup (name);
+  ifn->handler = handler;
+  ifn->cookie = cookie;
+  ifn->destroyer = destroyer;
+  *fnp = ifn;
+  return result;
+}
+
+char *
+value_internal_function_name (struct value *val)
+{
+  gdb_byte *addr = value_contents_writeable (val);
+  struct internal_function *ifn = * (struct internal_function **) addr;
+  return ifn->name;
+}
+
+struct value *
+call_internal_function (struct value *func, int argc, struct value **argv)
+{
+  gdb_byte *addr = value_contents_writeable (func);
+  struct internal_function *ifn = * (struct internal_function **) addr;
+  return (*ifn->handler) (ifn->cookie, argc, argv);
+}
+
+/* The 'function' command.  This does nothing -- it is just a
+   placeholder to let "help function NAME" work.  This is also used as
+   the implementation of the sub-command that is created when
+   registering an internal function.  */
+static void
+function_command (char *command, int from_tty)
+{
+  /* Do nothing.  */
+}
+
+/* Clean up if an internal function's command is destroyed.  */
+static void
+function_destroyer (struct cmd_list_element *self, void *ignore)
+{
+  xfree (self->name);
+  xfree (self->doc);
+}
+
+/* Add a new internal function.  NAME is the name of the function; DOC
+   is a documentation string describing the function.  HANDLER is
+   called when the function is invoked.  COOKIE is an arbitrary
+   pointer which is passed to HANDLER and is intended for "user data".
+   DESTROYER is invoked when the function is destroyed.  */
+void
+add_internal_function (const char *name, const char *doc,
+		       internal_function_fn handler,
+		       void *cookie, void (*destroyer) (void *))
+{
+  struct cmd_list_element *cmd;
+  struct internalvar *var = lookup_internalvar (name);
+  struct value *fnval = value_create_internal_function (name, handler, cookie,
+							destroyer);
+  release_value (fnval);
+  set_internalvar (var, fnval);
+
+  cmd = add_cmd (xstrdup (name), no_class, function_command, (char *) doc,
+		 &functionlist);
+  cmd->destroyer = function_destroyer;
 }
 
 /* Update VALUE before discarding OBJFILE.  COPIED_TYPES is used to
@@ -915,6 +1079,7 @@ preserve_values (struct objfile *objfile)
   htab_t copied_types;
   struct value_history_chunk *cur;
   struct internalvar *var;
+  struct value *val;
   int i;
 
   /* Create the hash table.  We allocate on the objfile's obstack, since
@@ -929,6 +1094,9 @@ preserve_values (struct objfile *objfile)
   for (var = internalvars; var; var = var->next)
     preserve_one_value (var->value, objfile, copied_types);
 
+  for (val = values_in_python; val; val = val->next)
+    preserve_one_value (val, objfile, copied_types);
+
   htab_delete (copied_types);
 }
 
@@ -937,7 +1105,9 @@ show_convenience (char *ignore, int from_tty)
 {
   struct internalvar *var;
   int varseen = 0;
+  struct value_print_options opts;
 
+  get_user_print_options (&opts);
   for (var = internalvars; var; var = var->next)
     {
       if (!varseen)
@@ -946,7 +1116,7 @@ show_convenience (char *ignore, int from_tty)
 	}
       printf_filtered (("$%s = "), var->name);
       value_print (value_of_internalvar (var), gdb_stdout,
-		   0, Val_pretty_default);
+		   &opts);
       printf_filtered (("\n"));
     }
   if (!varseen)
@@ -1017,7 +1187,7 @@ value_as_address (struct value *val)
 
      Upon entry to this function, if VAL is a value of type `function'
      (that is, TYPE_CODE (VALUE_TYPE (val)) == TYPE_CODE_FUNC), then
-     VALUE_ADDRESS (val) is the address of the function.  This is what
+     value_address (val) is the address of the function.  This is what
      you'll get if you evaluate an expression like `main'.  The call
      to COERCE_ARRAY below actually does all the usual unary
      conversions, which includes converting values of type `function'
@@ -1037,7 +1207,7 @@ value_as_address (struct value *val)
      function, just return its address directly.  */
   if (TYPE_CODE (value_type (val)) == TYPE_CODE_FUNC
       || TYPE_CODE (value_type (val)) == TYPE_CODE_METHOD)
-    return VALUE_ADDRESS (val);
+    return value_address (val);
 
   val = coerce_array (val);
 
@@ -1235,7 +1405,7 @@ value_static_field (struct type *type, int fieldno)
 {
   struct value *retval;
 
-  if (TYPE_FIELD_STATIC_HAS_ADDR (type, fieldno))
+  if (TYPE_FIELD_LOC_KIND (type, fieldno) == FIELD_LOC_KIND_PHYSADDR)
     {
       retval = value_at (TYPE_FIELD_TYPE (type, fieldno),
 			 TYPE_FIELD_STATIC_PHYSADDR (type, fieldno));
@@ -1243,7 +1413,7 @@ value_static_field (struct type *type, int fieldno)
   else
     {
       char *phys_name = TYPE_FIELD_STATIC_PHYSNAME (type, fieldno);
-      struct symbol *sym = lookup_symbol (phys_name, 0, VAR_DOMAIN, 0, NULL);
+      struct symbol *sym = lookup_symbol (phys_name, 0, VAR_DOMAIN, 0);
       if (sym == NULL)
 	{
 	  /* With some compilers, e.g. HP aCC, static data members are reported
@@ -1268,7 +1438,7 @@ value_static_field (struct type *type, int fieldno)
  	}
       if (retval && VALUE_LVAL (retval) == lval_memory)
 	SET_FIELD_PHYSADDR (TYPE_FIELD (type, fieldno),
-			    VALUE_ADDRESS (retval));
+			    value_address (retval));
     }
   return retval;
 }
@@ -1353,6 +1523,11 @@ value_primitive_field (struct value *arg1, int offset,
          bases, etc.  */
       v = allocate_value (value_enclosing_type (arg1));
       v->type = type;
+
+      /* Lazy register values with offsets are not supported.  */
+      if (VALUE_LVAL (arg1) == lval_register && value_lazy (arg1))
+	value_fetch_lazy (arg1);
+
       if (value_lazy (arg1))
 	set_value_lazy (v, 1);
       else
@@ -1367,6 +1542,11 @@ value_primitive_field (struct value *arg1, int offset,
       /* Plain old data member */
       offset += TYPE_FIELD_BITPOS (arg_type, fieldno) / 8;
       v = allocate_value (type);
+
+      /* Lazy register values with offsets are not supported.  */
+      if (VALUE_LVAL (arg1) == lval_register && value_lazy (arg1))
+	value_fetch_lazy (arg1);
+
       if (value_lazy (arg1))
 	set_value_lazy (v, 1);
       else
@@ -1413,7 +1593,7 @@ value_fn_field (struct value **arg1p, struct fn_field *f, int j, struct type *ty
   struct symbol *sym;
   struct minimal_symbol *msym;
 
-  sym = lookup_symbol (physname, 0, VAR_DOMAIN, 0, NULL);
+  sym = lookup_symbol (physname, 0, VAR_DOMAIN, 0);
   if (sym != NULL)
     {
       msym = NULL;
@@ -1429,11 +1609,18 @@ value_fn_field (struct value **arg1p, struct fn_field *f, int j, struct type *ty
   v = allocate_value (ftype);
   if (sym)
     {
-      VALUE_ADDRESS (v) = BLOCK_START (SYMBOL_BLOCK_VALUE (sym));
+      set_value_address (v, BLOCK_START (SYMBOL_BLOCK_VALUE (sym)));
     }
   else
     {
-      VALUE_ADDRESS (v) = SYMBOL_VALUE_ADDRESS (msym);
+      /* The minimal symbol might point to a function descriptor;
+	 resolve it to the actual code address instead.  */
+      struct objfile *objfile = msymbol_objfile (msym);
+      struct gdbarch *gdbarch = get_objfile_arch (objfile);
+
+      set_value_address (v,
+	gdbarch_convert_from_func_ptr_addr
+	   (gdbarch, SYMBOL_VALUE_ADDRESS (msym), &current_target));
     }
 
   if (arg1p)
@@ -1620,7 +1807,7 @@ value_from_string (char *ptr)
   struct type *stringtype;
 
   rangetype = create_range_type ((struct type *) NULL,
-				 builtin_type_int,
+				 builtin_type_int32,
 				 lowbound, len + lowbound - 1);
   string_char_type = language_string_char_type (current_language,
 						current_gdbarch);
@@ -1630,6 +1817,27 @@ value_from_string (char *ptr)
   val = allocate_value (stringtype);
   memcpy (value_contents_raw (val), ptr, len);
   return val;
+}
+
+/* Return a new value constructed from some bytes.  TYPE is the type
+   of the object.  VALADDR is a pointer to the base of the enclosing
+   object.  If VALADDR is NULL, the value is marked as lazy.
+   EMBEDDED_OFFSET is the offset into VALADDR of the bytes making up
+   the new object.  ADDRESS is the inferior address of the object.  */
+struct value *
+value_from_contents_and_address (struct type *type, const gdb_byte *valaddr,
+				 int embedded_offset, CORE_ADDR address)
+{
+  struct value *result = allocate_value (type);
+  if (valaddr == NULL)
+    set_value_lazy (result, 1);
+  else
+    memcpy (value_contents_raw (result), valaddr + embedded_offset,
+	    TYPE_LENGTH (type));
+  set_value_address (result, address);
+  if (address != 0)
+    VALUE_LVAL (result) = lval_memory;
+  return result;
 }
 
 struct value *
@@ -1674,28 +1882,21 @@ coerce_ref (struct value *arg)
 struct value *
 coerce_array (struct value *arg)
 {
+  struct type *type;
+
   arg = coerce_ref (arg);
-  if (current_language->c_style_arrays
-      && TYPE_CODE (value_type (arg)) == TYPE_CODE_ARRAY)
-    arg = value_coerce_array (arg);
-  if (TYPE_CODE (value_type (arg)) == TYPE_CODE_FUNC)
-    arg = value_coerce_function (arg);
-  return arg;
-}
+  type = check_typedef (value_type (arg));
 
-struct value *
-coerce_number (struct value *arg)
-{
-  arg = coerce_array (arg);
-  arg = coerce_enum (arg);
-  return arg;
-}
-
-struct value *
-coerce_enum (struct value *arg)
-{
-  if (TYPE_CODE (check_typedef (value_type (arg))) == TYPE_CODE_ENUM)
-    arg = value_cast (builtin_type_unsigned_int, arg);
+  switch (TYPE_CODE (type))
+    {
+    case TYPE_CODE_ARRAY:
+      if (current_language->c_style_arrays)
+	arg = value_coerce_array (arg);
+      break;
+    case TYPE_CODE_FUNC:
+      arg = value_coerce_function (arg);
+      break;
+    }
   return arg;
 }
 
@@ -1705,7 +1906,7 @@ coerce_enum (struct value *arg)
    address as a hidden first parameter).  */
 
 int
-using_struct_return (struct type *value_type)
+using_struct_return (struct type *func_type, struct type *value_type)
 {
   enum type_code code = TYPE_CODE (value_type);
 
@@ -1718,7 +1919,7 @@ using_struct_return (struct type *value_type)
     return 0;
 
   /* Probe the architecture for the return-value convention.  */
-  return (gdbarch_return_value (current_gdbarch, value_type,
+  return (gdbarch_return_value (current_gdbarch, func_type, value_type,
 				NULL, NULL, NULL)
 	  != RETURN_VALUE_REGISTER_CONVENTION);
 }
@@ -1762,4 +1963,13 @@ init-if-undefined VARIABLE = EXPRESSION\n\
 Set an internal VARIABLE to the result of the EXPRESSION if it does not\n\
 exist or does not contain a value.  The EXPRESSION is not evaluated if the\n\
 VARIABLE is already initialized."));
+
+  add_prefix_cmd ("function", no_class, function_command, _("\
+Placeholder command for showing help on convenience functions."),
+		  &functionlist, "function ", 0, &cmdlist);
+
+  internal_fn_type = alloc_type (NULL);
+  TYPE_CODE (internal_fn_type) = TYPE_CODE_INTERNAL_FUNCTION;
+  TYPE_LENGTH (internal_fn_type) = sizeof (struct internal_function *);
+  TYPE_NAME (internal_fn_type) = "<internal function>";
 }

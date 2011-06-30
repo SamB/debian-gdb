@@ -145,7 +145,7 @@ add_class_symbol (struct type *type, CORE_ADDR addr)
     obstack_alloc (&dynamics_objfile->objfile_obstack, sizeof (struct symbol));
   memset (sym, 0, sizeof (struct symbol));
   SYMBOL_LANGUAGE (sym) = language_java;
-  DEPRECATED_SYMBOL_NAME (sym) = TYPE_TAG_NAME (type);
+  SYMBOL_SET_LINKAGE_NAME (sym, TYPE_TAG_NAME (type));
   SYMBOL_CLASS (sym) = LOC_TYPEDEF;
   /*  SYMBOL_VALUE (sym) = valu; */
   SYMBOL_TYPE (sym) = type;
@@ -169,8 +169,7 @@ struct type *
 java_lookup_class (char *name)
 {
   struct symbol *sym;
-  sym = lookup_symbol (name, expression_context_block, STRUCT_DOMAIN,
-		       (int *) 0, (struct symtab **) NULL);
+  sym = lookup_symbol (name, expression_context_block, STRUCT_DOMAIN, NULL);
   if (sym != NULL)
     return SYMBOL_TYPE (sym);
 #if 0
@@ -190,7 +189,7 @@ java_lookup_class (char *name)
   TYPE_CODE (type) = TYPE_CODE_STRUCT;
   INIT_CPLUS_SPECIFIC (type);
   TYPE_TAG_NAME (type) = obsavestring (name, strlen (name), &objfile->objfile_obstack);
-  TYPE_FLAGS (type) |= TYPE_FLAG_STUB;
+  TYPE_STUB (type) = 1;
   TYPE ? = addr;
   return type;
 #else
@@ -211,8 +210,7 @@ get_java_utf8_name (struct obstack *obstack, struct value *name)
   CORE_ADDR data_addr;
   temp = value_struct_elt (&temp, NULL, "length", NULL, "structure");
   name_length = (int) value_as_long (temp);
-  data_addr = VALUE_ADDRESS (temp) + value_offset (temp)
-    + TYPE_LENGTH (value_type (temp));
+  data_addr = value_address (temp) + TYPE_LENGTH (value_type (temp));
   chrs = obstack_alloc (obstack, name_length + 1);
   chrs[name_length] = '\0';
   read_memory (data_addr, (gdb_byte *) chrs, name_length);
@@ -267,7 +265,7 @@ type_from_class (struct value *clas)
 	return NULL;
       clas = value_ind (clas);
     }
-  addr = VALUE_ADDRESS (clas) + value_offset (clas);
+  addr = value_address (clas);
 
 #if 0
   get_java_class_symtab ();
@@ -423,7 +421,7 @@ java_link_class_type (struct type *type, struct value *clas)
   fields = NULL;
   nfields--;			/* First set up dummy "class" field. */
   SET_FIELD_PHYSADDR (TYPE_FIELD (type, nfields),
-		      VALUE_ADDRESS (clas) + value_offset (clas));
+		      value_address (clas));
   TYPE_FIELD_NAME (type, nfields) = "class";
   TYPE_FIELD_TYPE (type, nfields) = value_type (clas);
   SET_TYPE_FIELD_PRIVATE (type, nfields);
@@ -440,7 +438,9 @@ java_link_class_type (struct type *type, struct value *clas)
 	}
       else
 	{			/* Re-use field value for next field. */
-	  VALUE_ADDRESS (field) += TYPE_LENGTH (value_type (field));
+	  CORE_ADDR addr
+	    = value_address (field) + TYPE_LENGTH (value_type (field));
+	  set_value_address (field, addr);
 	  set_value_lazy (field, 1);
 	}
       temp = field;
@@ -510,7 +510,9 @@ java_link_class_type (struct type *type, struct value *clas)
 	}
       else
 	{			/* Re-use method value for next method. */
-	  VALUE_ADDRESS (method) += TYPE_LENGTH (value_type (method));
+	  CORE_ADDR addr
+	    = value_address (method) + TYPE_LENGTH (value_type (method));
+	  set_value_address (method, addr);
 	  set_value_lazy (method, 1);
 	}
 
@@ -577,8 +579,7 @@ get_java_object_type (void)
   if (java_object_type == NULL)
     {
       struct symbol *sym;
-      sym = lookup_symbol ("java.lang.Object", NULL, STRUCT_DOMAIN,
-			   (int *) 0, (struct symtab **) NULL);
+      sym = lookup_symbol ("java.lang.Object", NULL, STRUCT_DOMAIN, NULL);
       if (sym == NULL)
 	error (_("cannot find java.lang.Object"));
       java_object_type = SYMBOL_TYPE (sym);
@@ -777,7 +778,7 @@ java_array_type (struct type *type, int dims)
 
   while (dims-- > 0)
     {
-      range_type = create_range_type (NULL, builtin_type_int, 0, 0);
+      range_type = create_range_type (NULL, builtin_type_int32, 0, 0);
       /* FIXME  This is bogus!  Java arrays are not gdb arrays! */
       type = create_array_type (NULL, type, range_type);
     }
@@ -940,7 +941,7 @@ evaluate_subexp_java (struct type *expect_type, struct expression *exp,
 standard:
   return evaluate_subexp_standard (expect_type, exp, pos, noside);
 nosideret:
-  return value_from_longest (builtin_type_long, (LONGEST) 1);
+  return value_from_longest (builtin_type_int8, (LONGEST) 1);
 }
 
 static char *java_demangle (const char *mangled, int options)
@@ -1042,6 +1043,51 @@ const struct op_print java_op_print_tab[] =
   {NULL, 0, 0, 0}
 };
 
+enum java_primitive_types
+{
+  java_primitive_type_int,
+  java_primitive_type_short,
+  java_primitive_type_long,
+  java_primitive_type_byte,
+  java_primitive_type_boolean,
+  java_primitive_type_char,
+  java_primitive_type_float,
+  java_primitive_type_double,
+  java_primitive_type_void,
+  nr_java_primitive_types
+};
+
+void
+java_language_arch_info (struct gdbarch *gdbarch,
+			 struct language_arch_info *lai)
+{
+  lai->string_char_type = java_char_type;
+  lai->primitive_type_vector
+    = GDBARCH_OBSTACK_CALLOC (gdbarch, nr_java_primitive_types + 1,
+                              struct type *);
+  lai->primitive_type_vector [java_primitive_type_int]
+    = java_int_type;
+  lai->primitive_type_vector [java_primitive_type_short]
+    = java_short_type;
+  lai->primitive_type_vector [java_primitive_type_long]
+    = java_long_type;
+  lai->primitive_type_vector [java_primitive_type_byte]
+    = java_byte_type;
+  lai->primitive_type_vector [java_primitive_type_boolean]
+    = java_boolean_type;
+  lai->primitive_type_vector [java_primitive_type_char]
+    = java_char_type;
+  lai->primitive_type_vector [java_primitive_type_float]
+    = java_float_type;
+  lai->primitive_type_vector [java_primitive_type_double]
+    = java_double_type;
+  lai->primitive_type_vector [java_primitive_type_void]
+    = java_void_type;
+
+  lai->bool_type_symbol = "boolean";
+  lai->bool_type_default = java_boolean_type;
+}
+
 const struct exp_descriptor exp_descriptor_java = 
 {
   print_subexp_standard,
@@ -1059,6 +1105,7 @@ const struct language_defn java_language_defn =
   type_check_off,
   case_sensitive_on,
   array_row_major,
+  macro_expansion_no,
   &exp_descriptor_java,
   java_parse,
   java_error,
@@ -1067,10 +1114,11 @@ const struct language_defn java_language_defn =
   c_printstr,			/* Function to print string constant */
   java_emit_char,		/* Function to print a single character */
   java_print_type,		/* Print a type using appropriate syntax */
+  default_print_typedef,	/* Print a typedef using appropriate syntax */
   java_val_print,		/* Print a value using appropriate syntax */
   java_value_print,		/* Print a top-level value */
   NULL,				/* Language specific skip_trampoline */
-  value_of_this,		/* value_of_this */
+  "this",	                /* name_of_this */
   basic_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   java_demangle,		/* Language specific symbol demangler */
@@ -1080,9 +1128,10 @@ const struct language_defn java_language_defn =
   0,				/* String lower bound */
   default_word_break_characters,
   default_make_symbol_completion_list,
-  c_language_arch_info,
+  java_language_arch_info,
   default_print_array_index,
   default_pass_by_reference,
+  default_get_string,
   LANG_MAGIC
 };
 

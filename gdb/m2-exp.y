@@ -52,6 +52,9 @@ Boston, MA 02110-1301, USA.  */
 #include "objfiles.h" /* For have_full_symbols and have_partial_symbols */
 #include "block.h"
 
+#define parse_type builtin_type (parse_gdbarch)
+#define parse_m2_type builtin_m2_type (parse_gdbarch)
+
 /* Remap normal yacc parser interface names (yyparse, yylex, yyerror, etc),
    as well as gratuitiously global symbol names, so we can have multiple
    yacc generated parsers in gdb.  Note that these are only the variables
@@ -497,7 +500,7 @@ exp	:	M2_FALSE
 
 exp	:	INT
 			{ write_exp_elt_opcode (OP_LONG);
-			  write_exp_elt_type (builtin_type_m2_int);
+			  write_exp_elt_type (parse_m2_type->builtin_int);
 			  write_exp_elt_longcst ((LONGEST) $1);
 			  write_exp_elt_opcode (OP_LONG); }
 	;
@@ -505,7 +508,7 @@ exp	:	INT
 exp	:	UINT
 			{
 			  write_exp_elt_opcode (OP_LONG);
-			  write_exp_elt_type (builtin_type_m2_card);
+			  write_exp_elt_type (parse_m2_type->builtin_card);
 			  write_exp_elt_longcst ((LONGEST) $1);
 			  write_exp_elt_opcode (OP_LONG);
 			}
@@ -513,7 +516,7 @@ exp	:	UINT
 
 exp	:	CHAR
 			{ write_exp_elt_opcode (OP_LONG);
-			  write_exp_elt_type (builtin_type_m2_char);
+			  write_exp_elt_type (parse_m2_type->builtin_char);
 			  write_exp_elt_longcst ((LONGEST) $1);
 			  write_exp_elt_opcode (OP_LONG); }
 	;
@@ -521,7 +524,7 @@ exp	:	CHAR
 
 exp	:	FLOAT
 			{ write_exp_elt_opcode (OP_DOUBLE);
-			  write_exp_elt_type (builtin_type_m2_real);
+			  write_exp_elt_type (parse_m2_type->builtin_real);
 			  write_exp_elt_dblcst ($1);
 			  write_exp_elt_opcode (OP_DOUBLE); }
 	;
@@ -531,7 +534,7 @@ exp	:	variable
 
 exp	:	SIZE '(' type ')'	%prec UNARY
 			{ write_exp_elt_opcode (OP_LONG);
-			  write_exp_elt_type (builtin_type_int);
+			  write_exp_elt_type (parse_type->builtin_int);
 			  write_exp_elt_longcst ((LONGEST) TYPE_LENGTH ($3));
 			  write_exp_elt_opcode (OP_LONG); }
 	;
@@ -550,7 +553,7 @@ block	:	fblock
 fblock	:	BLOCKNAME
 			{ struct symbol *sym
 			    = lookup_symbol (copy_name ($1), expression_context_block,
-					     VAR_DOMAIN, 0, NULL);
+					     VAR_DOMAIN, 0);
 			  $$ = sym;}
 	;
 			     
@@ -559,7 +562,7 @@ fblock	:	BLOCKNAME
 fblock	:	block COLONCOLON BLOCKNAME
 			{ struct symbol *tem
 			    = lookup_symbol (copy_name ($3), $1,
-					     VAR_DOMAIN, 0, NULL);
+					     VAR_DOMAIN, 0);
 			  if (!tem || SYMBOL_CLASS (tem) != LOC_BLOCK)
 			    error ("No function \"%s\" in specified context.",
 				   copy_name ($3));
@@ -583,7 +586,7 @@ variable:	INTERNAL_VAR
 variable:	block COLONCOLON NAME
 			{ struct symbol *sym;
 			  sym = lookup_symbol (copy_name ($3), $1,
-					       VAR_DOMAIN, 0, NULL);
+					       VAR_DOMAIN, 0);
 			  if (sym == 0)
 			    error ("No symbol \"%s\" in specified context.",
 				   copy_name ($3));
@@ -603,8 +606,7 @@ variable:	NAME
  			  sym = lookup_symbol (copy_name ($1),
 					       expression_context_block,
 					       VAR_DOMAIN,
-					       &is_a_field_of_this,
-					       NULL);
+					       &is_a_field_of_this);
 			  if (sym)
 			    {
 			      if (symbol_read_needs_frame (sym))
@@ -631,12 +633,7 @@ variable:	NAME
 			      msymbol =
 				lookup_minimal_symbol (arg, NULL, NULL);
 			      if (msymbol != NULL)
-				{
-				  write_exp_msymbol
-				    (msymbol,
-				     lookup_function_type (builtin_type_int),
-				     builtin_type_int);
-				}
+				write_exp_msymbol (msymbol);
 			      else if (!have_full_symbols () && !have_partial_symbols ())
 				error ("No symbol table is loaded.  Use the \"symbol-file\" command.");
 			      else
@@ -660,14 +657,14 @@ int
 overflow(a,b)
    long a,b;
 {
-   return (MAX_OF_TYPE(builtin_type_m2_int) - b) < a;
+   return (MAX_OF_TYPE(parse_m2_type->builtin_int) - b) < a;
 }
 
 int
 uoverflow(a,b)
    unsigned long a,b;
 {
-   return (MAX_OF_TYPE(builtin_type_m2_card) - b) < a;
+   return (MAX_OF_TYPE(parse_m2_type->builtin_card) - b) < a;
 }
 #endif /* FIXME */
 
@@ -1028,8 +1025,7 @@ yylex ()
 
     if (lookup_partial_symtab (tmp))
       return BLOCKNAME;
-    sym = lookup_symbol (tmp, expression_context_block,
-			 VAR_DOMAIN, 0, NULL);
+    sym = lookup_symbol (tmp, expression_context_block, VAR_DOMAIN, 0);
     if (sym && SYMBOL_CLASS (sym) == LOC_BLOCK)
       return BLOCKNAME;
     if (lookup_typename (copy_name (yylval.sval), expression_context_block, 1))
@@ -1037,23 +1033,18 @@ yylex ()
 
     if(sym)
     {
-       switch(sym->aclass)
+      switch(SYMBOL_CLASS (sym))
        {
        case LOC_STATIC:
        case LOC_REGISTER:
        case LOC_ARG:
        case LOC_REF_ARG:
-       case LOC_REGPARM:
        case LOC_REGPARM_ADDR:
        case LOC_LOCAL:
-       case LOC_LOCAL_ARG:
-       case LOC_BASEREG:
-       case LOC_BASEREG_ARG:
        case LOC_CONST:
        case LOC_CONST_BYTES:
        case LOC_OPTIMIZED_OUT:
        case LOC_COMPUTED:
-       case LOC_COMPUTED_ARG:
 	  return NAME;
 
        case LOC_TYPEDEF:

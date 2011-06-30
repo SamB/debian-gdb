@@ -35,6 +35,7 @@
 #include "alphabsd-tdep.h"
 #include "nbsd-tdep.h"
 #include "solib-svr4.h"
+#include "target.h"
 
 /* Core file support.  */
 
@@ -216,7 +217,7 @@ alphanbsd_sigtramp_offset (CORE_ADDR pc)
   LONGEST off;
   int i;
 
-  if (read_memory_nobpt (pc, (char *) w, 4) != 0)
+  if (target_read_memory (pc, (char *) w, 4) != 0)
     return -1;
 
   for (i = 0; i < RETCODE_NWORDS; i++)
@@ -230,7 +231,7 @@ alphanbsd_sigtramp_offset (CORE_ADDR pc)
   off = i * 4;
   pc -= off;
 
-  if (read_memory_nobpt (pc, (char *) ret, sizeof (ret)) != 0)
+  if (target_read_memory (pc, (char *) ret, sizeof (ret)) != 0)
     return -1;
 
   if (memcmp (ret, sigtramp_retcode, RETCODE_SIZE) == 0)
@@ -252,7 +253,9 @@ alphanbsd_sigcontext_addr (struct frame_info *frame)
   /* FIXME: This is not correct for all versions of NetBSD/alpha.
      We will probably need to disassemble the trampoline to figure
      out which trampoline frame type we have.  */
-  return get_frame_base (frame);
+  if (!get_next_frame (frame))
+    return 0;
+  return get_frame_base (get_next_frame (frame));
 }
 
 

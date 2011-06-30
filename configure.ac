@@ -1,5 +1,6 @@
 #   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-#   2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+#   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation,
+#   Inc.
 #
 # This file is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -18,10 +19,40 @@
 ##############################################################################
 ### WARNING: this file contains embedded tabs.  Do not run untabify on this file.
 
-sinclude(config/acx.m4)
+m4_include(config/acx.m4)
+m4_include(config/override.m4)
+m4_include(config/proginstall.m4)
 
 AC_INIT(move-if-change)
 AC_PREREQ(2.59)
+
+progname=$0
+# if PWD already has a value, it is probably wrong.
+if test -n "$PWD" ; then PWD=`${PWDCMD-pwd}`; fi
+
+# Export original configure arguments for use by sub-configures.
+# Quote arguments with shell meta charatcers.
+TOPLEVEL_CONFIGURE_ARGUMENTS=
+set -- "$progname" "$@"
+for ac_arg
+do
+  case "$ac_arg" in
+  *" "*|*"	"*|*[[\[\]\~\#\$\^\&\*\(\)\{\}\\\|\;\<\>\?\']]*)
+    ac_arg=`echo "$ac_arg" | sed "s/'/'\\\\\\\\''/g"`
+    # if the argument is of the form -foo=baz, quote the baz part only
+    ac_arg=`echo "'$ac_arg'" | sed "s/^'\([[-a-zA-Z0-9]]*=\)/\\1'/"` ;;
+  *) ;;
+  esac
+  # Add the quoted argument to the list.
+  TOPLEVEL_CONFIGURE_ARGUMENTS="$TOPLEVEL_CONFIGURE_ARGUMENTS $ac_arg"
+done
+if test "$silent" = yes; then
+  TOPLEVEL_CONFIGURE_ARGUMENTS="$TOPLEVEL_CONFIGURE_ARGUMENTS --silent"
+fi
+# Remove the initial space we just introduced and, as these will be
+# expanded by make, quote '$'.
+TOPLEVEL_CONFIGURE_ARGUMENTS=`echo "x$TOPLEVEL_CONFIGURE_ARGUMENTS" | sed -e 's/^x *//' -e 's,\\$,$$,g'`
+AC_SUBST(TOPLEVEL_CONFIGURE_ARGUMENTS)
 
 # Find the build, host, and target systems.
 ACX_NONCANONICAL_BUILD
@@ -82,34 +113,6 @@ esac
 
 config_shell=${CONFIG_SHELL-/bin/sh}
 
-progname=$0
-# if PWD already has a value, it is probably wrong.
-if test -n "$PWD" ; then PWD=`${PWDCMD-pwd}`; fi
-
-# Export original configure arguments for use by sub-configures.
-# Quote arguments with shell meta charatcers.
-TOPLEVEL_CONFIGURE_ARGUMENTS=
-set -- "$progname" "$@"
-for ac_arg
-do
-  case "$ac_arg" in
-  *" "*|*"	"*|*[[\[\]\~\#\$\^\&\*\(\)\{\}\\\|\;\<\>\?\']]*)
-    ac_arg=`echo "$ac_arg" | sed "s/'/'\\\\\\\\''/g"`
-    # if the argument is of the form -foo=baz, quote the baz part only
-    ac_arg=`echo "'$ac_arg'" | sed "s/^'\([[-a-zA-Z0-9]]*=\)/\\1'/"` ;;
-  *) ;;
-  esac
-  # Add the quoted argument to the list.
-  TOPLEVEL_CONFIGURE_ARGUMENTS="$TOPLEVEL_CONFIGURE_ARGUMENTS $ac_arg"
-done
-if test "$silent" = yes; then
-  TOPLEVEL_CONFIGURE_ARGUMENTS="$TOPLEVEL_CONFIGURE_ARGUMENTS --silent"
-fi
-# Remove the initial space we just introduced and, as these will be
-# expanded by make, quote '$'.
-TOPLEVEL_CONFIGURE_ARGUMENTS=`echo "x$TOPLEVEL_CONFIGURE_ARGUMENTS" | sed -e 's/^x *//' -e 's,\\$,$$,g'`
-AC_SUBST(TOPLEVEL_CONFIGURE_ARGUMENTS)
-
 moveifchange=${srcdir}/move-if-change
 
 srcpwd=`cd ${srcdir} ; ${PWDCMD-pwd}`
@@ -162,7 +165,8 @@ host_libs="intl mmalloc libiberty opcodes bfd readline tcl tk itcl libgui zlib l
 # know that we are building the simulator.
 # binutils, gas and ld appear in that order because it makes sense to run
 # "make check" in that particular order.
-host_tools="byacc flex bison binutils gas ld fixincludes gcc sid sim gdb make patch prms send-pr gprof etc expect dejagnu ash bash bzip2 m4 autoconf automake libtool diff rcs fileutils shellutils time textutils wdiff find uudecode hello tar gzip indent recode release sed utils guile perl gawk findutils gettext zip fastjar gnattools"
+# If --enable-gold is used, "gold" will replace "ld".
+host_tools="texinfo byacc flex bison binutils gas ld fixincludes gcc sid sim gdb make patch prms send-pr gprof etc expect dejagnu ash bash bzip2 m4 autoconf automake libtool diff rcs fileutils shellutils time textutils wdiff find uudecode hello tar gzip indent recode release sed utils guile perl gawk findutils gettext zip fastjar gnattools"
 
 # libgcj represents the runtime libraries only used by gcj.
 libgcj="target-libffi \
@@ -238,7 +242,7 @@ use_gnu_ld=
 # Make sure we don't let GNU ld be added if we didn't want it.
 if test x$with_gnu_ld = xno ; then
   use_gnu_ld=no
-  noconfigdirs="$noconfigdirs ld"
+  noconfigdirs="$noconfigdirs ld gold"
 fi
 
 use_gnu_as=
@@ -288,6 +292,38 @@ case ${with_newlib} in
   no) skipdirs="${skipdirs} target-newlib" ;;
   yes) skipdirs=`echo " ${skipdirs} " | sed -e 's/ target-newlib / /'` ;;
 esac
+
+# Handle --enable-gold.
+
+AC_ARG_ENABLE(gold,
+[  --enable-gold           use gold instead of ld],
+ENABLE_GOLD=$enableval,
+ENABLE_GOLD=no)
+if test "${ENABLE_GOLD}" = "yes"; then
+  # Check for ELF target.
+  is_elf=no
+  case "${target}" in
+    *-*-elf* | *-*-sysv4* | *-*-unixware* | *-*-eabi* | hppa*64*-*-hpux* \
+    | *-*-linux* | frv-*-uclinux* | *-*-irix5* | *-*-irix6* \
+    | *-*-netbsd* | *-*-openbsd* | *-*-freebsd* | *-*-solaris2*)
+      case "${target}" in
+        *-*-linux*aout* | *-*-linux*oldld*)
+          ;;
+        *)
+          is_elf=yes
+          ;;
+      esac
+  esac
+
+  if test "$is_elf" = "yes"; then
+    # Check for target supported by gold.
+    case "${target}" in
+      i?86-*-* | x86_64-*-* | sparc*-*-* | powerpc*-*-*)
+        configdirs="`echo " ${configdirs} " | sed -e 's/ ld / gold /'`"
+        ;;
+    esac
+  fi
+fi
 
 # Configure extra directories which are host specific
 
@@ -411,7 +447,7 @@ case "${target}" in
     noconfigdirs="$noconfigdirs target-newlib target-libgloss ${libgcj}"
     ;;
   powerpc-*-darwin* | i[[3456789]]86-*-darwin* | x86_64-*-darwin9*)
-    noconfigdirs="$noconfigdirs bfd binutils ld gas opcodes gdb gprof"
+    noconfigdirs="$noconfigdirs ld gas gdb gprof"
     noconfigdirs="$noconfigdirs sim target-rda"
     ;;
   *-*-darwin*)
@@ -528,7 +564,6 @@ case "${target}" in
     ;;
   arm*-*-linux-gnueabi)
     noconfigdirs="$noconfigdirs target-qthreads"
-    noconfigdirs="$noconfigdirs target-libobjc"
     case ${with_newlib} in
       no) noconfigdirs="$noconfigdirs target-newlib target-libgloss"
     esac
@@ -554,7 +589,7 @@ case "${target}" in
     noconfigdirs="$noconfigdirs ld target-libgloss ${libgcj}"
     ;;
   avr-*-*)
-    noconfigdirs="$noconfigdirs target-libiberty target-libstdc++-v3 ${libgcj}"
+    noconfigdirs="$noconfigdirs target-libiberty target-libstdc++-v3 ${libgcj} target-libssp"
     ;;
   bfin-*-*)
     noconfigdirs="$noconfigdirs gdb"
@@ -567,6 +602,9 @@ case "${target}" in
     ;;
   c54x*-*-* | tic54x-*-*)
     noconfigdirs="$noconfigdirs target-libstdc++-v3 target-libgloss ${libgcj} gcc gdb newlib"
+    ;;
+  cr16-*-*)
+    noconfigdirs="$noconfigdirs ${libgcj} gdb"
     ;;
   cris-*-* | crisv32-*-*)
     unsupported_languages="$unsupported_languages java"
@@ -854,7 +892,6 @@ case "${target}" in
   sparc-*-solaris* | sparc64-*-solaris* | sparcv9-*-solaris*)
     ;;
   spu-*-*)
-    skipdirs="target-libssp"
     ;;
   v810-*-*)
     noconfigdirs="$noconfigdirs bfd binutils gas gcc gdb ld target-libstdc++-v3 opcodes target-libgloss ${libgcj}"
@@ -1008,12 +1045,10 @@ case "${host}" in
     host_makefile_frag="config/mh-djgpp"
     ;;
   *-cygwin*)
+    ACX_CHECK_CYGWIN_CAT_WORKS
     host_makefile_frag="config/mh-cygwin"
     ;;
-  *-mingw32*)
-    host_makefile_frag="config/mh-mingw"
-    ;;
-  *-mingw64*)
+  *-mingw*)
     host_makefile_frag="config/mh-mingw"
     ;;
   *-interix*)
@@ -1031,10 +1066,18 @@ case "${host}" in
     # without overflowing the jump tables (-J says to use a 32 bit table)
     tentative_cc="cc -J"
     ;;
-  *-hp-hpux*)
+  hppa*-hp-hpux10*)
     tentative_cc="cc -Wp,-H256000"
+    host_makefile_frag="config/mh-pa-hpux10"
     ;;
-  *-*-hiux*)
+  hppa*-hp-hpux* | hppa*-*-hiux*)
+    tentative_cc="cc -Wp,-H256000"
+    host_makefile_frag="config/mh-pa"
+    ;;
+  hppa*-*)	
+    host_makefile_frag="config/mh-pa"
+    ;;
+  *-hp-hpux* | *-*-hiux*)
     tentative_cc="cc -Wp,-H256000"
     ;;
   rs6000-*-lynxos*)
@@ -1750,7 +1793,7 @@ if test x${use_gnu_as} = x &&
 fi
 
 if test x${use_gnu_ld} = x &&
-   echo " ${configdirs} " | grep " ld " > /dev/null 2>&1 ; then
+   echo " ${configdirs} " | egrep " (go)?ld " > /dev/null 2>&1 ; then
   with_gnu_ld=yes
   extra_host_args="$extra_host_args --with-gnu-ld"
 fi
@@ -1859,6 +1902,9 @@ case "${target}" in
     ;;
   mipsisa*-*-elfoabi*)
     target_makefile_frag="config/mt-mips-elfoabi"
+    ;;
+  mips*-*-*linux* | mips*-*-gnu*)
+    target_makefile_frag="config/mt-mips-gnu"
     ;;
   *-*-netware*)
     target_makefile_frag="config/mt-netware"
@@ -2003,11 +2049,20 @@ case "${host}" in
   ;;
 esac
 
+# Decide which environment variable is used to find dynamic libraries.
 case "${host}" in
   *-*-hpux*) RPATH_ENVVAR=SHLIB_PATH ;;
   *-*-darwin* | *-*-rhapsody* ) RPATH_ENVVAR=DYLD_LIBRARY_PATH ;;
+  *-*-mingw* | *-*-cygwin ) RPATH_ENVVAR=PATH ;;
   *) RPATH_ENVVAR=LD_LIBRARY_PATH ;;
 esac
+
+# On systems where the dynamic library environment variable is PATH,
+if test "$RPATH_ENVVAR" = PATH; then
+  GCC_SHLIB_SUBDIR=/shlib
+else
+  GCC_SHLIB_SUBDIR=
+fi
 
 # Record target_configdirs and the configure arguments for target and
 # build configuration in Makefile.
@@ -2466,6 +2521,7 @@ AC_SUBST_FILE(ospace_frag)
 
 # Miscellanea: directories, flags, etc.
 AC_SUBST(RPATH_ENVVAR)
+AC_SUBST(GCC_SHLIB_SUBDIR)
 AC_SUBST(tooldir)
 AC_SUBST(build_tooldir)
 AC_SUBST(CONFIGURE_GDB_TK)

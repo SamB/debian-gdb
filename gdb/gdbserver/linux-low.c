@@ -23,9 +23,7 @@
 #include <sys/wait.h>
 #include <stdio.h>
 #include <sys/param.h>
-#include <sys/dir.h>
 #include <sys/ptrace.h>
-#include <sys/user.h>
 #include <signal.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
@@ -107,6 +105,11 @@ static int thread_db_active;
 
 static int must_set_ptrace_flags;
 
+/* This flag is true iff we've just created or attached to a new inferior
+   but it has not stopped yet.  As soon as it does, we need to call the
+   low target's arch_setup callback.  */
+static int new_inferior;
+
 static void linux_resume_one_process (struct inferior_list_entry *entry,
 				      int step, int signal, siginfo_t *info);
 static void linux_resume (struct thread_resume *resume_info);
@@ -126,7 +129,8 @@ struct pending_signals
 #define PTRACE_XFER_TYPE long
 
 #ifdef HAVE_LINUX_REGSETS
-static int use_regsets_p = 1;
+static char *disabled_regsets;
+static int num_regsets;
 #endif
 
 #define pid_of(proc) ((proc)->head.id)
@@ -143,7 +147,7 @@ handle_extended_wait (struct process_info *event_child, int wstat)
   if (event == PTRACE_EVENT_CLONE)
     {
       unsigned long new_pid;
-      int ret, status;
+      int ret, status = W_STOPCODE (SIGSTOP);
 
       ptrace (PTRACE_GETEVENTMSG, inferior_pid, 0, &new_pid);
 
@@ -291,6 +295,7 @@ linux_create_inferior (char *program, char **allargs)
   new_process = add_process (pid);
   add_thread (pid, new_process, pid);
   must_set_ptrace_flags = 1;
+  new_inferior = 1;
 
   return pid;
 }
@@ -349,6 +354,8 @@ linux_attach (unsigned long pid)
      It will be collected by wait shortly.  */
   process = (struct process_info *) find_inferior_id (&all_processes, pid);
   process->stop_expected = 0;
+
+  new_inferior = 1;
 
   return 0;
 }
@@ -615,6 +622,19 @@ retry:
   (*childp)->pending_is_breakpoint = 0;
 
   (*childp)->last_status = *wstatp;
+
+  /* Architecture-specific setup after inferior is running.
+     This needs to happen after we have attached to the inferior
+     and it is stopped for the first time, but before we access
+     any inferior registers.  */
+  if (new_inferior)
+    {
+      the_low_target.arch_setup ();
+#ifdef HAVE_LINUX_REGSETS
+      memset (disabled_regsets, 0, num_regsets);
+#endif
+      new_inferior = 0;
+    }
 
   if (debug_threads
       && WIFSTOPPED (*wstatp))
@@ -1173,7 +1193,19 @@ linux_resume_one_process (struct inferior_list_entry *entry,
 
   current_inferior = saved_inferior;
   if (errno)
-    perror_with_name ("ptrace");
+    {
+      /* ESRCH from ptrace either means that the thread was already
+	 running (an error) or that it is gone (a race condition).  If
+	 it's gone, we will get a notification the next time we wait,
+	 so we can ignore the error.  We could differentiate these
+	 two, but it's tricky without waiting; the thread still exists
+	 as a zombie, so sending it signal 0 would succeed.  So just
+	 ignore ESRCH.  */
+      if (errno == ESRCH)
+	return;
+
+      perror_with_name ("ptrace");
+    }
 }
 
 static struct thread_resume *resume_ptr;
@@ -1383,10 +1415,9 @@ fetch_register (int regno)
 	  goto error_exit;
 	}
     }
-  if (the_low_target.left_pad_xfer
-      && register_size (regno) < sizeof (PTRACE_XFER_TYPE))
-    supply_register (regno, (buf + sizeof (PTRACE_XFER_TYPE)
-			     - register_size (regno)));
+
+  if (the_low_target.supply_ptrace_register)
+    the_low_target.supply_ptrace_register (regno, buf);
   else
     supply_register (regno, buf);
 
@@ -1430,12 +1461,12 @@ usr_store_inferior_registers (int regno)
 	     & - sizeof (PTRACE_XFER_TYPE);
       buf = alloca (size);
       memset (buf, 0, size);
-      if (the_low_target.left_pad_xfer
-	  && register_size (regno) < sizeof (PTRACE_XFER_TYPE))
-	collect_register (regno, (buf + sizeof (PTRACE_XFER_TYPE)
-				  - register_size (regno)));
+
+      if (the_low_target.collect_ptrace_register)
+	the_low_target.collect_ptrace_register (regno, buf);
       else
 	collect_register (regno, buf);
+
       for (i = 0; i < size; i += sizeof (PTRACE_XFER_TYPE))
 	{
 	  errno = 0;
@@ -1443,6 +1474,12 @@ usr_store_inferior_registers (int regno)
 		  *(PTRACE_XFER_TYPE *) (buf + i));
 	  if (errno != 0)
 	    {
+	      /* At this point, ESRCH should mean the process is already gone, 
+		 in which case we simply ignore attempts to change its registers.
+		 See also the related comment in linux_resume_one_process.  */
+	      if (errno == ESRCH)
+		return;
+
 	      if ((*the_low_target.cannot_store_register) (regno) == 0)
 		{
 		  char *err = strerror (errno);
@@ -1479,30 +1516,26 @@ regsets_fetch_inferior_registers ()
       void *buf;
       int res;
 
-      if (regset->size == 0)
+      if (regset->size == 0 || disabled_regsets[regset - target_regsets])
 	{
 	  regset ++;
 	  continue;
 	}
 
       buf = malloc (regset->size);
+#ifndef __sparc__
       res = ptrace (regset->get_request, inferior_pid, 0, buf);
+#else
+      res = ptrace (regset->get_request, inferior_pid, buf, 0);
+#endif
       if (res < 0)
 	{
 	  if (errno == EIO)
 	    {
-	      /* If we get EIO on the first regset, do not try regsets again.
-		 If we get EIO on a later regset, disable that regset.  */
-	      if (regset == target_regsets)
-		{
-		  use_regsets_p = 0;
-		  return -1;
-		}
-	      else
-		{
-		  regset->size = 0;
-		  continue;
-		}
+	      /* If we get EIO on a regset, do not try it again for
+		 this process.  */
+	      disabled_regsets[regset - target_regsets] = 1;
+	      continue;
 	    }
 	  else
 	    {
@@ -1536,7 +1569,7 @@ regsets_store_inferior_registers ()
       void *buf;
       int res;
 
-      if (regset->size == 0)
+      if (regset->size == 0 || disabled_regsets[regset - target_regsets])
 	{
 	  regset ++;
 	  continue;
@@ -1547,7 +1580,11 @@ regsets_store_inferior_registers ()
       /* First fill the buffer with the current register set contents,
 	 in case there are any items in the kernel's regset that are
 	 not in gdbserver's regcache.  */
+#ifndef __sparc__
       res = ptrace (regset->get_request, inferior_pid, 0, buf);
+#else
+      res = ptrace (regset->get_request, inferior_pid, buf, 0);
+#endif
 
       if (res == 0)
 	{
@@ -1555,25 +1592,28 @@ regsets_store_inferior_registers ()
 	  regset->fill_function (buf);
 
 	  /* Only now do we write the register set.  */
-	  res = ptrace (regset->set_request, inferior_pid, 0, buf);
+#ifndef __sparc__
+          res = ptrace (regset->set_request, inferior_pid, 0, buf);
+#else
+          res = ptrace (regset->set_request, inferior_pid, buf, 0);
+#endif
 	}
 
       if (res < 0)
 	{
 	  if (errno == EIO)
 	    {
-	      /* If we get EIO on the first regset, do not try regsets again.
-		 If we get EIO on a later regset, disable that regset.  */
-	      if (regset == target_regsets)
-		{
-		  use_regsets_p = 0;
-		  return -1;
-		}
-	      else
-		{
-		  regset->size = 0;
-		  continue;
-		}
+	      /* If we get EIO on a regset, do not try it again for
+		 this process.  */
+	      disabled_regsets[regset - target_regsets] = 1;
+	      continue;
+	    }
+	  else if (errno == ESRCH)
+	    {
+	      /* At this point, ESRCH should mean the process is already gone, 
+		 in which case we simply ignore attempts to change its registers.
+		 See also the related comment in linux_resume_one_process.  */
+	      return 0;
 	    }
 	  else
 	    {
@@ -1599,11 +1639,8 @@ void
 linux_fetch_registers (int regno)
 {
 #ifdef HAVE_LINUX_REGSETS
-  if (use_regsets_p)
-    {
-      if (regsets_fetch_inferior_registers () == 0)
-	return;
-    }
+  if (regsets_fetch_inferior_registers () == 0)
+    return;
 #endif
 #ifdef HAVE_LINUX_USRREGS
   usr_fetch_inferior_registers (regno);
@@ -1614,11 +1651,8 @@ void
 linux_store_registers (int regno)
 {
 #ifdef HAVE_LINUX_REGSETS
-  if (use_regsets_p)
-    {
-      if (regsets_store_inferior_registers () == 0)
-	return;
-    }
+  if (regsets_store_inferior_registers () == 0)
+    return;
 #endif
 #ifdef HAVE_LINUX_USRREGS
   usr_store_inferior_registers (regno);
@@ -1705,7 +1739,6 @@ linux_write_memory (CORE_ADDR memaddr, const unsigned char *myaddr, int len)
   = (((memaddr + len) - addr) + sizeof (PTRACE_XFER_TYPE) - 1) / sizeof (PTRACE_XFER_TYPE);
   /* Allocate buffer of that many longwords.  */
   register PTRACE_XFER_TYPE *buffer = (PTRACE_XFER_TYPE *) alloca (count * sizeof (PTRACE_XFER_TYPE));
-  extern int errno;
 
   if (debug_threads)
     {
@@ -2016,12 +2049,6 @@ linux_read_offsets (CORE_ADDR *text_p, CORE_ADDR *data_p)
 }
 #endif
 
-static const char *
-linux_arch_string (void)
-{
-  return the_low_target.arch_string;
-}
-
 static struct target_ops linux_target_ops = {
   linux_create_inferior,
   linux_attach,
@@ -2052,7 +2079,6 @@ static struct target_ops linux_target_ops = {
 #else
   NULL,
 #endif
-  linux_arch_string,
   NULL,
   hostio_last_error_from_errno,
 };
@@ -2072,7 +2098,11 @@ initialize_low (void)
   set_target_ops (&linux_target_ops);
   set_breakpoint_data (the_low_target.breakpoint,
 		       the_low_target.breakpoint_len);
-  init_registers ();
   linux_init_signals ();
   linux_test_for_tracefork ();
+#ifdef HAVE_LINUX_REGSETS
+  for (num_regsets = 0; target_regsets[num_regsets].size >= 0; num_regsets++)
+    ;
+  disabled_regsets = malloc (num_regsets);
+#endif
 }

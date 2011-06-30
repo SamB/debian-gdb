@@ -14,9 +14,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Please email any bugs, comments, and/or additions to this file to:
-# bug-gdb@prep.ai.mit.edu
-
 # This file was written by Rob Savoye. (rob@cygnus.com)
 
 if $tracelevel {
@@ -251,3 +248,14 @@ gdb_test "print (void*) ((long long) (unsigned long) -1 + 1)" \
 if [expr ! $ok] { setup_xfail "*-*-*" }
 gdb_test "print (void*) (~((long long)(unsigned long) -1) - 1)" \
 	"warning: value truncated.*" "truncate (void*) 0xffffffff00000000 - 1"
+
+# String concatentation.
+test_expr "print \"x\" \"y\"" "\\$\[0-9\]* = \"xy\""
+test_expr "print \"x\" \"y\" \"z\"" "\\$\[0-9\]* = \"xyz\""
+
+# Enum formatting tests.
+test_expr "print red" "\\$\[0-9\]* = red"
+gdb_test "set output-radix 8" ""
+test_expr "print red" "\\$\[0-9\]* = red"
+test_expr "print/d red" "\\$\[0-9\]* = 0"
+gdb_test "set output-radix 10" ""

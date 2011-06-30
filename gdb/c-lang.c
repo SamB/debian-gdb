@@ -86,7 +86,8 @@ c_printchar (int c, struct ui_file *stream)
 
 void
 c_printstr (struct ui_file *stream, const gdb_byte *string,
-	    unsigned int length, int width, int force_ellipses)
+	    unsigned int length, int width, int force_ellipses,
+	    const struct value_print_options *options)
 {
   unsigned int i;
   unsigned int things_printed = 0;
@@ -108,7 +109,7 @@ c_printstr (struct ui_file *stream, const gdb_byte *string,
       return;
     }
 
-  for (i = 0; i < length && things_printed < print_max; ++i)
+  for (i = 0; i < length && things_printed < options->print_max; ++i)
     {
       /* Position of the character we are examining
          to see whether it is repeated.  */
@@ -137,11 +138,11 @@ c_printstr (struct ui_file *stream, const gdb_byte *string,
 	  ++reps;
 	}
 
-      if (reps > repeat_count_threshold)
+      if (reps > options->repeat_count_threshold)
 	{
 	  if (in_quotes)
 	    {
-	      if (inspect_it)
+	      if (options->inspect_it)
 		fputs_filtered ("\\\", ", stream);
 	      else
 		fputs_filtered ("\", ", stream);
@@ -150,14 +151,14 @@ c_printstr (struct ui_file *stream, const gdb_byte *string,
 	  LA_PRINT_CHAR (current_char, stream);
 	  fprintf_filtered (stream, _(" <repeats %u times>"), reps);
 	  i = rep1 - 1;
-	  things_printed += repeat_count_threshold;
+	  things_printed += options->repeat_count_threshold;
 	  need_comma = 1;
 	}
       else
 	{
 	  if (!in_quotes)
 	    {
-	      if (inspect_it)
+	      if (options->inspect_it)
 		fputs_filtered ("\\\"", stream);
 	      else
 		fputs_filtered ("\"", stream);
@@ -171,7 +172,7 @@ c_printstr (struct ui_file *stream, const gdb_byte *string,
   /* Terminate the quotes if necessary.  */
   if (in_quotes)
     {
-      if (inspect_it)
+      if (options->inspect_it)
 	fputs_filtered ("\\\"", stream);
       else
 	fputs_filtered ("\"", stream);
@@ -180,6 +181,118 @@ c_printstr (struct ui_file *stream, const gdb_byte *string,
   if (force_ellipses || i < length)
     fputs_filtered ("...", stream);
 }
+
+/* Obtain a C string from the inferior storing it in a newly allocated
+   buffer in BUFFER, which should be freed by the caller.  The string is
+   read until a null character is found. If VALUE is an array with known
+   length, the function will not read past the end of the array.  LENGTH
+   will contain the size of the string in bytes (not counting the null
+   character).
+
+   Assumes strings are terminated by a null character.  The size of a character
+   is determined by the length of the target type of the pointer or array.
+   This means that a null byte present in a multi-byte character will not
+   terminate the string unless the whole character is null.
+
+   Unless an exception is thrown, BUFFER will always be allocated, even on
+   failure.  In this case, some characters might have been read before the
+   failure happened.  Check LENGTH to recognize this situation.
+
+   CHARSET is always set to the target charset.
+
+   Return 0 on success, errno on failure.  */
+
+static int
+c_get_string (struct value *value, gdb_byte **buffer, int *length,
+	      const char **charset)
+{
+  int err, width;
+  unsigned int fetchlimit;
+  struct type *type = value_type (value);
+  struct type *element_type = TYPE_TARGET_TYPE (type);
+
+  if (element_type == NULL)
+    goto error;
+
+  if (TYPE_CODE (type) == TYPE_CODE_ARRAY)
+    {
+      /* If we know the size of the array, we can use it as a limit on the
+	 number of characters to be fetched.  */
+      if ((TYPE_NFIELDS (type) == 1)
+	  && TYPE_CODE (TYPE_FIELD_TYPE (type, 0)) == TYPE_CODE_RANGE)
+	{
+	  LONGEST low_bound, high_bound;
+
+	  get_discrete_bounds (TYPE_FIELD_TYPE (type, 0),
+			       &low_bound, &high_bound);
+	  fetchlimit = high_bound - low_bound + 1;
+	}
+      else
+	fetchlimit = UINT_MAX;
+    }
+  else if (TYPE_CODE (value_type (value)) == TYPE_CODE_PTR)
+    fetchlimit = UINT_MAX;
+  else
+    /* We work only with arrays and pointers.  */
+    goto error;
+
+  element_type = check_typedef (element_type);
+  if ((TYPE_CODE (element_type) != TYPE_CODE_INT)
+      && (TYPE_CODE (element_type) != TYPE_CODE_CHAR))
+    /* If the elements are not integers or characters, we don't consider it
+       a string.  */
+    goto error;
+
+  width = TYPE_LENGTH (element_type);
+
+  /* If the string lives in GDB's memory intead of the inferior's, then we
+     just need to copy it to BUFFER.  Also, since such strings are arrays
+     with known size, FETCHLIMIT will hold the size of the array.  */
+  if (((VALUE_LVAL (value) == not_lval)
+      || (VALUE_LVAL (value) == lval_internalvar)) && (fetchlimit != UINT_MAX))
+    {
+      int i;
+      const gdb_byte *contents = value_contents (value);
+
+      /* Look for a null character.  */
+      for (i = 0; i < fetchlimit; i++)
+	if (extract_unsigned_integer (contents + i*width, width) == 0)
+	  break;
+
+      /* i is now either the number of non-null characters, or fetchlimit.  */
+      *length = i*width;
+      *buffer = xmalloc (*length);
+      memcpy (*buffer, contents, *length);
+      err = 0;
+    }
+  else
+    err = read_string (value_as_address (value), -1, width, fetchlimit,
+		       buffer, length);
+
+  /* If the last character is null, subtract it from length.  */
+  if (extract_unsigned_integer (*buffer + *length - width, width) == 0)
+      *length -= width;
+
+  *charset = target_charset ();
+
+  return err;
+
+error:
+  {
+    char *type_str;
+
+    type_str = type_to_string (type);
+    if (type_str)
+      {
+	make_cleanup (xfree, type_str);
+	error (_("Trying to read string with inappropriate type `%s'."),
+	       type_str);
+      }
+    else
+      error (_("Trying to read string with inappropriate type."));
+  }
+}
+
 
 /* Preprocessing and parsing C and C++ expressions.  */
 
@@ -261,13 +374,6 @@ macro_lookup_ftype *expression_macro_lookup_func;
 void *expression_macro_lookup_baton;
 
 
-static struct macro_definition *
-null_macro_lookup (const char *name, void *baton)
-{
-  return 0;
-}
-
-
 static int
 c_preprocess_and_parse (void)
 {
@@ -279,17 +385,11 @@ c_preprocess_and_parse (void)
     scope = sal_macro_scope (find_pc_line (expression_context_pc, 0));
   else
     scope = default_macro_scope ();
+  if (! scope)
+    scope = user_macro_scope ();
 
-  if (scope)
-    {
-      expression_macro_lookup_func = standard_macro_lookup;
-      expression_macro_lookup_baton = (void *) scope;
-    }
-  else
-    {
-      expression_macro_lookup_func = null_macro_lookup;
-      expression_macro_lookup_baton = 0;      
-    }
+  expression_macro_lookup_func = standard_macro_lookup;
+  expression_macro_lookup_baton = (void *) scope;
 
   gdb_assert (! macro_original_text);
   make_cleanup (scan_macro_cleanup, 0);
@@ -393,6 +493,8 @@ c_language_arch_info (struct gdbarch *gdbarch,
   lai->primitive_type_vector [c_primitive_type_decfloat] = builtin->builtin_decfloat;
   lai->primitive_type_vector [c_primitive_type_decdouble] = builtin->builtin_decdouble;
   lai->primitive_type_vector [c_primitive_type_declong] = builtin->builtin_declong;
+
+  lai->bool_type_default = builtin->builtin_int;
 }
 
 const struct language_defn c_language_defn =
@@ -403,6 +505,7 @@ const struct language_defn c_language_defn =
   type_check_off,
   case_sensitive_on,
   array_row_major,
+  macro_expansion_c,
   &exp_descriptor_standard,
   c_preprocess_and_parse,
   c_error,
@@ -411,10 +514,11 @@ const struct language_defn c_language_defn =
   c_printstr,			/* Function to print string constant */
   c_emit_char,			/* Print a single char */
   c_print_type,			/* Print a type using appropriate syntax */
+  c_print_typedef,		/* Print a typedef using appropriate syntax */
   c_val_print,			/* Print a value using appropriate syntax */
   c_value_print,		/* Print a top-level value */
   NULL,				/* Language specific skip_trampoline */
-  NULL,				/* value_of_this */
+  NULL,				/* name_of_this */
   basic_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   NULL,				/* Language specific symbol demangler */
@@ -427,6 +531,7 @@ const struct language_defn c_language_defn =
   c_language_arch_info,
   default_print_array_index,
   default_pass_by_reference,
+  c_get_string,
   LANG_MAGIC
 };
 
@@ -506,6 +611,9 @@ cplus_language_arch_info (struct gdbarch *gdbarch,
     = builtin->builtin_decdouble;
   lai->primitive_type_vector [cplus_primitive_type_declong]
     = builtin->builtin_declong;
+
+  lai->bool_type_symbol = "bool";
+  lai->bool_type_default = builtin->builtin_bool;
 }
 
 const struct language_defn cplus_language_defn =
@@ -516,6 +624,7 @@ const struct language_defn cplus_language_defn =
   type_check_off,
   case_sensitive_on,
   array_row_major,
+  macro_expansion_c,
   &exp_descriptor_standard,
   c_preprocess_and_parse,
   c_error,
@@ -524,10 +633,11 @@ const struct language_defn cplus_language_defn =
   c_printstr,			/* Function to print string constant */
   c_emit_char,			/* Print a single char */
   c_print_type,			/* Print a type using appropriate syntax */
+  c_print_typedef,		/* Print a typedef using appropriate syntax */
   c_val_print,			/* Print a value using appropriate syntax */
   c_value_print,		/* Print a top-level value */
   cplus_skip_trampoline,	/* Language specific skip_trampoline */
-  value_of_this,		/* value_of_this */
+  "this",                       /* name_of_this */
   cp_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   cp_lookup_transparent_type,   /* lookup_transparent_type */
   cplus_demangle,		/* Language specific symbol demangler */
@@ -540,6 +650,7 @@ const struct language_defn cplus_language_defn =
   cplus_language_arch_info,
   default_print_array_index,
   cp_pass_by_reference,
+  c_get_string,
   LANG_MAGIC
 };
 
@@ -551,6 +662,7 @@ const struct language_defn asm_language_defn =
   type_check_off,
   case_sensitive_on,
   array_row_major,
+  macro_expansion_c,
   &exp_descriptor_standard,
   c_preprocess_and_parse,
   c_error,
@@ -559,10 +671,11 @@ const struct language_defn asm_language_defn =
   c_printstr,			/* Function to print string constant */
   c_emit_char,			/* Print a single char */
   c_print_type,			/* Print a type using appropriate syntax */
+  c_print_typedef,		/* Print a typedef using appropriate syntax */
   c_val_print,			/* Print a value using appropriate syntax */
   c_value_print,		/* Print a top-level value */
   NULL,				/* Language specific skip_trampoline */
-  NULL,				/* value_of_this */
+  NULL,				/* name_of_this */
   basic_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   NULL,				/* Language specific symbol demangler */
@@ -575,6 +688,7 @@ const struct language_defn asm_language_defn =
   c_language_arch_info, /* FIXME: la_language_arch_info.  */
   default_print_array_index,
   default_pass_by_reference,
+  c_get_string,
   LANG_MAGIC
 };
 
@@ -591,6 +705,7 @@ const struct language_defn minimal_language_defn =
   type_check_off,
   case_sensitive_on,
   array_row_major,
+  macro_expansion_c,
   &exp_descriptor_standard,
   c_preprocess_and_parse,
   c_error,
@@ -599,10 +714,11 @@ const struct language_defn minimal_language_defn =
   c_printstr,			/* Function to print string constant */
   c_emit_char,			/* Print a single char */
   c_print_type,			/* Print a type using appropriate syntax */
+  c_print_typedef,		/* Print a typedef using appropriate syntax */
   c_val_print,			/* Print a value using appropriate syntax */
   c_value_print,		/* Print a top-level value */
   NULL,				/* Language specific skip_trampoline */
-  NULL,				/* value_of_this */
+  NULL,				/* name_of_this */
   basic_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   NULL,				/* Language specific symbol demangler */
@@ -615,6 +731,7 @@ const struct language_defn minimal_language_defn =
   c_language_arch_info,
   default_print_array_index,
   default_pass_by_reference,
+  default_get_string,
   LANG_MAGIC
 };
 

@@ -482,6 +482,9 @@
 #ifndef elf_backend_merge_symbol_attribute
 #define elf_backend_merge_symbol_attribute	NULL
 #endif
+#ifndef elf_backend_get_target_dtag
+#define elf_backend_get_target_dtag		NULL
+#endif
 #ifndef elf_backend_ignore_undef_symbol
 #define elf_backend_ignore_undef_symbol		NULL
 #endif
@@ -551,6 +554,9 @@
 #endif
 #ifndef elf_backend_default_use_rela_p
 #define elf_backend_default_use_rela_p !USE_REL
+#endif
+#ifndef elf_backend_rela_plts_and_copies_p
+#define elf_backend_rela_plts_and_copies_p elf_backend_default_use_rela_p
 #endif
 
 #ifndef elf_backend_rela_normal
@@ -672,6 +678,7 @@ static struct elf_backend_data elfNN_bed =
   elf_backend_hide_symbol,
   elf_backend_fixup_symbol,
   elf_backend_merge_symbol_attribute,
+  elf_backend_get_target_dtag,
   elf_backend_ignore_undef_symbol,
   elf_backend_emit_relocs,
   elf_backend_count_relocs,
@@ -714,6 +721,7 @@ static struct elf_backend_data elfNN_bed =
   elf_backend_may_use_rel_p,
   elf_backend_may_use_rela_p,
   elf_backend_default_use_rela_p,
+  elf_backend_rela_plts_and_copies_p,
   elf_backend_rela_normal,
   elf_backend_sign_extend_vma,
   elf_backend_want_got_plt,

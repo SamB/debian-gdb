@@ -87,6 +87,21 @@ pascal_print_type (struct type *type, char *varstring, struct ui_file *stream,
 
 }
 
+/* Print a typedef using Pascal syntax.  TYPE is the underlying type.
+   NEW_SYMBOL is the symbol naming the type.  STREAM is the stream on
+   which to print.  */
+
+void
+pascal_print_typedef (struct type *type, struct symbol *new_symbol,
+		      struct ui_file *stream)
+{
+  CHECK_TYPEDEF (type);
+  fprintf_filtered (stream, "type ");
+  fprintf_filtered (stream, "%s = ", SYMBOL_PRINT_NAME (new_symbol));
+  type_print (type, "", stream, 0);
+  fprintf_filtered (stream, ";\n");
+}
+
 /* If TYPE is a derived type, then print out derivation information.
    Print only the actual base classes of this type, not the base classes
    of the base classes.  I.E.  for the derivation hierarchy:
@@ -251,7 +266,7 @@ pascal_type_print_varspec_prefix (struct type *type, struct ui_file *stream,
 	fprintf_filtered (stream, "(");
       fprintf_filtered (stream, "array ");
       if (TYPE_LENGTH (TYPE_TARGET_TYPE (type)) > 0
-	&& TYPE_ARRAY_UPPER_BOUND_TYPE (type) != BOUND_CANNOT_BE_DETERMINED)
+	&& !TYPE_ARRAY_UPPER_BOUND_IS_UNDEFINED (type))
 	fprintf_filtered (stream, "[%d..%d] ",
 			  TYPE_ARRAY_LOWER_BOUND_VALUE (type),
 			  TYPE_ARRAY_UPPER_BOUND_VALUE (type)
@@ -575,14 +590,12 @@ pascal_type_print_base (struct type *type, struct ui_file *stream, int show,
 		}
 
 	      print_spaces_filtered (level + 4, stream);
-	      if (TYPE_FIELD_STATIC (type, i))
-		{
-		  fprintf_filtered (stream, "static ");
-		}
+	      if (field_is_static (&TYPE_FIELD (type, i)))
+		fprintf_filtered (stream, "static ");
 	      pascal_print_type (TYPE_FIELD_TYPE (type, i),
 				 TYPE_FIELD_NAME (type, i),
 				 stream, show - 1, level + 4);
-	      if (!TYPE_FIELD_STATIC (type, i)
+	      if (!field_is_static (&TYPE_FIELD (type, i))
 		  && TYPE_FIELD_PACKED (type, i))
 		{
 		  /* It is a bitfield.  This code does not attempt
@@ -756,7 +769,7 @@ pascal_type_print_base (struct type *type, struct ui_file *stream, int show,
       {
 	struct type *target = TYPE_TARGET_TYPE (type);
 	if (target == NULL)
-	  target = builtin_type_long;
+	  target = builtin_type_int32;
 	print_type_scalar (target, TYPE_LOW_BOUND (type), stream);
 	fputs_filtered ("..", stream);
 	print_type_scalar (target, TYPE_HIGH_BOUND (type), stream);

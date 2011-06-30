@@ -48,6 +48,10 @@ cmd_types;
 #define DEPRECATED_WARN_USER      0x2
 #define MALLOCED_REPLACEMENT      0x4
 
+/* This flag is set if the command is allowed to run when the target
+   has execution, but there's no selected thread.  */
+#define CMD_NO_SELECTED_THREAD_OK 0x10
+
 struct cmd_list_element
   {
     /* Points to next command in this list.  */
@@ -163,7 +167,12 @@ struct cmd_list_element
        returned relative to this position.  For example, suppose TEXT is "foo"
        and we want to complete to "foobar".  If WORD is "oo", return
        "oobar"; if WORD is "baz/foo", return "baz/foobar".  */
-    char **(*completer) (char *text, char *word);
+    char **(*completer) (struct cmd_list_element *cmd, char *text, char *word);
+
+    /* Destruction routine for this command.  If non-NULL, this is
+       called when this command instance is destroyed.  This may be
+       used to finalize the CONTEXT field, if needed.  */
+    void (*destroyer) (struct cmd_list_element *self, void *context);
 
     /* Type of "set" or "show" command (or SET_NOT_SET if not "set"
        or "show").  */
@@ -193,6 +202,13 @@ struct cmd_list_element
     /* Pointer to command that is aliased by this one, so the
        aliased command can be located in case it has been hooked.  */
     struct cmd_list_element *cmd_pointer;
+
+    /* Start of a linked list of all aliases of this command.  */
+    struct cmd_list_element *aliases;
+
+    /* Link pointer for aliases on an alias list.  */
+    struct cmd_list_element *alias_chain;
+
   };
 
 /* API to the manipulation of command lists.  */
@@ -232,7 +248,8 @@ extern void set_cmd_sfunc (struct cmd_list_element *cmd,
 					  struct cmd_list_element * c));
 
 extern void set_cmd_completer (struct cmd_list_element *cmd,
-			       char **(*completer) (char *text, char *word));
+			       char **(*completer) (struct cmd_list_element *self,
+						    char *text, char *word));
 
 /* HACK: cagney/2002-02-23: Code, mostly in tracepoints.c, grubs
    around in cmd objects to test the value of the commands sfunc().  */
@@ -242,6 +259,13 @@ extern int cmd_cfunc_eq (struct cmd_list_element *cmd,
 /* Access to the command's local context.  */
 extern void set_cmd_context (struct cmd_list_element *cmd, void *context);
 extern void *get_cmd_context (struct cmd_list_element *cmd);
+
+/* Mark command as ok to call when there is no selected thread.  There
+   is no way to disable this once set.  */
+extern void set_cmd_no_selected_thread_ok (struct cmd_list_element *);
+
+/* Return true if command is no-selected-thread-ok.  */
+extern int get_cmd_no_selected_thread_ok (struct cmd_list_element *);
 
 extern struct cmd_list_element *lookup_cmd (char **,
 					    struct cmd_list_element *, char *,
@@ -278,8 +302,6 @@ extern struct cmd_list_element *add_info_alias (char *, char *, int);
 extern char **complete_on_cmdlist (struct cmd_list_element *, char *, char *);
 
 extern char **complete_on_enum (const char *enumlist[], char *, char *);
-
-extern void delete_cmd (char *, struct cmd_list_element **);
 
 extern void help_cmd_list (struct cmd_list_element *, enum command_class,
 			   char *, int, struct ui_file *);

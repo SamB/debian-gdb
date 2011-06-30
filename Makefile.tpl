@@ -23,6 +23,14 @@ in
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
 
+# First, test for a proper version of make, but only where one is required.
+
+@if gcc
+ifeq (,$(.VARIABLES)) # The variable .VARIABLES, new with 3.80, is never empty.
+$(error GNU make version 3.80 or newer is required.)
+endif
+@endif gcc
+
 # -------------------------------
 # Standard Autoconf-set variables
 # -------------------------------
@@ -100,6 +108,11 @@ GDB_NLM_DEPS =
 # the libraries.
 RPATH_ENVVAR = @RPATH_ENVVAR@
 
+# On targets where RPATH_ENVVAR is PATH, a subdirectory of the GCC build path
+# is used instead of the directory itself to avoid including built
+# executables in PATH.
+GCC_SHLIB_SUBDIR = @GCC_SHLIB_SUBDIR@
+
 # Build programs are put under this directory.
 BUILD_SUBDIR = @build_subdir@
 # This is set by the configure script to the arguments to use when configuring
@@ -139,6 +152,12 @@ BUILD_EXPORTS = \
 	WINDRES="$(WINDRES_FOR_BUILD)"; export WINDRES; \
 	WINDMC="$(WINDMC_FOR_BUILD)"; export WINDMC;
 
+# These variables must be set on the make command line for directories
+# built for the build system to override those in BASE_FLAGS_TO_PASSS.
+EXTRA_BUILD_FLAGS = \
+	CFLAGS="$(CFLAGS_FOR_BUILD)" \
+	LDFLAGS="$(LDFLAGS_FOR_BUILD)"
+
 # This is the list of directories to built for the host system.
 SUBDIRS = @configdirs@
 # This is set by the configure script to the arguments to use when configuring
@@ -153,6 +172,7 @@ HOST_SUBDIR = @host_subdir@
 HOST_EXPORTS = \
 	$(BASE_EXPORTS) \
 	CC="$(CC)"; export CC; \
+	ADA_CFLAGS="$(ADA_CFLAGS)"; export ADA_CFLAGS; \
 	CFLAGS="$(CFLAGS)"; export CFLAGS; \
 	CONFIG_SHELL="$(SHELL)"; export CONFIG_SHELL; \
 	CXX="$(CXX)"; export CXX; \
@@ -279,6 +299,7 @@ BUILD_PREFIX_1 = @BUILD_PREFIX_1@
 # here so that they can be overridden by Makefile fragments.
 BOOT_CFLAGS= -g -O2
 BOOT_LDFLAGS=
+BOOT_ADAFLAGS=-gnatpg -gnata
 
 BISON = @BISON@
 YACC = @YACC@
@@ -322,7 +343,6 @@ LDFLAGS = @LDFLAGS@
 LIBCFLAGS = $(CFLAGS)
 CXXFLAGS = @CXXFLAGS@
 LIBCXXFLAGS = $(CXXFLAGS) -fno-implicit-templates
-PICFLAG = 
 
 # Only build the C compiler for stage1, because that is the only one that
 # we can guarantee will build with the native compiler, and also it is the
@@ -389,7 +409,6 @@ DEBUG_PREFIX_CFLAGS_FOR_TARGET = @DEBUG_PREFIX_CFLAGS_FOR_TARGET@
 LIBCFLAGS_FOR_TARGET = $(CFLAGS_FOR_TARGET)
 LIBCXXFLAGS_FOR_TARGET = $(CXXFLAGS_FOR_TARGET) -fno-implicit-templates
 LDFLAGS_FOR_TARGET = 
-PICFLAG_FOR_TARGET = 
 
 # ------------------------------------
 # Miscellaneous targets and flag lists
@@ -426,7 +445,7 @@ HOST_LIB_PATH = [+ FOR host_modules +][+
 
 # Define HOST_LIB_PATH_gcc here, for the sake of TARGET_LIB_PATH, ouch
 @if gcc
-HOST_LIB_PATH_gcc = $$r/$(HOST_SUBDIR)/gcc:$$r/$(HOST_SUBDIR)/prev-gcc:
+HOST_LIB_PATH_gcc = $$r/$(HOST_SUBDIR)/gcc$(GCC_SHLIB_SUBDIR):$$r/$(HOST_SUBDIR)/prev-gcc$(GCC_SHLIB_SUBDIR):
 @endif gcc
 
 [+ FOR host_modules +][+ IF lib_path +]
@@ -949,7 +968,8 @@ clean-stage[+id+]-[+prefix+][+module+]:
 	     target_alias=(get "target" "${target_alias}")
 	     args="$(BUILD_CONFIGARGS)" no-config-site=true +]
 
-[+ all prefix="build-" subdir="$(BUILD_SUBDIR)" exports="$(BUILD_EXPORTS)" +]
+[+ all prefix="build-" subdir="$(BUILD_SUBDIR)" exports="$(BUILD_EXPORTS)"
+	     args="$(EXTRA_BUILD_FLAGS)" +]
 [+ ENDFOR build_module +]
 
 # --------------------------------------
@@ -1305,7 +1325,7 @@ stage[+id+]-end:: [+ FOR host_modules +][+ IF bootstrap +]
 
 # Bubble a bug fix through all the stages up to stage [+id+].  They are
 # remade, but not reconfigured.  The next stage (if any) will not be
-# reconfigured as well.
+# reconfigured either.
 .PHONY: stage[+id+]-bubble
 stage[+id+]-bubble:: [+ IF prev +]stage[+prev+]-bubble[+ ENDIF +]
 	@r=`${PWD_COMMAND}`; export r; \
@@ -1444,11 +1464,11 @@ stage_current:
 	@if test -f stage_last; then $(unstage); else $(MAKE) stage1-start; fi
 
 .PHONY: restrap
-restrap:
+restrap::
 	@: $(MAKE); $(stage)
 	rm -rf stage1-$(TARGET_SUBDIR) [+ FOR bootstrap-stage +][+ IF prev
 	  +]stage[+id+]-* [+ ENDIF prev +][+ ENDFOR bootstrap-stage +]
-	$(MAKE) $(RECURSE_FLAGS_TO_PASS) all
+restrap:: all
 @endif gcc-bootstrap
 
 # --------------------------------------
@@ -1479,7 +1499,7 @@ configure-target-[+module+]: maybe-all-gcc[+
 
 [+ ;; These Scheme functions build the bulk of the dependencies.
    ;; dep-target builds a string like "maybe-all-MODULE_KIND-gcc",
-   ;; where "maybe-" is only included if HARD is true, and all-gcc
+   ;; where "maybe-" is only included if HARD is not true, and all-gcc
    ;; is taken from VAR-NAME.
    (define dep-target (lambda (module-kind var-name hard)
       (string-append
@@ -1637,7 +1657,8 @@ config.status: configure
 
 # Rebuilding configure.
 AUTOCONF = autoconf
-$(srcdir)/configure: @MAINT@ $(srcdir)/configure.ac $(srcdir)/config/acx.m4
+$(srcdir)/configure: @MAINT@ $(srcdir)/configure.ac $(srcdir)/config/acx.m4 \
+	$(srcdir)/config/override.m4 $(srcdir)/config/proginstall.m4
 	cd $(srcdir) && $(AUTOCONF)
 
 # ------------------------------

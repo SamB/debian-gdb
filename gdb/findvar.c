@@ -274,10 +274,34 @@ value_of_register (int regnum, struct frame_info *frame)
   memcpy (value_contents_raw (reg_val), raw_buffer,
 	  register_size (gdbarch, regnum));
   VALUE_LVAL (reg_val) = lval;
-  VALUE_ADDRESS (reg_val) = addr;
+  set_value_address (reg_val, addr);
   VALUE_REGNUM (reg_val) = regnum;
   set_value_optimized_out (reg_val, optim);
   VALUE_FRAME_ID (reg_val) = get_frame_id (frame);
+  return reg_val;
+}
+
+/* Return a `value' with the contents of (virtual or cooked) register
+   REGNUM as found in the specified FRAME.  The register's type is
+   determined by register_type().  The value is not fetched.  */
+
+struct value *
+value_of_register_lazy (struct frame_info *frame, int regnum)
+{
+  struct gdbarch *gdbarch = get_frame_arch (frame);
+  struct value *reg_val;
+
+  gdb_assert (regnum < (gdbarch_num_regs (gdbarch)
+			+ gdbarch_num_pseudo_regs (gdbarch)));
+
+  /* We should have a valid (i.e. non-sentinel) frame.  */
+  gdb_assert (frame_id_p (get_frame_id (frame)));
+
+  reg_val = allocate_value (register_type (gdbarch, regnum));
+  VALUE_LVAL (reg_val) = lval_register;
+  VALUE_REGNUM (reg_val) = regnum;
+  VALUE_FRAME_ID (reg_val) = get_frame_id (frame);
+  set_value_lazy (reg_val, 1);
   return reg_val;
 }
 
@@ -321,7 +345,6 @@ symbol_read_needs_frame (struct symbol *sym)
       /* All cases listed explicitly so that gcc -Wall will detect it if
          we failed to consider one.  */
     case LOC_COMPUTED:
-    case LOC_COMPUTED_ARG:
       /* FIXME: cagney/2004-01-26: It should be possible to
 	 unconditionally call the SYMBOL_OPS method when available.
 	 Unfortunately DWARF 2 stores the frame-base (instead of the
@@ -332,19 +355,13 @@ symbol_read_needs_frame (struct symbol *sym)
     case LOC_REGISTER:
     case LOC_ARG:
     case LOC_REF_ARG:
-    case LOC_REGPARM:
     case LOC_REGPARM_ADDR:
     case LOC_LOCAL:
-    case LOC_LOCAL_ARG:
-    case LOC_BASEREG:
-    case LOC_BASEREG_ARG:
-    case LOC_HP_THREAD_LOCAL_STATIC:
       return 1;
 
     case LOC_UNDEF:
     case LOC_CONST:
     case LOC_STATIC:
-    case LOC_INDIRECT:
     case LOC_TYPEDEF:
 
     case LOC_LABEL:
@@ -376,9 +393,7 @@ read_var_value (struct symbol *var, struct frame_info *frame)
   int len;
 
   if (SYMBOL_CLASS (var) == LOC_COMPUTED
-      || SYMBOL_CLASS (var) == LOC_COMPUTED_ARG
-      || SYMBOL_CLASS (var) == LOC_REGISTER
-      || SYMBOL_CLASS (var) == LOC_REGPARM)
+      || SYMBOL_CLASS (var) == LOC_REGISTER)
     /* These cases do not use V.  */
     v = NULL;
   else
@@ -409,7 +424,7 @@ read_var_value (struct symbol *var, struct frame_info *frame)
 	{
 	  CORE_ADDR addr
 	    = symbol_overlayed_address (SYMBOL_VALUE_ADDRESS (var),
-					SYMBOL_BFD_SECTION (var));
+					SYMBOL_OBJ_SECTION (var));
 	  store_typed_address (value_contents_raw (v), type, addr);
 	}
       else
@@ -428,28 +443,10 @@ read_var_value (struct symbol *var, struct frame_info *frame)
     case LOC_STATIC:
       if (overlay_debugging)
 	addr = symbol_overlayed_address (SYMBOL_VALUE_ADDRESS (var),
-					 SYMBOL_BFD_SECTION (var));
+					 SYMBOL_OBJ_SECTION (var));
       else
 	addr = SYMBOL_VALUE_ADDRESS (var);
       break;
-
-    case LOC_INDIRECT:
-      {
-	/* The import slot does not have a real address in it from the
-	   dynamic loader (dld.sl on HP-UX), if the target hasn't
-	   begun execution yet, so check for that. */
-	CORE_ADDR locaddr;
-	struct value *loc;
-	if (!target_has_execution)
-	  error (_("\
-Attempt to access variable defined in different shared object or load module when\n\
-addresses have not been bound by the dynamic loader. Try again when executable is running."));
-
-	locaddr = SYMBOL_VALUE_ADDRESS (var);
-	loc = value_at (lookup_pointer_type (type), locaddr);
-	addr = value_as_address (loc);
-	break;
-      }
 
     case LOC_ARG:
       if (frame == NULL)
@@ -476,27 +473,11 @@ addresses have not been bound by the dynamic loader. Try again when executable i
       }
 
     case LOC_LOCAL:
-    case LOC_LOCAL_ARG:
       if (frame == NULL)
 	return 0;
       addr = get_frame_locals_address (frame);
       addr += SYMBOL_VALUE (var);
       break;
-
-    case LOC_BASEREG:
-    case LOC_BASEREG_ARG:
-    case LOC_HP_THREAD_LOCAL_STATIC:
-      {
-	struct value *regval;
-
-	regval = value_from_register (lookup_pointer_type (type),
-				      SYMBOL_BASEREG (var), frame);
-	if (regval == NULL)
-	  error (_("Value of base register not available."));
-	addr = value_as_address (regval);
-	addr += SYMBOL_VALUE (var);
-	break;
-      }
 
     case LOC_TYPEDEF:
       error (_("Cannot look up value of a typedef"));
@@ -504,23 +485,20 @@ addresses have not been bound by the dynamic loader. Try again when executable i
 
     case LOC_BLOCK:
       if (overlay_debugging)
-	VALUE_ADDRESS (v) = symbol_overlayed_address
-	  (BLOCK_START (SYMBOL_BLOCK_VALUE (var)), SYMBOL_BFD_SECTION (var));
+	set_value_address (v, symbol_overlayed_address
+	  (BLOCK_START (SYMBOL_BLOCK_VALUE (var)), SYMBOL_OBJ_SECTION (var)));
       else
-	VALUE_ADDRESS (v) = BLOCK_START (SYMBOL_BLOCK_VALUE (var));
+	set_value_address (v, BLOCK_START (SYMBOL_BLOCK_VALUE (var)));
       return v;
 
     case LOC_REGISTER:
-    case LOC_REGPARM:
     case LOC_REGPARM_ADDR:
       {
-	struct block *b;
 	int regno = SYMBOL_VALUE (var);
 	struct value *regval;
 
 	if (frame == NULL)
 	  return 0;
-	b = get_frame_block (frame, 0);
 
 	if (SYMBOL_CLASS (var) == LOC_REGPARM_ADDR)
 	  {
@@ -546,7 +524,6 @@ addresses have not been bound by the dynamic loader. Try again when executable i
       break;
 
     case LOC_COMPUTED:
-    case LOC_COMPUTED_ARG:
       /* FIXME: cagney/2004-01-26: It should be possible to
 	 unconditionally call the SYMBOL_OPS method when available.
 	 Unfortunately DWARF 2 stores the frame-base (instead of the
@@ -560,12 +537,12 @@ addresses have not been bound by the dynamic loader. Try again when executable i
       {
 	struct minimal_symbol *msym;
 
-	msym = lookup_minimal_symbol (DEPRECATED_SYMBOL_NAME (var), NULL, NULL);
+	msym = lookup_minimal_symbol (SYMBOL_LINKAGE_NAME (var), NULL, NULL);
 	if (msym == NULL)
 	  return 0;
 	if (overlay_debugging)
 	  addr = symbol_overlayed_address (SYMBOL_VALUE_ADDRESS (msym),
-					   SYMBOL_BFD_SECTION (msym));
+					   SYMBOL_OBJ_SECTION (msym));
 	else
 	  addr = SYMBOL_VALUE_ADDRESS (msym);
       }
@@ -581,7 +558,7 @@ addresses have not been bound by the dynamic loader. Try again when executable i
       break;
     }
 
-  VALUE_ADDRESS (v) = addr;
+  set_value_address (v, addr);
   set_value_lazy (v, 1);
   return v;
 }
@@ -683,7 +660,7 @@ address_from_register (struct type *type, int regnum, struct frame_info *frame)
 struct value *
 locate_var_value (struct symbol *var, struct frame_info *frame)
 {
-  struct gdbarch *gdbarch = get_frame_arch (frame);
+  struct gdbarch *gdbarch;
   CORE_ADDR addr = 0;
   struct type *type = SYMBOL_TYPE (var);
   struct value *lazy_value;
@@ -695,12 +672,12 @@ locate_var_value (struct symbol *var, struct frame_info *frame)
   if (lazy_value == 0)
     error (_("Address of \"%s\" is unknown."), SYMBOL_PRINT_NAME (var));
 
-  if (value_lazy (lazy_value)
+  if ((VALUE_LVAL (lazy_value) == lval_memory && value_lazy (lazy_value))
       || TYPE_CODE (type) == TYPE_CODE_FUNC)
     {
       struct value *val;
 
-      addr = VALUE_ADDRESS (lazy_value);
+      addr = value_address (lazy_value);
       val = value_from_pointer (lookup_pointer_type (type), addr);
       return val;
     }
@@ -709,6 +686,8 @@ locate_var_value (struct symbol *var, struct frame_info *frame)
   switch (VALUE_LVAL (lazy_value))
     {
     case lval_register:
+      gdb_assert (frame);
+      gdbarch = get_frame_arch (frame);
       gdb_assert (gdbarch_register_name
 		   (gdbarch, VALUE_REGNUM (lazy_value)) != NULL
 		  && *gdbarch_register_name
