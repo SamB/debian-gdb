@@ -1,5 +1,5 @@
 /* Assorted BFD support routines, only used internally.
-   Copyright 1990, 91, 92, 93, 94, 95, 1996 Free Software Foundation, Inc.
+   Copyright 1990, 91, 92, 93, 94, 95, 96, 1997 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
 This file is part of BFD, the Binary File Descriptor library.
@@ -21,6 +21,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "bfd.h"
 #include "sysdep.h"
 #include "libbfd.h"
+
+#ifndef HAVE_GETPAGESIZE
+#define getpagesize() 2048
+#endif
 
 static int real_read PARAMS ((PTR, size_t, size_t, FILE *));
 
@@ -260,10 +264,8 @@ bfd_read (ptr, size, nitems, abfd)
     }
 
   nread = real_read (ptr, 1, (size_t)(size*nitems), bfd_cache_lookup(abfd));
-#ifdef FILE_OFFSET_IS_CHAR_INDEX
   if (nread > 0)
     abfd->where += nread;
-#endif
 
   /* Set bfd_error if we did not read as much data as we expected.
 
@@ -305,6 +307,12 @@ bfd_init_window (windowp)
   windowp->i = 0;
   windowp->size = 0;
 }
+
+/* Currently, if USE_MMAP is undefined, none if the window stuff is
+   used.  Okay, so it's mis-named.  At least the command-line option
+   "--without-mmap" is more obvious than "--without-windows" or some
+   such.  */
+#ifdef USE_MMAP
 
 #undef HAVE_MPROTECT /* code's not tested yet */
 
@@ -318,12 +326,6 @@ bfd_init_window (windowp)
 #endif
 
 static int debug_windows;
-
-/* Currently, if USE_MMAP is undefined, none if the window stuff is
-   used.  Okay, so it's mis-named.  At least the command-line option
-   "--without-mmap" is more obvious than "--without-windows" or some
-   such.  */
-#ifdef USE_MMAP
 
 void
 bfd_free_window (windowp)
@@ -361,7 +363,6 @@ bfd_free_window (windowp)
   /* There should be no more references to i at this point.  */
   free (i);
 }
-#endif
 
 static int ok_to_map = 1;
 
@@ -377,15 +378,11 @@ bfd_get_file_window (abfd, offset, size, windowp, writable)
   bfd_window_internal *i = windowp->i;
   size_t size_to_alloc = size;
 
-#ifndef USE_MMAP
-  abort ();
-#endif
-
   if (debug_windows)
     fprintf (stderr, "bfd_get_file_window (%p, %6ld, %6ld, %p<%p,%lx,%p>, %d)",
 	     abfd, (long) offset, (long) size,
-	     windowp, windowp->data, windowp->size, windowp->i,
-	     writable);
+	     windowp, windowp->data, (unsigned long) windowp->size,
+	     windowp->i, writable);
 
   /* Make sure we know the page size, so we can be friendly to mmap.  */
   if (pagesize == 0)
@@ -513,6 +510,8 @@ bfd_get_file_window (abfd, offset, size, windowp, writable)
   return true;
 }
 
+#endif /* USE_MMAP */
+
 bfd_size_type
 bfd_write (ptr, size, nitems, abfd)
      CONST PTR ptr;
@@ -527,10 +526,8 @@ bfd_write (ptr, size, nitems, abfd)
 
   nwrote = fwrite (ptr, 1, (size_t) (size * nitems),
 		   bfd_cache_lookup (abfd));
-#ifdef FILE_OFFSET_IS_CHAR_INDEX
   if (nwrote > 0)
     abfd->where += nwrote;
-#endif
   if ((bfd_size_type) nwrote != size * nitems)
     {
 #ifdef ENOSPC
@@ -647,7 +644,6 @@ bfd_seek (abfd, position, direction)
       return 0;
     }
 
-#ifdef FILE_OFFSET_IS_CHAR_INDEX
   if (abfd->format != bfd_archive && abfd->my_archive == 0)
     {
 #if 0
@@ -681,7 +677,6 @@ bfd_seek (abfd, position, direction)
 
 	 In the meantime, no optimization for archives.  */
     }
-#endif
 
   f = bfd_cache_lookup (abfd);
   file_position = position;
@@ -698,13 +693,11 @@ bfd_seek (abfd, position, direction)
     }
   else
     {
-#ifdef FILE_OFFSET_IS_CHAR_INDEX
       /* Adjust `where' field.  */
       if (direction == SEEK_SET)
 	abfd->where = position;
       else
 	abfd->where += position;
-#endif
     }
   return result;
 }
@@ -1186,12 +1179,12 @@ bfd_log2(x)
 }
 
 boolean
-bfd_generic_is_local_label (abfd, sym)
+bfd_generic_is_local_label_name (abfd, name)
      bfd *abfd;
-     asymbol *sym;
+     const char *name;
 {
   char locals_prefix = (bfd_get_symbol_leading_char (abfd) == '_') ? 'L' : '.';
 
-  return (sym->name[0] == locals_prefix);
+  return (name[0] == locals_prefix);
 }
 

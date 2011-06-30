@@ -23,7 +23,7 @@ struct external_filehdr {
   ((x).f_magic!=SH_ARCH_MAGIC_LITTLE))
 
 #define	FILHDR	struct external_filehdr
-#define	FILHSZ	sizeof(FILHDR)
+#define	FILHSZ	20
 
 
 /********************** AOUT "OPTIONAL HEADER" **********************/
@@ -43,8 +43,8 @@ typedef struct
 AOUTHDR;
 
 
-#define AOUTHDRSZ (sizeof(AOUTHDR))
-#define AOUTSZ (sizeof(AOUTHDR))
+#define AOUTHDRSZ 28
+#define AOUTSZ 28
 
 
 
@@ -74,7 +74,7 @@ struct external_scnhdr {
 
 
 #define	SCNHDR	struct external_scnhdr
-#define	SCNHSZ	sizeof(SCNHDR)
+#define	SCNHSZ	40
 
 
 /********************** LINE NUMBERS **********************/
@@ -96,7 +96,7 @@ struct external_lineno {
 #define PUT_LINENO_LNNO(abfd,val, ext) bfd_h_put_32(abfd,val,  (bfd_byte *) (ext->l_lnno));
 
 #define	LINENO	struct external_lineno
-#define	LINESZ	sizeof(LINENO) 
+#define	LINESZ	8
 
 
 /********************** SYMBOLS **********************/
@@ -227,8 +227,9 @@ struct external_reloc {
      .word L1 - L2
    The r_offset field holds the difference between the reloc address
    and L2.  */
+#define R_SH_SWITCH8	33		/* 8 bit switch table entry */
 #define R_SH_SWITCH16	25		/* 16 bit switch table entry */
-#define R_SH_SWITCH32	26		/* 16 bit switch table entry */
+#define R_SH_SWITCH32	26		/* 32 bit switch table entry */
 
 /* The USES reloc type is used for relaxing.  The compiler will
    generate .uses pseudo-ops when it finds a function call which it
@@ -240,7 +241,7 @@ struct external_reloc {
 /* The COUNT reloc type is used for relaxing.  The assembler will
    generate COUNT relocs for addresses referred to by the register
    loads associated with USES relocs.  The r_offset field of the COUNT
-   reloc holds the number of times the address is references in the
+   reloc holds the number of times the address is referenced in the
    object file.  */
 #define R_SH_COUNT	28		/* Count of constant pool uses */
 
@@ -249,5 +250,20 @@ struct external_reloc {
    must be aligned.  */
 #define R_SH_ALIGN	29		/* .align pseudo-op */
 
+/* The CODE and DATA reloc types are used for aligning load and store
+   instructions.  The assembler will generate a CODE reloc before a
+   block of instructions.  It will generate a DATA reloc before data.
+   A section should be processed assuming it contains data, unless a
+   CODE reloc is seen.  The only relevant pieces of information in the
+   CODE and DATA relocs are the section and the address.  The symbol
+   and offset are meaningless.  */
+#define R_SH_CODE	30		/* start of code */
+#define R_SH_DATA	31		/* start of data */
 
+/* The LABEL reloc type is used for aligning load and store
+   instructions.  The assembler will generate a LABEL reloc for each
+   label within a block of instructions.  This permits the linker to
+   avoid swapping instructions which are the targets of branches.  */
+#define R_SH_LABEL	32		/* label */
 
+/* NB: R_SH_SWITCH8 is 33 */

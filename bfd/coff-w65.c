@@ -1,5 +1,5 @@
 /* BFD back-end for WDC 65816 COFF binaries.
-   Copyright 1995 Free Software Foundation, Inc.
+   Copyright 1995, 96, 1997 Free Software Foundation, Inc.
    Written by Steve Chamberlain, <sac@cygnus.com>.
 
 This file is part of BFD, the Binary File Descriptor library.
@@ -20,7 +20,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
-#include "obstack.h"
 #include "libbfd.h"
 #include "bfdlink.h"
 #include "coff/w65.h"
@@ -83,7 +82,7 @@ rtype2howto (internal, dst)
 #define RTYPE2HOWTO(internal, relocentry) rtype2howto(internal,relocentry)
 
 
-/* Perform any necessaru magic to the addend in a reloc entry */
+/* Perform any necessary magic to the addend in a reloc entry */
 
 
 #define CALC_ADDEND(abfd, symbol, ext_reloc, cache_ptr) \
@@ -146,13 +145,13 @@ h8300_reloc16_estimate(abfd, input_section, reloc, shrink, link_info)
 
   switch (reloc->howto->type)
     {     
-    case R_MOVB2:
+    case R_MOV16B2:
     case R_JMP2:
       shrink+=2;
       break;
 
       /* Thing is a move one byte */
-    case R_MOVB1:
+    case R_MOV16B1:
       value = bfd_coff_reloc16_get_value(reloc, link_info, input_section);
 
       if (value >= 0xff00)
@@ -234,10 +233,10 @@ h8300_reloc16_estimate(abfd, input_section, reloc, shrink, link_info)
 
 /* Reloc types
    large		small
-   R_MOVB1		R_MOVB2		mov.b with 16bit or 8 bit address
+   R_MOV16B1		R_MOV16B2	mov.b with 16bit or 8 bit address
    R_JMP1		R_JMP2		jmp or pcrel branch
    R_JMPL1		R_JMPL_B8	24jmp or pcrel branch
-   R_MOVLB1		R_MOVLB2	24 or 8 bit reloc for mov.b
+   R_MOV24B1		R_MOV24B2	24 or 8 bit reloc for mov.b
 
 */
 

@@ -1,5 +1,5 @@
 /* BFD support for the SPARC architecture.
-   Copyright (C) 1992, 1995, 1996 Free Software Foundation, Inc.
+   Copyright (C) 1992, 94, 95, 96, 1997 Free Software Foundation, Inc.
 
 This file is part of BFD, the Binary File Descriptor library.
 
@@ -23,6 +23,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 /* Don't mix 32 bit and 64 bit files.  */
 
+static const bfd_arch_info_type *sparc_compatible
+  PARAMS ((const bfd_arch_info_type *, const bfd_arch_info_type *));
+
 static const bfd_arch_info_type *
 sparc_compatible (a, b)
      const bfd_arch_info_type *a;
@@ -41,6 +44,34 @@ static const bfd_arch_info_type arch_info_struct[] =
     32,	/* bits in an address */
     8,	/* bits in a byte */
     bfd_arch_sparc,
+    bfd_mach_sparc_sparclet,
+    "sparc",
+    "sparc:sparclet",
+    3,
+    false,
+    sparc_compatible, 
+    bfd_default_scan,
+    &arch_info_struct[1],
+  },
+  {
+    32,	/* bits in a word */
+    32,	/* bits in an address */
+    8,	/* bits in a byte */
+    bfd_arch_sparc,
+    bfd_mach_sparc_sparclite,
+    "sparc",
+    "sparc:sparclite",
+    3,
+    false,
+    sparc_compatible, 
+    bfd_default_scan,
+    &arch_info_struct[2],
+  },
+  {
+    32,	/* bits in a word */
+    32,	/* bits in an address */
+    8,	/* bits in a byte */
+    bfd_arch_sparc,
     bfd_mach_sparc_v8plus,
     "sparc",
     "sparc:v8plus",
@@ -48,7 +79,7 @@ static const bfd_arch_info_type arch_info_struct[] =
     false,
     sparc_compatible, 
     bfd_default_scan,
-    &arch_info_struct[1],
+    &arch_info_struct[3],
   },
   {
     32,	/* bits in a word */
@@ -62,7 +93,7 @@ static const bfd_arch_info_type arch_info_struct[] =
     false,
     sparc_compatible, 
     bfd_default_scan,
-    &arch_info_struct[2],
+    &arch_info_struct[4],
   },
   {
     64,	/* bits in a word */
@@ -76,7 +107,7 @@ static const bfd_arch_info_type arch_info_struct[] =
     false,
     sparc_compatible, 
     bfd_default_scan,
-    &arch_info_struct[3],
+    &arch_info_struct[5],
   },
   {
     64,	/* bits in a word */

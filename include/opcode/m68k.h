@@ -1,5 +1,5 @@
 /* Opcode table header for m680[01234]0/m6888[12]/m68851.
-   Copyright 1989, 1991, 1992, 1993, 1994, 1995 Free Software Foundation.
+   Copyright 1989, 91, 92, 93, 94, 95, 96, 1997 Free Software Foundation.
 
 This file is part of GDB, GAS, and the GNU binutils.
 
@@ -35,6 +35,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #define	m68882  m68881 /* synonym for -m68881.  otherwise unused. */
 #define	m68851  0x080
 #define cpu32	0x100	/* e.g., 68332 */
+#define mcf5200 0x200
 
  /* handy aliases */
 #define	m68040up  (m68040 | m68060)
@@ -86,7 +87,7 @@ struct m68k_opcode_alias
    operand; the second, the place it is stored.  */
 
 /* Kinds of operands:
-   Characters used: AaBCcDdFfIJkLlMOQRrSsTtUVWXYZ0123|*~%;@!&$?/#^+-
+   Characters used: AaBCcDdFfIJkLlMmnOopQqRrSsTtUVvWXYZ0123|*~%;@!&$?/<>#^+-
 
    D  data register only.  Stored as 3 bits.
    A  address register only.  Stored as 3 bits.
@@ -151,6 +152,10 @@ struct m68k_opcode_alias
 	0x806	URP	User Root Pointer		[60, 40]
 	0x807	SRP	Supervisor Root Pointer		[60, 40]
 	0x808	PCR	Processor Configuration reg	[60]
+	0xC00	ROMBAR	ROM Base Address Register	[520X]
+	0xC04	RAMBAR0	RAM Base Address Register 0	[520X]
+	0xC05	RAMBAR1	RAM Base Address Register 0	[520X]
+	0xC0F	MBAR0	RAM Base Address Register 0	[520X]
 
     L  Register list of the type d0-d7/a0-a7 etc.
        (New!  Improved!  Can also hold fp0-fp7, as well!)
@@ -168,27 +173,40 @@ struct m68k_opcode_alias
  The remainder are all stored as 6 bits using an address mode and a
  register number; they differ in which addressing modes they match.
 
-   *  all					(modes 0-6,7.*)
+   *  all					(modes 0-6,7.0-4)
    ~  alterable memory				(modes 2-6,7.0,7.1)
-   						(not 0,1,7.~)
-   %  alterable					(modes 0-6,7.0,7.1)(not 7.~)
-   ;  data					(modes 0,2-6,7.*)(not 1)
-   @  data, but not immediate			(modes 0,2-6,7.? ? ?)
-						(not 1,7.?)
-						This may really be ;,
-						the 68020 book says it is
-   !  control					(modes 2,5,6,7.*-)
+   						(not 0,1,7.2-4)
+   %  alterable					(modes 0-6,7.0,7.1)
+						(not 7.2-4)
+   ;  data					(modes 0,2-6,7.0-4)
+						(not 1)
+   @  data, but not immediate			(modes 0,2-6,7.0-3)
+						(not 1,7.4)
+   !  control					(modes 2,5,6,7.0-3)
 						(not 0,1,3,4,7.4)
    &  alterable control				(modes 2,5,6,7.0,7.1)
-						(not 0,1,7.? ? ?)
+						(not 0,1,7.2-4)
    $  alterable data				(modes 0,2-6,7.0,7.1)
-						(not 1,7.~)
+						(not 1,7.2-4)
    ?  alterable control, or data register	(modes 0,2,5,6,7.0,7.1)
-						(not 1,3,4,7.~)
-   /  control, or data register			(modes 0,2,5,6,7.0,7.1,7.2,7.3)
+						(not 1,3,4,7.2-4)
+   /  control, or data register			(modes 0,2,5,6,7.0-3)
 						(not 1,3,4,7.4)
-   `  control, plus pre-dec, not simple indir.	(modes 4,5,6,7.*-)
-						(not 0,1,2,3,7.4) */
+   >  *save operands				(modes 2,4,5,6,7.0,7.1)
+						(not 0,1,3,7.2-4)
+   <  *restore operands				(modes 2,3,5,6,7.0-3)
+						(not 0,1,4,7.4)
+
+   coldfire move operands:
+   m  						(modes 0-4)
+   n						(modes 5,7.2)
+   o						(modes 6,7.0,7.1,7.3,7.4)
+   p						(modes 0-5)
+
+   coldfire bset/bclr/btst operands:
+   q						(modes 0,2-5)
+   v						(modes 0,2-5,7.0,7.1)
+*/
 
 /* For the 68851: */
 /*

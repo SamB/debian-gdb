@@ -1,5 +1,5 @@
 /* BFD semi-generic back-end for a.out binaries.
-   Copyright 1990, 91, 92, 93, 94, 95, 1996 Free Software Foundation, Inc.
+   Copyright 1990, 91, 92, 93, 94, 95, 96, 1997 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
 This file is part of BFD, the Binary File Descriptor library.
@@ -136,6 +136,9 @@ static boolean translate_from_native_sym_flags
   PARAMS ((bfd *, aout_symbol_type *));
 static boolean translate_to_native_sym_flags
   PARAMS ((bfd *, asymbol *, struct external_nlist *));
+static void adjust_o_magic PARAMS ((bfd *, struct internal_exec *));
+static void adjust_z_magic PARAMS ((bfd *, struct internal_exec *));
+static void adjust_n_magic PARAMS ((bfd *, struct internal_exec *));
 
 /*
 SUBSECTION
@@ -449,7 +452,7 @@ NAME(aout,some_aout_object_p) (abfd, execp, callback_to_real_object_p)
   execp = abfd->tdata.aout_data->a.hdr;
 
   /* Set the file flags */
-  abfd->flags = NO_FLAGS;
+  abfd->flags = BFD_NO_FLAGS;
   if (execp->a_drsize || execp->a_trsize)
     abfd->flags |= HAS_RELOC;
   /* Setting of EXEC_P has been deferred to the bottom of this function */
@@ -582,9 +585,20 @@ NAME(aout,some_aout_object_p) (abfd, execp, callback_to_real_object_p)
      guess at whether the file is executable.  If the entry point
      is within the text segment, assume it is.  (This makes files
      executable even if their entry point address is 0, as long as
-     their text starts at zero.).  */
-  if ((execp->a_entry >= obj_textsec(abfd)->vma) &&
-      (execp->a_entry < obj_textsec(abfd)->vma + obj_textsec(abfd)->_raw_size))
+     their text starts at zero.).
+
+     This test had to be changed to deal with systems where the text segment
+     runs at a different location than the default.  The problem is that the
+     entry address can appear to be outside the text segment, thus causing an
+     erroneous conclusion that the file isn't executable.
+
+     To fix this, we now accept any non-zero entry point as an indication of
+     executability.  This will work most of the time, since only the linker
+     sets the entry point, and that is likely to be non-zero for most systems. */
+
+  if (execp->a_entry != 0
+      || (execp->a_entry >= obj_textsec(abfd)->vma
+	  && execp->a_entry < obj_textsec(abfd)->vma + obj_textsec(abfd)->_raw_size))
     abfd->flags |= EXEC_P;
 #ifdef STAT_FOR_EXEC
   else
@@ -692,8 +706,11 @@ NAME(aout,machine_type) (arch, machine, unknown)
   case bfd_arch_sparc:
     if (machine == 0
 	|| machine == bfd_mach_sparc
+	|| machine == bfd_mach_sparc_sparclite
 	|| machine == bfd_mach_sparc_v9)
       arch_flags = M_SPARC;
+    else if (machine == bfd_mach_sparc_sparclet)
+      arch_flags = M_SPARCLET;
     break;
 
   case bfd_arch_m68k:
@@ -744,7 +761,6 @@ NAME(aout,machine_type) (arch, machine, unknown)
   case bfd_arch_vax:
     *unknown = false;
     break;
-
 
   default:
     arch_flags = M_UNKNOWN;
@@ -1234,7 +1250,7 @@ aout_get_external_symbols (abfd)
       syms = (struct external_nlist *) obj_aout_sym_window (abfd).data;
 #else
       /* We allocate using malloc to make the values easy to free
-	 later on.  If we put them on the obstack it might not be
+	 later on.  If we put them on the objalloc it might not be
 	 possible to free them.  */
       syms = ((struct external_nlist *)
 	      bfd_malloc ((size_t) count * EXTERNAL_NLIST_SIZE));
@@ -1406,6 +1422,10 @@ translate_from_native_sym_flags (abfd, cache_ptr)
     case N_SETD: case N_SETD | N_EXT:
     case N_SETB: case N_SETB | N_EXT:
       {
+	/* This code is no longer needed.  It used to be used to make
+           the linker handle set symbols, but they are now handled in
+           the add_symbols routine instead.  */
+#if 0
 	asection *section;
 	arelent_chain *reloc;
 	asection *into_section;
@@ -1481,6 +1501,24 @@ translate_from_native_sym_flags (abfd, cache_ptr)
 	section->_raw_size += BYTES_IN_WORD;
 
 	reloc->relent.howto = CTOR_TABLE_RELOC_HOWTO(abfd);
+
+#endif /* 0 */
+
+	switch (cache_ptr->type & N_TYPE)
+	  {
+	  case N_SETA:
+	    cache_ptr->symbol.section = bfd_abs_section_ptr;
+	    break;
+	  case N_SETT:
+	    cache_ptr->symbol.section = obj_textsec (abfd);
+	    break;
+	  case N_SETD:
+	    cache_ptr->symbol.section = obj_datasec (abfd);
+	    break;
+	  case N_SETB:
+	    cache_ptr->symbol.section = obj_bsssec (abfd);
+	    break;
+	  }
 
 	cache_ptr->symbol.flags |= BSF_CONSTRUCTOR;
       }
@@ -1559,8 +1597,9 @@ translate_to_native_sym_flags (abfd, cache_ptr, sym_pointer)
       /* This case occurs, e.g., for the *DEBUG* section of a COFF
 	 file.  */
       (*_bfd_error_handler)
-	("%s: can not represent section `%s' in a.out object file format",
-	 bfd_get_filename (abfd), bfd_get_section_name (abfd, sec));
+	("%s: can not represent section for symbol `%s' in a.out object file format",
+	 bfd_get_filename (abfd), 
+	 cache_ptr->name != NULL ? cache_ptr->name : "*unknown*");
       bfd_set_error (bfd_error_nonrepresentable_section);
       return false;
     }
@@ -1916,6 +1955,9 @@ NAME(aout,get_symtab) (abfd, location)
 /* Standard reloc stuff */
 /* Output standard relocation information to a file in target byte order. */
 
+extern void  NAME(aout,swap_std_reloc_out)
+  PARAMS ((bfd *, arelent *, struct reloc_std_external *));
+
 void
 NAME(aout,swap_std_reloc_out) (abfd, g, natptr)
      bfd *abfd;
@@ -1963,7 +2005,7 @@ NAME(aout,swap_std_reloc_out) (abfd, g, natptr)
       {
 	/* Whoops, looked like an abs symbol, but is really an offset
 	   from the abs section */
-	r_index = 0;
+	r_index = N_ABS;
 	r_extern = 0;
        }
       else
@@ -2011,6 +2053,9 @@ NAME(aout,swap_std_reloc_out) (abfd, g, natptr)
 /* Extended stuff */
 /* Output extended relocation information to a file in target byte order. */
 
+extern void NAME(aout,swap_ext_reloc_out)
+  PARAMS ((bfd *, arelent *, struct reloc_ext_external *));
+
 void
 NAME(aout,swap_ext_reloc_out) (abfd, g, natptr)
      bfd *abfd;
@@ -2042,7 +2087,7 @@ NAME(aout,swap_ext_reloc_out) (abfd, g, natptr)
   if (bfd_is_abs_section (bfd_get_section (sym)))
     {
       r_extern = 0;
-      r_index = 0;
+      r_index = N_ABS;
     }
   else if ((sym->flags & BSF_SECTION_SYM) == 0)
     {
@@ -2343,7 +2388,8 @@ NAME(aout,squirt_out_relocs) (abfd, section)
   unsigned int count = section->reloc_count;
   size_t natsize;
 
-  if (count == 0) return true;
+  if (count == 0 || section->orelocation == NULL)
+    return true;
 
   each_size = obj_reloc_entry_size (abfd);
   natsize = each_size * count;
@@ -2646,7 +2692,49 @@ NAME(aout,find_nearest_line)
       aout_symbol_type  *q = (aout_symbol_type *)(*p);
     next:
       switch (q->type){
+      case N_TEXT:
+	/* If this looks like a file name symbol, and it comes after
+           the line number we have found so far, but before the
+           offset, then we have probably not found the right line
+           number.  */
+	if (q->symbol.value <= offset
+	    && ((q->symbol.value > low_line_vma
+		 && (line_file_name != NULL
+		     || *line_ptr != 0))
+		|| (q->symbol.value > low_func_vma
+		    && func != NULL)))
+	  {
+	    const char *symname;
+
+	    symname = q->symbol.name;
+	    if (strcmp (symname + strlen (symname) - 2, ".o") == 0)
+	      {
+		if (q->symbol.value > low_line_vma)
+		  {
+		    *line_ptr = 0;
+		    line_file_name = NULL;
+		  }
+		if (q->symbol.value > low_func_vma)
+		  func = NULL;
+	      }
+	  }
+	break;
+
       case N_SO:
+	/* If this symbol is less than the offset, but greater than
+           the line number we have found so far, then we have not
+           found the right line number.  */
+	if (q->symbol.value <= offset)
+	  {
+	    if (q->symbol.value > low_line_vma)
+	      {
+		*line_ptr = 0;
+		line_file_name = NULL;
+	      }
+	    if (q->symbol.value > low_func_vma)
+	      func = NULL;
+	  }
+
 	main_file_name = current_file_name = q->symbol.name;
 	/* Look ahead to next symbol to check if that too is an N_SO. */
 	p++;
@@ -2717,7 +2805,7 @@ NAME(aout,find_nearest_line)
     adata (abfd).line_buf = buf = NULL;
   else
     {
-      buf = (char *) bfd_malloc (filelen + funclen + 2);
+      buf = (char *) bfd_malloc (filelen + funclen + 3);
       adata (abfd).line_buf = buf;
       if (buf == NULL)
 	return false;
@@ -3174,8 +3262,7 @@ aout_link_add_symbols (abfd, info)
   else
     copy = true;
 
-  if ((abfd->flags & DYNAMIC) != 0
-      && aout_backend_info (abfd)->add_dynamic_symbols != NULL)
+  if (aout_backend_info (abfd)->add_dynamic_symbols != NULL)
     {
       if (! ((*aout_backend_info (abfd)->add_dynamic_symbols)
 	     (abfd, info, &syms, &sym_count, &strings)))
@@ -3676,6 +3763,19 @@ NAME(aout,final_link) (abfd, info, callback)
   for (sub = info->input_bfds; sub != (bfd *) NULL; sub = sub->link_next)
     sub->output_has_begun = false;
 
+  /* Mark all sections which are to be included in the link.  This
+     will normally be every section.  We need to do this so that we
+     can identify any sections which the linker has decided to not
+     include.  */
+  for (o = abfd->sections; o != NULL; o = o->next)
+    {
+      for (p = o->link_order_head; p != NULL; p = p->next)
+	{
+	  if (p->type == bfd_indirect_link_order)
+	    p->u.indirect.section->linker_mark = true;
+	}
+    }
+
   have_link_order_relocs = false;
   for (o = abfd->sections; o != (asection *) NULL; o = o->next)
     {
@@ -3780,10 +3880,29 @@ NAME(aout,final_link) (abfd, info, callback)
   obj_datasec (abfd)->reloc_count =
     exec_hdr (abfd)->a_drsize / obj_reloc_entry_size (abfd);
 
-  /* Write out the string table.  */
-  if (bfd_seek (abfd, obj_str_filepos (abfd), SEEK_SET) != 0)
-    goto error_return;
-  return emit_stringtab (abfd, aout_info.strtab);
+  /* Write out the string table, unless there are no symbols.  */
+  if (abfd->symcount > 0)
+    {
+      if (bfd_seek (abfd, obj_str_filepos (abfd), SEEK_SET) != 0
+	  || ! emit_stringtab (abfd, aout_info.strtab))
+	goto error_return;
+    }
+  else if (obj_textsec (abfd)->reloc_count == 0
+	   && obj_datasec (abfd)->reloc_count == 0)
+    {
+      bfd_byte b;
+
+      b = 0;
+      if (bfd_seek (abfd,
+		    (obj_datasec (abfd)->filepos
+		     + exec_hdr (abfd)->a_data
+		     - 1),
+		    SEEK_SET) != 0
+	  || bfd_write (&b, 1, 1, abfd) != 1)
+	goto error_return;
+    }
+
+  return true;
 
  error_return:
   if (aout_info.contents != NULL)
@@ -3831,16 +3950,25 @@ aout_link_input_bfd (finfo, input_bfd)
     return false;
 
   /* Relocate and write out the sections.  These functions use the
-     symbol map created by aout_link_write_symbols.  */
-  if (! aout_link_input_section (finfo, input_bfd,
-				 obj_textsec (input_bfd),
-				 &finfo->treloff,
-				 exec_hdr (input_bfd)->a_trsize)
-      || ! aout_link_input_section (finfo, input_bfd,
-				    obj_datasec (input_bfd),
-				    &finfo->dreloff,
-				    exec_hdr (input_bfd)->a_drsize))
-    return false;
+     symbol map created by aout_link_write_symbols.  The linker_mark
+     field will be set if these sections are to be included in the
+     link, which will normally be the case.  */
+  if (obj_textsec (input_bfd)->linker_mark)
+    {
+      if (! aout_link_input_section (finfo, input_bfd,
+				     obj_textsec (input_bfd),
+				     &finfo->treloff,
+				     exec_hdr (input_bfd)->a_trsize))
+	return false;
+    }
+  if (obj_datasec (input_bfd)->linker_mark)
+    {
+      if (! aout_link_input_section (finfo, input_bfd,
+				     obj_datasec (input_bfd),
+				     &finfo->dreloff,
+				     exec_hdr (input_bfd)->a_drsize))
+	return false;
+    }
 
   /* If we are not keeping memory, we don't need the symbols any
      longer.  We still need them if we are keeping memory, because the
@@ -4173,10 +4301,8 @@ aout_link_write_symbols (finfo, input_bfd)
 		case discard_none:
 		  break;
 		case discard_l:
-		  if (*name == *finfo->info->lprefix
-		      && (finfo->info->lprefix_len == 1
-			  || strncmp (name, finfo->info->lprefix,
-				      finfo->info->lprefix_len) == 0))
+		  if ((type & N_STAB) == 0
+		      && bfd_is_local_label_name (input_bfd, name))
 		    skip = true;
 		  break;
 		case discard_all:
@@ -4888,7 +5014,9 @@ aout_link_input_section_std (finfo, input_bfd, input_section, relocs,
 	      {
 		const char *name;
 
-		if (r_extern)
+		if (h != NULL)
+		  name = h->root.root.string;
+		else if (r_extern)
 		  name = strings + GET_WORD (input_bfd,
 					     syms[r_index].e_strx);
 		else
@@ -4994,12 +5122,20 @@ aout_link_input_section_ext (finfo, input_bfd, input_section, relocs,
 	{
 	  /* We are generating a relocateable output file, and must
 	     modify the reloc accordingly.  */
-	  if (r_extern)
+	  if (r_extern
+	      || r_type == RELOC_BASE10
+	      || r_type == RELOC_BASE13
+	      || r_type == RELOC_BASE22)
 	    {
 	      /* If we know the symbol this relocation is against,
 		 convert it into a relocation against a section.  This
 		 is what the native linker does.  */
-	      h = sym_hashes[r_index];
+	      if (r_type == RELOC_BASE10
+		  || r_type == RELOC_BASE13
+		  || r_type == RELOC_BASE22)
+		h = NULL;
+	      else
+		h = sym_hashes[r_index];
 	      if (h != (struct aout_link_hash_entry *) NULL
 		  && (h->root.type == bfd_link_hash_defined
 		      || h->root.type == bfd_link_hash_defweak))
@@ -5115,8 +5251,12 @@ aout_link_input_section_ext (finfo, input_bfd, input_section, relocs,
 	    }
 
 	  /* As described above, we must always adjust a PC relative
-	     reloc by the change in VMA of the source.  */
-	  if (howto_table_ext[r_type].pc_relative)
+	     reloc by the change in VMA of the source.  However, if
+	     pcrel_offset is set, then the addend does not include the
+	     location within the section, in which case we don't need
+	     to adjust anything.  */
+	  if (howto_table_ext[r_type].pc_relative
+	      && ! howto_table_ext[r_type].pcrel_offset)
 	    relocation -= (input_section->output_section->vma
 			   + input_section->output_offset
 			   - input_section->vma);
@@ -5273,10 +5413,12 @@ aout_link_input_section_ext (finfo, input_bfd, input_section, relocs,
 		  {
 		    const char *name;
 
-		    if (r_extern
-			|| r_type == RELOC_BASE10
-			|| r_type == RELOC_BASE13
-			|| r_type == RELOC_BASE22)
+		    if (h != NULL)
+		      name = h->root.root.string;
+		    else if (r_extern
+			     || r_type == RELOC_BASE10
+			     || r_type == RELOC_BASE13
+			     || r_type == RELOC_BASE22)
 		      name = strings + GET_WORD (input_bfd,
 						 syms[r_index].e_strx);
 		    else

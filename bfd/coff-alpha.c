@@ -1,5 +1,5 @@
 /* BFD back-end for ALPHA Extended-Coff files.
-   Copyright 1993, 1994, 1995, 1996 Free Software Foundation, Inc.
+   Copyright 1993, 94, 95, 96, 1997 Free Software Foundation, Inc.
    Modified from coff-mips.c by Steve Chamberlain <sac@cygnus.com> and
    Ian Lance Taylor <ian@cygnus.com>.
 
@@ -47,6 +47,8 @@ static void alpha_adjust_reloc_in PARAMS ((bfd *,
 					   arelent *));
 static void alpha_adjust_reloc_out PARAMS ((bfd *, const arelent *,
 					    struct internal_reloc *));
+static reloc_howto_type *alpha_bfd_reloc_type_lookup
+ PARAMS ((bfd *, bfd_reloc_code_real_type));
 static bfd_byte *alpha_ecoff_get_relocated_section_contents
   PARAMS ((bfd *abfd, struct bfd_link_info *, struct bfd_link_order *,
 	   bfd_byte *data, boolean relocateable, asymbol **symbols));
@@ -634,9 +636,13 @@ alpha_adjust_reloc_in (abfd, intern, rptr)
     case ALPHA_R_SREL16:
     case ALPHA_R_SREL32:
     case ALPHA_R_SREL64:
-      /* The PC relative relocs do not seem to use the section VMA as
-	 a negative addend.  */
-      rptr->addend = 0;
+      /* This relocs appear to be fully resolved when they are against
+         internal symbols.  Against external symbols, BRADDR at least
+         appears to be resolved against the next instruction.  */
+      if (! intern->r_extern)
+	rptr->addend = 0;
+      else
+	rptr->addend = - (intern->r_vaddr + 4);
       break;
 
     case ALPHA_R_GPREL32:
@@ -1553,11 +1559,16 @@ alpha_relocate_section (output_bfd, info, input_bfd, input_section,
 
 	case ALPHA_R_REFLONG:
 	case ALPHA_R_REFQUAD:
-	case ALPHA_R_BRADDR:
 	case ALPHA_R_HINT:
+	  relocatep = true;
+	  break;
+
+	case ALPHA_R_BRADDR:
 	case ALPHA_R_SREL16:
 	case ALPHA_R_SREL32:
 	case ALPHA_R_SREL64:
+	  if (r_extern)
+	    addend += - (r_vaddr + 4);
 	  relocatep = true;
 	  break;
 
@@ -2255,7 +2266,7 @@ static const struct ecoff_backend_data alpha_ecoff_backend_data =
     (unsigned (*) PARAMS ((bfd *,PTR,PTR))) bfd_void, /* reloc_out */
     alpha_ecoff_swap_filehdr_out, alpha_ecoff_swap_aouthdr_out,
     alpha_ecoff_swap_scnhdr_out,
-    FILHSZ, AOUTSZ, SCNHSZ, 0, 0, 0, 0, true,
+    FILHSZ, AOUTSZ, SCNHSZ, 0, 0, 0, 0, true, false, 4,
     alpha_ecoff_swap_filehdr_in, alpha_ecoff_swap_aouthdr_in,
     alpha_ecoff_swap_scnhdr_in, NULL,
     alpha_ecoff_bad_format_hook, _bfd_ecoff_set_arch_mach_hook,

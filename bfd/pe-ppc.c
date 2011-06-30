@@ -1,4 +1,4 @@
-/* BFD back-end for Intel 386 PECOFF files.
+/* BFD back-end for PowerPC PECOFF files.
    Copyright 1995 Free Software Foundation, Inc.
 
 This file is part of BFD, the Binary File Descriptor library.
@@ -23,7 +23,7 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  */
 
 #define E_FILENMLEN     18
 
-#define PPC
+#define PPC_PE
 
 #define TARGET_LITTLE_SYM   bfd_powerpcle_pe_vec
 #define TARGET_LITTLE_NAME "pe-powerpcle"
@@ -31,8 +31,9 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #define TARGET_BIG_SYM      bfd_powerpc_pe_vec
 #define TARGET_BIG_NAME    "pe-powerpc"
 
-#define COFF_OBJ_WITH_PE
 #define COFF_WITH_PE
+
+#define COFF_LONG_SECTION_NAMES
 
 /* FIXME: verify PCRELOFFSET is always false */
 
