@@ -2,21 +2,22 @@
    Copyright (C) 1990-1991 Free Software Foundation, Inc.
    Contributed by Intel Corporation and Cygnus Support.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
 
 /*****************************************************************************
  * Definitions to target GDB to an i960 debugged over a serial line.
@@ -24,14 +25,17 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #include "i960/tm-i960.h"
 
+/* forward declarations */
+struct frame_info;
+
 /* redefined from tm-i960.h */
 /* Number of machine registers */
-#undef NUM_REGS 
+#undef NUM_REGS
 #define NUM_REGS 40
 
 /* Initializer for an array of names of registers.
    There should be NUM_REGS strings in this initializer.  */
-#undef REGISTER_NAMES 
+#undef REGISTER_NAMES
 #define REGISTER_NAMES { \
 	/*  0 */ "pfp", "sp",  "rip", "r3",  "r4",  "r5",  "r6",  "r7", \
 	/*  8 */ "r8",  "r9",  "r10", "r11", "r12", "r13", "r14", "r15",\
@@ -51,10 +55,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
    since it differs between Nindy, Mon960 and VxWorks, the currently supported
    target types.  */
 
-#define	FRAME_CHAIN_VALID(chain, thisframe) \
-	mon960_frame_chain_valid (chain, thisframe)
-
-extern int mon960_frame_chain_valid();		/* See i960-tdep.c */
+extern int mon960_frame_chain_valid PARAMS ((CORE_ADDR, struct frame_info *));
+#define	FRAME_CHAIN_VALID(chain, thisframe) mon960_frame_chain_valid (chain, thisframe)
 
 /* Sequence of bytes for breakpoint instruction */
 

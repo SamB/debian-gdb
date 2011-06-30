@@ -1,5 +1,6 @@
 /* Support for the generic parts of COFF, for BFD.
-   Copyright 1990, 91, 92, 93, 94, 95, 96, 1997 Free Software Foundation, Inc.
+   Copyright 1990, 91, 92, 93, 94, 95, 96, 97, 98, 1999
+   Free Software Foundation, Inc.
    Written by Cygnus Support.
 
 This file is part of BFD, the Binary File Descriptor library.
@@ -127,6 +128,7 @@ make_a_section_from_file (abfd, hdr, target_index)
 
   return_section->vma = hdr->s_vaddr;
   return_section->lma = hdr->s_paddr;
+  return_section->load_page = hdr->s_page;
   return_section->_raw_size = hdr->s_size;
   return_section->filepos = hdr->s_scnptr;
   return_section->rel_filepos = hdr->s_relptr;
@@ -181,6 +183,10 @@ coff_real_object_p (abfd, nscns, internal_f, internal_a)
     abfd->flags |= HAS_LINENO;
   if (!(internal_f->f_flags & F_LSYMS))
     abfd->flags |= HAS_LOCALS;
+  /* CYGNUS LOCAL TI COFF/twall@tiac.net */
+  if (internal_f->f_flags & F_LDPAGE)
+    abfd->flags |= HAS_LOAD_PAGE;
+  /* end CYGNUS LOCAL */
 
   /* FIXME: How can we set D_PAGED correctly?  */
   if ((internal_f->f_flags & F_EXEC) != 0)
@@ -210,6 +216,13 @@ coff_real_object_p (abfd, nscns, internal_f, internal_a)
   if (bfd_read ((PTR) external_sections, 1, readsize, abfd) != readsize)
     goto fail;
 
+  /* CYGNUS LOCAL TI COFF/twall@tiac.net
+     (this line used to be positioned *after* the section swapping) */
+  /* set the arch/mach *before* swapping in sections; section header swapping
+     may depend on arch/mach info */
+  if (bfd_coff_set_arch_mach_hook (abfd, (PTR) internal_f) == false)
+    goto fail;
+
   /* Now copy data as required; construct all asections etc */
   if (nscns != 0)
     {
@@ -224,11 +237,9 @@ coff_real_object_p (abfd, nscns, internal_f, internal_a)
 	    goto fail;
 	}
     }
+  /* end CYGNUS LOCAL */
 
   /*  make_abs_section (abfd); */
-
-  if (bfd_coff_set_arch_mach_hook (abfd, (PTR) internal_f) == false)
-    goto fail;
 
   return abfd->xvec;
 
@@ -558,7 +569,7 @@ coff_count_linenumbers (abfd)
 /*ARGSUSED*/
 coff_symbol_type *
 coff_symbol_from (ignore_abfd, symbol)
-     bfd *ignore_abfd;
+     bfd *ignore_abfd ATTRIBUTE_UNUSED;
      asymbol *symbol;
 {
   if (bfd_asymbol_flavour (symbol) != bfd_target_coff_flavour)
@@ -602,9 +613,14 @@ fixup_symbol_value (abfd, coff_symbol_ptr, syment)
 
 	  syment->n_value = (coff_symbol_ptr->symbol.value
 			     + coff_symbol_ptr->symbol.section->output_offset);
+          /* CYGNUS LOCAL TI COFF twall@tiac.net */
 	  if (! obj_pe (abfd))
-	    syment->n_value +=
-	      coff_symbol_ptr->symbol.section->output_section->vma;
+            {
+              syment->n_value += (syment->n_sclass == C_STATLAB) ?
+                coff_symbol_ptr->symbol.section->output_section->lma :
+                coff_symbol_ptr->symbol.section->output_section->vma;
+            }
+          /* end CYGNUS LOCAL */
 	}
       else
 	{
@@ -657,16 +673,18 @@ coff_renumber_symbols (bfd_ptr, first_undef)
       if ((symbol_ptr_ptr[i]->flags & BSF_NOT_AT_END) != 0
 	  || (!bfd_is_und_section (symbol_ptr_ptr[i]->section)
 	      && !bfd_is_com_section (symbol_ptr_ptr[i]->section)
-	      && ((symbol_ptr_ptr[i]->flags & (BSF_GLOBAL | BSF_FUNCTION))
-		  != BSF_GLOBAL)))
+	      && ((symbol_ptr_ptr[i]->flags & BSF_FUNCTION) != 0
+		  || ((symbol_ptr_ptr[i]->flags & (BSF_GLOBAL | BSF_WEAK))
+		      == 0))))
 	*newsyms++ = symbol_ptr_ptr[i];
 
     for (i = 0; i < symbol_count; i++)
       if ((symbol_ptr_ptr[i]->flags & BSF_NOT_AT_END) == 0
 	  && !bfd_is_und_section (symbol_ptr_ptr[i]->section)
 	  && (bfd_is_com_section (symbol_ptr_ptr[i]->section)
-	      || ((symbol_ptr_ptr[i]->flags & (BSF_GLOBAL | BSF_FUNCTION))
-		  == BSF_GLOBAL)))
+	      || ((symbol_ptr_ptr[i]->flags & BSF_FUNCTION) == 0
+		  && ((symbol_ptr_ptr[i]->flags & (BSF_GLOBAL | BSF_WEAK))
+		      != 0))))
 	*newsyms++ = symbol_ptr_ptr[i];
 
     *first_undef = newsyms - bfd_ptr->outsymbols;
@@ -1031,6 +1049,8 @@ coff_write_alien_symbol (abfd, symbol, written, string_size_p,
   native->u.syment.n_type = 0;
   if (symbol->flags & BSF_LOCAL)
     native->u.syment.n_sclass = C_STAT;
+  else if (symbol->flags & BSF_WEAK)
+    native->u.syment.n_sclass = obj_pe (abfd) ? C_NT_WEAK : C_WEAKEXT;
   else
     native->u.syment.n_sclass = C_EXT;
   native->u.syment.n_numaux = 0;
@@ -1346,7 +1366,7 @@ coff_write_linenumbers (abfd)
 /*ARGSUSED */
 alent *
 coff_get_lineno (ignore_abfd, symbol)
-     bfd *ignore_abfd;
+     bfd *ignore_abfd ATTRIBUTE_UNUSED;
      asymbol *symbol;
 {
   return coffsymbol (symbol)->lineno;
@@ -1416,8 +1436,8 @@ coff_pointerize_aux (abfd, table_base, symbol, indaux, auxent)
      unsigned int indaux;
      combined_entry_type *auxent;
 {
-  int type = symbol->u.syment.n_type;
-  int class = symbol->u.syment.n_sclass;
+  unsigned int type = symbol->u.syment.n_type;
+  unsigned int class = symbol->u.syment.n_sclass;
 
   if (coff_backend_info (abfd)->_bfd_coff_pointerize_aux_hook)
     {
@@ -1599,7 +1619,7 @@ _bfd_coff_read_string_table (abfd)
   if (strsize < STRING_SIZE_SIZE)
     {
       (*_bfd_error_handler)
-	("%s: bad string table size %lu", bfd_get_filename (abfd),
+	(_("%s: bad string table size %lu"), bfd_get_filename (abfd),
 	 (unsigned long) strsize);
       bfd_set_error (bfd_error_bad_value);
       return NULL;
@@ -1742,9 +1762,19 @@ coff_get_normalized_symtab (abfd)
 	  else
 	    {
 	      /* ordinary short filename, put into memory anyway */
-	      internal_ptr->u.syment._n._n_n._n_offset = (long)
-		copy_name (abfd, (internal_ptr + 1)->u.auxent.x_file.x_fname,
-			   FILNMLEN);
+	      if (internal_ptr->u.syment.n_numaux > 1
+		  && coff_data (abfd)->pe)
+		{
+		  internal_ptr->u.syment._n._n_n._n_offset = (long)
+		    copy_name (abfd, (internal_ptr + 1)->u.auxent.x_file.x_fname,
+			       internal_ptr->u.syment.n_numaux * symesz);
+		}
+	      else
+		{
+		  internal_ptr->u.syment._n._n_n._n_offset = (long)
+		    copy_name (abfd, (internal_ptr + 1)->u.auxent.x_file.x_fname,
+			       FILNMLEN);
+		}
 	    }
 	}
       else
@@ -1842,8 +1872,8 @@ coff_make_empty_symbol (abfd)
 asymbol *
 coff_bfd_make_debug_symbol (abfd, ptr, sz)
      bfd *abfd;
-     PTR ptr;
-     unsigned long sz;
+     PTR ptr ATTRIBUTE_UNUSED;
+     unsigned long sz ATTRIBUTE_UNUSED;
 {
   coff_symbol_type *new = (coff_symbol_type *) bfd_alloc (abfd, sizeof (coff_symbol_type));
   if (new == NULL)
@@ -2090,7 +2120,7 @@ coff_print_symbol (abfd, filep, symbol, how)
 
 boolean
 _bfd_coff_is_local_label_name (abfd, name)
-     bfd *abfd;
+     bfd *abfd ATTRIBUTE_UNUSED;
      const char *name;
 {
   return name[0] == '.' && name[1] == 'L';
@@ -2303,3 +2333,71 @@ coff_sizeof_headers (abfd, reloc)
   size += abfd->section_count * bfd_coff_scnhsz (abfd);
   return size;
 }
+
+/* Change the class of a coff symbol held by BFD.  */
+boolean
+bfd_coff_set_symbol_class (abfd, symbol, class)
+     bfd *         abfd;
+     asymbol *     symbol;
+     unsigned int  class;
+{
+  coff_symbol_type * csym;
+
+  csym = coff_symbol_from (abfd, symbol);
+  if (csym == NULL)
+    {
+      bfd_set_error (bfd_error_invalid_operation);
+      return false;
+    }
+  else if (csym->native == NULL)
+    {
+      /* This is an alien symbol which no native coff backend data.
+	 We cheat here by creating a fake native entry for it and
+	 then filling in the class.  This code is based on that in
+	 coff_write_alien_symbol().  */
+      
+      combined_entry_type * native;
+
+      native = (combined_entry_type *) bfd_alloc (abfd, sizeof (* native));
+      if (native == NULL)
+	return false;
+
+      memset (native, 0, sizeof (* native));
+      
+      native->u.syment.n_type   = T_NULL;
+      native->u.syment.n_sclass = class;
+      
+      if (bfd_is_und_section (symbol->section))
+	{
+	  native->u.syment.n_scnum = N_UNDEF;
+	  native->u.syment.n_value = symbol->value;
+	}
+      else if (bfd_is_com_section (symbol->section))
+	{
+	  native->u.syment.n_scnum = N_UNDEF;
+	  native->u.syment.n_value = symbol->value;
+	}
+      else
+	{
+	  native->u.syment.n_scnum =
+	    symbol->section->output_section->target_index;
+	  native->u.syment.n_value = (symbol->value
+				      + symbol->section->output_offset);
+	  if (! obj_pe (abfd))
+	    native->u.syment.n_value += symbol->section->output_section->vma;
+	  
+	  /* Copy the any flags from the the file header into the symbol.
+	     FIXME: Why?  */
+	  native->u.syment.n_flags = bfd_asymbol_bfd (& csym->symbol)->flags;
+	}
+      
+      csym->native = native;
+    }
+  else
+    {
+      csym->native->u.syment.n_sclass = class;
+    }
+  
+  return true;
+}
+

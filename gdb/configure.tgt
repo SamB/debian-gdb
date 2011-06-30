@@ -13,18 +13,20 @@
 case "${target_cpu}" in
 
 alpha*)			gdb_target_cpu=alpha ;;
-c[12])			gdb_target_cpu=convex ;;
+# OBSOLETE c[12])		gdb_target_cpu=convex ;;
 hppa*)			gdb_target_cpu=pa ;;
 i[3456]86*)		gdb_target_cpu=i386 ;;
 m68*)			gdb_target_cpu=m68k ;;
 m88*)			gdb_target_cpu=m88k ;;
 mips*)			gdb_target_cpu=mips ;;
-np1)			gdb_target_cpu=gould ;;
+# OBSOLETE np1)			gdb_target_cpu=gould ;;
 powerpc*)		gdb_target_cpu=powerpc ;;
-pn)			gdb_target_cpu=gould ;;
-pyramid)		gdb_target_cpu=pyr ;;
+# OBSOLETE pn)			gdb_target_cpu=gould ;;
+# OBSOLETE pyramid)		gdb_target_cpu=pyr ;;
 sparc*)			gdb_target_cpu=sparc ;;
 thumb*)			gdb_target_cpu=arm ;;
+strongarm*)		gdb_target_cpu=arm ;;
+v850*)			gdb_target_cpu=v850 ;;
 *)			gdb_target_cpu=$target_cpu ;;
 
 esac
@@ -48,29 +50,25 @@ alpha*-*-linux*)	gdb_target=alpha-linux ;;
 
 arc-*-*)		gdb_target=arc ;;
 
-arm-*-* | thumb-*-*)	gdb_target=arm
-
-			# rdi doesn't work for wingdb yet
-			case $gdb_host in
-			windows) ;;
-			*)
-			    configdirs="$configdirs rdi-share"
-			    CONFIG_OBS="$CONFIG_OBS remote-rdi.o rdi-share/libangsd.a"
-			    ;;
-			esac
-			;;
-
-c1-*-*)			gdb_target=convex ;;
-c2-*-*)			gdb_target=convex ;;
+arm-*-* | thumb-*-* | strongarm-*-*)
+			gdb_target=arm 
+                        configdirs="$configdirs rdi-share"
+                        ;;
+# OBSOLETE c1-*-*)		gdb_target=convex ;;
+# OBSOLETE c2-*-*)		gdb_target=convex ;;
 
 d10v-*-*)		gdb_target=d10v ;;
+d30v-*-*)		gdb_target=d30v ;;
+
 h8300-*-*)		gdb_target=h8300 ;;
 h8500-*-*)		gdb_target=h8500 ;;
 
-sh-*-*)			gdb_target=sh ;;
+fr30-*-elf*)		gdb_target=fr30 ;;
+
 
 hppa*-*-bsd*)		gdb_target=hppabsd ;;
 hppa*-*-pro*)		gdb_target=hppapro ;;
+hppa2.0w-*-hpux11*)	gdb_target=hppa64 ;;
 hppa*-*-hpux*)		gdb_target=hppahpux ;;
 hppa*-*-hiux*)		gdb_target=hppahpux ;;
 hppa*-*-osf*)		gdb_target=hppaosf ;;
@@ -79,25 +77,26 @@ i[3456]86-sequent-bsd*)	gdb_target=symmetry ;;
 i[3456]86-sequent-sysv4*) gdb_target=ptx4 ;;
 i[3456]86-sequent-sysv*) gdb_target=ptx ;;
 i[3456]86-ncr-*)	gdb_target=ncr3000 ;;
-i[3456]86-*-aout*)	gdb_target=i386aout ;;
-i[3456]86-*-coff*)	gdb_target=i386v ;;
-i[3456]86-*-elf*)	gdb_target=i386v ;;
+i[3456]86-*-aout*)	gdb_target=embed ;;
+i[3456]86-*-coff*)	gdb_target=embed ;;
+i[3456]86-*-elf*)	gdb_target=embed ;;
 i[3456]86-*-aix*)	gdb_target=i386aix ;;
 i[3456]86-*-bsd*)	gdb_target=i386bsd ;;
 i[3456]86-*-freebsd*)	gdb_target=fbsd ;;
 i[3456]86-*-netbsd*)	gdb_target=nbsd ;;
 i[3456]86-*-os9k)	gdb_target=i386os9k ;;
 i[3456]86-*-go32*)	gdb_target=i386aout ;;
+i[3456]86-*-msdosdjgpp*) gdb_target=go32 ;;
 i[3456]86-*-lynxos*)	gdb_target=i386lynx
 		configdirs="${configdirs} gdbserver" ;;
 i[3456]86-*-solaris*)	gdb_target=i386sol2 ;;
 i[3456]86-*-sunos*)	gdb_target=sun386 ;;
-i[3456]86-unixware*-*)	gdb_target=i386v42mp ;;
-i[3456]86-*-sysv5*)	gdb_target=i386v42mp ;;
 i[3456]86-*-sysv4.2*)	gdb_target=i386v42mp ;;
 i[3456]86-*-sysv4*)	gdb_target=i386v4 ;;
+i[3456]86-*-sysv5*)	gdb_target=i386v42mp ;;
 i[3456]86-*-unixware2*)	gdb_target=i386v42mp ;;
 i[3456]86-*-unixware*)	gdb_target=i386v4 ;;
+i[3456]86-*-sco3.2v4*)	gdb_target=i386sco4 ;;
 i[3456]86-*-sco3.2v5*)	gdb_target=i386sco5 ;;
 i[3456]86-*-sco*)	gdb_target=i386v ;;
 i[3456]86-*-sysv*)	gdb_target=i386v ;;
@@ -111,13 +110,14 @@ i[3456]86-*-gnu*)	gdb_target=i386gnu ;;
 i[3456]86-*-netware*)	gdb_target=i386nw
 		configdirs="${configdirs} nlm" ;;
 i[3456]86-*-osf1mk*)	gdb_target=i386mk ;;
-i[3456]86-*-cygwin32)	gdb_target=cygwin32  ;;
+i[3456]86-*-cygwin*)	gdb_target=cygwin  ;;
+i[3456]86-*-vxworks*)	gdb_target=vxworks ;;
+
 i960-*-bout*)		gdb_target=vxworks960 ;;
 i960-nindy-coff*)	gdb_target=nindy960 ;;
 i960-*-coff*)		gdb_target=mon960 ;;
 i960-nindy-elf*)	gdb_target=nindy960 ;;
 i960-*-elf*)		gdb_target=mon960 ;;
-
 i960-*-nindy*)		gdb_target=nindy960 ;;
 i960-*-vxworks*)	gdb_target=vxworks960 ;;
 
@@ -130,7 +130,7 @@ m68*-apollo*-bsd*)	gdb_target=apollo68b ;;
 m68*-bull-sysv*)	gdb_target=dpx2 ;;
 m68*-hp-bsd*)		gdb_target=hp300bsd ;;
 m68*-hp-hpux*)		gdb_target=hp300hpux ;;
-m68*-altos-*)		gdb_target=altos ;;
+# OBSOLETE m68*-altos-*)	gdb_target=altos ;;
 m68*-att-*)		gdb_target=3b1 ;;
 m68*-cisco*-*)		gdb_target=cisco ;;
 m68*-ericsson-*)	gdb_target=es1800 ;;
@@ -146,6 +146,8 @@ m68*-est-*)		gdb_target=monitor ;;
 m68*-*-aout*)		gdb_target=monitor ;;
 m68*-*-coff*)		gdb_target=monitor ;;
 m68*-*-elf*)		gdb_target=monitor ;;
+m68*-*-linux*)		gdb_target=linux
+		configdirs="${configdirs} gdbserver" ;;
 m68*-*-lynxos*)		gdb_target=m68klynx
 		configdirs="${configdirs} gdbserver" ;;
 m68*-*-netbsd*)		gdb_target=nbsd ;;
@@ -160,6 +162,7 @@ m88*-motorola-sysv4*)	gdb_target=delta88v4 ;;
 m88*-motorola-*)	gdb_target=delta88 ;;
 m88*-*-*)		gdb_target=m88k ;;
 
+mcore*-*-*)		gdb_target=mcore ;;
 mips64*-big-*)		gdb_target=bigmips64 ;;
 mips*-big-*)		gdb_target=bigmips ;;
 mips*-dec-mach3*)	gdb_target=mach3 ;;
@@ -169,7 +172,7 @@ mips64*-*-ecoff*)	gdb_target=embed64 ;;
 mips64*vr4300*el-*-elf*)	gdb_target=vr4300el ;;
 mips64*vr4300*-*-elf*)	gdb_target=vr4300 ;;
 mips64*vr4100*el-*-elf*)	gdb_target=vr4300el ;;
-mips64*vr4100*-*-elf*)	gdb_target=vr4300 ;;
+mips64*vr4100*-*-elf*)	gdb_target=vr4100 ;;
 mips64*vr5000*el-*-elf*)	gdb_target=vr5000el ;;
 mips64*vr5000*-*-elf*)	gdb_target=vr5000
 		configdirs="${configdirs} gdbserver" ;;
@@ -198,20 +201,21 @@ mn10300-*-*)		gdb_target=mn10300 ;;
 
 none-*-*)		gdb_target=none ;;
 
-np1-*-*)		gdb_target=np1 ;;
+# OBSOLETE np1-*-*)		gdb_target=np1 ;;
 
 ns32k-*-mach3*)		gdb_target=ns32km3 ;;
 ns32k-*-netbsd*)	gdb_target=nbsd ;;
 ns32k-utek-sysv*)	gdb_target=merlin ;;
 ns32k-utek-*)		gdb_target=umax ;;
 
-pn-*-*)			gdb_target=pn ;;
+# OBSOLETE pn-*-*)			gdb_target=pn ;;
+
 powerpc-*-macos*)	gdb_target=macos ;;
 powerpc-*-netware*)	gdb_target=ppc-nw
 			configdirs="${configdirs} nlm" ;;
 
 powerpc-*-aix*)		gdb_target=aix ;;
-powerpcle-*-cygwin32)	gdb_target=cygwin32 ;;
+powerpcle-*-cygwin*)	gdb_target=cygwin ;;
 powerpcle-*-solaris*)	gdb_target=solaris ;;
 powerpc-*-eabi* | powerpc-*-linux* | powerpc-*-sysv* | powerpc-*-elf*)
 			if test -f ../sim/ppc/Makefile; then
@@ -225,12 +229,15 @@ powerpcle-*-eabi* | powerpcle-*-sysv* | powerpcle-*-elf*)
 			else
 			  gdb_target=ppcle-eabi
 			fi ;;
+powerpc-*-vxworks*)	gdb_target=vxworks ;;
 
-pyramid-*-*)		gdb_target=pyramid ;;
+# OBSOLETE pyramid-*-*)		gdb_target=pyramid ;;
 
 rs6000-*-lynxos*)	gdb_target=rs6000lynx ;;
 rs6000-*-aix4*)		gdb_target=aix4 ;;
 rs6000-*-*)		gdb_target=rs6000 ;;
+
+sh-*-*)			gdb_target=sh ;;
 
 sparc-*-aout*)		gdb_target=sparc-em ;;
 sparc-*-coff*)		gdb_target=sparc-em ;;
@@ -245,7 +252,8 @@ sparc-*-sunos5*)	gdb_target=sun4sol2 ;;
 sparc-*-vxworks*)	gdb_target=vxsparc ;;
 sparc-*-*)		gdb_target=sun4os4 ;;
 sparclet-*-*)		gdb_target=sparclet;;
-sparclite*-*-*)		gdb_target=sparclite ;;
+sparclite-*-*)		gdb_target=sparclite ;;
+sparc86x-*-*)		gdb_target=sparclite ;;
 # It's not clear what the right solution for "v8plus" systems is yet.
 # For now, stick with sparc-sun-solaris2 since that's what config.guess
 # should return.  Work is still needed to get gdb to print the 64 bit
@@ -254,19 +262,24 @@ sparclite*-*-*)		gdb_target=sparclite ;;
 #sparc64-*-solaris2*)	gdb_target=sp64sol2 ;;
 sparc64-*-*)		gdb_target=sp64 ;;
 
-tahoe-*-*)		gdb_target=tahoe ;;
+# OBSOLETE tahoe-*-*)		gdb_target=tahoe ;;
 
-
+tic80-*-*)		gdb_target=tic80
+			configdirs="${configdirs} gdbserver" ;;
 
 vax-*-*)		gdb_target=vax ;;
 
-v850-*-*)		gdb_target=v850
-			case $gdb_host in
-			windows)
-				CONFIG_OBS="${CONFIG_OBS} v850ice.o"
-				LIBS="${LIBS} necmsg.lib" ;;
+fr30-*-*)		gdb_target=fr30
+			;;
+
+v850*-*-*)		gdb_target=v850
+			case ${gdb_host} in
+			cygwin*)
+				CONFIG_OBS="${CONFIG_OBS} v850ice.o" ;;
+			* ) ;;
 			esac
 			;;
+
 w65-*-*)		gdb_target=w65 ;;
 
 z8k-*-coff*)		gdb_target=z8k ;;

@@ -1,5 +1,5 @@
 /* BFD back-end for Intel 386 COFF files (go32 variant with a stub).
-   Copyright 1997 Free Software Foundation, Inc.
+   Copyright 1997, 1998, 1999 Free Software Foundation, Inc.
    Written by Robert Hoehne.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -223,9 +223,9 @@ adjust_filehdr_out_pre  (abfd, in, out)
 
 static void
 adjust_filehdr_out_post  (abfd, in, out)
-     bfd *abfd;
+     bfd *abfd ATTRIBUTE_UNUSED;
      PTR in;
-     PTR out;
+     PTR out ATTRIBUTE_UNUSED;
 {
   struct internal_filehdr *filehdr_in = (struct internal_filehdr *) in;
   /* undo the above change */
@@ -234,8 +234,8 @@ adjust_filehdr_out_post  (abfd, in, out)
 
 static void
 adjust_scnhdr_in_post  (abfd, ext, in)
-     bfd *abfd;
-     PTR ext;
+     bfd *abfd ATTRIBUTE_UNUSED;
+     PTR ext ATTRIBUTE_UNUSED;
      PTR in;
 {
   struct internal_scnhdr *scnhdr_int = (struct internal_scnhdr *) in;
@@ -247,9 +247,9 @@ adjust_scnhdr_in_post  (abfd, ext, in)
 
 static void
 adjust_scnhdr_out_pre  (abfd, in, out)
-     bfd *abfd;
+     bfd *abfd ATTRIBUTE_UNUSED;
      PTR in;
-     PTR out;
+     PTR out ATTRIBUTE_UNUSED;
 {
   struct internal_scnhdr *scnhdr_int = (struct internal_scnhdr *) in;
 
@@ -260,9 +260,9 @@ adjust_scnhdr_out_pre  (abfd, in, out)
 
 static void
 adjust_scnhdr_out_post (abfd, in, out)
-     bfd *abfd;
+     bfd *abfd ATTRIBUTE_UNUSED;
      PTR in;
-     PTR out;
+     PTR out ATTRIBUTE_UNUSED;
 {
   struct internal_scnhdr *scnhdr_int = (struct internal_scnhdr *) in;
 
@@ -273,12 +273,12 @@ adjust_scnhdr_out_post (abfd, in, out)
 
 static void
 adjust_aux_in_post  (abfd, ext1, type, class, indx, numaux, in1)
-     bfd *abfd;
-     PTR ext1;
+     bfd *abfd ATTRIBUTE_UNUSED;
+     PTR ext1 ATTRIBUTE_UNUSED;
      int type;
      int class;
-     int indx;
-     int numaux;
+     int indx ATTRIBUTE_UNUSED;
+     int numaux ATTRIBUTE_UNUSED;
      PTR in1;
 {
   union internal_auxent *in = (union internal_auxent *) in1;
@@ -291,13 +291,13 @@ adjust_aux_in_post  (abfd, ext1, type, class, indx, numaux, in1)
 
 static void
 adjust_aux_out_pre  (abfd, inp, type, class, indx, numaux, extp)
-     bfd *abfd;
+     bfd *abfd ATTRIBUTE_UNUSED;
      PTR inp;
      int type;
      int class;
-     int indx;
-     int numaux;
-     PTR extp;
+     int indx ATTRIBUTE_UNUSED;
+     int numaux ATTRIBUTE_UNUSED;
+     PTR extp ATTRIBUTE_UNUSED;
 {
   union internal_auxent *in = (union internal_auxent *) inp;
 
@@ -309,13 +309,13 @@ adjust_aux_out_pre  (abfd, inp, type, class, indx, numaux, extp)
 
 static void
 adjust_aux_out_post (abfd, inp, type, class, indx, numaux, extp)
-     bfd *abfd;
+     bfd *abfd ATTRIBUTE_UNUSED;
      PTR inp;
      int type;
      int class;
-     int indx;
-     int numaux;
-     PTR extp;
+     int indx ATTRIBUTE_UNUSED;
+     int numaux ATTRIBUTE_UNUSED;
+     PTR extp ATTRIBUTE_UNUSED;
 {
   union internal_auxent *in = (union internal_auxent *) inp;
 
@@ -393,7 +393,7 @@ create_go32_stub (abfd)
 	  goto stub_end;
 	}
       exe_start = _H (4) * 16;
-      if (lseek (f, exe_start, SEEK_SET) != exe_start)
+      if ((unsigned long) lseek (f, exe_start, SEEK_SET) != exe_start)
 	{
 	  close (f);
 	  goto stub_end;
@@ -416,7 +416,8 @@ create_go32_stub (abfd)
 	  return;
 	}
       lseek (f, 0L, SEEK_SET);
-      if (read (f, bfd_coff_go32stub (abfd), coff_start) != coff_start)
+      if ((unsigned long) read (f, bfd_coff_go32stub (abfd), coff_start)
+	  != coff_start)
 	{
 	  bfd_release (abfd, bfd_coff_go32stub (abfd));
 	  bfd_coff_go32stub (abfd) = NULL;

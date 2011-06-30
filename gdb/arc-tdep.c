@@ -1,21 +1,22 @@
 /* ARC target-dependent stuff.
    Copyright (C) 1995, 1997 Free Software Foundation, Inc.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -26,18 +27,30 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "symtab.h"
 #include "gdbcmd.h"
 
+/* Local functions */
+
+static int arc_set_cpu_type (char *str);
+
 /* Current CPU, set with the "set cpu" command.  */
 static int arc_bfd_mach_type;
 char *arc_cpu_type;
 char *tmp_arc_cpu_type;
 
 /* Table of cpu names.  */
-struct {
-  char *name;
-  int value;
-} arc_cpu_type_table[] = {
-  { "base", bfd_mach_arc_base },
-  { NULL, 0 }
+struct
+  {
+    char *name;
+    int value;
+  }
+arc_cpu_type_table[] =
+{
+  {
+    "base", bfd_mach_arc_base
+  }
+  ,
+  {
+    NULL, 0
+  }
 };
 
 /* Used by simulator.  */
@@ -81,7 +94,7 @@ static void codestream_read PARAMS ((unsigned int *, int));
 static void codestream_seek PARAMS ((CORE_ADDR));
 static unsigned int codestream_fill PARAMS ((int));
 
-#define CODESTREAM_BUFSIZ 16 
+#define CODESTREAM_BUFSIZ 16
 static CORE_ADDR codestream_next_addr;
 static CORE_ADDR codestream_addr;
 static unsigned int codestream_buf[CODESTREAM_BUFSIZ];
@@ -99,9 +112,9 @@ static int codestream_cnt;
    ? codestream_fill (0) \
    : codestream_buf[codestream_off++])
 
-static unsigned int 
+static unsigned int
 codestream_fill (peek_flag)
-    int peek_flag;
+     int peek_flag;
 {
   codestream_addr = codestream_next_addr;
   codestream_next_addr += CODESTREAM_BUFSIZ * sizeof (codestream_buf[0]);
@@ -121,7 +134,7 @@ codestream_fill (peek_flag)
 	for (j = 0; j < n / 2; ++j)
 	  tmp = p[j], p[j] = p[n - 1 - j], p[n - 1 - j] = tmp;
     }
-  
+
   if (peek_flag)
     return codestream_peek ();
   else
@@ -130,7 +143,7 @@ codestream_fill (peek_flag)
 
 static void
 codestream_seek (place)
-    CORE_ADDR place;
+     CORE_ADDR place;
 {
   codestream_next_addr = place / CODESTREAM_BUFSIZ;
   codestream_next_addr *= CODESTREAM_BUFSIZ;
@@ -203,16 +216,16 @@ arc_get_frame_setup (pc)
     {
       insn = codestream_get ();
       /* Frame may not be necessary, even though blink is saved.
-	 At least this is something we recognize.  */
+         At least this is something we recognize.  */
       frame_size = 0;
     }
 
-  if ((insn & BUILD_INSN (-1, 0, -1, -1, -1))		/* st fp,[sp] */
+  if ((insn & BUILD_INSN (-1, 0, -1, -1, -1))	/* st fp,[sp] */
       == BUILD_INSN (2, 0, SP_REGNUM, FP_REGNUM, 0))
-    {	
+    {
       insn = codestream_get ();
       if ((insn & BUILD_INSN (-1, -1, -1, -1, 0))
-	       != BUILD_INSN (12, FP_REGNUM, SP_REGNUM, SP_REGNUM, 0))
+	  != BUILD_INSN (12, FP_REGNUM, SP_REGNUM, SP_REGNUM, 0))
 	return -1;
 
       /* Check for stack adjustment sub sp,sp,N.  */
@@ -229,12 +242,12 @@ arc_get_frame_setup (pc)
 	  if (frame_size < 0)
 	    return -1;
 
-          codestream_get ();
+	  codestream_get ();
 
 	  /* This sequence is used to get the address of the return
 	     buffer for a function that returns a structure.  */
 	  insn = codestream_peek ();
-	  if (insn & OPMASK == 0x60000000)
+	  if ((insn & OPMASK) == 0x60000000)
 	    codestream_get ();
 	}
       /* Frameless fn.  */
@@ -264,7 +277,7 @@ arc_get_frame_setup (pc)
    This allows a quicker answer.  */
 
 CORE_ADDR
-skip_prologue (pc, frameless_p)
+arc_skip_prologue (pc, frameless_p)
      CORE_ADDR pc;
      int frameless_p;
 {
@@ -283,8 +296,8 @@ skip_prologue (pc, frameless_p)
       insn = codestream_peek ();
       if ((insn & BUILD_INSN (-1, 0, -1, 0, 0))
 	  != BUILD_INSN (2, 0, SP_REGNUM, 0, 0))
-	break; /* not st insn */
-      if (! ARC_CALL_SAVED_REG (X_C (insn)))
+	break;			/* not st insn */
+      if (!ARC_CALL_SAVED_REG (X_C (insn)))
 	break;
       codestream_get ();
     }
@@ -360,11 +373,11 @@ frame_find_saved_regs (fip, fsrp)
   dummy_bottom = fip->frame - 4 - REGISTER_BYTES - CALL_DUMMY_LENGTH;
 
   /* Check if the PC is in the stack, in a dummy frame.  */
-  if (dummy_bottom <= fip->pc && fip->pc <= fip->frame) 
+  if (dummy_bottom <= fip->pc && fip->pc <= fip->frame)
     {
       /* all regs were saved by push_call_dummy () */
       adr = fip->frame;
-      for (i = 0; i < NUM_REGS; i++) 
+      for (i = 0; i < NUM_REGS; i++)
 	{
 	  adr -= REGISTER_RAW_SIZE (i);
 	  fsrp->regs[i] = adr;
@@ -374,7 +387,7 @@ frame_find_saved_regs (fip, fsrp)
 
   locals = arc_get_frame_setup (get_pc_function_start (fip->pc));
 
-  if (locals >= 0) 
+  if (locals >= 0)
     {
       /* Set `adr' to the value of `sp'.  */
       adr = fip->frame - locals;
@@ -382,9 +395,9 @@ frame_find_saved_regs (fip, fsrp)
 	{
 	  insn = codestream_get ();
 	  if ((insn & BUILD_INSN (-1, 0, -1, 0, 0))
-	       != BUILD_INSN (2, 0, SP_REGNUM, 0, 0))
+	      != BUILD_INSN (2, 0, SP_REGNUM, 0, 0))
 	    break;
-          regnum = X_C (insn);
+	  regnum = X_C (insn);
 	  offset = X_D (insn);
 	  fsrp->regs[regnum] = adr + offset;
 	}
@@ -395,14 +408,14 @@ frame_find_saved_regs (fip, fsrp)
 }
 
 void
-push_dummy_frame ()
+arc_push_dummy_frame (void)
 {
   CORE_ADDR sp = read_register (SP_REGNUM);
   int regnum;
   char regbuf[MAX_REGISTER_RAW_SIZE];
 
   read_register_gen (PC_REGNUM, regbuf);
-  write_memory (sp+4, regbuf, REGISTER_SIZE);
+  write_memory (sp + 4, regbuf, REGISTER_SIZE);
   read_register_gen (FP_REGNUM, regbuf);
   write_memory (sp, regbuf, REGISTER_SIZE);
   write_register (FP_REGNUM, sp);
@@ -411,22 +424,22 @@ push_dummy_frame ()
       read_register_gen (regnum, regbuf);
       sp = push_bytes (sp, regbuf, REGISTER_RAW_SIZE (regnum));
     }
-  sp += (2*REGISTER_SIZE);
+  sp += (2 * REGISTER_SIZE);
   write_register (SP_REGNUM, sp);
 }
 
 void
-pop_frame ()
+arc_pop_frame (void)
 {
   struct frame_info *frame = get_current_frame ();
   CORE_ADDR fp;
   int regnum;
   struct frame_saved_regs fsr;
   char regbuf[MAX_REGISTER_RAW_SIZE];
-  
+
   fp = FRAME_FP (frame);
   get_frame_saved_regs (frame, &fsr);
-  for (regnum = 0; regnum < NUM_REGS; regnum++) 
+  for (regnum = 0; regnum < NUM_REGS; regnum++)
     {
       CORE_ADDR adr;
       adr = fsr.regs[regnum];
@@ -447,11 +460,12 @@ pop_frame ()
 
 typedef enum
 {
-  NORMAL4, /* a normal 4 byte insn */
-  NORMAL8, /* a normal 8 byte insn */
-  BRANCH4, /* a 4 byte branch insn, including ones without delay slots */
-  BRANCH8, /* an 8 byte branch insn, including ones with delay slots */
-} insn_type;
+  NORMAL4,			/* a normal 4 byte insn */
+  NORMAL8,			/* a normal 8 byte insn */
+  BRANCH4,			/* a 4 byte branch insn, including ones without delay slots */
+  BRANCH8,			/* an 8 byte branch insn, including ones with delay slots */
+}
+insn_type;
 
 /* Return the type of INSN and store in TARGET the destination address of a
    branch if this is one.  */
@@ -466,26 +480,30 @@ get_insn_type (insn, pc, target)
 
   switch (insn >> 27)
     {
-    case 0 : case 1 : case 2 : /* load/store insns */
+    case 0:
+    case 1:
+    case 2:			/* load/store insns */
       if (LIMM_P (X_A (insn))
 	  || LIMM_P (X_B (insn))
 	  || LIMM_P (X_C (insn)))
 	return NORMAL8;
       return NORMAL4;
-    case 4 : case 5 : case 6 : /* branch insns */
+    case 4:
+    case 5:
+    case 6:			/* branch insns */
       *target = pc + 4 + X_L (insn);
       /* ??? It isn't clear that this is always the right answer.
-	 The problem occurs when the next insn is an 8 byte insn.  If the
-	 branch is conditional there's no worry as there shouldn't be an 8
-	 byte insn following.  The programmer may be cheating if s/he knows
-	 the branch will never be taken, but we don't deal with that.
-	 Note that the programmer is also allowed to play games by putting
-	 an insn with long immediate data in the delay slot and then duplicate
-	 the long immediate data at the branch target.  Ugh!  */
+         The problem occurs when the next insn is an 8 byte insn.  If the
+         branch is conditional there's no worry as there shouldn't be an 8
+         byte insn following.  The programmer may be cheating if s/he knows
+         the branch will never be taken, but we don't deal with that.
+         Note that the programmer is also allowed to play games by putting
+         an insn with long immediate data in the delay slot and then duplicate
+         the long immediate data at the branch target.  Ugh!  */
       if (X_N (insn) == 0)
 	return BRANCH4;
       return BRANCH8;
-    case 7 : /* jump insns */
+    case 7:			/* jump insns */
       if (LIMM_P (X_B (insn)))
 	{
 	  limm = read_memory_integer (pc + 4, 4);
@@ -499,7 +517,7 @@ get_insn_type (insn, pc, target)
       if (X_Q (insn) == 0 && X_N (insn) == 0)
 	return BRANCH4;
       return BRANCH8;
-    default : /* arithmetic insns, etc. */
+    default:			/* arithmetic insns, etc. */
       if (LIMM_P (X_A (insn))
 	  || LIMM_P (X_B (insn))
 	  || LIMM_P (X_C (insn)))
@@ -507,12 +525,6 @@ get_insn_type (insn, pc, target)
       return NORMAL4;
     }
 }
-
-/* Non-zero if we just simulated a single-step.  This is needed because we
-   cannot remove the breakpoints in the inferior process until after the
-   `wait' in `wait_for_inferior'.  */
-
-int one_stepped;
 
 /* single_step() is called just before we want to resume the inferior, if we
    want to single-step it but there is no hardware or kernel single-step
@@ -523,15 +535,16 @@ int one_stepped;
    set up a simulated single-step, we undo our damage.  */
 
 void
-single_step (ignore)
-     enum target_signal ignore; /* sig, but we don't need it */
+arc_software_single_step (ignore, insert_breakpoints_p)
+     enum target_signal ignore;	/* sig but we don't need it */
+     int insert_breakpoints_p;
 {
   static CORE_ADDR next_pc, target;
   static int brktrg_p;
   typedef char binsn_quantum[BREAKPOINT_MAX];
   static binsn_quantum break_mem[2];
 
-  if (!one_stepped)
+  if (insert_breakpoints_p)
     {
       insn_type type;
       CORE_ADDR pc;
@@ -548,18 +561,16 @@ single_step (ignore)
       brktrg_p = 0;
 
       if ((type == BRANCH4 || type == BRANCH8)
-	  /* Watch out for branches to the following location.
-	     We just stored a breakpoint there and another call to
-	     target_insert_breakpoint will think the real insn is the
-	     breakpoint we just stored there.  */
+      /* Watch out for branches to the following location.
+         We just stored a breakpoint there and another call to
+         target_insert_breakpoint will think the real insn is the
+         breakpoint we just stored there.  */
 	  && target != next_pc)
 	{
 	  brktrg_p = 1;
 	  target_insert_breakpoint (target, break_mem[1]);
 	}
 
-      /* We are ready to let it go.  */
-      one_stepped = 1;
     }
   else
     {
@@ -572,8 +583,6 @@ single_step (ignore)
       /* Fix the pc.  */
       stop_pc -= DECR_PC_AFTER_BREAK;
       write_pc (stop_pc);
-
-      one_stepped = 0;
     }
 }
 
@@ -584,7 +593,7 @@ single_step (ignore)
    This routine returns true on success. */
 
 int
-get_longjmp_target(pc)
+get_longjmp_target (pc)
      CORE_ADDR *pc;
 {
   char buf[TARGET_PTR_BIT / TARGET_CHAR_BIT];
@@ -592,7 +601,7 @@ get_longjmp_target(pc)
 
   sp = read_register (SP_REGNUM);
 
-  if (target_read_memory (sp + SP_ARG0, /* Offset of first arg on stack */
+  if (target_read_memory (sp + SP_ARG0,		/* Offset of first arg on stack */
 			  buf,
 			  TARGET_PTR_BIT / TARGET_CHAR_BIT))
     return 0;
@@ -636,9 +645,7 @@ arc_print_insn (vma, info)
 /* Command to set cpu type.  */
 
 void
-arc_set_cpu_type_command (args, from_tty)
-     char *args;
-     int from_tty;
+arc_set_cpu_type_command (char *args, int from_tty)
 {
   int i;
 
@@ -653,7 +660,7 @@ arc_set_cpu_type_command (args, from_tty)
 
       return;
     }
-  
+
   if (!arc_set_cpu_type (tmp_arc_cpu_type))
     {
       error ("Unknown cpu type `%s'.", tmp_arc_cpu_type);
@@ -672,7 +679,7 @@ arc_show_cpu_type_command (args, from_tty)
 /* Modify the actual cpu type.
    Result is a boolean indicating success.  */
 
-int
+static int
 arc_set_cpu_type (str)
      char *str;
 {

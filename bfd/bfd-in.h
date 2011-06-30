@@ -1,5 +1,6 @@
 /* Main header file for the bfd library -- portable access to object files.
-   Copyright 1990, 91, 92, 93, 94, 95, 96, 1997 Free Software Foundation, Inc.
+   Copyright 1990, 91, 92, 93, 94, 95, 96, 97, 98, 1999
+   Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
 ** NOTE: bfd.h and bfd-in2.h are GENERATED files.  Don't change them;
@@ -22,7 +23,7 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
-/* bfd.h -- The only header file required by users of the bfd library 
+/* bfd.h -- The only header file required by users of the bfd library
 
 The bfd.h file is generated from bfd-in.h and various .c files; if you
 change it, your changes will probably be lost.
@@ -108,7 +109,7 @@ typedef enum bfd_boolean {bfd_fffalse, bfd_tttrue} boolean;
 /* FIXME:  This should be using off_t from <sys/types.h>.
    For now, try to avoid breaking stuff by not including <sys/types.h> here.
    This will break on systems with 64-bit file offsets (e.g. 4.4BSD).
-   Probably the best long-term answer is to avoid using file_ptr AND off_t 
+   Probably the best long-term answer is to avoid using file_ptr AND off_t
    in this header file, and to handle this in the BFD implementation
    rather than in its interface.  */
 /* typedef off_t	file_ptr; */
@@ -120,20 +121,24 @@ typedef long int file_ptr;
    use gcc's "long long" type.  Otherwise, BFD_HOST_64_BIT must be
    defined above.  */
 
+#ifndef BFD_HOST_64_BIT
+# if BFD_HOST_64BIT_LONG
+#  define BFD_HOST_64_BIT long
+#  define BFD_HOST_U_64_BIT unsigned long
+# else
+#  ifdef __GNUC__
+#   if __GNUC__ >= 2
+#    define BFD_HOST_64_BIT long long
+#    define BFD_HOST_U_64_BIT unsigned long long
+#   endif /* __GNUC__ >= 2 */
+#  endif /* ! defined (__GNUC__) */
+# endif /* ! BFD_HOST_64BIT_LONG */
+#endif /* ! defined (BFD_HOST_64_BIT) */
+
 #ifdef BFD64
 
 #ifndef BFD_HOST_64_BIT
-#if BFD_HOST_64BIT_LONG
-#define BFD_HOST_64_BIT long
-#define BFD_HOST_U_64_BIT unsigned long
-#else
-#ifdef __GNUC__
-#define BFD_HOST_64_BIT long long
-#define BFD_HOST_U_64_BIT unsigned long long
-#else /* ! defined (__GNUC__) */
  #error No 64 bit integer type available
-#endif /* ! defined (__GNUC__) */
-#endif /* ! BFD_HOST_64BIT_LONG */
 #endif /* ! defined (BFD_HOST_64_BIT) */
 
 typedef BFD_HOST_U_64_BIT bfd_vma;
@@ -174,7 +179,9 @@ typedef unsigned long bfd_size_type;
 /* Print a bfd_vma x on stream s.  */
 #define fprintf_vma(s,x) fprintf(s, "%08lx", x)
 #define sprintf_vma(s,x) sprintf(s, "%08lx", x)
+
 #endif /* not BFD64  */
+
 #define printf_vma(x) fprintf_vma(stdout,x)
 
 typedef unsigned int flagword;	/* 32 bits of flags */
@@ -246,6 +253,11 @@ typedef enum bfd_format {
 /* This flag indicates that the BFD contents are actually cached in
    memory.  If this is set, iostream points to a bfd_in_memory struct.  */
 #define BFD_IN_MEMORY 0x800
+
+/* CYGNUS LOCAL TI COFF twall@tiac.net */
+/* The sections in this BFD specify a memory page */
+#define HAS_LOAD_PAGE 0x1000
+/* end CYGNUS LOCAL */
 
 /* symbols and relocation */
 
@@ -277,11 +289,11 @@ typedef struct carsym {
   file_ptr file_offset;		/* look here to find the file */
 } carsym;			/* to make these you call a carsymogen */
 
-  
+
 /* Used in generating armaps (archive tables of contents).
    Perhaps just a forward definition would do? */
 struct orl {			/* output ranlib */
-  char **name;			/* symbol name */ 
+  char **name;			/* symbol name */
   file_ptr pos;			/* bfd* or file position */
   int namidx;			/* index into string table */
 };
@@ -289,7 +301,7 @@ struct orl {			/* output ranlib */
 
 /* Linenumber stuff */
 typedef struct lineno_cache_entry {
-  unsigned int line_number;	/* Linenumber from start of function*/  
+  unsigned int line_number;	/* Linenumber from start of function*/
   union {
     struct symbol_cache_entry *sym; /* Function name */
     unsigned long offset;	/* Offset into section */
@@ -306,6 +318,9 @@ typedef struct sec *sec_ptr;
 #define bfd_get_section_name(bfd, ptr) ((ptr)->name + 0)
 #define bfd_get_section_vma(bfd, ptr) ((ptr)->vma + 0)
 #define bfd_get_section_alignment(bfd, ptr) ((ptr)->alignment_power + 0)
+/* CYGNUS LOCAL TI COFF twall@cygnus.com */
+#define bfd_get_section_load_page(bfd, ptr) ((ptr)->load_page)
+/* end CYGNUS LOCAL */
 #define bfd_section_name(bfd, ptr) ((ptr)->name)
 #define bfd_section_size(bfd, ptr) (bfd_get_section_size_before_reloc(ptr))
 #define bfd_section_vma(bfd, ptr) ((ptr)->vma)
@@ -318,17 +333,20 @@ typedef struct sec *sec_ptr;
 
 #define bfd_set_section_vma(bfd, ptr, val) (((ptr)->vma = (ptr)->lma= (val)), ((ptr)->user_set_vma = (boolean)true), true)
 #define bfd_set_section_alignment(bfd, ptr, val) (((ptr)->alignment_power = (val)),true)
+/* CYGNUS LOCAL TI COFF twall@cygnus.com */
+#define bfd_set_section_load_page(bfd, ptr, val) ((ptr)->load_page = (val), true)
+/* end CYGNUS LOCAL */
 #define bfd_set_section_userdata(bfd, ptr, val) (((ptr)->userdata = (val)),true)
 
-typedef struct stat stat_type; 
+typedef struct stat stat_type;
 
 typedef enum bfd_print_symbol
-{ 
+{
   bfd_print_symbol_name,
   bfd_print_symbol_more,
   bfd_print_symbol_all
 } bfd_print_symbol_type;
-    
+
 /* Information about a symbol that nm needs.  */
 
 typedef struct _symbol_info
@@ -606,6 +624,8 @@ extern boolean bfd_elf64_record_link_assignment
   PARAMS ((bfd *, struct bfd_link_info *, const char *, boolean));
 extern struct bfd_link_needed_list *bfd_elf_get_needed_list
   PARAMS ((bfd *, struct bfd_link_info *));
+extern boolean bfd_elf_get_bfd_needed_list
+  PARAMS ((bfd *, struct bfd_link_needed_list **));
 extern boolean bfd_elf32_size_dynamic_sections
   PARAMS ((bfd *, const char *, const char *, boolean, const char *,
 	   const char * const *, struct bfd_link_info *, struct sec **,
@@ -688,7 +708,31 @@ union internal_auxent;
 
 extern boolean bfd_coff_get_syment
   PARAMS ((bfd *, struct symbol_cache_entry *, struct internal_syment *));
+
 extern boolean bfd_coff_get_auxent
   PARAMS ((bfd *, struct symbol_cache_entry *, int, union internal_auxent *));
+
+extern boolean bfd_coff_set_symbol_class
+  PARAMS ((bfd *, struct symbol_cache_entry *, unsigned int));
+
+/* ARM Interworking support.  Called from linker.  */
+extern boolean bfd_arm_allocate_interworking_sections
+  PARAMS ((struct bfd_link_info *));
+
+extern boolean bfd_arm_process_before_allocation
+  PARAMS ((bfd *, struct bfd_link_info *, int));
+
+extern boolean bfd_arm_get_bfd_for_interworking
+  PARAMS ((bfd *, struct bfd_link_info *));
+
+/* ELF ARM Interworking support.  Called from linker.  */
+extern boolean bfd_elf32_arm_allocate_interworking_sections
+  PARAMS ((struct bfd_link_info *));
+
+extern boolean bfd_elf32_arm_process_before_allocation
+  PARAMS ((bfd *, struct bfd_link_info *, int));
+
+extern boolean bfd_elf32_arm_get_bfd_for_interworking
+  PARAMS ((bfd *, struct bfd_link_info *));
 
 /* And more from the source.  */

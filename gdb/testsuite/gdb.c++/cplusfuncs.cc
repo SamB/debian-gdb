@@ -36,7 +36,7 @@ public:
   void  operator ||     (foo&);
   void  operator ~      (void);
   void  operator --     (int);
-  void  operator ->     (void);
+  foo*  operator ->     (void);
   void  operator -=     (foo&);
   void  operator /=     (foo&);
   void  operator <<=    (foo&);
@@ -45,13 +45,13 @@ public:
   void  operator ->*    (foo&);
   void  operator []     (foo&);
   void  operator ()     (foo&);
-  void* operator new    (size_t);
+  void* operator new    (size_t) throw ();
   void  operator delete (void *);
   /**/  operator int    ();
   /**/  operator char*  ();
 
-  foofunc (int);
-  foofunc (int, signed char *);
+  int foofunc (int); // forced to have int return type, which is required
+  int foofunc (int, signed char *); // forced to have int return type, which is required
   int ifoo;
   const char *ccpfoo;
 };
@@ -63,7 +63,7 @@ extern "C" {
 };
 #endif
 
-main () {
+int main () {
 #ifdef usestubs
    set_debug_traps();
    breakpoint();
@@ -105,7 +105,7 @@ void  foo::operator ^      (foo& afoo) { afoo.ifoo = 0; }
 void  foo::operator ||     (foo& afoo) { afoo.ifoo = 0; }
 void  foo::operator ~      (void) {}
 void  foo::operator --     (int ival) { ival = 0; }
-void  foo::operator ->     (void) {}
+foo*  foo::operator ->     (void) {return this;}
 void  foo::operator -=     (foo& afoo) { afoo.ifoo = 0; }
 void  foo::operator /=     (foo& afoo) { afoo.ifoo = 0; }
 void  foo::operator <<=    (foo& afoo) { afoo.ifoo = 0; }
@@ -114,7 +114,7 @@ void  foo::operator ^=     (foo& afoo) { afoo.ifoo = 0; }
 void  foo::operator ->*    (foo& afoo) { afoo.ifoo = 0; }
 void  foo::operator []     (foo& afoo) { afoo.ifoo = 0; }
 void  foo::operator ()     (foo& afoo) { afoo.ifoo = 0; }
-void* foo::operator new    (size_t ival) { ival = 0; return 0; }
+void* foo::operator new    (size_t ival) throw () { ival = 0; return 0; }
 void  foo::operator delete (void *ptr) { ptr = 0; }
 /**/  foo::operator int    () { return 0; }
 /**/  foo::operator char*  () { return 0; }

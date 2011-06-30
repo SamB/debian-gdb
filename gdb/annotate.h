@@ -1,25 +1,30 @@
 /* Annotation routines for GDB.
-   Copyright 1986, 1989, 1990, 1991, 1992 Free Software Foundation, Inc.
+   Copyright 1986, 1989, 1990, 1991, 1992, 1999 Free Software Foundation, Inc.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
+
+#include "symtab.h"
+#include "gdbtypes.h"
 
 extern void breakpoints_changed PARAMS ((void));
 
 extern void annotate_breakpoint PARAMS ((int));
+extern void annotate_catchpoint PARAMS ((int));
 extern void annotate_watchpoint PARAMS ((int));
 extern void annotate_starting PARAMS ((void));
 extern void annotate_stopped PARAMS ((void));
@@ -39,9 +44,7 @@ extern void annotate_breakpoints_table_end PARAMS ((void));
 
 extern void annotate_frames_invalid PARAMS ((void));
 
-#ifdef __STDC__
 struct type;
-#endif
 
 extern void annotate_field_begin PARAMS ((struct type *));
 extern void annotate_field_name_end PARAMS ((void));
@@ -93,3 +96,9 @@ extern void annotate_elt_rep PARAMS ((unsigned int));
 extern void annotate_elt_rep_end PARAMS ((void));
 extern void annotate_elt PARAMS ((void));
 extern void annotate_array_section_end PARAMS ((void));
+
+extern void (*annotate_starting_hook) PARAMS ((void));
+extern void (*annotate_stopped_hook) PARAMS ((void));
+extern void (*annotate_signalled_hook) PARAMS ((void));
+extern void (*annotate_signal_hook) PARAMS ((void));
+extern void (*annotate_exited_hook) PARAMS ((void));

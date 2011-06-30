@@ -226,32 +226,43 @@ c g(c*, const c*, volatile c*)
 c g(char, c*&, const c*&, volatile c*&)
 { return 0; }
 
+/*
 void h(char = 'a')
 { }
 void h(char, signed char = 'a')
 { }
 void h(unsigned char = 'a')
 { }
-
-void h(short = 43)
+*/
+/*
+void h(char = (char)'a')
 { }
-void h(char, signed short = 43)
+void h(char, signed char = (signed char)'a')
 { }
-void h(unsigned short = 43)
-{ }
-
-void h(int = 43)
-{ }
-void h(char, signed int = 43)
-{ }
-void h(unsigned int = 43)
+void h(unsigned char = (unsigned char)'a')
 { }
 
-void h(long = 43)
+
+void h(short = (short)43)
 { }
-void h(char, signed long = 43)
+void h(char, signed short = (signed short)43)
 { }
-void h(unsigned long = 43)
+void h(unsigned short = (unsigned short)43)
+{ }
+
+void h(int = (int)43)
+{ }
+void h(char, signed int = (signed int)43)
+{ }
+void h(unsigned int = (unsigned int)43)
+{ }
+
+
+void h(long = (long)43)
+{ }
+void h(char, signed long = (signed long)43)
+{ }
+void h(unsigned long = (unsigned long)43)
 { }
 
 #ifdef __GNUC__
@@ -271,7 +282,7 @@ void h(double = 4.3)
 void h(long double = 4.33e33)
 { }
 #endif
-
+*/
 void printf(const char *format, ... )
 {
     // elipsis
@@ -279,7 +290,7 @@ void printf(const char *format, ... )
 
 class T1 {
 public:
-    static void* operator new(size_t);
+    static void* operator new(size_t) throw ();
     static void operator delete(void *pointer);
 
     void operator=(const T1&);
@@ -354,7 +365,7 @@ public:
 };
 
 void* 
-T1::operator new(size_t)
+T1::operator new(size_t) throw ()
 { return 0; }
 
 void
@@ -445,7 +456,7 @@ public:
     T5(int);
     T5(const T5<T>&);
     ~T5();
-    static void* operator new(size_t);
+    static void* operator new(size_t) throw ();
     static void operator delete(void *pointer);
     int value();
     
@@ -468,7 +479,7 @@ T5<T>::~T5()
 
 template<class T>
 void*
-T5<T>::operator new(size_t)
+T5<T>::operator new(size_t) throw ()
 { return 0; }
 
 template<class T>
@@ -481,22 +492,31 @@ int
 T5<T>::value()
 { return val; }
 
+
 #if ! defined(__GNUC__) || defined(GCC_BUG)
 template<class T>
-T5<T>::T T5<T>::X;
+T T5<T>::X;
 #endif
+
+
+
 
 T5<char> t5c(1);
 T5<int> t5i(2);
 T5<int (*)(char, void *)> t5fi1(3);
 T5<int (*)(int, double **, void *)> t5fi2(4);
 
+ 
+
+
+
+
 class x {
 public:
     int (*manage[5])(double,
 		     void *(*malloc)(unsigned size),
 		     void (*free)(void *pointer));
-    int (*device[5])(int open(const char *, unsigned mode, unsigned perms, int extra = 0), 
+    int (*device[5])(int open(const char *, unsigned mode, unsigned perms, int extra), 
 		     int *(*read)(int fd, void *place, unsigned size),
 		     int *(*write)(int fd, void *place, unsigned size),
 		     void (*close)(int fd));
@@ -527,14 +547,163 @@ T7::put(int i)
     // nothing
 }
 
-#ifdef usestubs
-extern "C" { 
-   void set_debug_traps();
-   void breakpoint();
-};
-#endif
+// More template kinds.  GDB 4.16 didn't handle these, but
+// Wildebeest does.  Note: Assuming HP aCC is used to compile
+// this file; with g++ or HP cfront or other compilers the
+// demangling may not get done correctly.
 
-main()
+// Ordinary template, to be instantiated with different types
+template<class T>
+class Foo {
+public:
+  int x;
+  T t;
+  T foo (int, T);
+};
+
+
+template<class T> T Foo<T>::foo (int i, T tt)
+{
+  return tt;
+}
+
+// Template with int parameter
+
+template<class T, int sz>
+class Bar {
+public:
+  int x;
+  T t;
+  T bar (int, T);
+};
+
+
+template<class T, int sz> T Bar<T, sz>::bar (int i, T tt)
+{
+  if (i < sz)
+    return tt;
+  else
+    return 0;
+}
+
+// function template with int parameter
+template<class T> int dummy (T tt, int i)
+{
+  return tt;
+}
+
+// Template with partial specializations
+template<class T1, class T2>
+class Spec {
+public:
+  int x;
+  T1 spec (T2);
+};
+
+template<class T1, class T2>
+T1 Spec<T1, T2>::spec (T2 t2)
+{
+  return 0;
+}
+
+template<class T>
+class Spec<T, T*> {
+public:
+  int x;
+  T spec (T*);
+};
+
+template<class T>
+T Spec<T, T*>::spec (T * tp)
+{
+  return *tp;
+}
+
+// Template with char parameter
+template<class T, char sz>
+class Baz {
+public:
+  int x;
+  T t;
+  T baz (int, T);
+};
+
+template<class T, char sz> T Baz<T, sz>::baz (int i, T tt)
+{
+  if (i < sz)
+    return tt;
+  else
+    return 0;
+}
+
+// Template with char * parameter
+template<class T, char * sz>
+class Qux {
+public:
+  int x;
+  T t;
+  T qux (int, T);
+};
+
+template<class T, char * sz> T Qux<T, sz>::qux (int i, T tt)
+{
+  if (sz[0] == 'q')
+    return tt;
+  else
+    return 0;
+}
+
+// Template with a function pointer parameter
+template<class T, int (*f)(int) >
+class Qux1 {
+public:
+  int x;
+  T t;
+  T qux (int, T);
+};
+
+template<class T, int (*f)(int)> T Qux1<T, f>::qux (int i, T tt)
+{
+  if (f != 0)
+    return tt;
+  else
+    return 0;
+}
+
+// Some functions to provide as arguments to template
+int gf1 (int a) {
+  return a * 2 + 13;
+}
+int gf2 (int a) {
+  return a * 2 + 26;
+}
+
+char string[3];
+
+
+// Template for nested instantiations
+
+template<class T>
+class Garply {
+public:
+  int x;
+  T t;
+  T garply (int, T);
+};
+
+template<class T> T Garply<T>::garply (int i, T tt)
+{
+  if (i > x)
+    return tt;
+  else
+    {
+      x += i;
+      return tt;
+    }
+}
+
+
+int main()
 {
     int i;
 #ifdef usestubs
@@ -542,4 +711,75 @@ main()
     breakpoint();
 #endif
     i = i + 1;
+
+    // New tests added here
+
+  Foo<int> fint;
+  Foo<char> fchar;
+  Foo<volatile char *> fvpchar = {0, 0};
+
+  Bar<int, 33> bint;
+  Bar<int, (4 > 3)> bint2;
+
+  Baz<int, 's'> bazint;
+  Baz<char, 'a'> bazint2;
+
+  Qux<char, string> quxint2;
+  Qux<int, string> quxint;
+
+  Qux1<int, gf1> qux11;
+
+  int x = fint.foo(33, 47);
+  char c = fchar.foo(33, 'x');
+  volatile char * cp = fvpchar.foo(33, 0);
+  
+  int y = dummy<int> (400, 600);
+
+  int z = bint.bar(55, 66);
+  z += bint2.bar(55, 66);
+
+  c = bazint2.baz(4, 'y');
+  c = quxint2.qux(4, 'z');
+  
+  y = bazint.baz(4,3);
+  y = quxint.qux(4, 22);
+  y += qux11.qux(4, 22);
+
+  y *= gf1(y) - gf2(y);
+  
+  Spec<int, char> sic;
+  Spec<int, int *> siip;
+
+  sic.spec ('c');
+  siip.spec (&x);
+
+  Garply<int> f;
+  Garply<char> fc;
+  f.x = 13;
+
+  Garply<Garply<char> > nf;
+  nf.x = 31;
+  
+  x = f.garply (3, 4);
+  
+  fc = nf.garply (3, fc);
+
+  y = x + fc.x;
+  
+
+  return 0;
+    
 }
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -15,7 +15,7 @@ $! manually copied from Makefile.in
 $ REQUIRED_OFILES = "argv.o basename.o choose-temp.o concat.o cplus-dem.o "-
 	+ "fdmatch.o fnmatch.o getopt.o getopt1.o getruntime.o hex.o "-
 	+ "floatformat.o objalloc.o obstack.o spaces.o strerror.o strsignal.o "-
-	+ "xatexit.o xexit.o xmalloc.o xstrdup.o xstrerror.o"
+	+ "xatexit.o xexit.o xmalloc.o xmemdup.o xstrdup.o xstrerror.o"
 $! anything not caught by link+search of dummy.* should be added here
 $ EXTRA_OFILES = ""
 $!
@@ -31,8 +31,6 @@ $ create config.h
 #define NEED_strsignal
 #define NEED_psignal
 #define NEED_basename
-$ if f$search("alloca-conf.h").eqs."" then -
-	copy alloca-norm.h alloca-conf.h
 $ LIBR 'WORK_LIB' /Create
 $
 $! first pass: compile "required" modules

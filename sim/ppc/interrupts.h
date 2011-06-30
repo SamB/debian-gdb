@@ -94,6 +94,7 @@ typedef enum {
   privileged_instruction_program_interrupt,
   trap_program_interrupt,
   optional_instruction_program_interrupt, /* subset of illegal instruction */
+  mpc860c0_instruction_program_interrupt, /* fwd br, taken but not predicted, near EO page */
   nr_program_interrupt_reasons
 } program_interrupt_reasons;
 

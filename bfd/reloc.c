@@ -1,5 +1,5 @@
 /* BFD support for handling relocation entries.
-   Copyright (C) 1990, 91, 92, 93, 94, 95, 96, 97, 1998
+   Copyright (C) 1990, 91, 92, 93, 94, 95, 96, 97, 98, 1999
    Free Software Foundation, Inc.
    Written by Cygnus Support.
 
@@ -389,6 +389,14 @@ DESCRIPTION
 
 .#define NEWHOWTO( FUNCTION, NAME,SIZE,REL,IN) HOWTO(0,0,SIZE,0,REL,0,complain_overflow_dont,FUNCTION, NAME,false,0,0,IN)
 .
+
+DESCRIPTION
+	This is used to fill in an empty howto entry in an array.
+
+.#define EMPTY_HOWTO(C) \
+.  HOWTO((C),0,0,0,false,0,complain_overflow_dont,NULL,NULL,false,0,0,false)
+.
+
 DESCRIPTION
 	Helper routine to turn a symbol into a relocation value.
 
@@ -411,14 +419,14 @@ FUNCTION
 	bfd_get_reloc_size
 
 SYNOPSIS
-	int bfd_get_reloc_size (reloc_howto_type *);
+	unsigned int bfd_get_reloc_size (reloc_howto_type *);
 
 DESCRIPTION
 	For a reloc_howto_type that operates on a fixed number of bytes,
 	this returns the number of bytes operated on.
  */
 
-int
+unsigned int
 bfd_get_reloc_size (howto)
      reloc_howto_type *howto;
 {
@@ -450,6 +458,8 @@ DESCRIPTION
 
 */
 
+/* N_ONES produces N one bits, without overflowing machine arithmetic.  */
+#define N_ONES(n) (((((bfd_vma) 1 << ((n) - 1)) - 1) << 1) | 1)
 
 /*
 FUNCTION
@@ -461,28 +471,37 @@ SYNOPSIS
 			(enum complain_overflow how,
 			 unsigned int bitsize,
 			 unsigned int rightshift,
+			 unsigned int addrsize,
 			 bfd_vma relocation);
 
 DESCRIPTION
-	Perform overflow checking on @var{relocation} which has @var{bitsize}
-	significant bits and will be shifted right by @var{rightshift} bits.
-	The result is either of @code{bfd_reloc_ok} or
-	@code{bfd_reloc_overflow}.
+	Perform overflow checking on @var{relocation} which has
+	@var{bitsize} significant bits and will be shifted right by
+	@var{rightshift} bits, on a machine with addresses containing
+	@var{addrsize} significant bits.  The result is either of
+	@code{bfd_reloc_ok} or @code{bfd_reloc_overflow}.
 
 */
 
 bfd_reloc_status_type
-bfd_check_overflow (how, bitsize, rightshift, relocation)
+bfd_check_overflow (how, bitsize, rightshift, addrsize, relocation)
      enum complain_overflow how;
-     unsigned int bitsize, rightshift;
+     unsigned int bitsize;
+     unsigned int rightshift;
+     unsigned int addrsize;
      bfd_vma relocation;
 {
-  bfd_vma check;
+  bfd_vma fieldmask, addrmask, signmask, ss, a;
   bfd_reloc_status_type flag = bfd_reloc_ok;
 
-  /* Get the value that will be used for the relocation, but
-     starting at bit position zero.  */
-  check = relocation >> rightshift;
+  a = relocation;
+
+  /* Note: BITSIZE should always be <= ADDRSIZE, but in case it's not,
+     we'll be permissive: extra bits in the field mask will
+     automatically extend the address mask for purposes of the
+     overflow check.  */
+  fieldmask = N_ONES (bitsize);
+  addrmask = N_ONES (addrsize) | fieldmask;
 
   switch (how)
     {
@@ -490,62 +509,35 @@ bfd_check_overflow (how, bitsize, rightshift, relocation)
       break;
 
     case complain_overflow_signed:
-      {
-	/* Assumes two's complement.  */
-	bfd_signed_vma reloc_signed_max = (1 << (bitsize - 1)) - 1;
-	bfd_signed_vma reloc_signed_min = ~reloc_signed_max;
-
-	/* The above right shift is incorrect for a signed value.
-	   Fix it up by forcing on the upper bits.  */
-	if (rightshift > 0
-	    && (bfd_signed_vma) relocation < 0)
-	  check |= ((bfd_vma) - 1
-		    & ~((bfd_vma) - 1
-			>> rightshift));
-	if ((bfd_signed_vma) check > reloc_signed_max
-	    || (bfd_signed_vma) check < reloc_signed_min)
-	  flag = bfd_reloc_overflow;
-      }
+      /* If any sign bits are set, all sign bits must be set.  That
+         is, A must be a valid negative address after shifting.  */
+      a = (a & addrmask) >> rightshift;
+      signmask = ~ (fieldmask >> 1);
+      ss = a & signmask;
+      if (ss != 0 && ss != ((addrmask >> rightshift) & signmask))
+	flag = bfd_reloc_overflow;
       break;
 
     case complain_overflow_unsigned:
-      {
-	/* Assumes two's complement.  This expression avoids
-	   overflow if `bitsize' is the number of bits in
-	   bfd_vma.  */
-	bfd_vma reloc_unsigned_max = (((1 << (bitsize - 1)) - 1) << 1) | 1;
-
-	if ((bfd_vma) check > reloc_unsigned_max)
-	  flag = bfd_reloc_overflow;
-      }
+      /* We have an overflow if the address does not fit in the field.  */
+      a = (a & addrmask) >> rightshift;
+      if ((a & ~ fieldmask) != 0)
+	flag = bfd_reloc_overflow;
       break;
 
     case complain_overflow_bitfield:
-      {
-	/* Assumes two's complement.  This expression avoids
-	   overflow if `bitsize' is the number of bits in
-	   bfd_vma.  */
-	bfd_vma reloc_bits = (((1 << (bitsize - 1)) - 1) << 1) | 1;
-
-	if (((bfd_vma) check & ~reloc_bits) != 0
-	    && ((bfd_vma) check & ~reloc_bits) != (-1 & ~reloc_bits))
-	  {
-	    /* The above right shift is incorrect for a signed
-	       value.  See if turning on the upper bits fixes the
-	       overflow.  */
-	    if (rightshift > 0
-		&& (bfd_signed_vma) relocation < 0)
-	      {
-		check |= ((bfd_vma) - 1
-			  & ~((bfd_vma) - 1
-			      >> rightshift));
-		if (((bfd_vma) check & ~reloc_bits) != (-1 & ~reloc_bits))
-		  flag = bfd_reloc_overflow;
-	      }
-	    else
-	      flag = bfd_reloc_overflow;
-	  }
-      }
+      /* Bitfields are sometimes signed, sometimes unsigned.  We
+         overflow if the value has some, but not all, bits set outside
+         the field, or if it has any bits set outside the field but
+         the sign bit is not set.  */
+      a >>= rightshift;
+      if ((a & ~ fieldmask) != 0)
+	{
+	  signmask = (fieldmask >> 1) + 1;
+	  ss = (signmask << rightshift) - 1;
+	  if ((ss | relocation) != ~ (bfd_vma) 0)
+	    flag = bfd_reloc_overflow;
+	}
       break;
 
     default:
@@ -554,7 +546,6 @@ bfd_check_overflow (how, bitsize, rightshift, relocation)
 
   return flag;
 }
-
 
 /*
 FUNCTION
@@ -601,7 +592,9 @@ bfd_perform_relocation (abfd, reloc_entry, data, input_section, output_bfd,
 {
   bfd_vma relocation;
   bfd_reloc_status_type flag = bfd_reloc_ok;
-  bfd_size_type addr = reloc_entry->address;
+  /* CYGNUS LOCAL changed addr to octets */
+  bfd_size_type octets = reloc_entry->address * bfd_octets_per_byte (abfd);
+  /* end CYGNUS LOCAL */
   bfd_vma output_base = 0;
   reloc_howto_type *howto = reloc_entry->howto;
   asection *reloc_target_output_section;
@@ -636,9 +629,12 @@ bfd_perform_relocation (abfd, reloc_entry, data, input_section, output_bfd,
 	return cont;
     }
 
+  /* CYGNUS LOCAL */
   /* Is the address of the relocation really within the section?  */
-  if (reloc_entry->address > input_section->_cooked_size)
+  if (reloc_entry->address > input_section->_cooked_size /
+      bfd_octets_per_byte (abfd))
     return bfd_reloc_outofrange;
+  /* end CYGNUS LOCAL */
 
   /* Work out which section the relocation is targetted at and the
      initial relocation command value.  */
@@ -825,8 +821,11 @@ space consuming.  For each target:
      adding in the value contained in the object file.  */
   if (howto->complain_on_overflow != complain_overflow_dont
       && flag == bfd_reloc_ok)
-    flag = bfd_check_overflow (howto->complain_on_overflow, howto->bitsize,
-			       howto->rightshift, relocation);
+    flag = bfd_check_overflow (howto->complain_on_overflow,
+			       howto->bitsize,
+			       howto->rightshift,
+			       bfd_arch_bits_per_address (abfd),
+			       relocation);
 
   /*
     Either we are relocating all the way, or we don't want to apply
@@ -903,41 +902,41 @@ space consuming.  For each target:
     {
     case 0:
       {
-	char x = bfd_get_8 (abfd, (char *) data + addr);
+	char x = bfd_get_8 (abfd, (char *) data + octets);
 	DOIT (x);
-	bfd_put_8 (abfd, x, (unsigned char *) data + addr);
+	bfd_put_8 (abfd, x, (unsigned char *) data + octets);
       }
       break;
 
     case 1:
       {
-	short x = bfd_get_16 (abfd, (bfd_byte *) data + addr);
+	short x = bfd_get_16 (abfd, (bfd_byte *) data + octets);
 	DOIT (x);
-	bfd_put_16 (abfd, x, (unsigned char *) data + addr);
+	bfd_put_16 (abfd, x, (unsigned char *) data + octets);
       }
       break;
     case 2:
       {
-	long x = bfd_get_32 (abfd, (bfd_byte *) data + addr);
+	long x = bfd_get_32 (abfd, (bfd_byte *) data + octets);
 	DOIT (x);
-	bfd_put_32 (abfd, x, (bfd_byte *) data + addr);
+	bfd_put_32 (abfd, x, (bfd_byte *) data + octets);
       }
       break;
     case -2:
       {
-	long x = bfd_get_32 (abfd, (bfd_byte *) data + addr);
+	long x = bfd_get_32 (abfd, (bfd_byte *) data + octets);
 	relocation = -relocation;
 	DOIT (x);
-	bfd_put_32 (abfd, x, (bfd_byte *) data + addr);
+	bfd_put_32 (abfd, x, (bfd_byte *) data + octets);
       }
       break;
 
     case -1:
       {
-	long x = bfd_get_16 (abfd, (bfd_byte *) data + addr);
+	long x = bfd_get_16 (abfd, (bfd_byte *) data + octets);
 	relocation = -relocation;
 	DOIT (x);
-	bfd_put_16 (abfd, x, (bfd_byte *) data + addr);
+	bfd_put_16 (abfd, x, (bfd_byte *) data + octets);
       }
       break;
 
@@ -948,9 +947,9 @@ space consuming.  For each target:
     case 4:
 #ifdef BFD64
       {
-	bfd_vma x = bfd_get_64 (abfd, (bfd_byte *) data + addr);
+	bfd_vma x = bfd_get_64 (abfd, (bfd_byte *) data + octets);
 	DOIT (x);
-	bfd_put_64 (abfd, x, (bfd_byte *) data + addr);
+	bfd_put_64 (abfd, x, (bfd_byte *) data + octets);
       }
 #else
       abort ();
@@ -1000,7 +999,9 @@ bfd_install_relocation (abfd, reloc_entry, data_start, data_start_offset,
 {
   bfd_vma relocation;
   bfd_reloc_status_type flag = bfd_reloc_ok;
-  bfd_size_type addr = reloc_entry->address;
+  /* CYGNUS LOCAL octets vs. bytes/twall@tiac.net */
+  bfd_size_type octets = reloc_entry->address * bfd_octets_per_byte (abfd);
+  /* end CYGNUS LOCAL */
   bfd_vma output_base = 0;
   reloc_howto_type *howto = reloc_entry->howto;
   asection *reloc_target_output_section;
@@ -1212,8 +1213,11 @@ space consuming.  For each target:
      FIXME: We should also do overflow checking on the result after
      adding in the value contained in the object file.  */
   if (howto->complain_on_overflow != complain_overflow_dont)
-    flag = bfd_check_overflow (howto->complain_on_overflow, howto->bitsize,
-			       howto->rightshift, relocation);
+    flag = bfd_check_overflow (howto->complain_on_overflow,
+			       howto->bitsize,
+			       howto->rightshift,
+			       bfd_arch_bits_per_address (abfd),
+			       relocation);
 
   /*
     Either we are relocating all the way, or we don't want to apply
@@ -1286,7 +1290,7 @@ space consuming.  For each target:
 #define DOIT(x) \
   x = ( (x & ~howto->dst_mask) | (((x & howto->src_mask) +  relocation) & howto->dst_mask))
 
-  data = (bfd_byte *) data_start + (addr - data_start_offset);
+  data = (bfd_byte *) data_start + (octets - data_start_offset); 
 
   switch (howto->size)
     {
@@ -1416,8 +1420,10 @@ _bfd_relocate_contents (howto, input_bfd, relocation, location)
      bfd_byte *location;
 {
   int size;
-  bfd_vma x;
+  bfd_vma x = 0;
   boolean overflow;
+  unsigned int rightshift = howto->rightshift;
+  unsigned int bitpos = howto->bitpos;
 
   /* If the size is negative, negate RELOCATION.  This isn't very
      general.  */
@@ -1456,114 +1462,148 @@ _bfd_relocate_contents (howto, input_bfd, relocation, location)
   overflow = false;
   if (howto->complain_on_overflow != complain_overflow_dont)
     {
-      bfd_vma check;
-      bfd_signed_vma signed_check;
-      bfd_vma add;
-      bfd_signed_vma signed_add;
+      bfd_vma addrmask, fieldmask, signmask, ss;
+      bfd_vma a, b, sum;
 
-      if (howto->rightshift == 0)
-	{
-	  check = relocation;
-	  signed_check = (bfd_signed_vma) relocation;
-	}
-      else
-	{
-	  /* Drop unwanted bits from the value we are relocating to.  */
-	  check = relocation >> howto->rightshift;
-
-	  /* If this is a signed value, the rightshift just dropped
-	     leading 1 bits (assuming twos complement).  */
-	  if ((bfd_signed_vma) relocation >= 0)
-	    signed_check = check;
-	  else
-	    signed_check = (check
-			    | ((bfd_vma) - 1
-			       & ~((bfd_vma) - 1 >> howto->rightshift)));
-	}
-
-      /* Get the value from the object file.  */
-      add = x & howto->src_mask;
-
-      /* Get the value from the object file with an appropriate sign.
-	 The expression involving howto->src_mask isolates the upper
-	 bit of src_mask.  If that bit is set in the value we are
-	 adding, it is negative, and we subtract out that number times
-	 two.  If src_mask includes the highest possible bit, then we
-	 can not get the upper bit, but that does not matter since
-	 signed_add needs no adjustment to become negative in that
-	 case.  */
-      signed_add = add;
-      if ((add & (((~howto->src_mask) >> 1) & howto->src_mask)) != 0)
-	signed_add -= (((~howto->src_mask) >> 1) & howto->src_mask) << 1;
-
-      /* Add the value from the object file, shifted so that it is a
-	 straight number.  */
-      if (howto->bitpos == 0)
-	{
-	  check += add;
-	  signed_check += signed_add;
-	}
-      else
-	{
-	  check += add >> howto->bitpos;
-
-	  /* For the signed case we use ADD, rather than SIGNED_ADD,
-	     to avoid warnings from SVR4 cc.  This is OK since we
-	     explictly handle the sign bits.  */
-	  if (signed_add >= 0)
-	    signed_check += add >> howto->bitpos;
-	  else
-	    signed_check += ((add >> howto->bitpos)
-			     | ((bfd_vma) - 1
-				& ~((bfd_vma) - 1 >> howto->bitpos)));
-	}
+      /* Get the values to be added together.  For signed and unsigned
+         relocations, we assume that all values should be truncated to
+         the size of an address.  For bitfields, all the bits matter.
+         See also bfd_check_overflow.  */
+      fieldmask = N_ONES (howto->bitsize);
+      addrmask = N_ONES (bfd_arch_bits_per_address (input_bfd)) | fieldmask;
+      a = relocation;
+      b = x & howto->src_mask;
 
       switch (howto->complain_on_overflow)
 	{
 	case complain_overflow_signed:
-	  {
-	    /* Assumes two's complement.  */
-	    bfd_signed_vma reloc_signed_max = (1 << (howto->bitsize - 1)) - 1;
-	    bfd_signed_vma reloc_signed_min = ~reloc_signed_max;
+	  a = (a & addrmask) >> rightshift;
 
-	    if (signed_check > reloc_signed_max
-		|| signed_check < reloc_signed_min)
-	      overflow = true;
-	  }
+	  /* If any sign bits are set, all sign bits must be set.
+	     That is, A must be a valid negative address after
+	     shifting.  */
+	  signmask = ~ (fieldmask >> 1);
+	  ss = a & signmask;
+	  if (ss != 0 && ss != ((addrmask >> rightshift) & signmask))
+	    overflow = true;
+
+	  /* We only need this next bit of code if the sign bit of B
+             is below the sign bit of A.  This would only happen if
+             SRC_MASK had fewer bits than BITSIZE.  Note that if
+             SRC_MASK has more bits than BITSIZE, we can get into
+             trouble; we would need to verify that B is in range, as
+             we do for A above.  */
+	  signmask = ((~ howto->src_mask) >> 1) & howto->src_mask;
+	  if ((b & signmask) != 0)
+	    {
+	      /* Set all the bits above the sign bit.  */
+	      b -= signmask <<= 1;
+	    }
+
+	  b = (b & addrmask) >> bitpos;
+
+	  /* Now we can do the addition.  */
+	  sum = a + b;
+
+	  /* See if the result has the correct sign.  Bits above the
+             sign bit are junk now; ignore them.  If the sum is
+             positive, make sure we did not have all negative inputs;
+             if the sum is negative, make sure we did not have all
+             positive inputs.  The test below looks only at the sign
+             bits, and it really just
+	         SIGN (A) == SIGN (B) && SIGN (A) != SIGN (SUM)
+	     */
+	  signmask = (fieldmask >> 1) + 1;
+	  if (((~ (a ^ b)) & (a ^ sum)) & signmask)
+	    overflow = true;
+
 	  break;
+
 	case complain_overflow_unsigned:
-	  {
-	    /* Assumes two's complement.  This expression avoids
-	       overflow if howto->bitsize is the number of bits in
-	       bfd_vma.  */
-	    bfd_vma reloc_unsigned_max =
-	    (((1 << (howto->bitsize - 1)) - 1) << 1) | 1;
+	  /* Checking for an unsigned overflow is relatively easy:
+             trim the addresses and add, and trim the result as well.
+             Overflow is normally indicated when the result does not
+             fit in the field.  However, we also need to consider the
+             case when, e.g., fieldmask is 0x7fffffff or smaller, an
+             input is 0x80000000, and bfd_vma is only 32 bits; then we
+             will get sum == 0, but there is an overflow, since the
+             inputs did not fit in the field.  Instead of doing a
+             separate test, we can check for this by or-ing in the
+             operands when testing for the sum overflowing its final
+             field.  */
+	  a = (a & addrmask) >> rightshift;
+	  b = (b & addrmask) >> bitpos;
+	  sum = (a + b) & addrmask;
+	  if ((a | b | sum) & ~ fieldmask)
+	    overflow = true;
 
-	    if (check > reloc_unsigned_max)
-	      overflow = true;
-	  }
 	  break;
+
 	case complain_overflow_bitfield:
-	  {
-	    /* Assumes two's complement.  This expression avoids
-	       overflow if howto->bitsize is the number of bits in
-	       bfd_vma.  */
-	    bfd_vma reloc_bits = (((1 << (howto->bitsize - 1)) - 1) << 1) | 1;
+	  /* Much like unsigned, except no trimming with addrmask.  In
+             addition, the sum overflows if there is a carry out of
+             the bfd_vma, i.e., the sum is less than either input
+             operand.  */
+	  a >>= rightshift;
+	  b >>= bitpos;
 
-	    if ((check & ~reloc_bits) != 0
-		&& (((bfd_vma) signed_check & ~reloc_bits)
-		    != (-1 & ~reloc_bits)))
-	      overflow = true;
-	  }
+	  /* Bitfields are sometimes used for signed numbers; for
+             example, a 13-bit field sometimes represents values in
+             0..8191 and sometimes represents values in -4096..4095.
+             If the field is signed and a is -4095 (0x1001) and b is
+             -1 (0x1fff), the sum is -4096 (0x1000), but (0x1001 +
+             0x1fff is 0x3000).  It's not clear how to handle this
+             everywhere, since there is not way to know how many bits
+             are significant in the relocation, but the original code
+             assumed that it was fully sign extended, and we will keep
+             that assumption.  */
+	  signmask = (fieldmask >> 1) + 1;
+
+	  if ((a & ~ fieldmask) != 0)
+	    {
+	      /* Some bits out of the field are set.  This might not
+                 be a problem: if this is a signed bitfield, it is OK
+                 iff all the high bits are set, including the sign
+                 bit.  We'll try setting all but the most significant
+                 bit in the original relocation value: if this is all
+                 ones, we are OK, assuming a signed bitfield.  */
+	      ss = (signmask << rightshift) - 1;
+	      if ((ss | relocation) != ~ (bfd_vma) 0)
+		overflow = true;
+	      a &= fieldmask;
+	    }
+
+	  /* We just assume (b & ~ fieldmask) == 0.  */
+
+	  /* We explicitly permit wrap around if this relocation
+	     covers the high bit of an address.  The Linux kernel
+	     relies on it, and it is the only way to write assembler
+	     code which can run when loaded at a location 0x80000000
+	     away from the location at which it is linked.  */
+	  if (howto->bitsize + rightshift
+	      == bfd_arch_bits_per_address (input_bfd))
+	    break;
+
+	  sum = a + b;
+	  if (sum < a || (sum & ~ fieldmask) != 0)
+	    {
+	      /* There was a carry out, or the field overflow.  Test
+                 for signed operands again.  Here is the overflow test
+                 is as for complain_overflow_signed.  */
+	      if (((~ (a ^ b)) & (a ^ sum)) & signmask)
+		overflow = true;
+	    }
+
 	  break;
+
 	default:
 	  abort ();
 	}
     }
 
   /* Put RELOCATION in the right bits.  */
-  relocation >>= (bfd_vma) howto->rightshift;
-  relocation <<= (bfd_vma) howto->bitpos;
+  relocation >>= (bfd_vma) rightshift;
+  relocation <<= (bfd_vma) bitpos;
 
   /* Add RELOCATION to the right bits of X.  */
   x = ((x & ~howto->dst_mask)
@@ -1866,6 +1906,11 @@ ENUMDOC
   SPARC64 relocations
 
 ENUM
+  BFD_RELOC_SPARC_REV32
+ENUMDOC
+  SPARC little endian relocation
+
+ENUM
   BFD_RELOC_ALPHA_GPDISP_HI16
 ENUMDOC
   Alpha ECOFF and ELF relocations.  Some of these treat the symbol or
@@ -2007,6 +2052,15 @@ ENUMX
   BFD_RELOC_MIPS_CALL_HI16
 ENUMX
   BFD_RELOC_MIPS_CALL_LO16
+ENUMX
+  BFD_RELOC_MIPS_SUB
+ENUMX
+  BFD_RELOC_MIPS_GOT_PAGE
+ENUMX
+  BFD_RELOC_MIPS_GOT_OFST
+ENUMX
+  BFD_RELOC_MIPS_GOT_DISP
+COMMENT
 ENUMDOC
   MIPS ELF relocations.
 
@@ -2136,6 +2190,8 @@ ENUMDOC
 ENUM
   BFD_RELOC_ARM_IMMEDIATE
 ENUMX
+  BFD_RELOC_ARM_ADRL_IMMEDIATE
+ENUMX
   BFD_RELOC_ARM_OFFSET_IMM
 ENUMX
   BFD_RELOC_ARM_SHIFT_IMM
@@ -2165,6 +2221,24 @@ ENUMX
   BFD_RELOC_ARM_THUMB_SHIFT
 ENUMX
   BFD_RELOC_ARM_THUMB_OFFSET
+ENUMX
+  BFD_RELOC_ARM_GOT12
+ENUMX
+  BFD_RELOC_ARM_GOT32
+ENUMX
+  BFD_RELOC_ARM_JUMP_SLOT
+ENUMX
+  BFD_RELOC_ARM_COPY
+ENUMX
+  BFD_RELOC_ARM_GLOB_DAT
+ENUMX
+  BFD_RELOC_ARM_PLT32
+ENUMX
+  BFD_RELOC_ARM_RELATIVE
+ENUMX
+  BFD_RELOC_ARM_GOTOFF
+ENUMX
+  BFD_RELOC_ARM_GOTPC
 ENUMDOC
   These relocs are only used within the ARM assembler.  They are not
   (at present) written to any object files.
@@ -2232,7 +2306,6 @@ ENUMDOC
   stored in the instruction.  The high 24 bits are installed in bits 23
   through 0.
 
-COMMENT
 ENUM
   BFD_RELOC_D10V_10_PCREL_R
 ENUMDOC
@@ -2257,9 +2330,66 @@ ENUM
 ENUMDOC
   This is an 18-bit reloc with the right 2 bits
   assumed to be 0.
-COMMENT
 
-COMMENT
+ENUM
+  BFD_RELOC_D30V_6
+ENUMDOC
+  Mitsubishi D30V relocs.
+  This is a 6-bit absolute reloc.
+ENUM
+  BFD_RELOC_D30V_9_PCREL
+ENUMDOC
+  This is a 6-bit pc-relative reloc with 
+  the right 3 bits assumed to be 0.  
+ENUM
+  BFD_RELOC_D30V_9_PCREL_R
+ENUMDOC
+  This is a 6-bit pc-relative reloc with 
+  the right 3 bits assumed to be 0. Same
+  as the previous reloc but on the right side
+  of the container.  
+ENUM
+  BFD_RELOC_D30V_15
+ENUMDOC
+  This is a 12-bit absolute reloc with the 
+  right 3 bitsassumed to be 0.  
+ENUM
+  BFD_RELOC_D30V_15_PCREL
+ENUMDOC
+  This is a 12-bit pc-relative reloc with 
+  the right 3 bits assumed to be 0.  
+ENUM
+  BFD_RELOC_D30V_15_PCREL_R
+ENUMDOC
+  This is a 12-bit pc-relative reloc with 
+  the right 3 bits assumed to be 0. Same
+  as the previous reloc but on the right side
+  of the container.  
+ENUM
+  BFD_RELOC_D30V_21
+ENUMDOC
+  This is an 18-bit absolute reloc with 
+  the right 3 bits assumed to be 0.
+ENUM
+  BFD_RELOC_D30V_21_PCREL
+ENUMDOC
+  This is an 18-bit pc-relative reloc with 
+  the right 3 bits assumed to be 0.
+ENUM
+  BFD_RELOC_D30V_21_PCREL_R
+ENUMDOC
+  This is an 18-bit pc-relative reloc with 
+  the right 3 bits assumed to be 0. Same
+  as the previous reloc but on the right side
+  of the container.
+ENUM
+  BFD_RELOC_D30V_32
+ENUMDOC
+  This is a 32-bit absolute reloc.
+ENUM
+  BFD_RELOC_D30V_32_PCREL
+ENUMDOC
+  This is a 32-bit pc-relative reloc.
 
 ENUM
   BFD_RELOC_M32R_24
@@ -2344,6 +2474,34 @@ ENUM
 ENUMDOC
   This is a 16 bit offset from the tiny data area pointer.
 COMMENT
+ENUM
+  BFD_RELOC_V850_TDA_4_5_OFFSET
+ENUMDOC
+  This is a 5 bit offset (of which only 4 bits are used) from the tiny
+  data area pointer.
+ENUM
+  BFD_RELOC_V850_TDA_4_4_OFFSET
+ENUMDOC
+  This is a 4 bit offset from the tiny data area pointer.
+ENUM
+  BFD_RELOC_V850_SDA_16_16_SPLIT_OFFSET
+ENUMDOC
+  This is a 16 bit offset from the short data area pointer, with the
+  bits placed non-contigously in the instruction.
+ENUM
+  BFD_RELOC_V850_ZDA_16_16_SPLIT_OFFSET
+ENUMDOC
+  This is a 16 bit offset from the zero data area pointer, with the
+  bits placed non-contigously in the instruction.
+ENUM
+  BFD_RELOC_V850_CALLT_6_7_OFFSET
+ENUMDOC
+  This is a 6 bit offset from the call table base pointer.
+ENUM
+  BFD_RELOC_V850_CALLT_16_16_OFFSET
+ENUMDOC
+  This is a 16 bit offset from the call table base pointer.
+COMMENT
 
 ENUM
   BFD_RELOC_MN10300_32_PCREL
@@ -2363,6 +2521,89 @@ ENUMDOC
   significant 8 bits of a 24 bit word are placed into the least
   significant 8 bits of the opcode.
 
+COMMENT
+
+ENUM
+  BFD_RELOC_FR30_48
+ENUMDOC
+  This is a 48 bit reloc for the FR30 that stores 32 bits.
+ENUM
+  BFD_RELOC_FR30_20
+ENUMDOC
+  This is a 32 bit reloc for the FR30 that stores 20 bits split up into
+  two sections.
+ENUM
+  BFD_RELOC_FR30_6_IN_4
+ENUMDOC
+  This is a 16 bit reloc for the FR30 that stores a 6 bit word offset in
+  4 bits.
+ENUM
+  BFD_RELOC_FR30_8_IN_8
+ENUMDOC
+  This is a 16 bit reloc for the FR30 that stores an 8 bit byte offset
+  into 8 bits.
+ENUM
+  BFD_RELOC_FR30_9_IN_8
+ENUMDOC
+  This is a 16 bit reloc for the FR30 that stores a 9 bit short offset
+  into 8 bits.
+ENUM
+  BFD_RELOC_FR30_10_IN_8
+ENUMDOC
+  This is a 16 bit reloc for the FR30 that stores a 10 bit word offset
+  into 8 bits.
+ENUM
+  BFD_RELOC_FR30_9_PCREL
+ENUMDOC
+  This is a 16 bit reloc for the FR30 that stores a 9 bit pc relative
+  short offset into 8 bits.
+ENUM
+  BFD_RELOC_FR30_12_PCREL
+ENUMDOC
+  This is a 16 bit reloc for the FR30 that stores a 12 bit pc relative
+  short offset into 11 bits.
+  
+ENUM
+  BFD_RELOC_MCORE_PCREL_IMM8BY4
+ENUMX
+  BFD_RELOC_MCORE_PCREL_IMM11BY2
+ENUMX
+  BFD_RELOC_MCORE_PCREL_IMM4BY2
+ENUMX
+  BFD_RELOC_MCORE_PCREL_32
+ENUMX
+  BFD_RELOC_MCORE_PCREL_JSR_IMM11BY2
+ENUMX
+  BFD_RELOC_MCORE_RVA
+ENUMDOC
+  Motorola Mcore relocations.
+
+COMMENT
+
+ENUM
+  BFD_RELOC_VTABLE_INHERIT
+ENUMX
+  BFD_RELOC_VTABLE_ENTRY
+ENUMDOC
+  These two relocations are used by the linker to determine which of 
+  the entries in a C++ virtual function table are actually used.  When
+  the --gc-sections option is given, the linker will zero out the entries
+  that are not used, so that the code for those functions need not be
+  included in the output.
+
+  VTABLE_INHERIT is a zero-space relocation used to describe to the
+  linker the inheritence tree of a C++ virtual function table.  The
+  relocation's symbol should be the parent class' vtable, and the
+  relocation should be located at the child vtable.
+
+  VTABLE_ENTRY is a zero-space relocation that describes the use of a
+  virtual function table entry.  The reloc's symbol should refer to the
+  table of the class mentioned in the code.  Off of that base, an offset
+  describes the entry that is being used.  For Rela hosts, this offset 
+  is stored in the reloc's addend.  For Rel hosts, we are forced to put
+  this offset in the reloc's section offset.
+
+COMMENT
 ENDSENUM
   BFD_RELOC_UNUSED
 CODE_FRAGMENT
@@ -2480,12 +2721,34 @@ DESCRIPTION
 /*ARGSUSED*/
 boolean
 bfd_generic_relax_section (abfd, section, link_info, again)
-     bfd *abfd;
-     asection *section;
-     struct bfd_link_info *link_info;
+     bfd *abfd ATTRIBUTE_UNUSED;
+     asection *section ATTRIBUTE_UNUSED;
+     struct bfd_link_info *link_info ATTRIBUTE_UNUSED;
      boolean *again;
 {
   *again = false;
+  return true;
+}
+
+/*
+INTERNAL_FUNCTION
+	bfd_generic_gc_sections
+
+SYNOPSIS
+	boolean bfd_generic_gc_sections
+	 (bfd *, struct bfd_link_info *);
+
+DESCRIPTION
+	Provides default handling for relaxing for back ends which
+	don't do section gc -- i.e., does nothing.
+*/
+
+/*ARGSUSED*/
+boolean
+bfd_generic_gc_sections (abfd, link_info)
+     bfd *abfd ATTRIBUTE_UNUSED;
+     struct bfd_link_info *link_info ATTRIBUTE_UNUSED;
+{
   return true;
 }
 

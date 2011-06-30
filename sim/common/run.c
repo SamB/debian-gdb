@@ -56,11 +56,15 @@ extern host_callback default_callback;
 
 static char *myname;
 
-
 /* NOTE: sim_size() and sim_trace() are going away */
 extern int sim_trace PARAMS ((SIM_DESC sd));
 
 extern int getopt ();
+
+#ifdef NEED_UI_LOOP_HOOK
+/* Gdb foolery. This is only needed for gdb using a gui. */
+int (*ui_loop_hook) PARAMS ((int signo));
+#endif
 
 static SIM_DESC sd;
 
@@ -81,7 +85,6 @@ main (ac, av)
 {
   RETSIGTYPE (*prev_sigint) ();
   bfd *abfd;
-  asection *s;
   int i;
   int verbose = 0;
   int trace = 0;
@@ -270,6 +273,12 @@ main (ac, av)
 
     case sim_exited:
       break;
+
+    case sim_running:
+    case sim_polling: /* these indicate a serious problem */
+      abort ();
+      break;
+
     }
 #endif
 

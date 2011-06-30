@@ -1,5 +1,5 @@
 /* Generic target-file-type support for the BFD library.
-   Copyright 1990, 91, 92, 93, 94, 95, 96, 97, 1998
+   Copyright 1990, 91, 92, 93, 94, 95, 96, 97, 98, 1999
    Free Software Foundation, Inc.
    Written by Cygnus Support.
 
@@ -152,6 +152,7 @@ DESCRIPTION
 .  bfd_target_os9k_flavour,
 .  bfd_target_versados_flavour,
 .  bfd_target_msdos_flavour,
+.  bfd_target_ovax_flavour,
 .  bfd_target_evax_flavour
 .};
 .
@@ -413,7 +414,8 @@ The general target vector.
 .CAT(NAME,_bfd_link_hash_table_create),\
 .CAT(NAME,_bfd_link_add_symbols),\
 .CAT(NAME,_bfd_final_link),\
-.CAT(NAME,_bfd_link_split_section)
+.CAT(NAME,_bfd_link_split_section),\
+.CAT(NAME,_bfd_gc_sections)
 .  int        (*_bfd_sizeof_headers) PARAMS ((bfd *, boolean));
 .  bfd_byte * (*_bfd_get_relocated_section_contents) PARAMS ((bfd *,
 .                    struct bfd_link_info *, struct bfd_link_order *,
@@ -437,7 +439,10 @@ The general target vector.
 .  {* Should this section be split up into smaller pieces during linking.  *}
 .  boolean (*_bfd_link_split_section) PARAMS ((bfd *, struct sec *));
 .
-. {* Routines to handle dynamic symbols and relocs.  *}
+.  {* Remove sections that are not referenced from the output.  *}
+.  boolean (*_bfd_gc_sections) PARAMS ((bfd *, struct bfd_link_info *));
+.
+.  {* Routines to handle dynamic symbols and relocs.  *}
 .#define BFD_JUMP_TABLE_DYNAMIC(NAME)\
 .CAT(NAME,_get_dynamic_symtab_upper_bound),\
 .CAT(NAME,_canonicalize_dynamic_symtab),\
@@ -455,10 +460,21 @@ The general target vector.
 .    PARAMS ((bfd *, arelent **, struct symbol_cache_entry **));
 .
 
+A pointer to an alternative bfd_target in case the current one is not
+satisfactory.  This can happen when the target cpu supports both big
+and little endian code, and target chosen by the linker has the wrong
+endianness.  The function open_output() in ld/ldlang.c uses this field
+to find an alternative output format that is suitable.
+
+. {* Opposite endian version of this target.  *}  
+. const struct bfd_target * alternative_target;
+. 
+
 Data for use by back-end routines, which isn't generic enough to belong
 in this structure.
 
 . PTR backend_data;
+. 
 .} bfd_target;
 
 */
@@ -477,22 +493,33 @@ extern const bfd_target aout0_big_vec;
 extern const bfd_target apollocoff_vec;
 extern const bfd_target armcoff_little_vec;
 extern const bfd_target armcoff_big_vec;
+extern const bfd_target armnetbsd_vec;
 extern const bfd_target armpe_little_vec;
 extern const bfd_target armpe_big_vec;
 extern const bfd_target armpei_little_vec;
 extern const bfd_target armpei_big_vec;
+extern const bfd_target arm_epoc_pe_little_vec;
+extern const bfd_target arm_epoc_pe_big_vec;
+extern const bfd_target arm_epoc_pei_little_vec;
+extern const bfd_target arm_epoc_pei_big_vec;
 extern const bfd_target b_out_vec_big_host;
 extern const bfd_target b_out_vec_little_host;
 extern const bfd_target bfd_elf64_alpha_vec;
 extern const bfd_target bfd_elf32_bigarc_vec;
+extern const bfd_target bfd_elf32_bigarm_vec;
+extern const bfd_target bfd_elf32_bigarm_oabi_vec;
 extern const bfd_target bfd_elf32_littlearc_vec;
+extern const bfd_target bfd_elf32_littlearm_vec;
+extern const bfd_target bfd_elf32_littlearm_oabi_vec;
 extern const bfd_target bfd_elf32_big_generic_vec;
 extern const bfd_target bfd_elf32_bigmips_vec;
 extern const bfd_target bfd_elf64_bigmips_vec;
 extern const bfd_target bfd_elf32_d10v_vec;
+extern const bfd_target bfd_elf32_d30v_vec;
 extern const bfd_target bfd_elf32_hppa_vec;
 extern const bfd_target bfd_elf32_i386_vec;
 extern const bfd_target bfd_elf32_i860_vec;
+extern const bfd_target bfd_elf32_i960_vec;
 extern const bfd_target bfd_elf32_little_generic_vec;
 extern const bfd_target bfd_elf32_littlemips_vec;
 extern const bfd_target bfd_elf64_littlemips_vec;
@@ -507,6 +534,9 @@ extern const bfd_target bfd_elf32_sh_vec;
 extern const bfd_target bfd_elf32_shl_vec;
 extern const bfd_target bfd_elf32_sparc_vec;
 extern const bfd_target bfd_elf32_v850_vec;
+extern const bfd_target bfd_elf32_fr30_vec;
+extern const bfd_target bfd_elf32_mcore_big_vec;
+extern const bfd_target bfd_elf32_mcore_little_vec;
 extern const bfd_target bfd_elf64_big_generic_vec;
 extern const bfd_target bfd_elf64_little_generic_vec;
 extern const bfd_target bfd_elf64_sparc_vec;
@@ -515,7 +545,6 @@ extern const bfd_target ecoff_big_vec;
 extern const bfd_target ecoff_little_vec;
 extern const bfd_target ecoff_biglittle_vec;
 extern const bfd_target ecoffalpha_little_vec;
-extern const bfd_target evax_alpha_vec;
 extern const bfd_target h8300coff_vec;
 extern const bfd_target h8500coff_vec;
 extern const bfd_target host_aout_vec;
@@ -557,6 +586,10 @@ extern const bfd_target m68ksysvcoff_vec;
 extern const bfd_target m68k4knetbsd_vec;
 extern const bfd_target m88kbcs_vec;
 extern const bfd_target m88kmach3_vec;
+extern const bfd_target mcore_pe_big_vec;
+extern const bfd_target mcore_pe_little_vec;
+extern const bfd_target mcore_pei_big_vec;
+extern const bfd_target mcore_pei_little_vec;
 extern const bfd_target newsos3_vec;
 extern const bfd_target nlm32_i386_vec;
 extern const bfd_target nlm32_sparc_vec;
@@ -583,7 +616,11 @@ extern const bfd_target sunos_big_vec;
 extern const bfd_target tekhex_vec;
 extern const bfd_target tic30_aout_vec;
 extern const bfd_target tic30_coff_vec;
+extern const bfd_target tic80coff_vec;
+extern const bfd_target vaxnetbsd_vec;
 extern const bfd_target versados_vec;
+extern const bfd_target vms_alpha_vec;
+extern const bfd_target vms_vax_vec;
 extern const bfd_target we32kcoff_vec;
 extern const bfd_target w65_vec;
 extern const bfd_target z8kcoff_vec;
@@ -606,7 +643,7 @@ extern const bfd_target hppabsd_core_vec;
 extern const bfd_target irix_core_vec;
 extern const bfd_target netbsd_core_vec;
 extern const bfd_target osf_core_vec;
-extern const bfd_target sco_core_vec;
+extern const bfd_target sco5_core_vec;
 extern const bfd_target trad_core_vec;
 extern const bfd_target ptrace_core_vec;
 
@@ -645,16 +682,22 @@ const bfd_target * const bfd_target_vector[] = {
 	&bfd_elf64_alpha_vec,
 #endif
 	&bfd_elf32_bigarc_vec,
+        &bfd_elf32_bigarm_vec,
+        &bfd_elf32_bigarm_oabi_vec,
 	&bfd_elf32_bigmips_vec,
 #ifdef BFD64
 	&bfd_elf64_bigmips_vec,
 #endif
 	&bfd_elf32_d10v_vec,
+	&bfd_elf32_d30v_vec,
 	&bfd_elf32_hppa_vec,
 	&bfd_elf32_i386_vec,
 	&bfd_elf32_i860_vec,
+	&bfd_elf32_i960_vec,
 	&bfd_elf32_little_generic_vec,
 	&bfd_elf32_littlearc_vec,
+        &bfd_elf32_littlearm_vec,
+        &bfd_elf32_littlearm_oabi_vec,
 	&bfd_elf32_littlemips_vec,
 #ifdef BFD64
 	&bfd_elf64_littlemips_vec,
@@ -666,7 +709,11 @@ const bfd_target * const bfd_target_vector[] = {
 	&bfd_elf32_m88k_vec,
 	&bfd_elf32_sparc_vec,
 	&bfd_elf32_powerpc_vec,
+	&bfd_elf32_powerpcle_vec,
 	&bfd_elf32_v850_vec,
+	&bfd_elf32_fr30_vec,
+	&bfd_elf32_mcore_big_vec,
+	&bfd_elf32_mcore_little_vec,
 #ifdef BFD64			/* No one seems to use this.  */
 	&bfd_elf64_big_generic_vec,
 	&bfd_elf64_little_generic_vec,
@@ -685,7 +732,6 @@ const bfd_target * const bfd_target_vector[] = {
 	&ecoff_biglittle_vec,
 #ifdef BFD64
 	&ecoffalpha_little_vec,
-	&evax_alpha_vec,
 #endif
 	&h8300coff_vec,
 	&h8500coff_vec,
@@ -730,10 +776,15 @@ const bfd_target * const bfd_target_vector[] = {
 	&i386pei_vec,
 	&armcoff_little_vec,
 	&armcoff_big_vec,
+	&armnetbsd_vec,
 	&armpe_little_vec,
 	&armpe_big_vec,
 	&armpei_little_vec,
 	&armpei_big_vec,
+	&arm_epoc_pe_little_vec,
+	&arm_epoc_pe_big_vec,
+	&arm_epoc_pei_little_vec,
+	&arm_epoc_pei_big_vec,
 	&icoff_big_vec,
 	&icoff_little_vec,
 	&ieee_vec,
@@ -750,6 +801,10 @@ const bfd_target * const bfd_target_vector[] = {
 	&m68ksysvcoff_vec,
 	&m88kbcs_vec,
 	&m88kmach3_vec,
+	&mcore_pe_big_vec,
+	&mcore_pe_little_vec,
+	&mcore_pei_big_vec,
+	&mcore_pei_little_vec,
 	&newsos3_vec,
 	&nlm32_i386_vec,
 	&nlm32_sparc_vec,
@@ -789,11 +844,16 @@ const bfd_target * const bfd_target_vector[] = {
 	&sparcnetbsd_vec,
 	&sunos_big_vec,
 	&aout0_big_vec,
-	&tekhex_vec,
 	&tic30_aout_vec,
 	&tic30_coff_vec,
-	&we32kcoff_vec,
+	&tic80coff_vec,
+	&vaxnetbsd_vec,
 	&versados_vec,
+#ifdef BFD64
+	&vms_alpha_vec,
+#endif
+	&vms_vax_vec,
+	&we32kcoff_vec,
 	&z8kcoff_vec,
 
 #endif /* not SELECT_VECS */
@@ -822,8 +882,14 @@ const bfd_target * const bfd_target_vector[] = {
 #ifdef IRIX_CORE
 	&irix_core_vec,
 #endif
+#ifdef NETBSD_CORE
+	&netbsd_core_vec,
+#endif
 #ifdef OSF_CORE
 	&osf_core_vec,
+#endif
+#ifdef SCO5_CORE
+	&sco5_core_vec,
 #endif
 #ifdef	TRAD_CORE
 	&trad_core_vec,
@@ -1025,4 +1091,33 @@ bfd_target_list ()
     *(name_ptr++) = (*target)->name;
 
   return name_list;
+}
+
+/*
+FUNCTION
+	bfd_seach_for_target
+
+SYNOPSIS
+	const bfd_target * bfd_search_for_target (int (* search_func)(const bfd_target *, void *), void *);
+
+DESCRIPTION
+	Return a pointer to the first transfer vector in the list of
+	transfer vectors maintained by BFD that produces a non-zero
+	result when passed to the function @var{search_func}.  The
+	parameter @var{data} is passed, unexamined, to the search
+	function.
+*/
+
+const bfd_target *
+bfd_search_for_target (search_func, data)
+     int (* search_func) PARAMS ((const bfd_target * target, void * data));
+     void * data;
+{
+  const bfd_target * const * target;
+
+  for (target = bfd_target_vector; * target != NULL; target ++)
+    if (search_func (* target, data))
+      return * target;
+
+  return NULL;
 }

@@ -1,21 +1,23 @@
 /* Low level Unix child interface to ptrace, for GDB when running under Unix.
-   Copyright 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996 Free Software Foundation, Inc.
+   Copyright 1988, 89, 90, 91, 92, 93, 94, 95, 96, 1998 
+   Free Software Foundation, Inc.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -34,13 +36,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include <signal.h>
 #include <sys/ioctl.h>
 
-#ifndef NO_PTRACE_H
-#ifdef PTRACE_IN_WRONG_PLACE
+#ifdef HAVE_PTRACE_H
 #include <ptrace.h>
 #else
+#ifdef HAVE_SYS_PTRACE_H
 #include <sys/ptrace.h>
 #endif
-#endif /* NO_PTRACE_H */
+#endif
 
 #if !defined (PT_READ_I)
 #define PT_READ_I	1	/* Read word from text space */
@@ -104,7 +106,10 @@ static void fetch_register PARAMS ((int));
 static void store_register PARAMS ((int));
 #endif
 
+void _initialize_kernel_u_addr PARAMS ((void));
+void _initialize_infptrace PARAMS ((void));
 
+
 /* This function simply calls ptrace with the given arguments.  
    It exists so that all calls to ptrace are isolated in this 
    machine-dependent file. */
@@ -114,14 +119,74 @@ call_ptrace (request, pid, addr, data)
      PTRACE_ARG3_TYPE addr;
      int data;
 {
-  return ptrace (request, pid, addr, data
-#if defined (FIVE_ARG_PTRACE)
-		 /* Deal with HPUX 8.0 braindamage.  We never use the
-		    calls which require the fifth argument.  */
-		 , 0
+  int pt_status = 0;
+
+#if 0
+  int saved_errno;
+
+  printf ("call_ptrace(request=%d, pid=%d, addr=0x%x, data=0x%x)",
+	  request, pid, addr, data);
 #endif
-		 );
+#if defined(PT_SETTRC)
+  /* If the parent can be told to attach to us, try to do it.  */
+  if (request == PT_SETTRC)
+    {
+      errno = 0;
+      pt_status = ptrace (PT_SETTRC, pid, addr, data
+#if defined (FIVE_ARG_PTRACE)
+      /* Deal with HPUX 8.0 braindamage.  We never use the
+         calls which require the fifth argument.  */
+			  ,0
+#endif
+	);
+
+      if (errno)
+	perror_with_name ("ptrace");
+#if 0
+      printf (" = %d\n", pt_status);
+#endif
+      if (pt_status < 0)
+	return pt_status;
+      else
+	return parent_attach_all (pid, addr, data);
+    }
+#endif
+
+#if defined(PT_CONTIN1)
+  /* On HPUX, PT_CONTIN1 is a form of continue that preserves pending
+     signals.  If it's available, use it.  */
+  if (request == PT_CONTINUE)
+    request = PT_CONTIN1;
+#endif
+
+#if defined(PT_SINGLE1)
+  /* On HPUX, PT_SINGLE1 is a form of step that preserves pending
+     signals.  If it's available, use it.  */
+  if (request == PT_STEP)
+    request = PT_SINGLE1;
+#endif
+
+#if 0
+  saved_errno = errno;
+  errno = 0;
+#endif
+  pt_status = ptrace (request, pid, addr, data
+#if defined (FIVE_ARG_PTRACE)
+  /* Deal with HPUX 8.0 braindamage.  We never use the
+     calls which require the fifth argument.  */
+		      ,0
+#endif
+    );
+#if 0
+  if (errno)
+    printf (" [errno = %d]", errno);
+
+  errno = saved_errno;
+  printf (" = 0x%x\n", pt_status);
+#endif
+  return pt_status;
 }
+
 
 #if defined (DEBUG_PTRACE) || defined (FIVE_ARG_PTRACE)
 /* For the rest of the file, use an extra level of indirection */
@@ -129,9 +194,26 @@ call_ptrace (request, pid, addr, data)
 #define ptrace call_ptrace
 #endif
 
+/* Wait for a process to finish, possibly running a target-specific
+   hook before returning.  */
+
+int
+ptrace_wait (pid, status)
+     int pid;
+     int *status;
+{
+  int wstate;
+
+  wstate = wait (status);
+  target_post_wait (wstate, *status);
+  return wstate;
+}
+
 void
 kill_inferior ()
 {
+  int status;
+
   if (inferior_pid == 0)
     return;
 
@@ -144,7 +226,7 @@ kill_inferior ()
      The kill call causes problems under hpux10, so it's been removed;
      if this causes problems we'll deal with them as they arise.  */
   ptrace (PT_KILL, inferior_pid, (PTRACE_ARG3_TYPE) 0, 0);
-  wait ((int *)0);
+  ptrace_wait (0, &status);
   target_mourn_inferior ();
 }
 
@@ -179,12 +261,11 @@ child_resume (pid, step, signal)
 
   if (step)
     {
-#ifdef NO_SINGLE_STEP
-      abort();  /* Make sure this doesn't happen. */
-#else
-      ptrace (PT_STEP,     pid, (PTRACE_ARG3_TYPE) 1,
-	      target_signal_to_host (signal));
-#endif          /* NO_SINGLE_STEP */
+      if (SOFTWARE_SINGLE_STEP_P)
+	abort ();		/* Make sure this doesn't happen. */
+      else
+	ptrace (PT_STEP, pid, (PTRACE_ARG3_TYPE) 1,
+		target_signal_to_host (signal));
     }
   else
     ptrace (PT_CONTINUE, pid, (PTRACE_ARG3_TYPE) 1,
@@ -194,8 +275,8 @@ child_resume (pid, step, signal)
     perror_with_name ("ptrace");
 }
 #endif /* CHILD_RESUME */
-
 
+
 #ifdef ATTACH_DETACH
 /* Start debugging the process whose number is PID.  */
 int
@@ -249,7 +330,7 @@ _initialize_kernel_u_addr ()
   if (nlist ("/vmunix", names) == 0)
     kernel_u_addr = names[0].n_value;
   else
-    fatal ("Unable to get kernel u area address.");
+    internal_error ("Unable to get kernel u area address.");
 #endif /* KERNEL_U_ADDR_BSD.  */
 }
 
@@ -280,9 +361,9 @@ fetch_register (regno)
 {
   /* This isn't really an address.  But ptrace thinks of it as one.  */
   CORE_ADDR regaddr;
-  char mess[128];				/* For messages */
+  char mess[128];		/* For messages */
   register int i;
-  unsigned int offset;  /* Offset of registers within the u area.  */
+  unsigned int offset;		/* Offset of registers within the u area.  */
   char buf[MAX_REGISTER_RAW_SIZE];
 
   if (CANNOT_FETCH_REGISTER (regno))
@@ -298,12 +379,12 @@ fetch_register (regno)
   for (i = 0; i < REGISTER_RAW_SIZE (regno); i += sizeof (PTRACE_XFER_TYPE))
     {
       errno = 0;
-      *(PTRACE_XFER_TYPE *) &buf[i] = ptrace (PT_READ_U, inferior_pid,
-					      (PTRACE_ARG3_TYPE) regaddr, 0);
+      *(PTRACE_XFER_TYPE *) & buf[i] = ptrace (PT_READ_U, inferior_pid,
+					     (PTRACE_ARG3_TYPE) regaddr, 0);
       regaddr += sizeof (PTRACE_XFER_TYPE);
       if (errno != 0)
 	{
-	  sprintf (mess, "reading register %s (#%d)", reg_names[regno], regno);
+	  sprintf (mess, "reading register %s (#%d)", REGISTER_NAME (regno), regno);
 	  perror_with_name (mess);
 	}
     }
@@ -345,9 +426,9 @@ store_register (regno)
 {
   /* This isn't really an address.  But ptrace thinks of it as one.  */
   CORE_ADDR regaddr;
-  char mess[128];				/* For messages */
+  char mess[128];		/* For messages */
   register int i;
-  unsigned int offset;  /* Offset of registers within the u area.  */
+  unsigned int offset;		/* Offset of registers within the u area.  */
 
   if (CANNOT_STORE_REGISTER (regno))
     {
@@ -357,15 +438,15 @@ store_register (regno)
   offset = U_REGS_OFFSET;
 
   regaddr = register_addr (regno, offset);
-  for (i = 0; i < REGISTER_RAW_SIZE (regno); i += sizeof(PTRACE_XFER_TYPE))
+  for (i = 0; i < REGISTER_RAW_SIZE (regno); i += sizeof (PTRACE_XFER_TYPE))
     {
       errno = 0;
       ptrace (PT_WRITE_U, inferior_pid, (PTRACE_ARG3_TYPE) regaddr,
-	      *(PTRACE_XFER_TYPE *) &registers[REGISTER_BYTE (regno) + i]);
+	      *(PTRACE_XFER_TYPE *) & registers[REGISTER_BYTE (regno) + i]);
       regaddr += sizeof (PTRACE_XFER_TYPE);
       if (errno != 0)
 	{
-	  sprintf (mess, "writing register %s (#%d)", reg_names[regno], regno);
+	  sprintf (mess, "writing register %s (#%d)", REGISTER_NAME (regno), regno);
 	  perror_with_name (mess);
 	}
     }
@@ -404,7 +485,7 @@ store_inferior_registers (regno)
 /* Copy LEN bytes to or from inferior's memory starting at MEMADDR
    to debugger memory starting at MYADDR.   Copy to inferior if
    WRITE is nonzero.
-  
+
    Returns the length copied, which is either the LEN argument or zero.
    This xfer function does not do partial moves, since child_ops
    doesn't allow memory operations to cross below us in the target stack
@@ -416,28 +497,29 @@ child_xfer_memory (memaddr, myaddr, len, write, target)
      char *myaddr;
      int len;
      int write;
-     struct target_ops *target;		/* ignored */
+     struct target_ops *target;	/* ignored */
 {
   register int i;
   /* Round starting address down to longword boundary.  */
-  register CORE_ADDR addr = memaddr & - sizeof (PTRACE_XFER_TYPE);
+  register CORE_ADDR addr = memaddr & -sizeof (PTRACE_XFER_TYPE);
   /* Round ending address up; get number of longwords that makes.  */
   register int count
-    = (((memaddr + len) - addr) + sizeof (PTRACE_XFER_TYPE) - 1)
-      / sizeof (PTRACE_XFER_TYPE);
+  = (((memaddr + len) - addr) + sizeof (PTRACE_XFER_TYPE) - 1)
+  / sizeof (PTRACE_XFER_TYPE);
   /* Allocate buffer of that many longwords.  */
   register PTRACE_XFER_TYPE *buffer
-    = (PTRACE_XFER_TYPE *) alloca (count * sizeof (PTRACE_XFER_TYPE));
+  = (PTRACE_XFER_TYPE *) alloca (count * sizeof (PTRACE_XFER_TYPE));
 
   if (write)
     {
       /* Fill start and end extra bytes of buffer with existing memory data.  */
 
-      if (addr != memaddr || len < (int) sizeof (PTRACE_XFER_TYPE)) {
-	/* Need part of initial word -- fetch it.  */
-        buffer[0] = ptrace (PT_READ_I, inferior_pid, (PTRACE_ARG3_TYPE) addr,
-			    0);
-      }
+      if (addr != memaddr || len < (int) sizeof (PTRACE_XFER_TYPE))
+	{
+	  /* Need part of initial word -- fetch it.  */
+	  buffer[0] = ptrace (PT_READ_I, inferior_pid, (PTRACE_ARG3_TYPE) addr,
+			      0);
+	}
 
       if (count > 1)		/* FIXME, avoid if even boundary */
 	{
@@ -464,7 +546,7 @@ child_xfer_memory (memaddr, myaddr, len, write, target)
 	  if (errno)
 	    {
 	      /* Using the appropriate one (I or D) is necessary for
-		 Gould NP1, at least.  */
+	         Gould NP1, at least.  */
 	      errno = 0;
 	      ptrace (PT_WRITE_I, inferior_pid, (PTRACE_ARG3_TYPE) addr,
 		      buffer[i]);
@@ -473,7 +555,7 @@ child_xfer_memory (memaddr, myaddr, len, write, target)
 	    return 0;
 	}
 #ifdef CLEAR_INSN_CACHE
-      CLEAR_INSN_CACHE();
+      CLEAR_INSN_CACHE ();
 #endif
     }
   else
@@ -496,23 +578,23 @@ child_xfer_memory (memaddr, myaddr, len, write, target)
     }
   return len;
 }
-
 
+
 static void
 udot_info (dummy1, dummy2)
      char *dummy1;
      int dummy2;
 {
 #if defined (KERNEL_U_SIZE)
-  int udot_off;		/* Offset into user struct */
-  int udot_val;		/* Value from user struct at udot_off */
-  char mess[128];	/* For messages */
+  int udot_off;			/* Offset into user struct */
+  int udot_val;			/* Value from user struct at udot_off */
+  char mess[128];		/* For messages */
 #endif
 
-   if (!target_has_execution)
-     {
-       error ("The program is not being run.");
-     }
+  if (!target_has_execution)
+    {
+      error ("The program is not being run.");
+    }
 
 #if !defined (KERNEL_U_SIZE)
 
@@ -548,8 +630,8 @@ udot_info (dummy1, dummy2)
 #endif
 }
 #endif /* !defined (CHILD_XFER_MEMORY).  */
-
 
+
 void
 _initialize_infptrace ()
 {

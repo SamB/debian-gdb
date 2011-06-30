@@ -1,30 +1,30 @@
 /* Macro definitions for GDB on an Intel i[345]86.
    Copyright (C) 1995, 1996 Free Software Foundation, Inc.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
 
 #ifndef TM_I386_H
 #define TM_I386_H 1
 
-#ifdef __STDC__		/* Forward decl's for prototypes */
+/* Forward decl's for prototypes */
 struct frame_info;
 struct frame_saved_regs;
 struct type;
-#endif
 
 #define TARGET_BYTE_ORDER LITTLE_ENDIAN
 
@@ -47,7 +47,7 @@ struct type;
 /* Advance PC across any function entry prologue instructions to reach some
    "real" code.  */
 
-#define SKIP_PROLOGUE(frompc)   {(frompc) = i386_skip_prologue((frompc));}
+#define SKIP_PROLOGUE(frompc)   (i386_skip_prologue (frompc))
 
 extern int i386_skip_prologue PARAMS ((int));
 
@@ -59,7 +59,7 @@ extern int i386_skip_prologue PARAMS ((int));
 
 /* Stack grows downward.  */
 
-#define INNER_THAN <
+#define INNER_THAN(lhs,rhs) ((lhs) < (rhs))
 
 /* Sequence of bytes for breakpoint instruction.  */
 
@@ -70,10 +70,6 @@ extern int i386_skip_prologue PARAMS ((int));
 
 #define DECR_PC_AFTER_BREAK 1
 
-/* Nonzero if instruction at PC is a return instruction.  */
-
-#define ABOUT_TO_RETURN(pc) (read_memory_integer ((pc), 1) == 0xc3)
-
 /* Say how long (ordinary) registers are.  This is a piece of bogosity
    used in push_word and a few other places; REGISTER_RAW_SIZE is the
    real way to know how big a register is.  */
@@ -82,7 +78,7 @@ extern int i386_skip_prologue PARAMS ((int));
 
 /* Number of machine registers */
 
-#define NUM_FREGS 0 /*8*/		/* Number of FP regs */
+#define NUM_FREGS 0 /*8*/	/* Number of FP regs */
 #define NUM_REGS (16 + NUM_FREGS)	/* Basic i*86 regs + FP regs */
 
 /* Initializer for an array of names of registers.  There should be at least
@@ -106,13 +102,13 @@ extern int i386_skip_prologue PARAMS ((int));
    to be actual register numbers as far as the user is concerned
    but do serve to get the desired values when passed to read_register.  */
 
-#define FP_REGNUM 5	/* (ebp) Contains address of executing stack frame */
-#define SP_REGNUM 4	/* (usp) Contains address of top of stack */
-#define PC_REGNUM 8	/* (eip) Contains program counter */
-#define PS_REGNUM 9	/* (ps)  Contains processor status */
+#define FP_REGNUM 5		/* (ebp) Contains address of executing stack frame */
+#define SP_REGNUM 4		/* (usp) Contains address of top of stack */
+#define PC_REGNUM 8		/* (eip) Contains program counter */
+#define PS_REGNUM 9		/* (ps)  Contains processor status */
 
-#define FP0_REGNUM 16   /* (st0) 387 register */
-#define FPC_REGNUM 25	/* 80387 control register */
+#define FP0_REGNUM 16		/* (st0) 387 register */
+#define FPC_REGNUM 25		/* 80387 control register */
 
 /* Total amount of space needed to store our copies of the machine's register
    state, the array `registers'. */
@@ -123,7 +119,7 @@ extern int i386_skip_prologue PARAMS ((int));
 
 #define REGISTER_BYTE(N) \
   (((N) < FP0_REGNUM) ? ((N) * 4) : ((((N) - FP0_REGNUM) * 10) + 64))
- 
+
 /* Number of bytes of storage in the actual machine representation for
    register N.  All registers are 4 bytes, except 387 st(0) - st(7),
    which are 80 bits each. */
@@ -158,8 +154,10 @@ extern int i386_skip_prologue PARAMS ((int));
    subroutine will return.  This is called from call_function. */
 
 #define STORE_STRUCT_RETURN(ADDR, SP) \
-  { (SP) -= sizeof (ADDR);		\
-    write_memory ((SP), (char *) &(ADDR), sizeof (ADDR)); }
+  { char buf[REGISTER_SIZE];	\
+    (SP) -= sizeof (ADDR);	\
+    store_address (buf, sizeof (ADDR), ADDR);	\
+    write_memory ((SP), buf, sizeof (ADDR)); }
 
 /* Extract from an array REGBUF containing the (raw) register state
    a function return value of type TYPE, and copy that, in virtual format,
@@ -168,7 +166,7 @@ extern int i386_skip_prologue PARAMS ((int));
 #define EXTRACT_RETURN_VALUE(TYPE,REGBUF,VALBUF) \
    i386_extract_return_value ((TYPE),(REGBUF),(VALBUF))
 
-extern void i386_extract_return_value PARAMS ((struct type *, char [], char *));
+extern void i386_extract_return_value PARAMS ((struct type *, char[], char *));
 
 /* Write into appropriate registers a function return value of type TYPE, given
    in virtual format.  */
@@ -209,13 +207,8 @@ extern void i386_extract_return_value PARAMS ((struct type *, char [], char *));
    by FI does not have a frame on the stack associated with it.  If it
    does not, FRAMELESS is set to 1, else 0.  */
 
-#define FRAMELESS_FUNCTION_INVOCATION(FI, FRAMELESS) \
-  do { \
-    if ((FI)->signal_handler_caller) \
-      (FRAMELESS) = 0; \
-    else \
-      (FRAMELESS) = frameless_look_for_prologue(FI); \
-  } while (0)
+#define FRAMELESS_FUNCTION_INVOCATION(FI) \
+     (((FI)->signal_handler_caller) ? 0 : frameless_look_for_prologue(FI))
 
 /* Saved Pc.  Get it from sigcontext if within sigtramp.  */
 
@@ -234,7 +227,7 @@ extern CORE_ADDR sigtramp_saved_pc PARAMS ((struct frame_info *));
 /* Return number of args passed to a frame.  Can return -1, meaning no way
    to tell, which is typical now that the C compiler delays popping them.  */
 
-#define FRAME_NUM_ARGS(numargs, fi) (numargs) = i386_frame_num_args(fi)
+#define FRAME_NUM_ARGS(fi) (i386_frame_num_args(fi))
 
 extern int i386_frame_num_args PARAMS ((struct frame_info *));
 
@@ -253,8 +246,8 @@ extern int i386_frame_num_args PARAMS ((struct frame_info *));
 
 extern void i386_frame_find_saved_regs PARAMS ((struct frame_info *,
 						struct frame_saved_regs *));
-
 
+
 /* Things needed for making the inferior call functions.  */
 
 /* Push an empty stack frame, to record the current PC, etc.  */
@@ -268,8 +261,8 @@ extern void i386_push_dummy_frame PARAMS ((void));
 #define POP_FRAME  { i386_pop_frame (); }
 
 extern void i386_pop_frame PARAMS ((void));
-
 
+
 /* this is 
  *   call 11223344 (32 bit relative)
  *   int3
@@ -279,7 +272,7 @@ extern void i386_pop_frame PARAMS ((void));
 
 #define CALL_DUMMY_LENGTH 8
 
-#define CALL_DUMMY_START_OFFSET 0  /* Start execution at beginning of dummy */
+#define CALL_DUMMY_START_OFFSET 0	/* Start execution at beginning of dummy */
 
 #define CALL_DUMMY_BREAKPOINT_OFFSET 5
 

@@ -1,21 +1,22 @@
 /* Macro definitions for i386, Unix System V.
    Copyright 1986, 1987, 1989, 1991, 1992, 1993 Free Software Foundation, Inc.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
 
 #ifndef TM_I386V_H
 #define TM_I386V_H 1
@@ -100,8 +101,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #undef  STORE_STRUCT_RETURN
 #define STORE_STRUCT_RETURN(ADDR, SP) \
-  { (SP) -= sizeof (ADDR);		\
-    write_memory ((SP), (char *) &(ADDR), sizeof (ADDR)); }
+  { char buf[REGISTER_SIZE];	\
+    (SP) -= sizeof (ADDR);	\
+    store_address (buf, sizeof (ADDR), ADDR);	\
+    write_memory ((SP), buf, sizeof (ADDR)); }
 
 /* Extract from an array REGBUF containing the (raw) register state
    a function return value of type TYPE, and copy that, in virtual format,
@@ -117,8 +120,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #undef  STORE_RETURN_VALUE
 #define STORE_RETURN_VALUE(TYPE,VALBUF) \
   write_register_bytes (0, VALBUF, TYPE_LENGTH (TYPE))
-
 
+
 /* Describe the pointer in each stack frame to the previous stack frame
    (its caller).  */
 
@@ -138,8 +141,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
    does not, FRAMELESS is set to 1, else 0.  */
 
 #undef  FRAMELESS_FUNCTION_INVOCATION
-#define FRAMELESS_FUNCTION_INVOCATION(FI, FRAMELESS) \
-  (FRAMELESS) = frameless_look_for_prologue(FI)
+#define FRAMELESS_FUNCTION_INVOCATION(FI) \
+  (frameless_look_for_prologue (FI))
 
 #undef  FRAME_SAVED_PC
 #define FRAME_SAVED_PC(FRAME) (read_memory_integer ((FRAME)->frame + 4, 4))
@@ -148,14 +151,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
    Can return -1, meaning no way to tell.  */
 
 #undef  FRAME_NUM_ARGS
-#define FRAME_NUM_ARGS(numargs, fi) (numargs) = -1
+#define FRAME_NUM_ARGS(fi) (-1)
 
-#ifdef __STDC__		/* Forward decl's for prototypes */
+/* Forward decl's for prototypes */
 struct frame_info;
 struct frame_saved_regs;
-#endif
 
 extern int
 i386_frame_num_args PARAMS ((struct frame_info *));
 
-#endif	/* ifndef TM_I386V_H */
+#endif /* ifndef TM_I386V_H */

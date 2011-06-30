@@ -1,21 +1,22 @@
 /* Target dependent code for the Fujitsu SPARClite for GDB, the GNU debugger.
-   Copyright 1994, 1995, 1996  Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1996, 1999  Free Software Foundation, Inc.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
 
 #include "defs.h"
 #include "gdbcore.h"
@@ -24,17 +25,15 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #include "serial.h"
 #include <sys/types.h>
 
-#if !defined(__GO32__) && !defined(_WIN32)
+#if (!defined(__GO32__) && !defined(_WIN32)) || defined(__CYGWIN32__)
 #define HAVE_SOCKETS
 #include <sys/time.h>
-#include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #endif
 
-extern struct target_ops sparclite_ops;	/* Forward decl */
-extern struct target_ops remote_ops;
+static struct target_ops sparclite_ops;
 
 static char *remote_target_name = NULL;
 static serial_t remote_desc = NULL;
@@ -53,20 +52,20 @@ static int send_udp_buf PARAMS ((int fd, unsigned char *buf, int len));
 static void sparclite_open PARAMS ((char *name, int from_tty));
 static void sparclite_close PARAMS ((int quitting));
 static void download PARAMS ((char *target_name, char *args, int from_tty,
-			      void (*write_routine) (bfd *from_bfd,
-						     asection *from_sec,
+			      void (*write_routine) (bfd * from_bfd,
+						     asection * from_sec,
 						     file_ptr from_addr,
-						     bfd_vma to_addr, int len),
+						  bfd_vma to_addr, int len),
 			      void (*start_routine) (bfd_vma entry)));
 static void sparclite_serial_start PARAMS ((bfd_vma entry));
-static void sparclite_serial_write PARAMS ((bfd *from_bfd, asection *from_sec,
+static void sparclite_serial_write PARAMS ((bfd * from_bfd, asection * from_sec,
 					    file_ptr from_addr,
 					    bfd_vma to_addr, int len));
 #ifdef HAVE_SOCKETS
 static unsigned short calc_checksum PARAMS ((unsigned char *buffer,
 					     int count));
 static void sparclite_udp_start PARAMS ((bfd_vma entry));
-static void sparclite_udp_write PARAMS ((bfd *from_bfd, asection *from_sec,
+static void sparclite_udp_write PARAMS ((bfd * from_bfd, asection * from_sec,
 					 file_ptr from_addr, bfd_vma to_addr,
 					 int len));
 #endif
@@ -76,14 +75,14 @@ static void sparclite_download PARAMS ((char *filename, int from_tty));
 #define DDA1_SUP_ASI		0xb0000
 
 #define DDA2_ASI_MASK 		0xff000000
-#define DDA1_ASI_MASK 		0xff0000 
+#define DDA1_ASI_MASK 		0xff0000
 #define DIA2_SUP_MODE 		0x8000
 #define DIA1_SUP_MODE 		0x4000
 #define DDA2_ENABLE 		0x100
 #define DDA1_ENABLE 		0x80
 #define DIA2_ENABLE 		0x40
 #define DIA1_ENABLE 		0x20
-#define DSINGLE_STEP 		0x10
+#define DSINGLE_STEP 		0x10	/* not used */
 #define DDV_TYPE_MASK 		0xc
 #define DDV_TYPE_LOAD 		0x0
 #define DDV_TYPE_STORE 		0x4
@@ -112,7 +111,7 @@ sparclite_insert_watchpoint (addr, len, type)
 	  write_register (DDV1_REGNUM, 0);
 	  write_register (DDV2_REGNUM, 0xffffffff);
 	  dcr |= (DDV_TYPE_LOAD & (~DDV_COND & ~DDV_MASK));
-	}   
+	}
       else if (type == 0)
 	{
 	  write_register (DDV1_REGNUM, 0);
@@ -156,7 +155,7 @@ sparclite_insert_watchpoint (addr, len, type)
     return -1;
 
   return 0;
-} 
+}
 
 int
 sparclite_remove_watchpoint (addr, len, type)
@@ -188,7 +187,7 @@ sparclite_insert_hw_breakpoint (addr, len)
   CORE_ADDR dcr;
 
   dcr = read_register (DCR_REGNUM);
-  
+
   if (!(dcr & DIA1_ENABLE))
     {
       write_register (DIA1_REGNUM, addr);
@@ -215,7 +214,7 @@ sparclite_remove_hw_breakpoint (addr, shadow)
   dcr = read_register (DCR_REGNUM);
   dia1 = read_register (DIA1_REGNUM);
   dia2 = read_register (DIA2_REGNUM);
-  
+
   if ((dcr & DIA1_ENABLE) && addr == dia1)
     write_register (DCR_REGNUM, (dcr & ~DIA1_ENABLE));
   else if ((dcr & DIA2_ENABLE) && addr == dia2)
@@ -232,6 +231,10 @@ sparclite_check_watch_resources (type, cnt, ot)
      int cnt;
      int ot;
 {
+  /* Watchpoints not supported on simulator.  */
+  if (strcmp (target_shortname, "sim") == 0)
+    return 0;
+
   if (type == bp_hardware_breakpoint)
     {
       if (TARGET_HW_BREAK_LIMIT == 0)
@@ -302,6 +305,7 @@ readchar (desc, timeout)
      int timeout;
 {
   int ch;
+  char s[10];
 
   ch = SERIAL_READCHAR (desc, timeout);
 
@@ -314,17 +318,43 @@ readchar (desc, timeout)
     case SERIAL_TIMEOUT:
       error ("SPARClite remote timeout");
     default:
+      if (remote_debug > 0)
+	{
+	  sprintf (s, "[%02x]", ch & 0xff);
+	  puts_debug ("read -->", s, "<--");
+	}
       return ch;
     }
 }
+
+static void
+debug_serial_write (desc, buf, len)
+     serial_t desc;
+     char *buf;
+     int len;
+{
+  char s[10];
+
+  SERIAL_WRITE (desc, buf, len);
+  if (remote_debug > 0)
+    {
+      while (len-- > 0)
+	{
+	  sprintf (s, "[%02x]", *buf & 0xff);
+	  puts_debug ("Sent -->", s, "<--");
+	  buf++;
+	}
+    }
+}
+
 
 static int
 send_resp (desc, c)
      serial_t desc;
      char c;
 {
-  SERIAL_WRITE (desc, &c, 1);
-  return readchar (desc, 2);
+  debug_serial_write (desc, &c, 1);
+  return readchar (desc, remote_timeout);
 }
 
 static void
@@ -392,7 +422,7 @@ send_udp_buf (fd, buf, len)
 
   error ("Short count in send: tried %d, sent %d\n", len, cc);
 }
-#endif /* __GO32__ */
+#endif /* HAVE_SOCKETS */
 
 static void
 sparclite_open (name, from_tty)
@@ -425,7 +455,8 @@ sparclite_open (name, from_tty)
   if (p)
     {
       *p++ = '\000';
-      while ((*p != '\000') && isspace (*p)) p++;
+      while ((*p != '\000') && isspace (*p))
+	p++;
 
       if (strncmp (name, "serial", strlen (name)) == 0)
 	serial_flag = 1;
@@ -449,7 +480,7 @@ or: target sparclite udp host");
     {
       remote_desc = open_tty (p);
 
-      old_chain = make_cleanup (close_tty, 0);
+      old_chain = make_cleanup ((make_cleanup_func) close_tty, 0);
 
       c = send_resp (remote_desc, 0x00);
 
@@ -482,17 +513,17 @@ or: target sparclite udp host");
       old_chain = make_cleanup (close, udp_fd);
 
       sockaddr.sin_family = PF_INET;
-      sockaddr.sin_port = htons(7000);
+      sockaddr.sin_port = htons (7000);
       memcpy (&sockaddr.sin_addr.s_addr, he->h_addr, sizeof (struct in_addr));
 
-      if (connect (udp_fd, &sockaddr, sizeof(sockaddr)))
+      if (connect (udp_fd, &sockaddr, sizeof (sockaddr)))
 	perror_with_name ("Connect failed");
 
       buffer[0] = 0x5;
       buffer[1] = 0;
 
-      send_udp_buf (udp_fd, buffer, 2);	/* Request version */
-      cc = recv_udp_buf (udp_fd, buffer, sizeof(buffer), 5); /* Get response */
+      send_udp_buf (udp_fd, buffer, 2);		/* Request version */
+      cc = recv_udp_buf (udp_fd, buffer, sizeof (buffer), 5);	/* Get response */
       if (cc == 0)
 	error ("SPARClite isn't responding.");
 
@@ -500,7 +531,7 @@ or: target sparclite udp host");
 	error ("SPARClite appears to be ill.");
 #else
       error ("UDP downloading is not supported for DOS hosts.");
-#endif /* __GO32__ */
+#endif /* HAVE_SOCKETS */
     }
 
   printf_unfiltered ("[SPARClite appears to be alive]\n");
@@ -519,9 +550,8 @@ sparclite_close (quitting)
   if (serial_flag)
     close_tty (0);
 #ifdef HAVE_SOCKETS
-  else
-    if (udp_fd != -1)
-      close (udp_fd);
+  else if (udp_fd != -1)
+    close (udp_fd);
 #endif
 }
 
@@ -532,8 +562,8 @@ download (target_name, args, from_tty, write_routine, start_routine)
      char *target_name;
      char *args;
      int from_tty;
-     void (*write_routine) PARAMS ((bfd *from_bfd, asection *from_sec,
-				    file_ptr from_addr, bfd_vma to_addr, int len));
+     void (*write_routine) PARAMS ((bfd * from_bfd, asection * from_sec,
+			     file_ptr from_addr, bfd_vma to_addr, int len));
      void (*start_routine) PARAMS ((bfd_vma entry));
 {
   struct cleanup *old_chain;
@@ -554,11 +584,13 @@ download (target_name, args, from_tty, write_routine, start_routine)
     {
       char *arg;
 
-      while (isspace (*args)) args++;
+      while (isspace (*args))
+	args++;
 
       arg = args;
 
-      while ((*args != '\000') && !isspace (*args)) args++;
+      while ((*args != '\000') && !isspace (*args))
+	args++;
 
       if (*args != '\000')
 	*args++ = '\000';
@@ -582,25 +614,53 @@ download (target_name, args, from_tty, write_routine, start_routine)
       perror_with_name (filename);
       return;
     }
-  old_chain = make_cleanup (bfd_close, pbfd);
+  old_chain = make_cleanup ((make_cleanup_func) bfd_close, pbfd);
 
-  if (!bfd_check_format (pbfd, bfd_object)) 
+  if (!bfd_check_format (pbfd, bfd_object))
     error ("\"%s\" is not an object file: %s", filename,
 	   bfd_errmsg (bfd_get_error ()));
 
-  for (section = pbfd->sections; section; section = section->next) 
+  for (section = pbfd->sections; section; section = section->next)
     {
       if (bfd_get_section_flags (pbfd, section) & SEC_LOAD)
 	{
 	  bfd_vma section_address;
 	  bfd_size_type section_size;
 	  file_ptr fptr;
+	  const char *section_name;
+
+	  section_name = bfd_get_section_name (pbfd, section);
 
 	  section_address = bfd_get_section_vma (pbfd, section);
+
 	  /* Adjust sections from a.out files, since they don't
 	     carry their addresses with.  */
 	  if (bfd_get_flavour (pbfd) == bfd_target_aout_flavour)
-	    section_address += LOAD_ADDRESS;
+	    {
+	      if (strcmp (section_name, ".text") == 0)
+		section_address = bfd_get_start_address (pbfd);
+	      else if (strcmp (section_name, ".data") == 0)
+		{
+		  /* Read the first 8 bytes of the data section.
+		     There should be the string 'DaTa' followed by
+		     a word containing the actual section address. */
+		  struct data_marker
+		    {
+		      char signature[4];	/* 'DaTa' */
+		      unsigned char sdata[4];	/* &sdata */
+		    }
+		  marker;
+		  bfd_get_section_contents (pbfd, section, &marker, 0,
+					    sizeof (marker));
+		  if (strncmp (marker.signature, "DaTa", 4) == 0)
+		    {
+		      if (TARGET_BYTE_ORDER == BIG_ENDIAN)
+			section_address = bfd_getb32 (marker.sdata);
+		      else
+			section_address = bfd_getl32 (marker.sdata);
+		    }
+		}
+	    }
 
 	  section_size = bfd_get_section_size_before_reloc (section);
 
@@ -659,8 +719,8 @@ sparclite_serial_start (entry)
   buffer[0] = 0x03;
   store_unsigned_integer (buffer + 1, 4, entry);
 
-  SERIAL_WRITE (remote_desc, buffer, 1 + 4);
-  i = readchar (remote_desc, 2);
+  debug_serial_write (remote_desc, buffer, 1 + 4);
+  i = readchar (remote_desc, remote_timeout);
   if (i != 0x55)
     error ("Can't start SparcLite.  Error code %d\n", i);
 }
@@ -673,12 +733,12 @@ sparclite_serial_write (from_bfd, from_sec, from_addr, to_addr, len)
      bfd_vma to_addr;
      int len;
 {
-  char buffer[4 + 4 + WRITESIZE]; /* addr + len + data */
+  char buffer[4 + 4 + WRITESIZE];	/* addr + len + data */
   unsigned char checksum;
   int i;
 
-  store_unsigned_integer (buffer, 4, to_addr); /* Address */
-  store_unsigned_integer (buffer + 4, 4, len); /* Length */
+  store_unsigned_integer (buffer, 4, to_addr);	/* Address */
+  store_unsigned_integer (buffer + 4, 4, len);	/* Length */
 
   bfd_get_section_contents (from_bfd, from_sec, buffer + 8, from_addr, len);
 
@@ -691,8 +751,8 @@ sparclite_serial_write (from_bfd, from_sec, from_addr, to_addr, len)
   if (i != 0x5a)
     error ("Bad response from load command (0x%x)", i);
 
-  SERIAL_WRITE (remote_desc, buffer, 4 + 4 + len);
-  i = readchar (remote_desc, 2);
+  debug_serial_write (remote_desc, buffer, 4 + 4 + len);
+  i = readchar (remote_desc, remote_timeout);
 
   if (i != checksum)
     error ("Bad checksum from load command (0x%x)", i);
@@ -731,8 +791,8 @@ sparclite_udp_start (entry)
   buffer[4] = entry >> 8;
   buffer[5] = entry;
 
-  send_udp_buf (udp_fd, buffer, 6); /* Send start addr */
-  i = recv_udp_buf (udp_fd, buffer, sizeof(buffer), -1); /* Get response */
+  send_udp_buf (udp_fd, buffer, 6);	/* Send start addr */
+  i = recv_udp_buf (udp_fd, buffer, sizeof (buffer), -1);	/* Get response */
 
   if (i < 1 || buffer[0] != 0x55)
     error ("Failed to take start address.");
@@ -812,7 +872,7 @@ sparclite_udp_write (from_bfd, from_sec, from_addr, to_addr, len)
     }
 }
 
-#endif /* __GO32__ */
+#endif /* HAVE_SOCKETS */
 
 static void
 sparclite_download (filename, from_tty)
@@ -831,55 +891,25 @@ sparclite_download (filename, from_tty)
 	      sparclite_serial_start);
 }
 
-/* Define the target subroutine names */
+/* Set up the sparclite target vector.  */
 
-static struct target_ops sparclite_ops =
+static void
+init_sparclite_ops (void)
 {
-  "sparclite",			/* to_shortname */
-  "SPARClite remote target",	/* to_longname */
-  "Use a remote SPARClite target board via a serial line, using a gdb-specific protocol.\n\
-Specify the serial device it is connected to (e.g. /dev/ttya).",  /* to_doc */
-  sparclite_open,		/* to_open */
-  sparclite_close,		/* to_close */
-  0,				/* to_attach */
-  0,				/* to_detach */
-  0,				/* to_resume */
-  0,				/* to_wait */
-  0,				/* to_fetch_registers */
-  0,				/* to_store_registers */
-  0,				/* to_prepare_to_store */
-  0,				/* to_xfer_memory */
-  0,				/* to_files_info */
-  0,				/* to_insert_breakpoint */
-  0,				/* to_remove_breakpoint */
-  0,				/* to_terminal_init */
-  0,				/* to_terminal_inferior */
-  0,				/* to_terminal_ours_for_output */
-  0,				/* to_terminal_ours */
-  0,				/* to_terminal_info */
-  0,				/* to_kill */
-  sparclite_download,		/* to_load */
-  0,				/* to_lookup_symbol */
-  0,				/* to_create_inferior */
-  0,				/* to_mourn_inferior */
-  0,				/* to_can_run */
-  0,				/* to_notice_signals */
-  0,				/* to_thread_alive */
-  0,				/* to_stop */
-  download_stratum,		/* to_stratum */
-  0,				/* to_next */
-  0,				/* to_has_all_memory */
-  0,				/* to_has_memory */
-  0,				/* to_has_stack */
-  0,				/* to_has_registers */
-  0,				/* to_has_execution */
-  0,				/* sections */
-  0,				/* sections_end */
-  OPS_MAGIC			/* to_magic */
-  };
+  sparclite_ops.to_shortname = "sparclite";
+  sparclite_ops.to_longname = "SPARClite download target";
+  sparclite_ops.to_doc = "Download to a remote SPARClite target board via serial of UDP.\n\
+Specify the device it is connected to (e.g. /dev/ttya).";
+  sparclite_ops.to_open = sparclite_open;
+  sparclite_ops.to_close = sparclite_close;
+  sparclite_ops.to_load = sparclite_download;
+  sparclite_ops.to_stratum = download_stratum;
+  sparclite_ops.to_magic = OPS_MAGIC;
+}
 
 void
 _initialize_sparcl_tdep ()
 {
+  init_sparclite_ops ();
   add_target (&sparclite_ops);
 }

@@ -19,6 +19,12 @@ set supports_template_debugging 1
 set supports_template_debugging 0
 #endif
 
+#if defined(__cplusplus) 
+set supports_template_debugging 1
+#else
+set supports_template_debugging 0
+#endif
+
 #if defined (__GNUC__)
 set gcc_compiled __GNUC__
 #else

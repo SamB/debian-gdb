@@ -3,27 +3,27 @@
    Free Software Foundation, Inc.
    Contributed by IBM Corporation.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330,
+   Boston, MA 02111-1307, USA.  */
 
-#ifdef __STDC__		/* Forward decls for prototypes */
+/* Forward decls for prototypes */
 struct frame_info;
 struct type;
 struct value;
-#endif
 
 /* Minimum possible text address in AIX */
 
@@ -52,35 +52,40 @@ extern int inferior_pid;
 
 /* We are missing register descriptions in the system header files. Sigh! */
 
-struct regs {
-	int	gregs [32];		/* general purpose registers */
-	int	pc;			/* program conter	*/
-	int	ps;			/* processor status, or machine state */
-};
+struct regs
+  {
+    int gregs[32];		/* general purpose registers */
+    int pc;			/* program conter       */
+    int ps;			/* processor status, or machine state */
+  };
 
-struct fp_status {
-	double	fpregs [32];		/* floating GP registers */
-};
+struct fp_status
+  {
+    double fpregs[32];		/* floating GP registers */
+  };
 
 
 /* To be used by skip_prologue. */
 
-struct rs6000_framedata {
-  int	offset;				/* # of bytes in gpr's and fpr's are saved */
-  int	saved_gpr;			/* smallest # of saved gpr */
-  int	saved_fpr;			/* smallest # of saved fpr */
-  int	alloca_reg;			/* alloca register number (frame ptr) */
-  char	frameless;			/* true if frameless functions. */
-  char	nosavedpc;			/* true if pc not saved. */
-  int	gpr_offset;			/* offset of saved gprs */
-  int	fpr_offset;			/* offset of saved fprs */
-  int	lr_offset;			/* offset of saved lr */
-  int	cr_offset;			/* offset of saved cr */
-};
+struct rs6000_framedata
+  {
+    int offset;			/* total size of frame --- the distance
+				   by which we decrement sp to allocate
+				   the frame */
+    int saved_gpr;		/* smallest # of saved gpr */
+    int saved_fpr;		/* smallest # of saved fpr */
+    int alloca_reg;		/* alloca register number (frame ptr) */
+    char frameless;		/* true if frameless functions. */
+    char nosavedpc;		/* true if pc not saved. */
+    int gpr_offset;		/* offset of saved gprs from prev sp */
+    int fpr_offset;		/* offset of saved fprs from prev sp */
+    int lr_offset;		/* offset of saved lr */
+    int cr_offset;		/* offset of saved cr */
+  };
 
 /* Define the byte order of the machine.  */
 
-#define TARGET_BYTE_ORDER	BIG_ENDIAN
+#define TARGET_BYTE_ORDER_DEFAULT	BIG_ENDIAN
 
 /* AIX's assembler doesn't grok dollar signs in identifiers.
    So we use dots instead.  This item must be coordinated with G++. */
@@ -95,13 +100,10 @@ struct rs6000_framedata {
 /* Advance PC across any function entry prologue instructions
    to reach some "real" code.  */
 
-#define SKIP_PROLOGUE(pc)						\
-do {									\
-  struct rs6000_framedata _frame;					\
-  pc = skip_prologue (pc, &_frame);					\
-} while (0)
+extern CORE_ADDR rs6000_skip_prologue PARAMS ((CORE_ADDR));
+#define SKIP_PROLOGUE(pc) (rs6000_skip_prologue (pc))
 
-extern CORE_ADDR skip_prologue PARAMS((CORE_ADDR, struct rs6000_framedata *));
+extern CORE_ADDR skip_prologue PARAMS ((CORE_ADDR, struct rs6000_framedata *));
 
 
 /* If PC is in some function-call trampoline code, return the PC
@@ -135,7 +137,7 @@ extern CORE_ADDR skip_trampoline_code PARAMS ((CORE_ADDR));
 
 #define	PROCESS_LINENUMBER_HOOK()	aix_process_linenos ()
 extern void aix_process_linenos PARAMS ((void));
-   
+
 /* Immediately after a function call, return the saved pc.
    Can't go through the frames for this because on some machines
    the new frame is not set up until the new function executes
@@ -149,7 +151,7 @@ extern void aix_process_linenos PARAMS ((void));
 
 /* Stack grows downward.  */
 
-#define INNER_THAN <
+#define INNER_THAN(lhs,rhs) ((lhs) < (rhs))
 
 /* This is how arguments pushed onto stack or passed in registers.
    Stack must be aligned on 64-bit boundaries when synthesizing
@@ -157,23 +159,13 @@ extern void aix_process_linenos PARAMS ((void));
    handle it. */
 
 #define	PUSH_ARGUMENTS(nargs, args, sp, struct_return, struct_addr) \
-  sp = push_arguments((nargs), (args), (sp), (struct_return), (struct_addr))
-extern CORE_ADDR push_arguments PARAMS ((int, struct value **, CORE_ADDR,
-					 int, CORE_ADDR));
+  (rs6000_push_arguments((nargs), (args), (sp), (struct_return), (struct_addr)))
+extern CORE_ADDR rs6000_push_arguments PARAMS ((int, struct value **, CORE_ADDR, int, CORE_ADDR));
 
-/* Sequence of bytes for breakpoint instruction.  */
-
-#define BIG_BREAKPOINT { 0x7d, 0x82, 0x10, 0x08 }
-#define LITTLE_BREAKPOINT { 0x08, 0x10, 0x82, 0x7d }
-
-#if TARGET_BYTE_ORDER == BIG_ENDIAN
-#define BREAKPOINT BIG_BREAKPOINT
-
-#else
-#if TARGET_BYTE_ORDER == LITTLE_ENDIAN
-#define BREAKPOINT LITTLE_BREAKPOINT
-#endif
-#endif
+/* BREAKPOINT_FROM_PC uses the program counter value to determine the
+   breakpoint that should be used */
+extern breakpoint_from_pc_fn rs6000_breakpoint_from_pc;
+#define BREAKPOINT_FROM_PC(pcptr, lenptr) rs6000_breakpoint_from_pc (pcptr, lenptr)
 
 /* Amount PC must be decremented by after a breakpoint.
    This is often the number of bytes in BREAKPOINT
@@ -181,36 +173,20 @@ extern CORE_ADDR push_arguments PARAMS ((int, struct value **, CORE_ADDR,
 
 #define DECR_PC_AFTER_BREAK 0
 
-/* Nonzero if instruction at PC is a return instruction.  */
-/* Allow any of the return instructions, including a trapv and a return
-   from interrupt.  */
-
-#define ABOUT_TO_RETURN(pc)  \
-   ((read_memory_integer (pc, 4) & 0xfe8007ff) == 0x4e800020)
-
 /* Say how long (ordinary) registers are.  This is a piece of bogosity
    used in push_word and a few other places; REGISTER_RAW_SIZE is the
    real way to know how big a register is.  */
-
 #define REGISTER_SIZE 4
 
+
+/* Return the name of register number REG.  This may return "" to
+   indicate a register number that's not used on this variant.
+   (Register numbers may be sparse for consistency between variants.)  */
+#define REGISTER_NAME(reg) (rs6000_register_name(reg))
+extern char *rs6000_register_name (int reg);
+
 /* Number of machine registers */
-
-#define NUM_REGS 71
-
-/* Initializer for an array of names of registers.
-   There should be NUM_REGS strings in this initializer.  */
-
-#define REGISTER_NAMES  \
- {"r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",  \
-  "r8", "r9", "r10","r11","r12","r13","r14","r15", \
-  "r16","r17","r18","r19","r20","r21","r22","r23", \
-  "r24","r25","r26","r27","r28","r29","r30","r31", \
-  "f0", "f1", "f2", "f3", "f4", "f5", "f6", "f7",  \
-  "f8", "f9", "f10","f11","f12","f13","f14","f15", \
-  "f16","f17","f18","f19","f20","f21","f22","f23", \
-  "f24","f25","f26","f27","f28","f29","f30","f31", \
-  "pc", "ps", "cnd", "lr", "cnt", "xer", "mq" }
+#define NUM_REGS 183
 
 /* Register numbers of various important registers.
    Note that some of these values are "real" register numbers,
@@ -225,11 +201,11 @@ extern CORE_ADDR push_arguments PARAMS ((int, struct value **, CORE_ADDR,
 #define FP0_REGNUM 32		/* Floating point register 0 */
 #define	GP0_REGNUM 0		/* GPR register 0 */
 #define FP0_REGNUM 32		/* FPR (Floating point) register 0 */
-#define FPLAST_REGNUM 63	/* Last floating point register */  
+#define FPLAST_REGNUM 63	/* Last floating point register */
 
 /* Special purpose registers... */
-/* P.S. keep these in the same order as in /usr/mstsave.h `mstsave' structure, for
-   easier processing */
+/* P.S. keep these in the same order as in /usr/mstsave.h `mstsave'
+   structure, for easier processing */
 
 #define PC_REGNUM 64		/* Program counter (instruction address %iar) */
 #define PS_REGNUM 65		/* Processor (or machine) status (%msr) */
@@ -239,19 +215,26 @@ extern CORE_ADDR push_arguments PARAMS ((int, struct value **, CORE_ADDR,
 #define	XER_REGNUM 69		/* Fixed point exception registers */
 #define	MQ_REGNUM 70		/* Multiply/quotient register */
 
-#define	FIRST_SP_REGNUM 64	/* first special register number */
-#define LAST_SP_REGNUM  70	/* last special register number */
+/* These #defines are used to parse core files and talk to ptrace, so they
+   must remain fixed.  */
+#define	FIRST_UISA_SP_REGNUM 64	/* first special register number */
+#define LAST_UISA_SP_REGNUM  70	/* last special register number */
+
+/* This is the offset in REG_NAMES at which the `set processor'
+   command starts plugging in its names.  */
+#define FIRST_VARIANT_REGISTER 66
 
 /* Total amount of space needed to store our copies of the machine's
    register state, the array `registers'.
-
-	32 4-byte gpr's
-	32 8-byte fpr's
-	7  4-byte special purpose registers, 
-
-   total 416 bytes. Keep some extra space for now, in case to add more. */
-
-#define REGISTER_BYTES 420
+   32 4-byte gpr's
+   32 8-byte fpr's
+   7  4-byte UISA special purpose registers, 
+   16 4-byte segment registers,
+   32 4-byte standard OEA special-purpose registers,
+   and up to 64 4-byte non-standard OEA special purpose regs.
+   total: (+ (* 32 4) (* 32 8) (* 7 4) (* 16 4) (* 32 4) (* 64 4)) 860 bytes
+   Keep some extra space for now, in case to add more. */
+#define REGISTER_BYTES 880
 
 
 /* Index within `registers' of the first byte of the space for
@@ -266,7 +249,7 @@ extern CORE_ADDR push_arguments PARAMS ((int, struct value **, CORE_ADDR,
 /* Number of bytes of storage in the actual machine representation
    for register N. */
 /* Note that the unsigned cast here forces the result of the
-   subtractiion to very high positive values if N < FP0_REGNUM */
+   subtraction to very high positive values if N < FP0_REGNUM */
 
 #define REGISTER_RAW_SIZE(N) (((unsigned)(N) - FP0_REGNUM) < 32 ? 8 : 4)
 
@@ -347,11 +330,11 @@ extern CORE_ADDR rs6000_struct_return_address;
    into VALBUF.  */
 
 /* #define EXTRACT_RETURN_VALUE(TYPE,REGBUF,VALBUF) \
-  memcpy (VALBUF, REGBUF, TYPE_LENGTH (TYPE)) */
+   memcpy (VALBUF, REGBUF, TYPE_LENGTH (TYPE)) */
 
 #define EXTRACT_RETURN_VALUE(TYPE,REGBUF,VALBUF) \
   extract_return_value(TYPE,REGBUF,VALBUF)
-extern void extract_return_value PARAMS ((struct type *, char [], char *));
+extern void extract_return_value PARAMS ((struct type *, char[], char *));
 
 /* Write into appropriate registers a function return value
    of type TYPE, given in virtual format.  */
@@ -397,36 +380,17 @@ CORE_ADDR rs6000_frame_chain PARAMS ((struct frame_info *));
    by FI does not have a frame on the stack associated with it.  If it
    does not, FRAMELESS is set to 1, else 0.  */
 
-#define FRAMELESS_FUNCTION_INVOCATION(FI, FRAMELESS) \
-  FRAMELESS = frameless_function_invocation (FI)
+#define FRAMELESS_FUNCTION_INVOCATION(FI) \
+  (frameless_function_invocation (FI))
 
-extern int frameless_function_invocation PARAMS((struct frame_info *));
-
-/* Functions calling alloca() change the value of the stack pointer. We
-   need to use initial stack pointer (which is saved in r31 by gcc) in 
-   such cases. If a compiler emits traceback table, then we should use the
-   alloca register specified in traceback table. FIXME. */
-/* Also, it is a good idea to cache information about frame's saved registers
-   in the frame structure to speed things up. See tm-m88k.h. FIXME. */
-
-#define	EXTRA_FRAME_INFO	\
-	CORE_ADDR initial_sp;			/* initial stack pointer. */ \
-	struct frame_saved_regs *cache_fsr;	/* saved registers	  */
+extern int frameless_function_invocation PARAMS ((struct frame_info *));
 
 #define INIT_FRAME_PC_FIRST(fromleaf, prev) \
   prev->pc = (fromleaf ? SAVED_PC_AFTER_CALL (prev->next) : \
 	      prev->next ? FRAME_SAVED_PC (prev->next) : read_pc ());
-#define INIT_FRAME_PC(fromleaf, prev) /* nothing */
-#define	INIT_EXTRA_FRAME_INFO(fromleaf, fi)	\
-  fi->initial_sp = 0;		\
-  fi->cache_fsr = 0; \
-  if (fi->next != (CORE_ADDR)0 \
-      && fi->pc < TEXT_SEGMENT_BASE) \
-    /* We're in get_prev_frame_info */ \
-    /* and this is a special signal frame.  */ \
-    /* (fi->pc will be some low address in the kernel, */ \
-    /*  to which the signal handler returns).  */ \
-    fi->signal_handler_caller = 1;
+#define INIT_FRAME_PC(fromleaf, prev)	/* nothing */
+extern void rs6000_init_extra_frame_info (int fromleaf, struct frame_info *);
+#define	INIT_EXTRA_FRAME_INFO(fromleaf, fi) rs6000_init_extra_frame_info (fromleaf, fi)
 
 /* If the kernel has to deliver a signal, it pushes a sigcontext
    structure on the stack and then calls the signal handler, passing
@@ -447,11 +411,8 @@ extern int frameless_function_invocation PARAMS((struct frame_info *));
 
 extern unsigned long frame_saved_pc PARAMS ((struct frame_info *));
 
-#define FRAME_ARGS_ADDRESS(FI)	\
-  (((struct frame_info*)(FI))->initial_sp ?		\
-	((struct frame_info*)(FI))->initial_sp :	\
-	frame_initial_stack_address (FI))
-extern CORE_ADDR frame_initial_stack_address PARAMS ((struct frame_info *));
+extern CORE_ADDR rs6000_frame_args_address PARAMS ((struct frame_info *));
+#define FRAME_ARGS_ADDRESS(FI) rs6000_frame_args_address (FI)
 
 #define FRAME_LOCALS_ADDRESS(FI)	FRAME_ARGS_ADDRESS(FI)
 
@@ -462,7 +423,7 @@ extern CORE_ADDR frame_initial_stack_address PARAMS ((struct frame_info *));
 /* We can't tell how many args there are
    now that the C compiler delays popping them.  */
 
-#define FRAME_NUM_ARGS(val,fi) (val = -1)
+#define FRAME_NUM_ARGS(fi) (-1)
 
 /* Return number of bytes at start of arglist that are not really args.  */
 
@@ -477,66 +438,9 @@ extern CORE_ADDR frame_initial_stack_address PARAMS ((struct frame_info *));
    not sure if it will be needed. The following macro takes care of gpr's
    and fpr's only. */
 
-#define FRAME_FIND_SAVED_REGS(FRAME_INFO, FRAME_SAVED_REGS)		\
-{									\
-  int ii;								\
-  CORE_ADDR frame_addr, func_start;					\
-  struct rs6000_framedata fdata;					\
-									\
-  /* find the start of the function and collect info about its frame. */ \
-									\
-  func_start = get_pc_function_start ((FRAME_INFO)->pc) + FUNCTION_START_OFFSET; \
-  (void) skip_prologue (func_start, &fdata);				\
-  memset (&(FRAME_SAVED_REGS), '\0', sizeof (FRAME_SAVED_REGS));	\
-									\
-  /* if there were any saved registers, figure out parent's stack pointer. */ \
-  /* the following is true only if the frame doesn't have a call to alloca(), \
-      FIXME. */								\
-  if (fdata.saved_fpr == 0 && fdata.saved_gpr == 0 &&			\
-      fdata.lr_offset == 0 && fdata.cr_offset == 0) {			\
-    frame_addr = 0;							\
-									\
-  } else if ((FRAME_INFO)->prev && (FRAME_INFO)->prev->frame) {		\
-    frame_addr = (FRAME_INFO)->prev->frame;				\
-									\
-  } else {								\
-    frame_addr = read_memory_integer ((FRAME_INFO)->frame, 4);		\
-  }									\
-									\
-  /* if != -1, fdata.saved_fpr is the smallest number of saved_fpr. All	\
-     fpr's from saved_fpr to f31 are saved. */				\
-  if (fdata.saved_fpr >= 0) {						\
-    int fpr_offset = frame_addr + fdata.fpr_offset;			\
-    for (ii = fdata.saved_fpr; ii < 32; ii++) {				\
-      (FRAME_SAVED_REGS).regs [FP0_REGNUM + ii] = fpr_offset;		\
-      fpr_offset += 8;							\
-    }									\
-  }									\
-									\
-  /* if != -1, fdata.saved_gpr is the smallest number of saved_gpr. All	\
-     gpr's from saved_gpr to r31 are saved. */				\
-  if (fdata.saved_gpr >= 0) {						\
-    int gpr_offset = frame_addr + fdata.gpr_offset;			\
-    for (ii = fdata.saved_gpr; ii < 32; ii++) {				\
-      (FRAME_SAVED_REGS).regs [ii] = gpr_offset;			\
-      gpr_offset += 4;							\
-    }									\
-  }									\
-									\
-  /* If != 0, fdata.cr_offset is the offset from the frame that holds	\
-     the CR */								\
-  if (fdata.cr_offset != 0) {						\
-    (FRAME_SAVED_REGS).regs [CR_REGNUM] = frame_addr + fdata.cr_offset;	\
-  }									\
-									\
-  /* If != 0, fdata.cr_offset is the offset from the frame that holds	\
-     the LR */								\
-  if (fdata.lr_offset != 0) {						\
-    (FRAME_SAVED_REGS).regs [LR_REGNUM] = frame_addr + fdata.lr_offset;	\
-  }									\
-}
+extern void rs6000_frame_init_saved_regs PARAMS ((struct frame_info *));
+#define FRAME_INIT_SAVED_REGS(FI) rs6000_frame_init_saved_regs (FI)
 
-
 /* Things needed for making the inferior call functions.  */
 
 /* Push an empty stack frame, to record the current PC, etc.  */
@@ -553,39 +457,39 @@ extern void pop_frame PARAMS ((void));
 
 /* This sequence of words is the instructions:
 
-	mflr	r0		// 0x7c0802a6
-				// save fpr's
-	stfd	r?, num(r1)	// 0xd8010000 there should be 32 of this??
-				// save gpr's
-	stm	r0, num(r1)	// 0xbc010000
-	stu	r1, num(r1)	// 0x94210000
+   mflr r0              // 0x7c0802a6
+   // save fpr's
+   stfd r?, num(r1)     // 0xd8010000 there should be 32 of this??
+   // save gpr's
+   stm  r0, num(r1)     // 0xbc010000
+   stu  r1, num(r1)     // 0x94210000
 
-	// the function we want to branch might be in a different load 
-	// segment. reset the toc register. Note that the actual toc address
-	// will be fix by fix_call_dummy () along with function address.
+   // the function we want to branch might be in a different load 
+   // segment. reset the toc register. Note that the actual toc address
+   // will be fix by fix_call_dummy () along with function address.
 
-	st	r2, 0x14(r1)	// 0x90410014 save toc register
-	liu	r2, 0x1234	// 0x3c401234 reset a new toc value 0x12345678
-	oril	r2, r2,0x5678   // 0x60425678	
+   st   r2, 0x14(r1)    // 0x90410014 save toc register
+   liu  r2, 0x1234      // 0x3c401234 reset a new toc value 0x12345678
+   oril r2, r2,0x5678   // 0x60425678   
 
-				// load absolute address 0x12345678 to r0
-	liu	r0, 0x1234	// 0x3c001234
-	oril	r0, r0,0x5678	// 0x60005678
-	mtctr	r0		// 0x7c0903a6 ctr <- r0
-	bctrl			// 0x4e800421 jump subroutine 0x12345678 (%ctr)
-	cror	0xf, 0xf, 0xf	// 0x4def7b82
-	brpt			// 0x7d821008, breakpoint
-	cror	0xf, 0xf, 0xf	// 0x4def7b82 (for 8 byte alignment)
+   // load absolute address 0x12345678 to r0
+   liu  r0, 0x1234      // 0x3c001234
+   oril r0, r0,0x5678   // 0x60005678
+   mtctr        r0              // 0x7c0903a6 ctr <- r0
+   bctrl                        // 0x4e800421 jump subroutine 0x12345678 (%ctr)
+   cror 0xf, 0xf, 0xf   // 0x4def7b82
+   brpt                 // 0x7d821008, breakpoint
+   cror 0xf, 0xf, 0xf   // 0x4def7b82 (for 8 byte alignment)
 
 
-  We actually start executing by saving the toc register first, since the pushing 
-  of the registers is done by PUSH_DUMMY_FRAME.  If this were real code,
-  the arguments for the function called by the `bctrl' would be pushed
-  between the `stu' and the `bctrl', and we could allow it to execute through.
-  But the arguments have to be pushed by GDB after the PUSH_DUMMY_FRAME is done,
-  and we cannot allow to push the registers again.
-*/
-	
+   We actually start executing by saving the toc register first, since the pushing 
+   of the registers is done by PUSH_DUMMY_FRAME.  If this were real code,
+   the arguments for the function called by the `bctrl' would be pushed
+   between the `stu' and the `bctrl', and we could allow it to execute through.
+   But the arguments have to be pushed by GDB after the PUSH_DUMMY_FRAME is done,
+   and we cannot allow to push the registers again.
+ */
+
 #define CALL_DUMMY {0x7c0802a6, 0xd8010000, 0xbc010000, 0x94210000, \
 		    0x90410014, 0x3c401234, 0x60425678,		    \
 		    0x3c001234, 0x60005678, 0x7c0903a6, 0x4e800421, \
@@ -608,15 +512,15 @@ extern void rs6000_fix_call_dummy PARAMS ((char *, CORE_ADDR, CORE_ADDR,
 
 /* Hook in rs6000-tdep.c for determining the TOC address when
    calling functions in the inferior.  */
-extern CORE_ADDR (*find_toc_address_hook) PARAMS ((CORE_ADDR));
+extern
+CORE_ADDR (*find_toc_address_hook) PARAMS ((CORE_ADDR));
 
 /* xcoffread.c provides a function to determine the TOC offset
    for a given object file.
    It is used under native AIX configurations for determining the
    TOC address when calling functions in the inferior.  */
-#ifdef __STDC__
+
 struct objfile;
-#endif
 extern CORE_ADDR get_toc_offset PARAMS ((struct objfile *));
 
 /* Usually a function pointer's representation is simply the address
@@ -635,14 +539,16 @@ extern CORE_ADDR get_toc_offset PARAMS ((struct objfile *));
 
 #define CONVERT_FROM_FUNC_PTR_ADDR(ADDR) \
   (is_magic_function_pointer (ADDR) ? read_memory_integer (ADDR, 4) : (ADDR))
-extern int is_magic_function_pointer PARAMS ((CORE_ADDR));
+     extern int is_magic_function_pointer PARAMS ((CORE_ADDR));
 
 /* Flag for machine-specific stuff in shared files.  FIXME */
 #define IBM6000_TARGET
 
 /* RS6000/AIX does not support PT_STEP.  Has to be simulated.  */
 
-#define NO_SINGLE_STEP
+#define SOFTWARE_SINGLE_STEP_P 1
+     extern void rs6000_software_single_step PARAMS ((unsigned int, int));
+#define SOFTWARE_SINGLE_STEP(sig,bp_p) rs6000_software_single_step (sig, bp_p)
 
 /* If the current gcc for for this target does not produce correct debugging
    information for float parameters, both prototyped and unprototyped, then
