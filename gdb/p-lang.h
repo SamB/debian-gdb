@@ -1,6 +1,6 @@
 /* Pascal language support definitions for GDB, the GNU debugger.
 
-   Copyright (C) 2000, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,6 +20,9 @@
 /* This file is derived from c-lang.h */
 
 struct value;
+
+/* Defined in p-lang.c */
+extern const char *pascal_main_name (void);
 
 extern int pascal_parse (void);	/* Defined in p-exp.y */
 
@@ -46,8 +49,6 @@ extern void pascal_printchar (int, struct ui_file *);
 
 extern void pascal_printstr (struct ui_file *, const gdb_byte *,
 			     unsigned int, int, int);
-
-extern struct type *pascal_create_fundamental_type (struct objfile *, int);
 
 extern struct type **const (pascal_builtin_types[]);
 

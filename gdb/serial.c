@@ -1,7 +1,7 @@
 /* Generic serial interface routines
 
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2002, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -515,12 +515,12 @@ serial_async (struct serial *scb,
 	      serial_event_ftype *handler,
 	      void *context)
 {
-  /* Only change mode if there is a need. */
-  if ((scb->async_handler == NULL)
-      != (handler == NULL))
-    scb->ops->async (scb, handler != NULL);
+  int changed = ((scb->async_handler == NULL) != (handler == NULL));
   scb->async_handler = handler;
   scb->async_context = context;
+  /* Only change mode if there is a need.  */
+  if (changed)
+    scb->ops->async (scb, handler != NULL);
 }
 
 int

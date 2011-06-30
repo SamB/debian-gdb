@@ -1,6 +1,6 @@
 /* Target-dependent code for GNU/Linux i386.
 
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -38,13 +38,13 @@
 /* Return the name of register REG.  */
 
 static const char *
-i386_linux_register_name (int reg)
+i386_linux_register_name (struct gdbarch *gdbarch, int reg)
 {
   /* Deal with the extra "orig_eax" pseudo register.  */
   if (reg == I386_LINUX_ORIG_EAX_REGNUM)
     return "orig_eax";
 
-  return i386_register_name (reg);
+  return i386_register_name (gdbarch, reg);
 }
 
 /* Return non-zero, when the register is in the corresponding register
@@ -428,6 +428,10 @@ i386_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->sigcontext_addr = i386_linux_sigcontext_addr;
   tdep->sc_reg_offset = i386_linux_sc_reg_offset;
   tdep->sc_num_regs = ARRAY_SIZE (i386_linux_sc_reg_offset);
+
+  /* N_FUN symbols in shared libaries have 0 for their values and need
+     to be relocated. */
+  set_gdbarch_sofun_address_maybe_missing (gdbarch, 1);
 
   /* GNU/Linux uses SVR4-style shared libraries.  */
   set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);

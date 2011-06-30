@@ -1,6 +1,6 @@
 /* Renesas M32C target-dependent code for GDB, the GNU debugger.
 
-   Copyright 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -227,9 +227,9 @@ make_types (struct gdbarch *arch)
 /* Register set.  */
 
 static const char *
-m32c_register_name (int num)
+m32c_register_name (struct gdbarch *gdbarch, int num)
 {
-  return gdbarch_tdep (current_gdbarch)->regs[num].name;
+  return gdbarch_tdep (gdbarch)->regs[num].name;
 }
 
 
@@ -241,16 +241,16 @@ m32c_register_type (struct gdbarch *arch, int reg_nr)
 
 
 static int
-m32c_register_sim_regno (int reg_nr)
+m32c_register_sim_regno (struct gdbarch *gdbarch, int reg_nr)
 {
-  return gdbarch_tdep (current_gdbarch)->regs[reg_nr].sim_num;
+  return gdbarch_tdep (gdbarch)->regs[reg_nr].sim_num;
 }
 
 
 static int
-m32c_debug_info_reg_to_regnum (int reg_nr)
+m32c_debug_info_reg_to_regnum (struct gdbarch *gdbarch, int reg_nr)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   if (0 <= reg_nr && reg_nr <= M32C_MAX_DWARF_REGNUM
       && tdep->dwarf_regs[reg_nr])
     return tdep->dwarf_regs[reg_nr]->num;
@@ -265,7 +265,7 @@ int
 m32c_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 			  struct reggroup *group)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   struct m32c_reg *reg = &tdep->regs[regnum];
 
   /* The anonymous raw registers aren't in any groups.  */
@@ -976,7 +976,7 @@ make_regs (struct gdbarch *arch)
 /* Breakpoints.  */
 
 static const unsigned char *
-m32c_breakpoint_from_pc (CORE_ADDR *pc, int *len)
+m32c_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pc, int *len)
 {
   static unsigned char break_insn[] = { 0x00 };	/* brk */
 
@@ -1803,7 +1803,7 @@ m32c_analyze_prologue (struct gdbarch *arch,
 
 
 static CORE_ADDR
-m32c_skip_prologue (CORE_ADDR ip)
+m32c_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR ip)
 {
   char *name;
   CORE_ADDR func_addr, func_end, sal_end;
@@ -1814,7 +1814,7 @@ m32c_skip_prologue (CORE_ADDR ip)
     return ip;
 
   /* Find end by prologue analysis.  */
-  m32c_analyze_prologue (current_gdbarch, ip, func_end, &p);
+  m32c_analyze_prologue (gdbarch, ip, func_end, &p);
   /* Find end by line info.  */
   sal_end = skip_prologue_using_sal (ip);
   /* Return whichever is lower.  */
@@ -2332,7 +2332,7 @@ m32c_return_value (struct gdbarch *gdbarch,
 static CORE_ADDR
 m32c_skip_trampoline_code (struct frame_info *frame, CORE_ADDR stop_pc)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (frame));
 
   /* It would be nicer to simply look up the addresses of known
      trampolines once, and then compare stop_pc with them.  However,
@@ -2525,7 +2525,7 @@ m32c_m16c_pointer_to_address (struct type *type, const gdb_byte *buf)
 }
 
 void
-m32c_virtual_frame_pointer (CORE_ADDR pc,
+m32c_virtual_frame_pointer (struct gdbarch *gdbarch, CORE_ADDR pc,
 			    int *frame_regnum,
 			    LONGEST *frame_offset)
 {
@@ -2534,12 +2534,12 @@ m32c_virtual_frame_pointer (CORE_ADDR pc,
   struct m32c_prologue p;
 
   struct regcache *regcache = get_current_regcache ();
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   
   if (!find_pc_partial_function (pc, &name, &func_addr, &func_end))
     internal_error (__FILE__, __LINE__, _("No virtual frame pointer available"));
 
-  m32c_analyze_prologue (current_gdbarch, func_addr, pc, &p);
+  m32c_analyze_prologue (gdbarch, func_addr, pc, &p);
   switch (p.kind)
     {
     case prologue_with_frame_ptr:
@@ -2556,7 +2556,7 @@ m32c_virtual_frame_pointer (CORE_ADDR pc,
       break;
     }
   /* Sanity check */
-  if (*frame_regnum > gdbarch_num_regs (current_gdbarch))
+  if (*frame_regnum > gdbarch_num_regs (gdbarch))
     internal_error (__FILE__, __LINE__, _("No virtual frame pointer available"));
 }
 

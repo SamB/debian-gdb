@@ -1,5 +1,5 @@
 /* Target-dependent code for the GNU Hurd.
-   Copyright (C) 2002, 2003, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,6 +18,7 @@
 
 #include "defs.h"
 #include "osabi.h"
+#include "solib-svr4.h"
 
 #include "i386-tdep.h"
 
@@ -28,6 +29,9 @@ i386gnu_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   /* GNU uses ELF.  */
   i386_elf_init_abi (info, gdbarch);
+
+  set_solib_svr4_fetch_link_map_offsets
+    (gdbarch, svr4_ilp32_fetch_link_map_offsets);
 
   tdep->jb_pc_offset = 20;	/* From <bits/setjmp.h>.  */
 }

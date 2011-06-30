@@ -1,6 +1,6 @@
 /* Portable <string.h>
 
-   Copyright (C) 1995, 1998, 1999, 2000, 2001, 2004, 2007
+   Copyright (C) 1995, 1998, 1999, 2000, 2001, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -23,6 +23,9 @@
 
 #ifdef STDC_HEADERS
 #include <string.h>
+#ifdef HAVE_STRINGS_H
+#include <strings.h> /* strcasecmp etc.. */
+#endif
 #else
 #ifdef HAVE_STRING_H
 #include <string.h>

@@ -1,4 +1,4 @@
-# Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2007
+# Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008
 # Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
@@ -41,11 +41,7 @@ if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {deb
      return -1
 }
 
-mi_delete_breakpoints
-mi_gdb_reinitialize_dir $srcdir/$subdir
-mi_gdb_load ${binfile}
-
-proc test_watchpoint_creation_and_listing {} {
+proc test_watchpoint_creation_and_listing {type} {
     global mi_gdb_prompt
     global srcfile
     global hex
@@ -69,7 +65,7 @@ proc test_watchpoint_creation_and_listing {} {
 }
 
 # UNUSED at the time
-proc test_awatch_creation_and_listing {} {
+proc test_awatch_creation_and_listing {type} {
     global mi_gdb_prompt
     global srcfile
     global hex
@@ -96,7 +92,7 @@ proc test_awatch_creation_and_listing {} {
 }
 
 # UNUSED at the time
-proc test_rwatch_creation_and_listing {} {
+proc test_rwatch_creation_and_listing {type} {
     global mi_gdb_prompt
     global srcfile
     global hex
@@ -122,7 +118,7 @@ proc test_rwatch_creation_and_listing {} {
 	    "delete read watchpoint"
 }
 
-proc test_watchpoint_triggering {} {
+proc test_watchpoint_triggering {type} {
     global mi_gdb_prompt
     global hex
 
@@ -151,6 +147,9 @@ proc test_watchpoint_triggering {} {
       timeout {fail "watchpoint trigger (timeout 1)"}
     }
 
+    if { $type == "sw" } {
+      setup_xfail *-*-*
+    }
     send_gdb "223-exec-continue\n"
     gdb_expect {
       -re "223\\^running\r\n$mi_gdb_prompt" {
@@ -165,18 +164,51 @@ proc test_watchpoint_triggering {} {
       -re ".*$mi_gdb_prompt$" {fail "wp out of scope (1)"}
       timeout {fail "wp out of scope (timeout 1)"}
     }
+    clear_xfail *-*-*
 }
 
-# Disable hardware watchpoints if necessary.
+proc test_watchpoint_all {type} {
+    global pf_prefix
+    upvar srcdir srcdir
+    upvar subdir subdir
+    upvar binfile binfile
+
+    set old_prefix $pf_prefix
+    lappend pf_prefix "$type:"
+
+    mi_delete_breakpoints
+    mi_gdb_reinitialize_dir $srcdir/$subdir
+    mi_gdb_load ${binfile}
+
+    mi_runto callee4
+    test_watchpoint_creation_and_listing $type
+    #test_rwatch_creation_and_listing $type
+    #test_awatch_creation_and_listing $type
+    test_watchpoint_triggering $type
+
+    set pf_prefix $old_prefix
+}
+
+# Run the tests twice, once using software watchpoints...
+mi_gdb_test "567-gdb-set can-use-hw-watchpoints 0" \
+	"567\\^done" \
+	"hw watchpoints toggle (1)"
+test_watchpoint_all sw
+
+mi_gdb_exit
+
+# ... and unless requested otherwise...
 if [target_info exists gdb,no_hardware_watchpoints] {
-    mi_gdb_test "-gdb-set can-use-hw-watchpoints 0" "\\^done" ""
+    return 0
 }
 
-mi_runto callee4
-test_watchpoint_creation_and_listing
-#test_rwatch_creation_and_listing
-#test_awatch_creation_and_listing
-test_watchpoint_triggering
+mi_gdb_start
+
+# ... once using hardware watchpoints (if available).
+mi_gdb_test "890-gdb-set can-use-hw-watchpoints 1" \
+	"890\\^done" \
+	"hw watchpoints toggle (2)"
+test_watchpoint_all hw
 
 mi_gdb_exit
 return 0

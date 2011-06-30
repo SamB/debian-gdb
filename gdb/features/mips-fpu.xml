@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Copyright (C) 2007 Free Software Foundation, Inc.
+<!-- Copyright (C) 2007, 2008 Free Software Foundation, Inc.
 
      Copying and distribution of this file, with or without modification,
      are permitted in any medium without royalty provided the copyright
@@ -7,7 +7,7 @@
 
 <!DOCTYPE feature SYSTEM "gdb-target.dtd">
 <feature name="org.gnu.gdb.mips.fpu">
-  <reg name="f0" bitsize="32" type="ieee_single"/>
+  <reg name="f0" bitsize="32" type="ieee_single" regnum="38"/>
   <reg name="f1" bitsize="32" type="ieee_single"/>
   <reg name="f2" bitsize="32" type="ieee_single"/>
   <reg name="f3" bitsize="32" type="ieee_single"/>

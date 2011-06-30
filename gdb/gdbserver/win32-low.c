@@ -1,5 +1,5 @@
 /* Low level interface to Windows debugging, for gdbserver.
-   Copyright (C) 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Leo Zayas.  Based on "win32-nat.c" from GDB.
 
@@ -21,6 +21,7 @@
 #include "server.h"
 #include "regcache.h"
 #include "gdb/signals.h"
+#include "gdb/fileio.h"
 #include "mem-break.h"
 #include "win32-low.h"
 
@@ -65,12 +66,22 @@
 int using_threads = 1;
 
 /* Globals.  */
+static int attaching = 0;
 static HANDLE current_process_handle = NULL;
 static DWORD current_process_id = 0;
+static DWORD main_thread_id = 0;
 static enum target_signal last_sig = TARGET_SIGNAL_0;
 
 /* The current debug event from WaitForDebugEvent.  */
 static DEBUG_EVENT current_event;
+
+/* Non zero if an interrupt request is to be satisfied by suspending
+   all threads.  */
+static int soft_interrupt_requested = 0;
+
+/* Non zero if the inferior is stopped in a simulated breakpoint done
+   by suspending all the threads.  */
+static int faked_breakpoint = 0;
 
 #define NUM_REGS (the_low_target.num_regs)
 
@@ -78,8 +89,6 @@ typedef BOOL WINAPI (*winapi_DebugActiveProcessStop) (DWORD dwProcessId);
 typedef BOOL WINAPI (*winapi_DebugSetProcessKillOnExit) (BOOL KillOnExit);
 typedef BOOL WINAPI (*winapi_DebugBreakProcess) (HANDLE);
 typedef BOOL WINAPI (*winapi_GenerateConsoleCtrlEvent) (DWORD, DWORD);
-
-static DWORD main_thread_id = 0;
 
 static void win32_resume (struct thread_resume *resume_info);
 
@@ -90,6 +99,39 @@ current_inferior_tid (void)
 {
   win32_thread_info *th = inferior_target_data (current_inferior);
   return th->tid;
+}
+
+/* Get the thread context of the thread associated with TH.  */
+
+static void
+win32_get_thread_context (win32_thread_info *th)
+{
+  memset (&th->context, 0, sizeof (CONTEXT));
+  (*the_low_target.get_thread_context) (th, &current_event);
+#ifdef _WIN32_WCE
+  memcpy (&th->base_context, &th->context, sizeof (CONTEXT));
+#endif
+}
+
+/* Set the thread context of the thread associated with TH.  */
+
+static void
+win32_set_thread_context (win32_thread_info *th)
+{
+#ifdef _WIN32_WCE
+  /* Calling SuspendThread on a thread that is running kernel code
+     will report that the suspending was successful, but in fact, that
+     will often not be true.  In those cases, the context returned by
+     GetThreadContext will not be correct by the time the thread
+     stops, hence we can't set that context back into the thread when
+     resuming - it will most likelly crash the inferior.
+     Unfortunately, there is no way to know when the thread will
+     really stop.  To work around it, we'll only write the context
+     back to the thread when either the user or GDB explicitly change
+     it between stopping and resuming.  */
+  if (memcmp (&th->context, &th->base_context, sizeof (CONTEXT)) != 0)
+#endif
+    (*the_low_target.set_thread_context) (th, &current_event);
 }
 
 /* Find a thread record given a thread id.  If GET_CONTEXT is set then
@@ -105,12 +147,21 @@ thread_rec (DWORD id, int get_context)
     return NULL;
 
   th = inferior_target_data (thread);
-  if (!th->suspend_count && get_context)
+  if (get_context && th->context.ContextFlags == 0)
     {
-      if (id != current_event.dwThreadId)
-	th->suspend_count = SuspendThread (th->h) + 1;
+      if (!th->suspended)
+	{
+	  if (SuspendThread (th->h) == (DWORD) -1)
+	    {
+	      DWORD err = GetLastError ();
+	      OUTMSG (("warning: SuspendThread failed in thread_rec, "
+		       "(error %d): %s\n", (int) err, strwinerror (err)));
+	    }
+	  else
+	    th->suspended = 1;
+	}
 
-      (*the_low_target.get_thread_context) (th, &current_event);
+      win32_get_thread_context (th);
     }
 
   return th;
@@ -125,8 +176,7 @@ child_add_thread (DWORD tid, HANDLE h)
   if ((th = thread_rec (tid, FALSE)))
     return th;
 
-  th = (win32_thread_info *) malloc (sizeof (*th));
-  memset (th, 0, sizeof (*th));
+  th = calloc (1, sizeof (*th));
   th->tid = tid;
   th->h = h;
 
@@ -239,9 +289,16 @@ child_init_thread_list (void)
 }
 
 static void
-do_initial_child_stuff (DWORD pid)
+do_initial_child_stuff (HANDLE proch, DWORD pid)
 {
   last_sig = TARGET_SIGNAL_0;
+
+  current_process_handle = proch;
+  current_process_id = pid;
+  main_thread_id = 0;
+
+  soft_interrupt_requested = 0;
+  faked_breakpoint = 0;
 
   memset (&current_event, 0, sizeof (current_event));
 
@@ -259,20 +316,23 @@ continue_one_thread (struct inferior_list_entry *this_thread, void *id_ptr)
   struct thread_info *thread = (struct thread_info *) this_thread;
   int thread_id = * (int *) id_ptr;
   win32_thread_info *th = inferior_target_data (thread);
-  int i;
 
   if ((thread_id == -1 || thread_id == th->tid)
-      && th->suspend_count)
+      && th->suspended)
     {
       if (th->context.ContextFlags)
 	{
-	  (*the_low_target.set_thread_context) (th, &current_event);
+	  win32_set_thread_context (th);
 	  th->context.ContextFlags = 0;
 	}
 
-      for (i = 0; i < th->suspend_count; i++)
-	(void) ResumeThread (th->h);
-      th->suspend_count = 0;
+      if (ResumeThread (th->h) == (DWORD) -1)
+	{
+	  DWORD err = GetLastError ();
+	  OUTMSG (("warning: ResumeThread failed in continue_one_thread, "
+		   "(error %d): %s\n", (int) err, strwinerror (err)));
+	}
+      th->suspended = 0;
     }
 
   return 0;
@@ -281,14 +341,17 @@ continue_one_thread (struct inferior_list_entry *this_thread, void *id_ptr)
 static BOOL
 child_continue (DWORD continue_status, int thread_id)
 {
-  BOOL res;
+  /* The inferior will only continue after the ContinueDebugEvent
+     call.  */
+  find_inferior (&all_threads, continue_one_thread, &thread_id);
+  faked_breakpoint = 0;
 
-  res = ContinueDebugEvent (current_event.dwProcessId,
-			    current_event.dwThreadId, continue_status);
-  if (res)
-    find_inferior (&all_threads, continue_one_thread, &thread_id);
+  if (!ContinueDebugEvent (current_event.dwProcessId,
+			   current_event.dwThreadId,
+			   continue_status))
+    return FALSE;
 
-  return res;
+  return TRUE;
 }
 
 /* Fetch register(s) from the current thread context.  */
@@ -443,6 +506,9 @@ win32_create_inferior (char *program, char **program_args)
   PROCESS_INFORMATION pi;
   DWORD err;
 
+  /* win32_wait needs to know we're not attaching.  */
+  attaching = 0;
+
   if (!program)
     error ("No executable specified, specify executable to debug.\n");
 
@@ -513,10 +579,7 @@ win32_create_inferior (char *program, char **program_args)
   CloseHandle (pi.hThread);
 #endif
 
-  current_process_handle = pi.hProcess;
-  current_process_id = pi.dwProcessId;
-
-  do_initial_child_stuff (current_process_id);
+  do_initial_child_stuff (pi.hProcess, pi.dwProcessId);
 
   return current_process_id;
 }
@@ -527,34 +590,36 @@ win32_create_inferior (char *program, char **program_args)
 static int
 win32_attach (unsigned long pid)
 {
-  winapi_DebugActiveProcessStop DebugActiveProcessStop = NULL;
+  HANDLE h;
   winapi_DebugSetProcessKillOnExit DebugSetProcessKillOnExit = NULL;
+  DWORD err;
 #ifdef _WIN32_WCE
   HMODULE dll = GetModuleHandle (_T("COREDLL.DLL"));
 #else
   HMODULE dll = GetModuleHandle (_T("KERNEL32.DLL"));
 #endif
-  DebugActiveProcessStop = GETPROCADDRESS (dll, DebugActiveProcessStop);
   DebugSetProcessKillOnExit = GETPROCADDRESS (dll, DebugSetProcessKillOnExit);
 
-  if (DebugActiveProcess (pid))
+  h = OpenProcess (PROCESS_ALL_ACCESS, FALSE, pid);
+  if (h != NULL)
     {
-      if (DebugSetProcessKillOnExit != NULL)
- 	DebugSetProcessKillOnExit (FALSE);
+      if (DebugActiveProcess (pid))
+	{
+	  if (DebugSetProcessKillOnExit != NULL)
+	    DebugSetProcessKillOnExit (FALSE);
 
-      current_process_handle = OpenProcess (PROCESS_ALL_ACCESS, FALSE, pid);
+	  /* win32_wait needs to know we're attaching.  */
+ 	  attaching = 1;
+	  do_initial_child_stuff (h, pid);
+	  return 0;
+	}
 
-      if (current_process_handle != NULL)
- 	{
- 	  current_process_id = pid;
- 	  do_initial_child_stuff (pid);
- 	  return 0;
- 	}
-      if (DebugActiveProcessStop != NULL)
-	DebugActiveProcessStop (current_process_id);
+      CloseHandle (h);
     }
 
-  error ("Attach to process failed.");
+  err = GetLastError ();
+  error ("Attach to process failed (error %d): %s\n",
+	 (int) err, strwinerror (err));
 }
 
 /* Handle OUTPUT_DEBUG_STRING_EVENT from child process.  */
@@ -602,12 +667,20 @@ handle_output_debug_string (struct target_waitstatus *ourstatus)
 #undef READ_BUFFER_LEN
 }
 
+static void
+win32_clear_inferiors (void)
+{
+  if (current_process_handle != NULL)
+    CloseHandle (current_process_handle);
+
+  for_each_inferior (&all_threads, delete_thread_info);
+  clear_inferiors ();
+}
+
 /* Kill all inferiors.  */
 static void
 win32_kill (void)
 {
-  win32_thread_info *current_thread;
-
   if (current_process_handle == NULL)
     return;
 
@@ -627,22 +700,13 @@ win32_kill (void)
   	}
     }
 
-  CloseHandle (current_process_handle);
-
-  current_thread = inferior_target_data (current_inferior);
-  if (current_thread && current_thread->h)
-    {
-      /* This may fail in an attached process, so don't check.  */
-      (void) CloseHandle (current_thread->h);
-    }
+  win32_clear_inferiors ();
 }
 
 /* Detach from all inferiors.  */
 static int
 win32_detach (void)
 {
-  HANDLE h;
-
   winapi_DebugActiveProcessStop DebugActiveProcessStop = NULL;
   winapi_DebugSetProcessKillOnExit DebugSetProcessKillOnExit = NULL;
 #ifdef _WIN32_WCE
@@ -657,16 +721,6 @@ win32_detach (void)
       || DebugActiveProcessStop == NULL)
     return -1;
 
-  /* We need a new handle, since DebugActiveProcessStop
-     closes all the ones that came through the events.  */
-  if ((h = OpenProcess (PROCESS_ALL_ACCESS,
-			FALSE,
-			current_process_id)) == NULL)
-    {
-      /* The process died.  */
-      return -1;
-    }
-
   {
     struct thread_resume resume;
     resume.thread = -1;
@@ -677,13 +731,11 @@ win32_detach (void)
   }
 
   if (!DebugActiveProcessStop (current_process_id))
-    {
-      CloseHandle (h);
-      return -1;
-    }
+    return -1;
+
   DebugSetProcessKillOnExit (FALSE);
 
-  current_process_handle = h;
+  win32_clear_inferiors ();
   return 0;
 }
 
@@ -691,15 +743,14 @@ win32_detach (void)
 static void
 win32_join (void)
 {
-  if (current_process_id == 0
-      || current_process_handle == NULL)
-    return;
+  extern unsigned long signal_pid;
 
-  WaitForSingleObject (current_process_handle, INFINITE);
-  CloseHandle (current_process_handle);
-
-  current_process_handle = NULL;
-  current_process_id = 0;
+  HANDLE h = OpenProcess (PROCESS_ALL_ACCESS, FALSE, signal_pid);
+  if (h != NULL)
+    {
+      WaitForSingleObject (h, INFINITE);
+      CloseHandle (h);
+    }
 }
 
 /* Return 1 iff the thread with thread ID TID is alive.  */
@@ -784,7 +835,7 @@ win32_resume (struct thread_resume *resume_info)
 		       "in this configuration.\n");
 	    }
 
-	  (*the_low_target.set_thread_context) (th, &current_event);
+	  win32_set_thread_context (th);
 	  th->context.ContextFlags = 0;
 	}
     }
@@ -1235,19 +1286,108 @@ handle_exception (struct target_waitstatus *ourstatus)
   last_sig = ourstatus->value.sig;
 }
 
-/* Get the next event from the child.  */
+
 static void
+suspend_one_thread (struct inferior_list_entry *entry)
+{
+  struct thread_info *thread = (struct thread_info *) entry;
+  win32_thread_info *th = inferior_target_data (thread);
+
+  if (!th->suspended)
+    {
+      if (SuspendThread (th->h) == (DWORD) -1)
+	{
+	  DWORD err = GetLastError ();
+	  OUTMSG (("warning: SuspendThread failed in suspend_one_thread, "
+		   "(error %d): %s\n", (int) err, strwinerror (err)));
+	}
+      else
+	th->suspended = 1;
+    }
+}
+
+static void
+fake_breakpoint_event (void)
+{
+  OUTMSG2(("fake_breakpoint_event\n"));
+
+  faked_breakpoint = 1;
+
+  memset (&current_event, 0, sizeof (current_event));
+  current_event.dwThreadId = main_thread_id;
+  current_event.dwDebugEventCode = EXCEPTION_DEBUG_EVENT;
+  current_event.u.Exception.ExceptionRecord.ExceptionCode
+    = EXCEPTION_BREAKPOINT;
+
+  for_each_inferior (&all_threads, suspend_one_thread);
+}
+
+#ifdef _WIN32_WCE
+static int
+auto_delete_breakpoint (CORE_ADDR stop_pc)
+{
+  return 1;
+}
+#endif
+
+/* Get the next event from the child.  */
+
+static int
 get_child_debug_event (struct target_waitstatus *ourstatus)
 {
-  BOOL debug_event;
-
   last_sig = TARGET_SIGNAL_0;
   ourstatus->kind = TARGET_WAITKIND_SPURIOUS;
 
-  /* Keep the wait time low enough for confortable remote interruption,
-     but high enough so gdbserver doesn't become a bottleneck.  */
-  if (!(debug_event = WaitForDebugEvent (&current_event, 250)))
-    return;
+  /* Check if GDB sent us an interrupt request.  */
+  check_remote_input_interrupt_request ();
+
+  if (soft_interrupt_requested)
+    {
+      soft_interrupt_requested = 0;
+      fake_breakpoint_event ();
+      goto gotevent;
+    }
+
+#ifndef _WIN32_WCE
+  attaching = 0;
+#else
+  if (attaching)
+    {
+      /* WinCE doesn't set an initial breakpoint automatically.  To
+ 	 stop the inferior, we flush all currently pending debug
+ 	 events -- the thread list and the dll list are always
+ 	 reported immediatelly without delay, then, we suspend all
+ 	 threads and pretend we saw a trap at the current PC of the
+ 	 main thread.
+
+ 	 Contrary to desktop Windows, Windows CE *does* report the dll
+ 	 names on LOAD_DLL_DEBUG_EVENTs resulting from a
+ 	 DebugActiveProcess call.  This limits the way we can detect
+ 	 if all the dlls have already been reported.  If we get a real
+ 	 debug event before leaving attaching, the worst that will
+ 	 happen is the user will see a spurious breakpoint.  */
+
+      current_event.dwDebugEventCode = 0;
+      if (!WaitForDebugEvent (&current_event, 0))
+ 	{
+ 	  OUTMSG2(("no attach events left\n"));
+ 	  fake_breakpoint_event ();
+ 	  attaching = 0;
+ 	}
+      else
+ 	OUTMSG2(("got attach event\n"));
+    }
+  else
+#endif
+    {
+      /* Keep the wait time low enough for confortable remote
+ 	 interruption, but high enough so gdbserver doesn't become a
+ 	 bottleneck.  */
+      if (!WaitForDebugEvent (&current_event, 250))
+ 	return 0;
+    }
+
+ gotevent:
 
   current_inferior =
     (struct thread_info *) find_inferior_id (&all_threads,
@@ -1293,12 +1433,16 @@ get_child_debug_event (struct target_waitstatus *ourstatus)
 
       ourstatus->value.related_pid = current_event.dwThreadId;
 #ifdef _WIN32_WCE
-      /* Windows CE doesn't set the initial breakpoint automatically
-	 like the desktop versions of Windows do.  We add it explicitly
-	 here.  It will be removed as soon as it is hit.  */
-      set_breakpoint_at ((CORE_ADDR) (long) current_event.u
-			 .CreateProcessInfo.lpStartAddress,
-			 delete_breakpoint_at);
+      if (!attaching)
+	{
+	  /* Windows CE doesn't set the initial breakpoint
+	     automatically like the desktop versions of Windows do.
+	     We add it explicitly here.	 It will be removed as soon as
+	     it is hit.	 */
+	  set_breakpoint_at ((CORE_ADDR) (long) current_event.u
+			     .CreateProcessInfo.lpStartAddress,
+			     auto_delete_breakpoint);
+	}
 #endif
       break;
 
@@ -1364,6 +1508,7 @@ get_child_debug_event (struct target_waitstatus *ourstatus)
   current_inferior =
     (struct thread_info *) find_inferior_id (&all_threads,
 					     current_event.dwThreadId);
+  return 1;
 }
 
 /* Wait for the inferior process to change state.
@@ -1378,10 +1523,8 @@ win32_wait (char *status)
 
   while (1)
     {
-      /* Check if GDB sent us an interrupt request.  */
-      check_remote_input_interrupt_request ();
-
-      get_child_debug_event (&our_status);
+      if (!get_child_debug_event (&our_status))
+	continue;
 
       switch (our_status.kind)
 	{
@@ -1390,9 +1533,7 @@ win32_wait (char *status)
 		    our_status.value.integer));
 
 	  *status = 'W';
-
-	  child_fetch_inferior_registers (-1);
-
+	  win32_clear_inferiors ();
 	  return our_status.value.integer;
 	case TARGET_WAITKIND_STOPPED:
  	case TARGET_WAITKIND_LOADED:
@@ -1491,7 +1632,8 @@ win32_request_interrupt (void)
       && DebugBreakProcess (current_process_handle))
     return;
 
-  OUTMSG (("Could not interrupt process.\n"));
+  /* Last resort, suspend all threads manually.  */
+  soft_interrupt_requested = 1;
 }
 
 static const char *
@@ -1499,6 +1641,65 @@ win32_arch_string (void)
 {
   return the_low_target.arch_string;
 }
+
+#ifdef _WIN32_WCE
+int
+win32_error_to_fileio_error (DWORD err)
+{
+  switch (err)
+    {
+    case ERROR_BAD_PATHNAME:
+    case ERROR_FILE_NOT_FOUND:
+    case ERROR_INVALID_NAME:
+    case ERROR_PATH_NOT_FOUND:
+      return FILEIO_ENOENT;
+    case ERROR_CRC:
+    case ERROR_IO_DEVICE:
+    case ERROR_OPEN_FAILED:
+      return FILEIO_EIO;
+    case ERROR_INVALID_HANDLE:
+      return FILEIO_EBADF;
+    case ERROR_ACCESS_DENIED:
+    case ERROR_SHARING_VIOLATION:
+      return FILEIO_EACCES;
+    case ERROR_NOACCESS:
+      return FILEIO_EFAULT;
+    case ERROR_BUSY:
+      return FILEIO_EBUSY;
+    case ERROR_ALREADY_EXISTS:
+    case ERROR_FILE_EXISTS:
+      return FILEIO_EEXIST;
+    case ERROR_BAD_DEVICE:
+      return FILEIO_ENODEV;
+    case ERROR_DIRECTORY:
+      return FILEIO_ENOTDIR;
+    case ERROR_FILENAME_EXCED_RANGE:
+    case ERROR_INVALID_DATA:
+    case ERROR_INVALID_PARAMETER:
+    case ERROR_NEGATIVE_SEEK:
+      return FILEIO_EINVAL;
+    case ERROR_TOO_MANY_OPEN_FILES:
+      return FILEIO_EMFILE;
+    case ERROR_HANDLE_DISK_FULL:
+    case ERROR_DISK_FULL:
+      return FILEIO_ENOSPC;
+    case ERROR_WRITE_PROTECT:
+      return FILEIO_EROFS;
+    case ERROR_NOT_SUPPORTED:
+      return FILEIO_ENOSYS;
+    }
+
+  return FILEIO_EUNKNOWN;
+}
+
+static void
+wince_hostio_last_error (char *buf)
+{
+  DWORD winerr = GetLastError ();
+  int fileio_err = win32_error_to_fileio_error (winerr);
+  sprintf (buf, "F-1,%x", fileio_err);
+}
+#endif
 
 static struct target_ops win32_target_ops = {
   win32_create_inferior,
@@ -1522,7 +1723,13 @@ static struct target_ops win32_target_ops = {
   NULL,
   NULL,
   NULL,
-  win32_arch_string
+  win32_arch_string,
+  NULL,
+#ifdef _WIN32_WCE
+  wince_hostio_last_error,
+#else
+  hostio_last_error_from_errno,
+#endif
 };
 
 /* Initialize the Win32 backend.  */

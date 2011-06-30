@@ -1,6 +1,6 @@
 /* MI Command Set for GDB, the GNU debugger.
 
-   Copyright (C) 2000, 2001, 2003, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2003, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions (a Red Hat company).
 
@@ -88,6 +88,7 @@ struct mi_cmd mi_cmds[] =
   { "inferior-tty-set", { NULL, 0 }, NULL, mi_cmd_inferior_tty_set},
   { "inferior-tty-show", { NULL, 0 }, NULL, mi_cmd_inferior_tty_show},
   { "interpreter-exec", { NULL, 0 }, 0, mi_cmd_interpreter_exec},
+  { "list-features", { NULL, 0 }, 0, mi_cmd_list_features},
   { "overlay-auto", { NULL, 0 }, NULL, NULL },
   { "overlay-list-mapping-state", { NULL, 0 }, NULL, NULL },
   { "overlay-list-overlays", { NULL, 0 }, NULL, NULL },
@@ -122,6 +123,9 @@ struct mi_cmd mi_cmds[] =
   { "target-disconnect", { "disconnect", 0 }, 0 },
   { "target-download", { NULL, 0 }, mi_cmd_target_download},
   { "target-exec-status", { NULL, 0 }, NULL, NULL },
+  { "target-file-delete", { NULL, 0 }, NULL, mi_cmd_target_file_delete },
+  { "target-file-get", { NULL, 0 }, NULL, mi_cmd_target_file_get },
+  { "target-file-put", { NULL, 0 }, NULL, mi_cmd_target_file_put },
   { "target-list-available-targets", { NULL, 0 }, NULL, NULL },
   { "target-list-current-targets", { NULL, 0 }, NULL, NULL },
   { "target-list-parameters", { NULL, 0 }, NULL, NULL },

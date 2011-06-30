@@ -1,7 +1,7 @@
 /* Modula 2 language support routines for GDB, the GNU debugger.
 
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 2000, 2002, 2003, 2004,
-   2005, 2007 Free Software Foundation, Inc.
+   2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -29,7 +29,6 @@
 #include "valprint.h"
 
 extern void _initialize_m2_language (void);
-static struct type *m2_create_fundamental_type (struct objfile *, int);
 static void m2_printchar (int, struct ui_file *);
 static void m2_emit_char (int, struct ui_file *, int);
 
@@ -37,8 +36,7 @@ static void m2_emit_char (int, struct ui_file *, int);
    string whose delimiter is QUOTER.  Note that that format for printing
    characters and strings is language specific.
    FIXME:  This is a copy of the same function from c-exp.y.  It should
-   be replaced with a true Modula version.
- */
+   be replaced with a true Modula version.  */
 
 static void
 m2_emit_char (int c, struct ui_file *stream, int quoter)
@@ -87,7 +85,7 @@ m2_emit_char (int c, struct ui_file *stream, int quoter)
 }
 
 /* FIXME:  This is a copy of the same function from c-exp.y.  It should
-   be replaced with a true Modula version. */
+   be replaced with a true Modula version.  */
 
 static void
 m2_printchar (int c, struct ui_file *stream)
@@ -102,7 +100,7 @@ m2_printchar (int c, struct ui_file *stream)
    are printed as appropriate.  Print ellipses at the end if we
    had to stop before printing LENGTH characters, or if FORCE_ELLIPSES.
    FIXME:  This is a copy of the same function from c-exp.y.  It should
-   be replaced with a true Modula version. */
+   be replaced with a true Modula version.  */
 
 static void
 m2_printstr (struct ui_file *stream, const gdb_byte *string,
@@ -187,172 +185,95 @@ m2_printstr (struct ui_file *stream, const gdb_byte *string,
     fputs_filtered ("...", stream);
 }
 
-/* FIXME:  This is a copy of c_create_fundamental_type(), before
-   all the non-C types were stripped from it.  Needs to be fixed
-   by an experienced Modula programmer. */
-
-static struct type *
-m2_create_fundamental_type (struct objfile *objfile, int typeid)
+static struct value *
+evaluate_subexp_modula2 (struct type *expect_type, struct expression *exp,
+			 int *pos, enum noside noside)
 {
-  struct type *type = NULL;
-
-  switch (typeid)
+  enum exp_opcode op = exp->elts[*pos].opcode;
+  struct value *arg1;
+  struct value *arg2;
+  struct type *type;
+  switch (op)
     {
+    case UNOP_HIGH:
+      (*pos)++;
+      arg1 = evaluate_subexp_with_coercion (exp, pos, noside);
+
+      if (noside == EVAL_SKIP || noside == EVAL_AVOID_SIDE_EFFECTS)
+	return arg1;
+      else
+	{
+	  arg1 = coerce_ref (arg1);
+	  type = check_typedef (value_type (arg1));
+
+	  if (m2_is_unbounded_array (type))
+	    {
+	      struct value *temp = arg1;
+	      type = TYPE_FIELD_TYPE (type, 1);
+	      /* i18n: Do not translate the "_m2_high" part!  */
+	      arg1 = value_struct_elt (&temp, NULL, "_m2_high", NULL,
+				       _("unbounded structure "
+					 "missing _m2_high field"));
+	  
+	      if (value_type (arg1) != type)
+		arg1 = value_cast (type, arg1);
+	    }
+	}
+      return arg1;
+
+    case BINOP_SUBSCRIPT:
+      (*pos)++;
+      arg1 = evaluate_subexp_with_coercion (exp, pos, noside);
+      arg2 = evaluate_subexp_with_coercion (exp, pos, noside);
+      if (noside == EVAL_SKIP)
+	goto nosideret;
+      /* If the user attempts to subscript something that is not an
+         array or pointer type (like a plain int variable for example),
+         then report this as an error.  */
+
+      arg1 = coerce_ref (arg1);
+      type = check_typedef (value_type (arg1));
+
+      if (m2_is_unbounded_array (type))
+	{
+	  struct value *temp = arg1;
+	  type = TYPE_FIELD_TYPE (type, 0);
+	  if (type == NULL || (TYPE_CODE (type) != TYPE_CODE_PTR)) {
+	    warning (_("internal error: unbounded array structure is unknown"));
+	    return evaluate_subexp_standard (expect_type, exp, pos, noside);
+	  }
+	  /* i18n: Do not translate the "_m2_contents" part!  */
+	  arg1 = value_struct_elt (&temp, NULL, "_m2_contents", NULL,
+				   _("unbounded structure "
+				     "missing _m2_contents field"));
+	  
+	  if (value_type (arg1) != type)
+	    arg1 = value_cast (type, arg1);
+
+	  type = check_typedef (value_type (arg1));
+	  return value_ind (value_add (arg1, arg2));
+	}
+      else
+	if (TYPE_CODE (type) != TYPE_CODE_ARRAY)
+	  {
+	    if (TYPE_NAME (type))
+	      error (_("cannot subscript something of type `%s'"),
+		     TYPE_NAME (type));
+	    else
+	      error (_("cannot subscript requested type"));
+	  }
+
+      if (noside == EVAL_AVOID_SIDE_EFFECTS)
+	return value_zero (TYPE_TARGET_TYPE (type), VALUE_LVAL (arg1));
+      else
+	return value_subscript (arg1, arg2);
+
     default:
-      /* FIXME:  For now, if we are asked to produce a type not in this
-         language, create the equivalent of a C integer type with the
-         name "<?type?>".  When all the dust settles from the type
-         reconstruction work, this should probably become an error. */
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "<?type?>", objfile);
-      warning (_("internal error: no Modula fundamental type %d"), typeid);
-      break;
-    case FT_VOID:
-      type = init_type (TYPE_CODE_VOID,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			0, "void", objfile);
-      break;
-    case FT_BOOLEAN:
-      type = init_type (TYPE_CODE_BOOL,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "boolean", objfile);
-      break;
-    case FT_STRING:
-      type = init_type (TYPE_CODE_STRING,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			0, "string", objfile);
-      break;
-    case FT_CHAR:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			0, "char", objfile);
-      break;
-    case FT_SIGNED_CHAR:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			0, "signed char", objfile);
-      break;
-    case FT_UNSIGNED_CHAR:
-      type = init_type (TYPE_CODE_INT,
-			TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "unsigned char", objfile);
-      break;
-    case FT_SHORT:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "short", objfile);
-      break;
-    case FT_SIGNED_SHORT:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "short", objfile);	/* FIXME-fnf */
-      break;
-    case FT_UNSIGNED_SHORT:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "unsigned short", objfile);
-      break;
-    case FT_INTEGER:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "int", objfile);
-      break;
-    case FT_SIGNED_INTEGER:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "int", objfile);	/* FIXME -fnf */
-      break;
-    case FT_UNSIGNED_INTEGER:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "unsigned int", objfile);
-      break;
-    case FT_FIXED_DECIMAL:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "fixed decimal", objfile);
-      break;
-    case FT_LONG:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "long", objfile);
-      break;
-    case FT_SIGNED_LONG:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "long", objfile);	/* FIXME -fnf */
-      break;
-    case FT_UNSIGNED_LONG:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "unsigned long", objfile);
-      break;
-    case FT_LONG_LONG:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_long_long_bit (current_gdbarch)
-			  / TARGET_CHAR_BIT,
-			0, "long long", objfile);
-      break;
-    case FT_SIGNED_LONG_LONG:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_long_long_bit (current_gdbarch)
-			  / TARGET_CHAR_BIT,
-			0, "signed long long", objfile);
-      break;
-    case FT_UNSIGNED_LONG_LONG:
-      type = init_type (TYPE_CODE_INT,
-			gdbarch_long_long_bit (current_gdbarch)
-			  / TARGET_CHAR_BIT,
-			TYPE_FLAG_UNSIGNED, "unsigned long long", objfile);
-      break;
-    case FT_FLOAT:
-      type = init_type (TYPE_CODE_FLT,
-			gdbarch_float_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "float", objfile);
-      break;
-    case FT_DBL_PREC_FLOAT:
-      type = init_type (TYPE_CODE_FLT,
-			gdbarch_double_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "double", objfile);
-      break;
-    case FT_FLOAT_DECIMAL:
-      type = init_type (TYPE_CODE_FLT,
-			gdbarch_double_bit (current_gdbarch) / TARGET_CHAR_BIT,
-			0, "floating decimal", objfile);
-      break;
-    case FT_EXT_PREC_FLOAT:
-      type = init_type (TYPE_CODE_FLT,
-			gdbarch_long_double_bit (current_gdbarch)
-			  / TARGET_CHAR_BIT,
-			0, "long double", objfile);
-      break;
-    case FT_COMPLEX:
-      type = init_type (TYPE_CODE_COMPLEX,
-			2 * gdbarch_float_bit (current_gdbarch)
-			  / TARGET_CHAR_BIT,
-			0, "complex", objfile);
-      TYPE_TARGET_TYPE (type)
-	= m2_create_fundamental_type (objfile, FT_FLOAT);
-      break;
-    case FT_DBL_PREC_COMPLEX:
-      type = init_type (TYPE_CODE_COMPLEX,
-			2 * gdbarch_double_bit (current_gdbarch)
-			  / TARGET_CHAR_BIT,
-			0, "double complex", objfile);
-      TYPE_TARGET_TYPE (type)
-	= m2_create_fundamental_type (objfile, FT_DBL_PREC_FLOAT);
-      break;
-    case FT_EXT_PREC_COMPLEX:
-      type = init_type (TYPE_CODE_COMPLEX,
-			2 * gdbarch_long_double_bit (current_gdbarch)
-			  / TARGET_CHAR_BIT,
-			0, "long double complex", objfile);
-      TYPE_TARGET_TYPE (type)
-	= m2_create_fundamental_type (objfile, FT_EXT_PREC_FLOAT);
-      break;
+      return evaluate_subexp_standard (expect_type, exp, pos, noside);
     }
-  return (type);
+
+ nosideret:
+  return value_from_longest (builtin_type_long, (LONGEST) 1);
 }
 
 
@@ -426,23 +347,30 @@ m2_language_arch_info (struct gdbarch *gdbarch,
     = builtin->builtin_bool;
 }
 
+const struct exp_descriptor exp_descriptor_modula2 = 
+{
+  print_subexp_standard,
+  operator_length_standard,
+  op_name_standard,
+  dump_subexp_body_standard,
+  evaluate_subexp_modula2
+};
+
 const struct language_defn m2_language_defn =
 {
   "modula-2",
   language_m2,
-  NULL,
   range_check_on,
   type_check_on,
   case_sensitive_on,
   array_row_major,
-  &exp_descriptor_standard,
+  &exp_descriptor_modula2,
   m2_parse,			/* parser */
   m2_error,			/* parser error function */
   null_post_parser,
   m2_printchar,			/* Print character constant */
   m2_printstr,			/* function to print string constant */
   m2_emit_char,			/* Function to print a single character */
-  m2_create_fundamental_type,	/* Create fundamental type in this language */
   m2_print_type,		/* Print a type using appropriate syntax */
   m2_val_print,			/* Print a value using appropriate syntax */
   c_value_print,		/* Print a top-level value */
@@ -455,10 +383,11 @@ const struct language_defn m2_language_defn =
   m2_op_print_tab,		/* expression operators for printing */
   0,				/* arrays are first-class (not c-style) */
   0,				/* String lower bound */
-  NULL,
   default_word_break_characters,
+  default_make_symbol_completion_list,
   m2_language_arch_info,
   default_print_array_index,
+  default_pass_by_reference,
   LANG_MAGIC
 };
 
@@ -470,17 +399,17 @@ build_m2_types (struct gdbarch *gdbarch)
 
   /* Modula-2 "pervasive" types.  NOTE:  these can be redefined!!! */
   builtin_m2_type->builtin_int =
-    init_type (TYPE_CODE_INT, 
-	       gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
+    init_type (TYPE_CODE_INT,
+	       gdbarch_int_bit (gdbarch) / TARGET_CHAR_BIT,
 	       0, "INTEGER", (struct objfile *) NULL);
   builtin_m2_type->builtin_card =
     init_type (TYPE_CODE_INT, 
-	       gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       gdbarch_int_bit (gdbarch) / TARGET_CHAR_BIT,
 	       TYPE_FLAG_UNSIGNED,
 	       "CARDINAL", (struct objfile *) NULL);
   builtin_m2_type->builtin_real =
     init_type (TYPE_CODE_FLT,
-	       gdbarch_float_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       gdbarch_float_bit (gdbarch) / TARGET_CHAR_BIT,
 	       0,
 	       "REAL", (struct objfile *) NULL);
   builtin_m2_type->builtin_char =
@@ -489,7 +418,7 @@ build_m2_types (struct gdbarch *gdbarch)
 	       "CHAR", (struct objfile *) NULL);
   builtin_m2_type->builtin_bool =
     init_type (TYPE_CODE_BOOL, 
-	       gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       gdbarch_int_bit (gdbarch) / TARGET_CHAR_BIT,
 	       TYPE_FLAG_UNSIGNED,
 	       "BOOLEAN", (struct objfile *) NULL);
 

@@ -1,7 +1,7 @@
 /* Definitions for dealing with stack frames, for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1996, 1997,
-   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -175,7 +175,8 @@ extern int frame_id_eq (struct frame_id l, struct frame_id r);
 /* Returns non-zero when L is strictly inner-than R (they have
    different frame .bases).  Neither L, nor R can be `null'.  See note
    above about frameless functions.  */
-extern int frame_id_inner (struct frame_id l, struct frame_id r);
+extern int frame_id_inner (struct gdbarch *gdbarch, struct frame_id l,
+			   struct frame_id r);
 
 /* Write the internal representation of a frame ID on the specified
    stream.  */
@@ -475,10 +476,6 @@ extern ULONGEST frame_unwind_register_unsigned (struct frame_info *frame,
 extern ULONGEST get_frame_register_unsigned (struct frame_info *frame,
 					     int regnum);
 
-
-/* Use frame_unwind_register_signed.  */
-extern void frame_unwind_unsigned_register (struct frame_info *frame,
-					    int regnum, ULONGEST *val);
 
 /* Get the value of the register that belongs to this FRAME.  This
    function is a wrapper to the call sequence ``frame_register_unwind

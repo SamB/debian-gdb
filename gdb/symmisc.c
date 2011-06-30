@@ -1,7 +1,7 @@
 /* Do various things to symbol tables (other than lookup), for GDB.
 
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2002, 2003, 2004, 2007
+   1996, 1997, 1998, 1999, 2000, 2002, 2003, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -346,7 +346,7 @@ dump_msymbols (struct objfile *objfile, struct ui_file *outfile)
 	  break;
 	}
       fprintf_filtered (outfile, "[%2d] %c ", index, ms_type);
-      deprecated_print_address_numeric (SYMBOL_VALUE_ADDRESS (msymbol), 1, outfile);
+      fputs_filtered (paddress (SYMBOL_VALUE_ADDRESS (msymbol)), outfile);
       fprintf_filtered (outfile, " %s", DEPRECATED_SYMBOL_NAME (msymbol));
       if (SYMBOL_BFD_SECTION (msymbol))
 	fprintf_filtered (outfile, " section %s",
@@ -356,10 +356,8 @@ dump_msymbols (struct objfile *objfile, struct ui_file *outfile)
 	{
 	  fprintf_filtered (outfile, "  %s", SYMBOL_DEMANGLED_NAME (msymbol));
 	}
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
       if (msymbol->filename)
 	fprintf_filtered (outfile, "  %s", msymbol->filename);
-#endif
       fputs_filtered ("\n", outfile);
     }
   if (objfile->minimal_symbol_count != index)
@@ -402,16 +400,15 @@ dump_psymtab (struct objfile *objfile, struct partial_symtab *psymtab,
       if (i != 0)
 	fprintf_filtered (outfile, ", ");
       wrap_here ("    ");
-      deprecated_print_address_numeric (ANOFFSET (psymtab->section_offsets, i),
-			     1,
-			     outfile);
+      fputs_filtered (paddress (ANOFFSET (psymtab->section_offsets, i)),
+		      outfile);
     }
   fprintf_filtered (outfile, "\n");
 
   fprintf_filtered (outfile, "  Symbols cover text addresses ");
-  deprecated_print_address_numeric (psymtab->textlow, 1, outfile);
+  fputs_filtered (paddress (psymtab->textlow), outfile);
   fprintf_filtered (outfile, "-");
-  deprecated_print_address_numeric (psymtab->texthigh, 1, outfile);
+  fputs_filtered (paddress (psymtab->texthigh), outfile);
   fprintf_filtered (outfile, "\n");
   fprintf_filtered (outfile, "  Depends on %d other partial symtabs.\n",
 		    psymtab->number_of_dependencies);
@@ -468,7 +465,7 @@ dump_symtab_1 (struct objfile *objfile, struct symtab *symtab,
       for (i = 0; i < len; i++)
 	{
 	  fprintf_filtered (outfile, " line %d at ", l->item[i].line);
-	  deprecated_print_address_numeric (l->item[i].pc, 1, outfile);
+	  fputs_filtered (paddress (l->item[i].pc), outfile);
 	  fprintf_filtered (outfile, "\n");
 	}
     }
@@ -496,9 +493,9 @@ dump_symtab_1 (struct objfile *objfile, struct symtab *symtab,
 	     wants it.  */
 	  fprintf_filtered (outfile, ", %d syms/buckets in ",
 			    dict_size (BLOCK_DICT (b)));
-	  deprecated_print_address_numeric (BLOCK_START (b), 1, outfile);
+	  fputs_filtered (paddress (BLOCK_START (b)), outfile);
 	  fprintf_filtered (outfile, "..");
-	  deprecated_print_address_numeric (BLOCK_END (b), 1, outfile);
+	  fputs_filtered (paddress (BLOCK_END (b)), outfile);
 	  if (BLOCK_FUNCTION (b))
 	    {
 	      fprintf_filtered (outfile, ", function %s", DEPRECATED_SYMBOL_NAME (BLOCK_FUNCTION (b)));
@@ -508,8 +505,6 @@ dump_symtab_1 (struct objfile *objfile, struct symtab *symtab,
 				SYMBOL_DEMANGLED_NAME (BLOCK_FUNCTION (b)));
 		}
 	    }
-	  if (BLOCK_GCC_COMPILED (b))
-	    fprintf_filtered (outfile, ", compiled with gcc%d", BLOCK_GCC_COMPILED (b));
 	  fprintf_filtered (outfile, "\n");
 	  /* Now print each symbol in this block (in no particular order, if
 	     we're using a hashtable).  */
@@ -520,7 +515,7 @@ dump_symtab_1 (struct objfile *objfile, struct symtab *symtab,
 	      s.depth = depth + 1;
 	      s.outfile = outfile;
 	      catch_errors (print_symbol, &s, "Error printing symbol:\n",
-			    RETURN_MASK_ALL);
+			    RETURN_MASK_ERROR);
 	    }
 	}
       fprintf_filtered (outfile, "\n");
@@ -613,7 +608,7 @@ print_symbol (void *args)
   if (SYMBOL_DOMAIN (symbol) == LABEL_DOMAIN)
     {
       fprintf_filtered (outfile, "label %s at ", SYMBOL_PRINT_NAME (symbol));
-      deprecated_print_address_numeric (SYMBOL_VALUE_ADDRESS (symbol), 1, outfile);
+      fputs_filtered (paddress (SYMBOL_VALUE_ADDRESS (symbol)), outfile);
       if (SYMBOL_BFD_SECTION (symbol))
 	fprintf_filtered (outfile, " section %s\n",
 		       bfd_section_name (SYMBOL_BFD_SECTION (symbol)->owner,
@@ -678,7 +673,7 @@ print_symbol (void *args)
 
 	case LOC_STATIC:
 	  fprintf_filtered (outfile, "static at ");
-	  deprecated_print_address_numeric (SYMBOL_VALUE_ADDRESS (symbol), 1, outfile);
+	  fputs_filtered (paddress (SYMBOL_VALUE_ADDRESS (symbol)), outfile);
 	  if (SYMBOL_BFD_SECTION (symbol))
 	    fprintf_filtered (outfile, " section %s",
 			      bfd_section_name
@@ -688,7 +683,7 @@ print_symbol (void *args)
 
 	case LOC_INDIRECT:
 	  fprintf_filtered (outfile, "extern global at *(");
-	  deprecated_print_address_numeric (SYMBOL_VALUE_ADDRESS (symbol), 1, outfile);
+	  fputs_filtered (paddress (SYMBOL_VALUE_ADDRESS (symbol)), outfile);
 	  fprintf_filtered (outfile, "),");
 	  break;
 
@@ -738,7 +733,7 @@ print_symbol (void *args)
 
 	case LOC_LABEL:
 	  fprintf_filtered (outfile, "label at ");
-	  deprecated_print_address_numeric (SYMBOL_VALUE_ADDRESS (symbol), 1, outfile);
+	  fputs_filtered (paddress (SYMBOL_VALUE_ADDRESS (symbol)), outfile);
 	  if (SYMBOL_BFD_SECTION (symbol))
 	    fprintf_filtered (outfile, " section %s",
 			      bfd_section_name
@@ -750,13 +745,11 @@ print_symbol (void *args)
 	  fprintf_filtered (outfile, "block object ");
 	  gdb_print_host_address (SYMBOL_BLOCK_VALUE (symbol), outfile);
 	  fprintf_filtered (outfile, ", ");
-	  deprecated_print_address_numeric (BLOCK_START (SYMBOL_BLOCK_VALUE (symbol)),
-				 1,
-				 outfile);
+	  fputs_filtered (paddress (BLOCK_START (SYMBOL_BLOCK_VALUE (symbol))),
+			  outfile);
 	  fprintf_filtered (outfile, "..");
-	  deprecated_print_address_numeric (BLOCK_END (SYMBOL_BLOCK_VALUE (symbol)),
-				 1,
-				 outfile);
+	  fputs_filtered (paddress (BLOCK_END (SYMBOL_BLOCK_VALUE (symbol))),
+			  outfile);
 	  if (SYMBOL_BFD_SECTION (symbol))
 	    fprintf_filtered (outfile, " section %s",
 			      bfd_section_name
@@ -929,7 +922,7 @@ print_partial_symbols (struct partial_symbol **p, int count, char *what,
 	  break;
 	}
       fputs_filtered (", ", outfile);
-      deprecated_print_address_numeric (SYMBOL_VALUE_ADDRESS (*p), 1, outfile);
+      fputs_filtered (paddress (SYMBOL_VALUE_ADDRESS (*p)), outfile);
       fprintf_filtered (outfile, "\n");
       p++;
     }
@@ -1043,6 +1036,8 @@ maintenance_info_symtabs (char *regexp, int from_tty)
             printf_filtered ("    blockvector ((struct blockvector *) %p)%s\n",
                              symtab->blockvector,
                              symtab->primary ? " (primary)" : "");
+            printf_filtered ("    linetable ((struct linetable *) %p)\n",
+                             symtab->linetable);
             printf_filtered ("    debugformat %s\n", symtab->debugformat);
             printf_filtered ("  }\n");
           }
@@ -1090,9 +1085,9 @@ maintenance_info_psymtabs (char *regexp, int from_tty)
             printf_filtered ("    fullname %s\n",
                              psymtab->fullname ? psymtab->fullname : "(null)");
             printf_filtered ("    text addresses ");
-            deprecated_print_address_numeric (psymtab->textlow, 1, gdb_stdout);
+	    fputs_filtered (paddress (psymtab->textlow), gdb_stdout);
             printf_filtered (" -- ");
-            deprecated_print_address_numeric (psymtab->texthigh, 1, gdb_stdout);
+	    fputs_filtered (paddress (psymtab->texthigh), gdb_stdout);
             printf_filtered ("\n");
             printf_filtered ("    globals ");
             if (psymtab->n_global_syms)
@@ -1201,9 +1196,9 @@ maintenance_check_symtabs (char *ignore, int from_tty)
 	printf_filtered ("Psymtab ");
 	puts_filtered (ps->filename);
 	printf_filtered (" covers bad range ");
-	deprecated_print_address_numeric (ps->textlow, 1, gdb_stdout);
+	fputs_filtered (paddress (ps->textlow), gdb_stdout);
 	printf_filtered (" - ");
-	deprecated_print_address_numeric (ps->texthigh, 1, gdb_stdout);
+	fputs_filtered (paddress (ps->texthigh), gdb_stdout);
 	printf_filtered ("\n");
 	continue;
       }
@@ -1214,13 +1209,13 @@ maintenance_check_symtabs (char *ignore, int from_tty)
 	printf_filtered ("Psymtab ");
 	puts_filtered (ps->filename);
 	printf_filtered (" covers ");
-	deprecated_print_address_numeric (ps->textlow, 1, gdb_stdout);
+	fputs_filtered (paddress (ps->textlow), gdb_stdout);
 	printf_filtered (" - ");
-	deprecated_print_address_numeric (ps->texthigh, 1, gdb_stdout);
+	fputs_filtered (paddress (ps->texthigh), gdb_stdout);
 	printf_filtered (" but symtab covers only ");
-	deprecated_print_address_numeric (BLOCK_START (b), 1, gdb_stdout);
+	fputs_filtered (paddress (BLOCK_START (b)), gdb_stdout);
 	printf_filtered (" - ");
-	deprecated_print_address_numeric (BLOCK_END (b), 1, gdb_stdout);
+	fputs_filtered (paddress (BLOCK_END (b)), gdb_stdout);
 	printf_filtered ("\n");
       }
   }

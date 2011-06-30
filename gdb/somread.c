@@ -1,6 +1,6 @@
 /* Read HP PA/Risc object files for GDB.
    Copyright (C) 1991, 1992, 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2002,
-   2004, 2007 Free Software Foundation, Inc.
+   2004, 2007, 2008 Free Software Foundation, Inc.
    Written by Fred Fish at Cygnus Support.
 
    This file is part of GDB.
@@ -438,6 +438,7 @@ static struct sym_fns som_sym_fns =
   som_symfile_offsets,		/* sym_offsets:  Translate ext. to int. relocation */
   default_symfile_segments,	/* sym_segments: Get segment information from
 				   a file.  */
+  NULL,                         /* sym_read_linetable */
   NULL				/* next: pointer to next struct sym_fns */
 };
 

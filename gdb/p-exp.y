@@ -1,5 +1,5 @@
 /* YACC parser for Pascal expressions, for GDB.
-   Copyright (C) 2000, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2006, 2007, 2008 Free Software Foundation, Inc.
 
 This file is part of GDB.
 
@@ -157,7 +157,7 @@ static int
 parse_number (char *, int, int, YYSTYPE *);
 
 static struct type *current_type;
-
+static int leftdiv_is_integer;
 static void push_current_type (void);
 static void pop_current_type (void);
 static int search_field;
@@ -233,6 +233,7 @@ static int search_field;
 
 start   :	{ current_type = NULL;
 		  search_field = 0;
+		  leftdiv_is_integer = 0;
 		}
 		normal_start {}
 	;
@@ -332,7 +333,10 @@ exp	:	exp '('
 			{ write_exp_elt_opcode (OP_FUNCALL);
 			  write_exp_elt_longcst ((LONGEST) end_arglist ());
 			  write_exp_elt_opcode (OP_FUNCALL); 
-			  pop_current_type (); }
+			  pop_current_type ();
+			  if (current_type)
+ 	  		    current_type = TYPE_TARGET_TYPE (current_type);
+			}
 	;
 
 arglist	:
@@ -367,8 +371,24 @@ exp	:	exp '*' exp
 			{ write_exp_elt_opcode (BINOP_MUL); }
 	;
 
-exp	:	exp '/' exp
-			{ write_exp_elt_opcode (BINOP_DIV); }
+exp	:	exp '/' {
+			  if (current_type && is_integral_type (current_type))
+			    leftdiv_is_integer = 1;
+			} 
+		exp
+			{ 
+			  if (leftdiv_is_integer && current_type
+			      && is_integral_type (current_type))
+			    {
+			      write_exp_elt_opcode (UNOP_CAST);
+			      write_exp_elt_type (builtin_type_long_double);
+			      current_type = builtin_type_long_double;
+			      write_exp_elt_opcode (UNOP_CAST);
+			      leftdiv_is_integer = 0;
+			    }
+
+			  write_exp_elt_opcode (BINOP_DIV); 
+			}
 	;
 
 exp	:	exp DIV exp
@@ -396,27 +416,39 @@ exp	:	exp RSH exp
 	;
 
 exp	:	exp '=' exp
-			{ write_exp_elt_opcode (BINOP_EQUAL); }
+			{ write_exp_elt_opcode (BINOP_EQUAL); 
+			  current_type = builtin_type_bool;
+			}
 	;
 
 exp	:	exp NOTEQUAL exp
-			{ write_exp_elt_opcode (BINOP_NOTEQUAL); }
+			{ write_exp_elt_opcode (BINOP_NOTEQUAL); 
+			  current_type = builtin_type_bool;
+			}
 	;
 
 exp	:	exp LEQ exp
-			{ write_exp_elt_opcode (BINOP_LEQ); }
+			{ write_exp_elt_opcode (BINOP_LEQ); 
+			  current_type = builtin_type_bool;
+			}
 	;
 
 exp	:	exp GEQ exp
-			{ write_exp_elt_opcode (BINOP_GEQ); }
+			{ write_exp_elt_opcode (BINOP_GEQ); 
+			  current_type = builtin_type_bool;
+			}
 	;
 
 exp	:	exp '<' exp
-			{ write_exp_elt_opcode (BINOP_LESS); }
+			{ write_exp_elt_opcode (BINOP_LESS); 
+			  current_type = builtin_type_bool;
+			}
 	;
 
 exp	:	exp '>' exp
-			{ write_exp_elt_opcode (BINOP_GTR); }
+			{ write_exp_elt_opcode (BINOP_GTR); 
+			  current_type = builtin_type_bool;
+			}
 	;
 
 exp	:	exp ANDAND exp
@@ -438,18 +470,21 @@ exp	:	exp ASSIGN exp
 exp	:	TRUEKEYWORD
 			{ write_exp_elt_opcode (OP_BOOL);
 			  write_exp_elt_longcst ((LONGEST) $1);
+			  current_type = builtin_type_bool;
 			  write_exp_elt_opcode (OP_BOOL); }
 	;
 
 exp	:	FALSEKEYWORD
 			{ write_exp_elt_opcode (OP_BOOL);
 			  write_exp_elt_longcst ((LONGEST) $1);
+			  current_type = builtin_type_bool;
 			  write_exp_elt_opcode (OP_BOOL); }
 	;
 
 exp	:	INT
 			{ write_exp_elt_opcode (OP_LONG);
 			  write_exp_elt_type ($1.type);
+			  current_type = $1.type;
 			  write_exp_elt_longcst ((LONGEST)($1.val));
 			  write_exp_elt_opcode (OP_LONG); }
 	;
@@ -459,6 +494,7 @@ exp	:	NAME_OR_INT
 			  parse_number ($1.stoken.ptr, $1.stoken.length, 0, &val);
 			  write_exp_elt_opcode (OP_LONG);
 			  write_exp_elt_type (val.typed_val_int.type);
+			  current_type = val.typed_val_int.type;
 			  write_exp_elt_longcst ((LONGEST)val.typed_val_int.val);
 			  write_exp_elt_opcode (OP_LONG);
 			}
@@ -468,6 +504,7 @@ exp	:	NAME_OR_INT
 exp	:	FLOAT
 			{ write_exp_elt_opcode (OP_DOUBLE);
 			  write_exp_elt_type ($1.type);
+			  current_type = $1.type;
 			  write_exp_elt_dblcst ($1.dval);
 			  write_exp_elt_opcode (OP_DOUBLE); }
 	;
@@ -640,9 +677,9 @@ variable:	name_not_typename
 			    {
 			      if (symbol_read_needs_frame (sym))
 				{
-				  if (innermost_block == 0 ||
-				      contained_in (block_found,
-						    innermost_block))
+				  if (innermost_block == 0
+				      || contained_in (block_found,
+						       innermost_block))
 				    innermost_block = block_found;
 				}
 
@@ -661,8 +698,9 @@ variable:	name_not_typename
 			      /* Object pascal: it hangs off of `this'.  Must
 			         not inadvertently convert from a method call
 				 to data ref.  */
-			      if (innermost_block == 0 ||
-				  contained_in (block_found, innermost_block))
+			      if (innermost_block == 0
+				  || contained_in (block_found,
+						   innermost_block))
 				innermost_block = block_found;
 			      write_exp_elt_opcode (OP_THIS);
 			      write_exp_elt_opcode (OP_THIS);
@@ -796,7 +834,7 @@ parse_number (p, len, parsed_float, putithere)
       char saved_char = p[len];
 
       p[len] = 0;	/* null-terminate the token */
-      num = sscanf (p, DOUBLEST_SCAN_FORMAT "%c",
+      num = sscanf (p, "%" DOUBLEST_SCAN_FORMAT "%c",
 		    &putithere->typed_val_float.dval, &c);
       p[len] = saved_char;	/* restore the input stream */
       if (num != 1) 		/* check scanf found ONLY a float ... */
@@ -1354,29 +1392,29 @@ yylex ()
   switch (namelen)
     {
     case 6:
-      if (DEPRECATED_STREQ (uptokstart, "OBJECT"))
+      if (strcmp (uptokstart, "OBJECT") == 0)
 	{
 	  free (uptokstart);
 	  return CLASS;
 	}
-      if (DEPRECATED_STREQ (uptokstart, "RECORD"))
+      if (strcmp (uptokstart, "RECORD") == 0)
 	{
 	  free (uptokstart);
 	  return STRUCT;
 	}
-      if (DEPRECATED_STREQ (uptokstart, "SIZEOF"))
+      if (strcmp (uptokstart, "SIZEOF") == 0)
 	{
 	  free (uptokstart);
 	  return SIZEOF;
 	}
       break;
     case 5:
-      if (DEPRECATED_STREQ (uptokstart, "CLASS"))
+      if (strcmp (uptokstart, "CLASS") == 0)
 	{
 	  free (uptokstart);
 	  return CLASS;
 	}
-      if (DEPRECATED_STREQ (uptokstart, "FALSE"))
+      if (strcmp (uptokstart, "FALSE") == 0)
 	{
           yylval.lval = 0;
 	  free (uptokstart);
@@ -1384,13 +1422,13 @@ yylex ()
         }
       break;
     case 4:
-      if (DEPRECATED_STREQ (uptokstart, "TRUE"))
+      if (strcmp (uptokstart, "TRUE") == 0)
 	{
           yylval.lval = 1;
 	  free (uptokstart);
   	  return TRUEKEYWORD;
         }
-      if (DEPRECATED_STREQ (uptokstart, "SELF"))
+      if (strcmp (uptokstart, "SELF") == 0)
         {
           /* here we search for 'this' like
              inserted in FPC stabs debug info */
@@ -1518,8 +1556,8 @@ yylex ()
     /* Call lookup_symtab, not lookup_partial_symtab, in case there are
        no psymtabs (coff, xcoff, or some future change to blow away the
        psymtabs once once symbols are read).  */
-    if ((sym && SYMBOL_CLASS (sym) == LOC_BLOCK) ||
-        lookup_symtab (tmp))
+    if ((sym && SYMBOL_CLASS (sym) == LOC_BLOCK)
+        || lookup_symtab (tmp))
       {
 	yylval.ssym.sym = sym;
 	yylval.ssym.is_a_field_of_this = is_a_field_of_this;
@@ -1629,9 +1667,9 @@ yylex ()
     /* Input names that aren't symbols but ARE valid hex numbers,
        when the input radix permits them, can be names or numbers
        depending on the parse.  Note we support radixes > 16 here.  */
-    if (!sym &&
-        ((tokstart[0] >= 'a' && tokstart[0] < 'a' + input_radix - 10) ||
-         (tokstart[0] >= 'A' && tokstart[0] < 'A' + input_radix - 10)))
+    if (!sym
+        && ((tokstart[0] >= 'a' && tokstart[0] < 'a' + input_radix - 10)
+            || (tokstart[0] >= 'A' && tokstart[0] < 'A' + input_radix - 10)))
       {
  	YYSTYPE newlval;	/* Its value is ignored.  */
 	hextype = parse_number (tokstart, namelen, 0, &newlval);

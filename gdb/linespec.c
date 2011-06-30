@@ -1,7 +1,7 @@
 /* Parser for linespec for the GNU debugger, GDB.
 
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -963,6 +963,7 @@ decode_indirect (char **argptr)
   values.sals[0] = find_pc_line (pc, 0);
   values.sals[0].pc = pc;
   values.sals[0].section = find_pc_overlay (pc);
+  values.sals[0].explicit_pc = 1;
 
   return values;
 }
@@ -1633,6 +1634,7 @@ decode_all_digits (char **argptr, struct symtab *default_symtab,
   values.nelts = 1;
   if (need_canonical)
     build_canonical_line_spec (values.sals, NULL, canonical);
+  values.sals[0].explicit_line = 1;
   return values;
 }
 

@@ -2,7 +2,7 @@
    Where it is, why it stopped, and how to step it.
 
    Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1998, 1999, 2000, 2001, 2003, 2004, 2005, 2006, 2007
+   1998, 1999, 2000, 2001, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -166,7 +166,7 @@ extern CORE_ADDR signed_pointer_to_address (struct type *type,
 extern void address_to_signed_pointer (struct type *type, gdb_byte *buf,
 				       CORE_ADDR addr);
 
-extern void wait_for_inferior (void);
+extern void wait_for_inferior (int treat_exec_as_sigtrap);
 
 extern void fetch_inferior_event (void *);
 

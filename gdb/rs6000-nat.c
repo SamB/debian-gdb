@@ -1,7 +1,7 @@
 /* IBM RS/6000 native-dependent code for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -130,7 +130,7 @@ static int objfile_symbol_add (void *);
 
 static void vmap_symtab (struct vmap *);
 
-static void exec_one_dummy_insn (void);
+static void exec_one_dummy_insn (struct gdbarch *);
 
 extern void fixup_breakpoints (CORE_ADDR low, CORE_ADDR high, CORE_ADDR delta);
 
@@ -140,9 +140,9 @@ extern void fixup_breakpoints (CORE_ADDR low, CORE_ADDR high, CORE_ADDR delta);
    ISFLOAT to indicate whether REGNO is a floating point register.  */
 
 static int
-regmap (int regno, int *isfloat)
+regmap (struct gdbarch *gdbarch, int regno, int *isfloat)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   *isfloat = 0;
   if (tdep->ppc_gp0_regnum <= regno
@@ -155,7 +155,7 @@ regmap (int regno, int *isfloat)
       *isfloat = 1;
       return regno - tdep->ppc_fp0_regnum + FPR0;
     }
-  else if (regno == gdbarch_pc_regnum (current_gdbarch))
+  else if (regno == gdbarch_pc_regnum (gdbarch))
     return IAR;
   else if (regno == tdep->ppc_ps_regnum)
     return MSR;
@@ -211,13 +211,14 @@ rs6000_ptrace64 (int req, int id, long long addr, int data, void *buf)
 static void
 fetch_register (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   int addr[MAX_REGISTER_SIZE];
   int nr, isfloat;
 
   /* Retrieved values may be -1, so infer errors from errno. */
   errno = 0;
 
-  nr = regmap (regno, &isfloat);
+  nr = regmap (gdbarch, regno, &isfloat);
 
   /* Floating-point registers. */
   if (isfloat)
@@ -226,7 +227,7 @@ fetch_register (struct regcache *regcache, int regno)
   /* Bogus register number. */
   else if (nr < 0)
     {
-      if (regno >= gdbarch_num_regs (current_gdbarch))
+      if (regno >= gdbarch_num_regs (gdbarch))
 	fprintf_unfiltered (gdb_stderr,
 			    "gdb error: register no %d not implemented.\n",
 			    regno);
@@ -244,7 +245,7 @@ fetch_register (struct regcache *regcache, int regno)
 	     even if the register is really only 32 bits. */
 	  long long buf;
 	  rs6000_ptrace64 (PT_READ_GPR, PIDGET (inferior_ptid), nr, 0, &buf);
-	  if (register_size (current_gdbarch, regno) == 8)
+	  if (register_size (gdbarch, regno) == 8)
 	    memcpy (addr, &buf, 8);
 	  else
 	    *addr = buf;
@@ -268,6 +269,7 @@ fetch_register (struct regcache *regcache, int regno)
 static void
 store_register (const struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   int addr[MAX_REGISTER_SIZE];
   int nr, isfloat;
 
@@ -277,7 +279,7 @@ store_register (const struct regcache *regcache, int regno)
   /* -1 can be a successful return value, so infer errors from errno. */
   errno = 0;
 
-  nr = regmap (regno, &isfloat);
+  nr = regmap (gdbarch, regno, &isfloat);
 
   /* Floating-point registers. */
   if (isfloat)
@@ -286,7 +288,7 @@ store_register (const struct regcache *regcache, int regno)
   /* Bogus register number. */
   else if (nr < 0)
     {
-      if (regno >= gdbarch_num_regs (current_gdbarch))
+      if (regno >= gdbarch_num_regs (gdbarch))
 	fprintf_unfiltered (gdb_stderr,
 			    "gdb error: register no %d not implemented.\n",
 			    regno);
@@ -295,13 +297,13 @@ store_register (const struct regcache *regcache, int regno)
   /* Fixed-point registers. */
   else
     {
-      if (regno == gdbarch_sp_regnum (current_gdbarch))
+      if (regno == gdbarch_sp_regnum (gdbarch))
 	/* Execute one dummy instruction (which is a breakpoint) in inferior
 	   process to give kernel a chance to do internal housekeeping.
 	   Otherwise the following ptrace(2) calls will mess up user stack
 	   since kernel will get confused about the bottom of the stack
 	   (%sp). */
-	exec_one_dummy_insn ();
+	exec_one_dummy_insn (gdbarch);
 
       /* The PT_WRITE_GPR operation is rather odd.  For 32-bit inferiors,
          the register's value is passed by value, but for 64-bit inferiors,
@@ -313,7 +315,7 @@ store_register (const struct regcache *regcache, int regno)
 	  /* PT_WRITE_GPR requires the buffer parameter to point to an 8-byte
 	     area, even if the register is really only 32 bits. */
 	  long long buf;
-	  if (register_size (current_gdbarch, regno) == 8)
+	  if (register_size (gdbarch, regno) == 8)
 	    memcpy (&buf, addr, 8);
 	  else
 	    buf = *addr;
@@ -334,12 +336,13 @@ store_register (const struct regcache *regcache, int regno)
 static void
 rs6000_fetch_inferior_registers (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   if (regno != -1)
     fetch_register (regcache, regno);
 
   else
     {
-      struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+      struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
       /* Read 32 general purpose registers.  */
       for (regno = tdep->ppc_gp0_regnum;
@@ -355,7 +358,7 @@ rs6000_fetch_inferior_registers (struct regcache *regcache, int regno)
           fetch_register (regcache, tdep->ppc_fp0_regnum + regno);
 
       /* Read special registers.  */
-      fetch_register (regcache, gdbarch_pc_regnum (current_gdbarch));
+      fetch_register (regcache, gdbarch_pc_regnum (gdbarch));
       fetch_register (regcache, tdep->ppc_ps_regnum);
       fetch_register (regcache, tdep->ppc_cr_regnum);
       fetch_register (regcache, tdep->ppc_lr_regnum);
@@ -375,12 +378,13 @@ rs6000_fetch_inferior_registers (struct regcache *regcache, int regno)
 static void
 rs6000_store_inferior_registers (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   if (regno != -1)
     store_register (regcache, regno);
 
   else
     {
-      struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+      struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
       /* Write general purpose registers first.  */
       for (regno = tdep->ppc_gp0_regnum;
@@ -396,7 +400,7 @@ rs6000_store_inferior_registers (struct regcache *regcache, int regno)
           store_register (regcache, tdep->ppc_fp0_regnum + regno);
 
       /* Write special registers.  */
-      store_register (regcache, gdbarch_pc_regnum (current_gdbarch));
+      store_register (regcache, gdbarch_pc_regnum (gdbarch));
       store_register (regcache, tdep->ppc_ps_regnum);
       store_register (regcache, tdep->ppc_cr_regnum);
       store_register (regcache, tdep->ppc_lr_regnum);
@@ -572,9 +576,9 @@ rs6000_wait (ptid_t ptid, struct target_waitstatus *ourstatus)
    including u_area. */
 
 static void
-exec_one_dummy_insn (void)
+exec_one_dummy_insn (struct gdbarch *gdbarch)
 {
-#define	DUMMY_INSN_ADDR	gdbarch_tdep (current_gdbarch)->text_segment_base+0x200
+#define	DUMMY_INSN_ADDR	gdbarch_tdep (gdbarch)->text_segment_base+0x200
 
   int ret, status, pid;
   CORE_ADDR prev_pc;
@@ -758,7 +762,7 @@ add_vmap (LdInfo *ldi)
       last = 0;
       /* FIXME??? am I tossing BFDs?  bfd? */
       while ((last = bfd_openr_next_archived_file (abfd, last)))
-	if (DEPRECATED_STREQ (mem, last->filename))
+	if (strcmp (mem, last->filename) == 0)
 	  break;
 
       if (!last)
@@ -842,8 +846,8 @@ vmap_ldinfo (LdInfo *ldi)
 
 	  /* The filenames are not always sufficient to match on. */
 
-	  if ((name[0] == '/' && !DEPRECATED_STREQ (name, vp->name))
-	      || (memb[0] && !DEPRECATED_STREQ (memb, vp->member)))
+	  if ((name[0] == '/' && strcmp (name, vp->name) != 0)
+	      || (memb[0] && strcmp (memb, vp->member) != 0))
 	    continue;
 
 	  /* See if we are referring to the same file.
@@ -940,17 +944,19 @@ vmap_exec (void)
 
   for (i = 0; &exec_ops.to_sections[i] < exec_ops.to_sections_end; i++)
     {
-      if (DEPRECATED_STREQ (".text", exec_ops.to_sections[i].the_bfd_section->name))
+      if (strcmp (".text", exec_ops.to_sections[i].the_bfd_section->name) == 0)
 	{
 	  exec_ops.to_sections[i].addr += vmap->tstart - vmap->tvma;
 	  exec_ops.to_sections[i].endaddr += vmap->tstart - vmap->tvma;
 	}
-      else if (DEPRECATED_STREQ (".data", exec_ops.to_sections[i].the_bfd_section->name))
+      else if (strcmp (".data",
+		       exec_ops.to_sections[i].the_bfd_section->name) == 0)
 	{
 	  exec_ops.to_sections[i].addr += vmap->dstart - vmap->dvma;
 	  exec_ops.to_sections[i].endaddr += vmap->dstart - vmap->dvma;
 	}
-      else if (DEPRECATED_STREQ (".bss", exec_ops.to_sections[i].the_bfd_section->name))
+      else if (strcmp (".bss",
+		       exec_ops.to_sections[i].the_bfd_section->name) == 0)
 	{
 	  exec_ops.to_sections[i].addr += vmap->dstart - vmap->dvma;
 	  exec_ops.to_sections[i].endaddr += vmap->dstart - vmap->dvma;

@@ -1,5 +1,5 @@
 ##Copyright (C) 1991, 1992, 1993, 1994, 1995, 1996, 1999, 2000, 2002, 2003,
-##2007 Free Software Foundation, Inc.
+##2007, 2008 Free Software Foundation, Inc.
 
 # Makefile for GDB documentation.
 # This file is part of GDB.
@@ -489,7 +489,7 @@ annotate_toc.html: $(ANNOTATE_DOC_FILES)
 
 force:
 
-Makefile: Makefile.in $(host_makefile_frag) $(target_makefile_frag) config.status
+Makefile: Makefile.in $(host_makefile_frag) config.status
 	$(SHELL) ./config.status
 
 

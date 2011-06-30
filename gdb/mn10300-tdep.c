@@ -1,7 +1,7 @@
 /* Target-dependent code for the Matsushita MN10300 for GDB, the GNU debugger.
 
    Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2007 Free Software Foundation, Inc.
+   2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -35,6 +35,7 @@
 #include "symtab.h"
 #include "dwarf2-frame.h"
 #include "osabi.h"
+#include "infcall.h"
 
 #include "mn10300-tdep.h"
 
@@ -219,7 +220,7 @@ register_name (int reg, char **regs, long sizeof_regs)
 }
 
 static const char *
-mn10300_generic_register_name (int reg)
+mn10300_generic_register_name (struct gdbarch *gdbarch, int reg)
 {
   static char *regs[] =
   { "d0", "d1", "d2", "d3", "a0", "a1", "a2", "a3",
@@ -232,7 +233,7 @@ mn10300_generic_register_name (int reg)
 
 
 static const char *
-am33_register_name (int reg)
+am33_register_name (struct gdbarch *gdbarch, int reg)
 {
   static char *regs[] =
   { "d0", "d1", "d2", "d3", "a0", "a1", "a2", "a3",
@@ -244,7 +245,7 @@ am33_register_name (int reg)
 }
 
 static const char *
-am33_2_register_name (int reg)
+am33_2_register_name (struct gdbarch *gdbarch, int reg)
 {
   static char *regs[] =
   {
@@ -288,7 +289,8 @@ mn10300_write_pc (struct regcache *regcache, CORE_ADDR val)
    one, so we defined it ourselves.  */
 
 const static unsigned char *
-mn10300_breakpoint_from_pc (CORE_ADDR *bp_addr, int *bp_size)
+mn10300_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *bp_addr,
+			    int *bp_size)
 {
   static char breakpoint[] = {0xff};
   *bp_size = 1;
@@ -306,6 +308,7 @@ set_reg_offsets (struct frame_info *fi,
 		  int stack_extra_size,
 		  int frame_in_fp)
 {
+  struct gdbarch *gdbarch;
   struct trad_frame_cache *cache;
   int offset = 0;
   CORE_ADDR base;
@@ -316,6 +319,7 @@ set_reg_offsets (struct frame_info *fi,
   cache = mn10300_frame_unwind_cache (fi, this_cache);
   if (cache == NULL)
     return;
+  gdbarch = get_frame_arch (fi);
 
   if (frame_in_fp)
     {
@@ -323,12 +327,13 @@ set_reg_offsets (struct frame_info *fi,
     }
   else
     {
-      base = frame_unwind_register_unsigned (fi, E_SP_REGNUM) + stack_extra_size;
+      base = frame_unwind_register_unsigned (fi, E_SP_REGNUM)
+	       + stack_extra_size;
     }
 
   trad_frame_set_this_base (cache, base);
 
-  if (AM33_MODE == 2)
+  if (AM33_MODE (gdbarch) == 2)
     {
       /* If bit N is set in fpregmask, fsN is saved on the stack.
 	 The floating point registers are saved in ascending order.
@@ -341,7 +346,8 @@ set_reg_offsets (struct frame_info *fi,
 	    {
 	      if (fpregmask & (1 << i))
 		{
-		  trad_frame_set_reg_addr (cache, E_FS0_REGNUM + i, base + offset);
+		  trad_frame_set_reg_addr (cache, E_FS0_REGNUM + i,
+					   base + offset);
 		  offset += 4;
 		}
 	    }
@@ -384,7 +390,7 @@ set_reg_offsets (struct frame_info *fi,
       trad_frame_set_reg_addr (cache, E_D2_REGNUM, base + offset);
       offset += 4;
     }
-  if (AM33_MODE)
+  if (AM33_MODE (gdbarch))
     {
       if (movm_args & movm_exother_bit)
         {
@@ -514,7 +520,7 @@ set_reg_offsets (struct frame_info *fi,
    frame chain to not bother trying to unwind past this frame.  */
 
 static CORE_ADDR
-mn10300_analyze_prologue (struct frame_info *fi, 
+mn10300_analyze_prologue (struct gdbarch *gdbarch, struct frame_info *fi, 
 			  void **this_cache, 
 			  CORE_ADDR pc)
 {
@@ -603,7 +609,23 @@ mn10300_analyze_prologue (struct frame_info *fi,
 	goto finish_prologue;
     }
 
-  if (AM33_MODE == 2)
+  /* Check for "mov pc, a2", an instruction found in optimized, position
+     independent code.  Skip it if found.  */
+  if (buf[0] == 0xf0 && buf[1] == 0x2e)
+    {
+      addr += 2;
+
+      /* Quit now if we're beyond the stop point.  */
+      if (addr >= stop)
+	goto finish_prologue;
+
+      /* Get the next two bytes so the prologue scan can continue.  */
+      status = read_memory_nobpt (addr, buf, 2);
+      if (status != 0)
+	goto finish_prologue;
+    }
+
+  if (AM33_MODE (gdbarch) == 2)
     {
       /* Determine if any floating point registers are to be saved.
 	 Look for one of the following three prologue formats:
@@ -630,6 +652,7 @@ mn10300_analyze_prologue (struct frame_info *fi,
 	 was actually encountered.  As a consequence, ``addr'' would
 	 sometimes be advanced even when no fmov instructions were found.  */
       CORE_ADDR restore_addr = addr;
+      int fmov_found = 0;
 
       /* First, look for add -SIZE,sp (i.e. add imm8,sp  (0xf8feXX)
                                          or add imm16,sp (0xfafeXXXX)
@@ -710,12 +733,9 @@ mn10300_analyze_prologue (struct frame_info *fi,
 			break;
 
 		      /* An fmov instruction has just been seen.  We can
-		         now really commit to the pattern match.  Set the
-			 address to restore at the end of this speculative
-			 bit of code to the actually address that we've
-			 been incrementing (or not) throughout the
-			 speculation.  */
-		      restore_addr = addr;
+		         now really commit to the pattern match.  */
+
+		      fmov_found = 1;
 
 		      /* Get the floating point register number from the 
 			 2nd and 3rd bytes of the "fmov" instruction:
@@ -734,29 +754,18 @@ mn10300_analyze_prologue (struct frame_info *fi,
 		      imm_size = (buf[0] == 0xf9) ? 3 : 4;
 		    }
 		}
-	      else
-		{
-		  /* No "fmov" was found. Reread the two bytes at the original
-		     "addr" to reset the state. */
-		  addr = restore_addr;
-		  if (!safe_frame_unwind_memory (fi, addr, buf, 2))
-		    goto finish_prologue;
-		}
 	    }
-	  /* else the prologue consists entirely of an "add -SIZE,sp"
-	     instruction. Handle this below. */
 	}
-      /* else no "add -SIZE,sp" was found indicating no floating point
-	 registers are saved in this prologue.  */
-
-      /* In the pattern match code contained within this block, `restore_addr'
-	 is set to the starting address at the very beginning and then
-	 iteratively to the next address to start scanning at once the
-	 pattern match has succeeded.  Thus `restore_addr' will contain
-	 the address to rewind to if the pattern match failed.  If the
-	 match succeeded, `restore_addr' and `addr' will already have the
-	 same value.  */
-      addr = restore_addr;
+      /* If no fmov instructions were found by the above sequence, reset
+         the state and pretend that the above bit of code never happened.  */
+      if (!fmov_found)
+	{
+	  addr = restore_addr;
+	  status = read_memory_nobpt (addr, buf, 2);
+	  if (status != 0)
+	    goto finish_prologue;
+	  stack_extra_size = 0;
+	}
     }
 
   /* Now see if we set up a frame pointer via "mov sp,a3" */
@@ -817,7 +826,8 @@ mn10300_analyze_prologue (struct frame_info *fi,
  finish_prologue:
   /* Note if/where callee saved registers were saved.  */
   if (fi)
-    set_reg_offsets (fi, this_cache, movm_args, fpregmask, stack_extra_size, frame_in_fp);
+    set_reg_offsets (fi, this_cache, movm_args, fpregmask, stack_extra_size,
+		     frame_in_fp);
   return addr;
 }
 
@@ -825,9 +835,9 @@ mn10300_analyze_prologue (struct frame_info *fi,
    Return the address of the first inst past the prologue of the function.  */
 
 static CORE_ADDR
-mn10300_skip_prologue (CORE_ADDR pc)
+mn10300_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
-  return mn10300_analyze_prologue (NULL, NULL, pc);
+  return mn10300_analyze_prologue (gdbarch, NULL, NULL, pc);
 }
 
 /* Simple frame_unwind_cache.  
@@ -836,15 +846,20 @@ struct trad_frame_cache *
 mn10300_frame_unwind_cache (struct frame_info *next_frame,
 			    void **this_prologue_cache)
 {
+  struct gdbarch *gdbarch;
   struct trad_frame_cache *cache;
   CORE_ADDR pc, start, end;
+  void *cache_p;
 
   if (*this_prologue_cache)
     return (*this_prologue_cache);
 
-  cache = trad_frame_cache_zalloc (next_frame);
-  pc = gdbarch_unwind_pc (current_gdbarch, next_frame);
-  mn10300_analyze_prologue (next_frame, (void **) &cache, pc);
+  gdbarch = get_frame_arch (next_frame);
+  cache_p = trad_frame_cache_zalloc (next_frame);
+  pc = gdbarch_unwind_pc (gdbarch, next_frame);
+  mn10300_analyze_prologue (gdbarch, next_frame, &cache_p, pc);
+  cache = cache_p;
+
   if (find_pc_partial_function (pc, NULL, &start, &end))
     trad_frame_set_id (cache, 
 		       frame_id_build (trad_frame_get_this_base (cache), 
@@ -934,7 +949,7 @@ mn10300_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   ULONGEST pc;
 
-  frame_unwind_unsigned_register (next_frame, E_PC_REGNUM, &pc);
+  pc = frame_unwind_register_unsigned (next_frame, E_PC_REGNUM);
   return pc;
 }
 
@@ -943,7 +958,7 @@ mn10300_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   ULONGEST sp;
 
-  frame_unwind_unsigned_register (next_frame, E_SP_REGNUM, &sp);
+  sp = frame_unwind_register_unsigned (next_frame, E_SP_REGNUM);
   return sp;
 }
 
@@ -1065,6 +1080,33 @@ mn10300_push_dummy_call (struct gdbarch *gdbarch,
 
   /* Update $sp.  */
   regcache_cooked_write_unsigned (regcache, E_SP_REGNUM, sp);
+
+  /* On the mn10300, it's possible to move some of the stack adjustment
+     and saving of the caller-save registers out of the prologue and
+     into the call sites.  (When using gcc, this optimization can
+     occur when using the -mrelax switch.) If this occurs, the dwarf2
+     info will reflect this fact.  We can test to see if this is the
+     case by creating a new frame using the current stack pointer and
+     the address of the function that we're about to call.  We then
+     unwind SP and see if it's different than the SP of our newly
+     created frame.  If the SP values are the same, the caller is not
+     expected to allocate any additional stack.  On the other hand, if
+     the SP values are different, the difference determines the
+     additional stack that must be allocated.
+     
+     Note that we don't update the return value though because that's
+     the value of the stack just after pushing the arguments, but prior
+     to performing the call.  This value is needed in order to
+     construct the frame ID of the dummy call.   */
+  {
+    CORE_ADDR func_addr = find_function_addr (target_func, NULL);
+    CORE_ADDR unwound_sp 
+      = mn10300_unwind_sp (gdbarch, create_new_frame (sp, func_addr));
+    if (sp != unwound_sp)
+      regcache_cooked_write_unsigned (regcache, E_SP_REGNUM,
+                                      sp - (unwound_sp - sp));
+  }
+
   return sp;
 }
 
@@ -1076,7 +1118,7 @@ mn10300_push_dummy_call (struct gdbarch *gdbarch,
    to work with the existing GDB, neither of them can change.  So we
    just have to cope.  */
 static int
-mn10300_dwarf2_reg_to_regnum (int dwarf2)
+mn10300_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int dwarf2)
 {
   /* This table is supposed to be shaped like the gdbarch_register_name
      initializer in gcc/config/mn10300/mn10300.h.  Registers which
@@ -1088,15 +1130,15 @@ mn10300_dwarf2_reg_to_regnum (int dwarf2)
     32, 33, 34, 35, 36, 37, 38, 39,
     40, 41, 42, 43, 44, 45, 46, 47,
     48, 49, 50, 51, 52, 53, 54, 55,
-    56, 57, 58, 59, 60, 61, 62, 63
+    56, 57, 58, 59, 60, 61, 62, 63,
+    9
   };
 
   if (dwarf2 < 0
-      || dwarf2 >= ARRAY_SIZE (dwarf2_to_gdb)
-      || dwarf2_to_gdb[dwarf2] == -1)
+      || dwarf2 >= ARRAY_SIZE (dwarf2_to_gdb))
     {
       warning (_("Bogus register number in debug info: %d"), dwarf2);
-      return 0;
+      return -1;
     }
 
   return dwarf2_to_gdb[dwarf2];
@@ -1179,9 +1221,9 @@ mn10300_gdbarch_init (struct gdbarch_info info,
 /* Dump out the mn10300 specific architecture information. */
 
 static void
-mn10300_dump_tdep (struct gdbarch *current_gdbarch, struct ui_file *file)
+mn10300_dump_tdep (struct gdbarch *gdbarch, struct ui_file *file)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   fprintf_unfiltered (file, "mn10300_dump_tdep: am33_mode = %d\n",
 		      tdep->am33_mode);
 }

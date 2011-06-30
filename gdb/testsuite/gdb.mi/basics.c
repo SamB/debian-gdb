@@ -1,4 +1,4 @@
-/* Copyright 1999, 2000, 2004, 2007 Free Software Foundation, Inc.
+/* Copyright 1999, 2000, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -46,12 +46,25 @@ callee1 (int intarg, char *strarg, double fltarg)
   callee2 (intarg, strarg);
 }
 
+void callme (int i)
+{
+  printf ("callme\n");
+}
+
+int return_1 ()
+{
+  return 1;
+}
+
 main ()
 {
   callee1 (2, "A string argument.", 3.5);
   callee1 (2, "A string argument.", 3.5);
 
   printf ("Hello, World!");
+
+  callme (1);
+  callme (2);
 
   return 0;
 }

@@ -1,5 +1,5 @@
 /* Remote target communications for serial-line targets in custom GDB protocol
-   Copyright (C) 1999, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 1999, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -66,5 +66,11 @@ extern void (*deprecated_target_wait_loop_hook) (void);
 
 void register_remote_g_packet_guess (struct gdbarch *gdbarch, int bytes,
 				     const struct target_desc *tdesc);
+
+void remote_file_put (const char *local_file, const char *remote_file,
+		      int from_tty);
+void remote_file_get (const char *remote_file, const char *local_file,
+		      int from_tty);
+void remote_file_delete (const char *remote_file, int from_tty);
 
 #endif

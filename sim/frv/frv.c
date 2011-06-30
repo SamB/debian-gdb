@@ -1,5 +1,5 @@
 /* frv simulator support code
-   Copyright (C) 1998, 1999, 2000, 2001, 2003, 2004, 2007
+   Copyright (C) 1998, 1999, 2000, 2001, 2003, 2004, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Red Hat.
 
@@ -1055,6 +1055,7 @@ SI
 frvbf_cut (SIM_CPU *current_cpu, SI reg1, SI reg2, SI cut_point)
 {
   SI result;
+  cut_point &= 0x3f;
   if (cut_point < 32)
     {
       result = reg1 << cut_point;

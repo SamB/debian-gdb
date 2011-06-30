@@ -1,7 +1,7 @@
 /* Support for printing C values for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1988, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2001, 2003, 2005, 2006, 2007
+   1998, 1999, 2000, 2001, 2003, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -47,7 +47,7 @@ print_function_pointer_address (CORE_ADDR address, struct ui_file *stream)
   if (addressprint && func_addr != address)
     {
       fputs_filtered ("@", stream);
-      deprecated_print_address_numeric (address, 1, stream);
+      fputs_filtered (paddress (address), stream);
       fputs_filtered (": ", stream);
     }
   print_address_demangle (func_addr, stream, demangle);
@@ -228,9 +228,7 @@ c_val_print (struct type *type, const gdb_byte *valaddr, int embedded_offset,
 	    }
 
 	  if (addressprint)
-	    {
-	      deprecated_print_address_numeric (addr, 1, stream);
-	    }
+	    fputs_filtered (paddress (addr), stream);
 
 	  /* For a pointer to a textual type, also print the string
 	     pointed to, unless pointer is null.  */
@@ -299,7 +297,7 @@ c_val_print (struct type *type, const gdb_byte *valaddr, int embedded_offset,
 	  CORE_ADDR addr
 	    = extract_typed_address (valaddr + embedded_offset, type);
 	  fprintf_filtered (stream, "@");
-	  deprecated_print_address_numeric (addr, 1, stream);
+	  fputs_filtered (paddress (addr), stream);
 	  if (deref_ref)
 	    fputs_filtered (": ", stream);
 	}
@@ -472,6 +470,13 @@ c_val_print (struct type *type, const gdb_byte *valaddr, int embedded_offset,
 	{
 	  print_floating (valaddr + embedded_offset, type, stream);
 	}
+      break;
+
+    case TYPE_CODE_DECFLOAT:
+      if (format)
+	print_scalar_formatted (valaddr + embedded_offset, type, format, 0, stream);
+      else
+	print_decimal_floating (valaddr + embedded_offset, type, stream);
       break;
 
     case TYPE_CODE_VOID:

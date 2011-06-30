@@ -1,6 +1,6 @@
 /* YACC parser for Ada expressions, for GDB.
    Copyright (C) 1986, 1989, 1990, 1991, 1993, 1994, 1997, 2000, 2003, 2004,
-   2007 Free Software Foundation, Inc.
+   2007, 2008 Free Software Foundation, Inc.
 
 This file is part of GDB.
 
@@ -124,7 +124,8 @@ static struct stoken string_to_operator (struct stoken);
 
 static void write_int (LONGEST, struct type *);
 
-static void write_object_renaming (struct block *, struct symbol *, int);
+static void write_object_renaming (struct block *, const char *, int,
+				   const char *, int);
 
 static struct type* write_var_or_type (struct block *, struct stoken);
 
@@ -352,7 +353,7 @@ arglist	:	exp
 			{ $$ = $1 + 1; }
 	;
 
-simple_exp :	'{' var_or_type '}' simple_exp  %prec '.'
+primary :	'{' var_or_type '}' primary  %prec '.'
 		/* GDB extension */
 			{ 
 			  if ($2 == NULL)
@@ -839,82 +840,86 @@ write_exp_op_with_string (enum exp_opcode opcode, struct stoken token)
   write_exp_elt_opcode (opcode);
 }
   
-/* Emit expression corresponding to the renamed object designated by
- * the type RENAMING, which must be the referent of an object renaming
- * type, in the context of ORIG_LEFT_CONTEXT.  MAX_DEPTH is the maximum
- * number of cascaded renamings to allow.  */
+/* Emit expression corresponding to the renamed object named 
+ * designated by RENAMED_ENTITY[0 .. RENAMED_ENTITY_LEN-1] in the
+ * context of ORIG_LEFT_CONTEXT, to which is applied the operations
+ * encoded by RENAMING_EXPR.  MAX_DEPTH is the maximum number of
+ * cascaded renamings to allow.  If ORIG_LEFT_CONTEXT is null, it
+ * defaults to the currently selected block. ORIG_SYMBOL is the 
+ * symbol that originally encoded the renaming.  It is needed only
+ * because its prefix also qualifies any index variables used to index
+ * or slice an array.  It should not be necessary once we go to the
+ * new encoding entirely (FIXME pnh 7/20/2007).  */
+
 static void
-write_object_renaming (struct block *orig_left_context, 
-		       struct symbol *renaming, int max_depth)
+write_object_renaming (struct block *orig_left_context,
+		       const char *renamed_entity, int renamed_entity_len,
+		       const char *renaming_expr, int max_depth)
 {
-  const char *qualification = SYMBOL_LINKAGE_NAME (renaming);
-  const char *simple_tail;
-  const char *expr = TYPE_FIELD_NAME (SYMBOL_TYPE (renaming), 0);
-  const char *suffix;
   char *name;
-  struct symbol *sym;
   enum { SIMPLE_INDEX, LOWER_BOUND, UPPER_BOUND } slice_state;
+  struct symbol *sym;
+  struct block *block;
 
   if (max_depth <= 0)
     error (_("Could not find renamed symbol"));
 
-  /* if orig_left_context is null, then use the currently selected
-     block; otherwise we might fail our symbol lookup below.  */
   if (orig_left_context == NULL)
     orig_left_context = get_selected_block (NULL);
 
-  for (simple_tail = qualification + strlen (qualification);
-       simple_tail != qualification; simple_tail -= 1)
-    {
-      if (*simple_tail == '.')
-	{
-	  simple_tail += 1;
-	  break;
-	}
-      else if (strncmp (simple_tail, "__", 2) == 0)
-	{
-	  simple_tail += 2;
-	  break;
-	}
-    }
-
-  suffix = strstr (expr, "___XE");
-  if (suffix == NULL)
-    goto BadEncoding;
-
-  name = (char *) obstack_alloc (&temp_parse_space, suffix - expr + 1);
-  strncpy (name, expr, suffix-expr);
-  name[suffix-expr] = '\000';
-  sym = lookup_symbol (name, orig_left_context, VAR_DOMAIN, 0, NULL);
+  name = obsavestring (renamed_entity, renamed_entity_len, &temp_parse_space);
+  sym = ada_lookup_encoded_symbol (name, orig_left_context, VAR_DOMAIN, 
+				   &block, NULL);
   if (sym == NULL)
     error (_("Could not find renamed variable: %s"), ada_decode (name));
-  if (ada_is_object_renaming (sym))
-    write_object_renaming (orig_left_context, sym, max_depth-1);
-  else
-    write_var_from_sym (orig_left_context, block_found, sym);
+  else if (SYMBOL_CLASS (sym) == LOC_TYPEDEF)
+    /* We have a renaming of an old-style renaming symbol.  Don't
+       trust the block information.  */
+    block = orig_left_context;
 
-  suffix += 5;
+  {
+    const char *inner_renamed_entity;
+    int inner_renamed_entity_len;
+    const char *inner_renaming_expr;
+
+    switch (ada_parse_renaming (sym, &inner_renamed_entity, 
+				&inner_renamed_entity_len,
+				&inner_renaming_expr))
+      {
+      case ADA_NOT_RENAMING:
+	write_var_from_sym (orig_left_context, block, sym);
+	break;
+      case ADA_OBJECT_RENAMING:
+	write_object_renaming (block,
+			       inner_renamed_entity, inner_renamed_entity_len,
+			       inner_renaming_expr, max_depth - 1);
+	break;
+      default:
+	goto BadEncoding;
+      }
+  }
+
   slice_state = SIMPLE_INDEX;
-  while (*suffix == 'X')
+  while (*renaming_expr == 'X')
     {
-      suffix += 1;
+      renaming_expr += 1;
 
-      switch (*suffix) {
+      switch (*renaming_expr) {
       case 'A':
-        suffix += 1;
+        renaming_expr += 1;
         write_exp_elt_opcode (UNOP_IND);
         break;
       case 'L':
 	slice_state = LOWER_BOUND;
       case 'S':
-	suffix += 1;
-	if (isdigit (*suffix))
+	renaming_expr += 1;
+	if (isdigit (*renaming_expr))
 	  {
 	    char *next;
-	    long val = strtol (suffix, &next, 10);
-	    if (next == suffix)
+	    long val = strtol (renaming_expr, &next, 10);
+	    if (next == renaming_expr)
 	      goto BadEncoding;
-	    suffix = next;
+	    renaming_expr = next;
 	    write_exp_elt_opcode (OP_LONG);
 	    write_exp_elt_type (type_int ());
 	    write_exp_elt_longcst ((LONGEST) val);
@@ -924,27 +929,26 @@ write_object_renaming (struct block *orig_left_context,
 	  {
 	    const char *end;
 	    char *index_name;
-	    int index_len;
 	    struct symbol *index_sym;
 
-	    end = strchr (suffix, 'X');
+	    end = strchr (renaming_expr, 'X');
 	    if (end == NULL)
-	      end = suffix + strlen (suffix);
+	      end = renaming_expr + strlen (renaming_expr);
 
-	    index_len = simple_tail - qualification + 2 + (suffix - end) + 1;
-	    index_name
-	      = (char *) obstack_alloc (&temp_parse_space, index_len);
-	    memset (index_name, '\000', index_len);
-	    strncpy (index_name, qualification, simple_tail - qualification);
-	    index_name[simple_tail - qualification] = '\000';
-	    strncat (index_name, suffix, suffix-end);
-	    suffix = end;
+	    index_name =
+	      obsavestring (renaming_expr, end - renaming_expr,
+			    &temp_parse_space);
+	    renaming_expr = end;
 
-	    index_sym =
-	      lookup_symbol (index_name, NULL, VAR_DOMAIN, 0, NULL);
+	    index_sym = ada_lookup_encoded_symbol (index_name, NULL,
+						   VAR_DOMAIN, &block,
+						   NULL);
 	    if (index_sym == NULL)
 	      error (_("Could not find %s"), index_name);
-	    write_var_from_sym (NULL, block_found, sym);
+	    else if (SYMBOL_CLASS (index_sym) == LOC_TYPEDEF)
+	      /* Index is an old-style renaming symbol.  */
+	      block = orig_left_context;
+	    write_var_from_sym (NULL, block, index_sym);
 	  }
 	if (slice_state == SIMPLE_INDEX)
 	  {
@@ -965,18 +969,18 @@ write_object_renaming (struct block *orig_left_context,
 	{
 	  struct stoken field_name;
 	  const char *end;
-	  suffix += 1;
+	  renaming_expr += 1;
 
 	  if (slice_state != SIMPLE_INDEX)
 	    goto BadEncoding;
-	  end = strchr (suffix, 'X');
+	  end = strchr (renaming_expr, 'X');
 	  if (end == NULL)
-	    end = suffix + strlen (suffix);
-	  field_name.length = end - suffix;
-	  field_name.ptr = xmalloc (end - suffix + 1);
-	  strncpy (field_name.ptr, suffix, end - suffix);
-	  field_name.ptr[end - suffix] = '\000';
-	  suffix = end;
+	    end = renaming_expr + strlen (renaming_expr);
+	  field_name.length = end - renaming_expr;
+	  field_name.ptr = xmalloc (end - renaming_expr + 1);
+	  strncpy (field_name.ptr, renaming_expr, end - renaming_expr);
+	  field_name.ptr[end - renaming_expr] = '\000';
+	  renaming_expr = end;
 	  write_exp_op_with_string (STRUCTOP_STRUCT, field_name);
 	  break;
 	}
@@ -989,8 +993,7 @@ write_object_renaming (struct block *orig_left_context,
     return;
 
  BadEncoding:
-  error (_("Internal error in encoding of renaming declaration: %s"),
-	 SYMBOL_LINKAGE_NAME (renaming));
+  error (_("Internal error in encoding of renaming declaration"));
 }
 
 static struct block*
@@ -1109,6 +1112,22 @@ chop_selector (char *name, int end)
   return -1;
 }
 
+/* If NAME is a string beginning with a separator (either '__', or
+   '.'), chop this separator and return the result; else, return
+   NAME.  */
+
+static char *
+chop_separator (char *name)
+{
+  if (*name == '.')
+   return name + 1;
+
+  if (name[0] == '_' && name[1] == '_')
+    return name + 2;
+
+  return name;
+}
+
 /* Given that SELS is a string of the form (<sep><identifier>)*, where
    <sep> is '__' or '.', write the indicated sequence of
    STRUCTOP_STRUCT expression operators. */
@@ -1118,10 +1137,8 @@ write_selectors (char *sels)
   while (*sels != '\0')
     {
       struct stoken field_name;
-      char *p;
-      while (*sels == '_' || *sels == '.')
-	sels += 1;
-      p = sels;
+      char *p = chop_separator (sels);
+      sels = p;
       while (*sels != '\0' && *sels != '.' 
 	     && (sels[0] != '_' || sels[1] != '_'))
 	sels += 1;
@@ -1151,6 +1168,70 @@ write_ambiguous_var (struct block *block, char *name, int len)
   write_exp_elt_opcode (OP_VAR_VALUE);
 }
 
+/* A convenient wrapper around ada_get_field_index that takes
+   a non NUL-terminated FIELD_NAME0 and a FIELD_NAME_LEN instead
+   of a NUL-terminated field name.  */
+
+static int
+ada_nget_field_index (const struct type *type, const char *field_name0,
+                      int field_name_len, int maybe_missing)
+{
+  char *field_name = alloca ((field_name_len + 1) * sizeof (char));
+
+  strncpy (field_name, field_name0, field_name_len);
+  field_name[field_name_len] = '\0';
+  return ada_get_field_index (type, field_name, maybe_missing);
+}
+
+/* If encoded_field_name is the name of a field inside symbol SYM,
+   then return the type of that field.  Otherwise, return NULL.
+
+   This function is actually recursive, so if ENCODED_FIELD_NAME
+   doesn't match one of the fields of our symbol, then try to see
+   if ENCODED_FIELD_NAME could not be a succession of field names
+   (in other words, the user entered an expression of the form
+   TYPE_NAME.FIELD1.FIELD2.FIELD3), in which case we evaluate
+   each field name sequentially to obtain the desired field type.
+   In case of failure, we return NULL.  */
+
+static struct type *
+get_symbol_field_type (struct symbol *sym, char *encoded_field_name)
+{
+  char *field_name = encoded_field_name;
+  char *subfield_name;
+  struct type *type = SYMBOL_TYPE (sym);
+  int fieldno;
+
+  if (type == NULL || field_name == NULL)
+    return NULL;
+
+  while (field_name[0] != '\0')
+    {
+      field_name = chop_separator (field_name);
+
+      fieldno = ada_get_field_index (type, field_name, 1);
+      if (fieldno >= 0)
+        return TYPE_FIELD_TYPE (type, fieldno);
+
+      subfield_name = field_name;
+      while (*subfield_name != '\0' && *subfield_name != '.' 
+	     && (subfield_name[0] != '_' || subfield_name[1] != '_'))
+	subfield_name += 1;
+
+      if (subfield_name[0] == '\0')
+        return NULL;
+
+      fieldno = ada_nget_field_index (type, field_name,
+                                      subfield_name - field_name, 1);
+      if (fieldno < 0)
+        return NULL;
+
+      type = TYPE_FIELD_TYPE (type, fieldno);
+      field_name = subfield_name;
+    }
+
+  return NULL;
+}
 
 /* Look up NAME0 (an unencoded identifier or dotted name) in BLOCK (or 
    expression_block_context if NULL).  If it denotes a type, return
@@ -1185,6 +1266,10 @@ write_var_or_type (struct block *block, struct stoken name0)
 	  int nsyms;
 	  struct ada_symbol_info *syms;
 	  struct symbol *type_sym;
+	  struct symbol *renaming_sym;
+	  const char* renaming;
+	  int renaming_len;
+	  const char* renaming_expr;
 	  int terminator = encoded_name[tail_index];
 
 	  encoded_name[tail_index] = '\0';
@@ -1194,51 +1279,72 @@ write_var_or_type (struct block *block, struct stoken name0)
 
 	  /* A single symbol may rename a package or object. */
 
-	  if (nsyms == 1 && !ada_is_object_renaming (syms[0].sym))
+	  /* This should go away when we move entirely to new version.
+	     FIXME pnh 7/20/2007. */
+	  if (nsyms == 1)
 	    {
-	      struct symbol *renaming_sym =
+	      struct symbol *renaming =
 		ada_find_renaming_symbol (SYMBOL_LINKAGE_NAME (syms[0].sym), 
 					  syms[0].block);
 
-	      if (renaming_sym != NULL)
-		syms[0].sym = renaming_sym;
+	      if (renaming != NULL)
+		syms[0].sym = renaming;
 	    }
 
 	  type_sym = select_possible_type_sym (syms, nsyms);
+
+	  if (type_sym != NULL)
+	    renaming_sym = type_sym;
+	  else if (nsyms == 1)
+	    renaming_sym = syms[0].sym;
+	  else 
+	    renaming_sym = NULL;
+
+	  switch (ada_parse_renaming (renaming_sym, &renaming,
+				      &renaming_len, &renaming_expr))
+	    {
+	    case ADA_NOT_RENAMING:
+	      break;
+	    case ADA_PACKAGE_RENAMING:
+	    case ADA_EXCEPTION_RENAMING:
+	    case ADA_SUBPROGRAM_RENAMING:
+	      {
+		char *new_name
+		  = obstack_alloc (&temp_parse_space,
+				   renaming_len + name_len - tail_index + 1);
+		strncpy (new_name, renaming, renaming_len);
+		strcpy (new_name + renaming_len, encoded_name + tail_index);
+		encoded_name = new_name;
+		name_len = renaming_len + name_len - tail_index;
+		goto TryAfterRenaming;
+	      }	
+	    case ADA_OBJECT_RENAMING:
+	      write_object_renaming (block, renaming, renaming_len, 
+				     renaming_expr, MAX_RENAMING_CHAIN_LENGTH);
+	      write_selectors (encoded_name + tail_index);
+	      return NULL;
+	    default:
+	      internal_error (__FILE__, __LINE__,
+			      _("impossible value from ada_parse_renaming"));
+	    }
+
 	  if (type_sym != NULL)
 	    {
-	      struct type *type = SYMBOL_TYPE (type_sym);
+              struct type *field_type;
+              
+              if (tail_index == name_len)
+                return SYMBOL_TYPE (type_sym);
 
-	      if (TYPE_CODE (type) == TYPE_CODE_VOID)
-		error (_("`%s' matches only void type name(s)"), name0.ptr);
-	      else if (ada_is_object_renaming (type_sym))
-		{
-		  write_object_renaming (block, type_sym, 
-					 MAX_RENAMING_CHAIN_LENGTH);
-		  write_selectors (encoded_name + tail_index);
-		  return NULL;
-		}
-	      else if (ada_renaming_type (SYMBOL_TYPE (type_sym)) != NULL)
-		{
-		  int result;
-		  char *renaming = ada_simple_renamed_entity (type_sym);
-		  int renaming_len = strlen (renaming);
-
-		  char *new_name
-		    = obstack_alloc (&temp_parse_space,
-				     renaming_len + name_len - tail_index 
-				     + 1);
-		  strcpy (new_name, renaming);
-		  xfree (renaming);
-		  strcpy (new_name + renaming_len, encoded_name + tail_index);
-		  encoded_name = new_name;
-		  name_len = renaming_len + name_len - tail_index;
-		  goto TryAfterRenaming;
-		}
-	      else if (tail_index == name_len)
-		return type;
+              /* We have some extraneous characters after the type name.
+                 If this is an expression "TYPE_NAME.FIELD0.[...].FIELDN",
+                 then try to get the type of FIELDN.  */
+              field_type
+                = get_symbol_field_type (type_sym, encoded_name + tail_index);
+              if (field_type != NULL)
+                return field_type;
 	      else 
-		error (_("Invalid attempt to select from type: \"%s\"."), name0.ptr);
+		error (_("Invalid attempt to select from type: \"%s\"."),
+                       name0.ptr);
 	    }
 	  else if (tail_index == name_len && nsyms == 0)
 	    {

@@ -1,7 +1,7 @@
 /* Target-dependent code for the HP PA-RISC architecture.
 
    Copyright (C) 1986, 1987, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
    Contributed by the Center for Software Science at the
@@ -67,10 +67,6 @@ const struct objfile_data *hppa_objfile_priv_data = NULL;
 /* Sizes (in bytes) of the native unwind entries.  */
 #define UNWIND_ENTRY_SIZE 16
 #define STUB_UNWIND_ENTRY_SIZE 8
-
-/* FIXME: brobecker 2002-11-07: We will likely be able to make the
-   following functions static, once we hppa is partially multiarched.  */
-int hppa_pc_requires_run_before_use (CORE_ADDR pc);
 
 /* Routines to extract various sized constants out of hppa 
    instructions. */
@@ -575,7 +571,7 @@ hppa_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 }
 
 static const unsigned char *
-hppa_breakpoint_from_pc (CORE_ADDR *pc, int *len)
+hppa_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pc, int *len)
 {
   static const unsigned char breakpoint[] = {0x00, 0x01, 0x00, 0x04};
   (*len) = sizeof (breakpoint);
@@ -585,7 +581,7 @@ hppa_breakpoint_from_pc (CORE_ADDR *pc, int *len)
 /* Return the name of a register.  */
 
 static const char *
-hppa32_register_name (int i)
+hppa32_register_name (struct gdbarch *gdbarch, int i)
 {
   static char *names[] = {
     "flags",  "r1",      "rp",     "r3",
@@ -628,7 +624,7 @@ hppa32_register_name (int i)
 }
 
 static const char *
-hppa64_register_name (int i)
+hppa64_register_name (struct gdbarch *gdbarch, int i)
 {
   static char *names[] = {
     "flags",  "r1",      "rp",     "r3",
@@ -663,7 +659,7 @@ hppa64_register_name (int i)
 }
 
 static int
-hppa64_dwarf_reg_to_regnum (int reg)
+hppa64_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 {
   /* r0-r31 and sar map one-to-one.  */
   if (reg <= 32)
@@ -832,7 +828,7 @@ hppa32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   if (struct_return)
     regcache_cooked_write_unsigned (regcache, 28, struct_addr);
 
-  gp = tdep->find_global_pointer (function);
+  gp = tdep->find_global_pointer (gdbarch, function);
 
   if (gp != 0)
     regcache_cooked_write_unsigned (regcache, 19, gp);
@@ -1091,7 +1087,7 @@ hppa64_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
     regcache_cooked_write_unsigned (regcache, HPPA_RET0_REGNUM, struct_addr);
 
   /* Set up GR27 (%dp) to hold the global pointer (gp).  */
-  gp = tdep->find_global_pointer (function);
+  gp = tdep->find_global_pointer (gdbarch, function);
   if (gp != 0)
     regcache_cooked_write_unsigned (regcache, HPPA_DP_REGNUM, gp);
 
@@ -1473,7 +1469,8 @@ inst_saves_fr (unsigned long inst)
 
 
 static CORE_ADDR
-skip_prologue_hard_way (CORE_ADDR pc, int stop_before_branch)
+skip_prologue_hard_way (struct gdbarch *gdbarch, CORE_ADDR pc,
+			int stop_before_branch)
 {
   char buf[4];
   CORE_ADDR orig_pc = pc;
@@ -1599,10 +1596,10 @@ restart:
 
          FIXME.  Can still die if we have a mix of GR and FR argument
          stores!  */
-      if (reg_num >= (gdbarch_ptr_bit (current_gdbarch) == 64 ? 19 : 23)
+      if (reg_num >= (gdbarch_ptr_bit (gdbarch) == 64 ? 19 : 23)
 	  && reg_num <= 26)
 	{
-	  while (reg_num >= (gdbarch_ptr_bit (current_gdbarch) == 64 ? 19 : 23)
+	  while (reg_num >= (gdbarch_ptr_bit (gdbarch) == 64 ? 19 : 23)
 		 && reg_num <= 26)
 	    {
 	      pc += 4;
@@ -1631,7 +1628,7 @@ restart:
       if ((inst & 0xfc000000) == 0x34000000
 	  && inst_saves_fr (next_inst) >= 4
 	  && inst_saves_fr (next_inst)
-	       <= (gdbarch_ptr_bit (current_gdbarch) == 64 ? 11 : 7))
+	       <= (gdbarch_ptr_bit (gdbarch) == 64 ? 11 : 7))
 	{
 	  /* So we drop into the code below in a reasonable state.  */
 	  reg_num = inst_saves_fr (next_inst);
@@ -1643,11 +1640,11 @@ restart:
          never does prologue scheduling.  So once we see one, skip past
          all of them.  */
       if (reg_num >= 4
-	  && reg_num <= (gdbarch_ptr_bit (current_gdbarch) == 64 ? 11 : 7))
+	  && reg_num <= (gdbarch_ptr_bit (gdbarch) == 64 ? 11 : 7))
 	{
 	  while (reg_num >= 4
 		 && reg_num
-		      <= (gdbarch_ptr_bit (current_gdbarch) == 64 ? 11 : 7))
+		      <= (gdbarch_ptr_bit (gdbarch) == 64 ? 11 : 7))
 	    {
 	      pc += 8;
 	      status = read_memory_nobpt (pc, buf, 4);
@@ -1763,7 +1760,7 @@ after_prologue (CORE_ADDR pc)
    skip over the branch in that case.  */
 
 static CORE_ADDR
-hppa_skip_prologue (CORE_ADDR pc)
+hppa_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   unsigned long inst;
   int offset;
@@ -1785,7 +1782,7 @@ hppa_skip_prologue (CORE_ADDR pc)
   if (post_prologue_pc != 0)
     return max (pc, post_prologue_pc);
   else
-    return (skip_prologue_hard_way (pc, 1));
+    return (skip_prologue_hard_way (gdbarch, pc, 1));
 }
 
 /* Return an unwind entry that falls within the frame's code block.  */
@@ -1813,6 +1810,7 @@ struct hppa_frame_cache
 static struct hppa_frame_cache *
 hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
 {
+  struct gdbarch *gdbarch = get_frame_arch (next_frame);
   struct hppa_frame_cache *cache;
   long saved_gr_mask;
   long saved_fr_mask;
@@ -1911,7 +1909,7 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
     else
       start_pc = frame_func_unwind (next_frame, NORMAL_FRAME);
 
-    prologue_end = skip_prologue_hard_way (start_pc, 0);
+    prologue_end = skip_prologue_hard_way (gdbarch, start_pc, 0);
     end_pc = frame_pc_unwind (next_frame);
 
     if (prologue_end != 0 && end_pc > prologue_end)
@@ -2106,7 +2104,7 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
 	       saved.  The entry SP value is saved at this frame's SP
 	       address.  */
             cache->base = read_memory_integer
-			    (this_sp, gdbarch_ptr_bit (current_gdbarch) / 8);
+			    (this_sp, gdbarch_ptr_bit (gdbarch) / 8);
 
 	    if (hppa_debug)
 	      fprintf_unfiltered (gdb_stdlog, " (base=0x%s) [saved]",
@@ -2185,7 +2183,7 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
   {
     /* Convert all the offsets into addresses.  */
     int reg;
-    for (reg = 0; reg < gdbarch_num_regs (current_gdbarch); reg++)
+    for (reg = 0; reg < gdbarch_num_regs (gdbarch); reg++)
       {
 	if (trad_frame_addr_p (cache->saved_regs, reg))
 	  cache->saved_regs[reg].addr += cache->base;
@@ -2193,10 +2191,8 @@ hppa_frame_cache (struct frame_info *next_frame, void **this_cache)
   }
 
   {
-    struct gdbarch *gdbarch;
     struct gdbarch_tdep *tdep;
 
-    gdbarch = get_frame_arch (next_frame);
     tdep = gdbarch_tdep (gdbarch);
 
     if (tdep->unwind_adjust_stub)
@@ -2461,7 +2457,7 @@ hppa_stub_unwind_sniffer (struct frame_info *next_frame)
   if (pc == 0
       || (tdep->in_solib_call_trampoline != NULL
 	  && tdep->in_solib_call_trampoline (pc, NULL))
-      || gdbarch_in_solib_return_trampoline (current_gdbarch, pc, NULL))
+      || gdbarch_in_solib_return_trampoline (gdbarch, pc, NULL))
     return &hppa_stub_frame_unwind;
   return NULL;
 }
@@ -2612,34 +2608,6 @@ unwind_command (char *exp, int from_tty)
     }
 }
 
-int
-hppa_pc_requires_run_before_use (CORE_ADDR pc)
-{
-  /* Sometimes we may pluck out a minimal symbol that has a negative address.
-  
-     An example of this occurs when an a.out is linked against a foo.sl.
-     The foo.sl defines a global bar(), and the a.out declares a signature
-     for bar().  However, the a.out doesn't directly call bar(), but passes
-     its address in another call.
-  
-     If you have this scenario and attempt to "break bar" before running,
-     gdb will find a minimal symbol for bar() in the a.out.  But that
-     symbol's address will be negative.  What this appears to denote is
-     an index backwards from the base of the procedure linkage table (PLT)
-     into the data linkage table (DLT), the end of which is contiguous
-     with the start of the PLT.  This is clearly not a valid address for
-     us to set a breakpoint on.
-  
-     Note that one must be careful in how one checks for a negative address.
-     0xc0000000 is a legitimate address of something in a shared text
-     segment, for example.  Since I don't know what the possible range
-     is of these "really, truly negative" addresses that come from the
-     minimal symbols, I'm resorting to the gross hack of checking the
-     top byte of the address for all 1's.  Sigh.  */
-
-  return (!target_has_stack && (pc & 0xFF000000) == 0xFF000000);
-}
-
 /* Return the GDB type object for the "standard" data type of data in
    register REGNUM.  */
 
@@ -2665,7 +2633,7 @@ hppa64_register_type (struct gdbarch *gdbarch, int regnum)
    through ptrace/ttrace.  */
 
 static int
-hppa32_cannot_store_register (int regnum)
+hppa32_cannot_store_register (struct gdbarch *gdbarch, int regnum)
 {
   return (regnum == 0
           || regnum == HPPA_PCSQ_HEAD_REGNUM
@@ -2674,17 +2642,17 @@ hppa32_cannot_store_register (int regnum)
 }
 
 static int
-hppa32_cannot_fetch_register (int regnum)
+hppa32_cannot_fetch_register (struct gdbarch *gdbarch, int regnum)
 {
   /* cr26 and cr27 are readable (but not writable) from userspace.  */
   if (regnum == HPPA_CR26_REGNUM || regnum == HPPA_CR27_REGNUM)
     return 0;
   else
-    return hppa32_cannot_store_register (regnum);
+    return hppa32_cannot_store_register (gdbarch, regnum);
 }
 
 static int
-hppa64_cannot_store_register (int regnum)
+hppa64_cannot_store_register (struct gdbarch *gdbarch, int regnum)
 {
   return (regnum == 0
           || regnum == HPPA_PCSQ_HEAD_REGNUM
@@ -2693,13 +2661,13 @@ hppa64_cannot_store_register (int regnum)
 }
 
 static int
-hppa64_cannot_fetch_register (int regnum)
+hppa64_cannot_fetch_register (struct gdbarch *gdbarch, int regnum)
 {
   /* cr26 and cr27 are readable (but not writable) from userspace.  */
   if (regnum == HPPA_CR26_REGNUM || regnum == HPPA_CR27_REGNUM)
     return 0;
   else
-    return hppa64_cannot_store_register (regnum);
+    return hppa64_cannot_store_register (gdbarch, regnum);
 }
 
 static CORE_ADDR
@@ -2737,7 +2705,7 @@ hppa_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
 }
 
 static CORE_ADDR
-hppa_find_global_pointer (struct value *function)
+hppa_find_global_pointer (struct gdbarch *gdbarch, struct value *function)
 {
   return 0;
 }
@@ -3195,9 +3163,9 @@ hppa_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 }
 
 static void
-hppa_dump_tdep (struct gdbarch *current_gdbarch, struct ui_file *file)
+hppa_dump_tdep (struct gdbarch *gdbarch, struct ui_file *file)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   fprintf_unfiltered (file, "bytes_per_address = %d\n", 
                       tdep->bytes_per_address);

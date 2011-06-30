@@ -1,6 +1,6 @@
 /* GNU/Linux native-dependent code common to multiple platforms.
 
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -84,10 +84,17 @@
 #define __WALL          0x40000000 /* Wait for any child.  */
 #endif
 
+#ifndef PTRACE_GETSIGINFO
+#define PTRACE_GETSIGINFO    0x4202
+#endif
+
 /* The single-threaded native GNU/Linux target_ops.  We save a pointer for
    the use of the multi-threaded target.  */
 static struct target_ops *linux_ops;
 static struct target_ops linux_ops_saved;
+
+/* The method to call, if any, when a new thread is attached.  */
+static void (*linux_nat_new_thread) (ptid_t);
 
 /* The saved to_xfer_partial method, inherited from inf-ptrace.c.
    Called by our to_xfer_partial.  */
@@ -376,7 +383,7 @@ linux_child_follow_fork (struct target_ops *ops, int follow_child)
       /* Detach new forked process?  */
       if (detach_fork)
 	{
-	  if (debug_linux_nat)
+	  if (info_verbose || debug_linux_nat)
 	    {
 	      target_terminal_ours ();
 	      fprintf_filtered (gdb_stdlog,
@@ -461,7 +468,7 @@ linux_child_follow_fork (struct target_ops *ops, int follow_child)
       /* Before detaching from the parent, remove all breakpoints from it. */
       remove_breakpoints ();
 
-      if (debug_linux_nat)
+      if (info_verbose || debug_linux_nat)
 	{
 	  target_terminal_ours ();
 	  fprintf_filtered (gdb_stdlog,
@@ -503,12 +510,14 @@ linux_child_follow_fork (struct target_ops *ops, int follow_child)
 	  target_detach (NULL, 0);
 	}
 
-      inferior_ptid = pid_to_ptid (child_pid);
+      inferior_ptid = ptid_build (child_pid, child_pid, 0);
 
       /* Reinstall ourselves, since we might have been removed in
 	 target_detach (which does other necessary cleanup).  */
 
       push_target (ops);
+      linux_nat_switch_fork (inferior_ptid);
+      check_for_thread_db ();
 
       /* Reset breakpoints in the child as appropriate.  */
       follow_inferior_reset_breakpoints ();
@@ -573,7 +582,7 @@ linux_child_insert_exec_catchpoint (int pid)
      because the "zombies" stay around.  */
 
 /* List of known LWPs.  */
-static struct lwp_info *lwp_list;
+struct lwp_info *lwp_list;
 
 /* Number of LWPs in the list.  */
 static int num_lwps;
@@ -657,7 +666,8 @@ init_lwp_list (void)
 }
 
 /* Add the LWP specified by PID to the list.  Return a pointer to the
-   structure describing the new LWP.  */
+   structure describing the new LWP.  The LWP should already be stopped
+   (with an exception for the very first LWP).  */
 
 static struct lwp_info *
 add_lwp (ptid_t ptid)
@@ -677,6 +687,9 @@ add_lwp (ptid_t ptid)
   lp->next = lwp_list;
   lwp_list = lp;
   ++num_lwps;
+
+  if (num_lwps > 1 && linux_nat_new_thread != NULL)
+    linux_nat_new_thread (ptid);
 
   return lp;
 }
@@ -858,7 +871,7 @@ exit_lwp (struct lwp_info *lp)
    be attached.  */
 
 int
-lin_lwp_attach_lwp (ptid_t ptid, int verbose)
+lin_lwp_attach_lwp (ptid_t ptid)
 {
   struct lwp_info *lp;
 
@@ -884,21 +897,19 @@ lin_lwp_attach_lwp (ptid_t ptid, int verbose)
     {
       pid_t pid;
       int status;
+      int cloned = 0;
 
       if (ptrace (PTRACE_ATTACH, GET_LWP (ptid), 0, 0) < 0)
 	{
 	  /* If we fail to attach to the thread, issue a warning,
 	     but continue.  One way this can happen is if thread
-	     creation is interrupted; as of Linux 2.6.19, a kernel
+	     creation is interrupted; as of Linux kernel 2.6.19, a
 	     bug may place threads in the thread list and then fail
 	     to create them.  */
 	  warning (_("Can't attach %s: %s"), target_pid_to_str (ptid),
 		   safe_strerror (errno));
 	  return -1;
 	}
-
-      if (lp == NULL)
-	lp = add_lwp (ptid);
 
       if (debug_linux_nat)
 	fprintf_unfiltered (gdb_stdlog,
@@ -910,11 +921,15 @@ lin_lwp_attach_lwp (ptid_t ptid, int verbose)
 	{
 	  /* Try again with __WCLONE to check cloned processes.  */
 	  pid = my_waitpid (GET_LWP (ptid), &status, __WCLONE);
-	  lp->cloned = 1;
+	  cloned = 1;
 	}
 
       gdb_assert (pid == GET_LWP (ptid)
 		  && WIFSTOPPED (status) && WSTOPSIG (status));
+
+      if (lp == NULL)
+	lp = add_lwp (ptid);
+      lp->cloned = cloned;
 
       target_post_attach (pid);
 
@@ -941,9 +956,6 @@ lin_lwp_attach_lwp (ptid_t ptid, int verbose)
       lp->stopped = 1;
     }
 
-  if (verbose)
-    printf_filtered (_("[New %s]\n"), target_pid_to_str (ptid));
-
   return 0;
 }
 
@@ -953,14 +965,11 @@ linux_nat_attach (char *args, int from_tty)
   struct lwp_info *lp;
   pid_t pid;
   int status;
+  int cloned = 0;
 
   /* FIXME: We should probably accept a list of process id's, and
      attach all of them.  */
   linux_ops->to_attach (args, from_tty);
-
-  /* Add the initial process as the first LWP to the list.  */
-  inferior_ptid = BUILD_LWP (GET_PID (inferior_ptid), GET_PID (inferior_ptid));
-  lp = add_lwp (inferior_ptid);
 
   /* Make sure the initial process is stopped.  The user-level threads
      layer might want to poke around in the inferior, and that won't
@@ -972,11 +981,16 @@ linux_nat_attach (char *args, int from_tty)
 
       /* Try again with __WCLONE to check cloned processes.  */
       pid = my_waitpid (GET_PID (inferior_ptid), &status, __WCLONE);
-      lp->cloned = 1;
+      cloned = 1;
     }
 
   gdb_assert (pid == GET_PID (inferior_ptid)
 	      && WIFSTOPPED (status) && WSTOPSIG (status) == SIGSTOP);
+
+  /* Add the initial process as the first LWP to the list.  */
+  inferior_ptid = BUILD_LWP (GET_PID (inferior_ptid), GET_PID (inferior_ptid));
+  lp = add_lwp (inferior_ptid);
+  lp->cloned = cloned;
 
   lp->stopped = 1;
 
@@ -1077,8 +1091,6 @@ resume_callback (struct lwp_info *lp, void *data)
 {
   if (lp->stopped && lp->status == 0)
     {
-      struct thread_info *tp;
-
       linux_ops->to_resume (pid_to_ptid (GET_LWP (lp->ptid)),
 			    0, TARGET_SIGNAL_0);
       if (debug_linux_nat)
@@ -1087,6 +1099,7 @@ resume_callback (struct lwp_info *lp, void *data)
 			    target_pid_to_str (lp->ptid));
       lp->stopped = 0;
       lp->step = 0;
+      memset (&lp->siginfo, 0, sizeof (lp->siginfo));
     }
 
   return 0;
@@ -1136,68 +1149,69 @@ linux_nat_resume (ptid_t ptid, int step, enum target_signal signo)
     ptid = inferior_ptid;
 
   lp = find_lwp_pid (ptid);
-  if (lp)
+  gdb_assert (lp != NULL);
+
+  ptid = pid_to_ptid (GET_LWP (lp->ptid));
+
+  /* Remember if we're stepping.  */
+  lp->step = step;
+
+  /* Mark this LWP as resumed.  */
+  lp->resumed = 1;
+
+  /* If we have a pending wait status for this thread, there is no
+     point in resuming the process.  But first make sure that
+     linux_nat_wait won't preemptively handle the event - we
+     should never take this short-circuit if we are going to
+     leave LP running, since we have skipped resuming all the
+     other threads.  This bit of code needs to be synchronized
+     with linux_nat_wait.  */
+
+  if (lp->status && WIFSTOPPED (lp->status))
     {
-      ptid = pid_to_ptid (GET_LWP (lp->ptid));
+      int saved_signo = target_signal_from_host (WSTOPSIG (lp->status));
 
-      /* Remember if we're stepping.  */
-      lp->step = step;
-
-      /* Mark this LWP as resumed.  */
-      lp->resumed = 1;
-
-      /* If we have a pending wait status for this thread, there is no
-	 point in resuming the process.  But first make sure that
-	 linux_nat_wait won't preemptively handle the event - we
-	 should never take this short-circuit if we are going to
-	 leave LP running, since we have skipped resuming all the
-	 other threads.  This bit of code needs to be synchronized
-	 with linux_nat_wait.  */
-
-      if (lp->status && WIFSTOPPED (lp->status))
+      if (signal_stop_state (saved_signo) == 0
+	  && signal_print_state (saved_signo) == 0
+	  && signal_pass_state (saved_signo) == 1)
 	{
-	  int saved_signo = target_signal_from_host (WSTOPSIG (lp->status));
+	  if (debug_linux_nat)
+	    fprintf_unfiltered (gdb_stdlog,
+				"LLR: Not short circuiting for ignored "
+				"status 0x%x\n", lp->status);
 
-	  if (signal_stop_state (saved_signo) == 0
-	      && signal_print_state (saved_signo) == 0
-	      && signal_pass_state (saved_signo) == 1)
-	    {
-	      if (debug_linux_nat)
-		fprintf_unfiltered (gdb_stdlog,
-				    "LLR: Not short circuiting for ignored "
-				    "status 0x%x\n", lp->status);
-
-	      /* FIXME: What should we do if we are supposed to continue
-		 this thread with a signal?  */
-	      gdb_assert (signo == TARGET_SIGNAL_0);
-	      signo = saved_signo;
-	      lp->status = 0;
-	    }
-	}
-
-      if (lp->status)
-	{
 	  /* FIXME: What should we do if we are supposed to continue
 	     this thread with a signal?  */
 	  gdb_assert (signo == TARGET_SIGNAL_0);
-
-	  if (debug_linux_nat)
-	    fprintf_unfiltered (gdb_stdlog,
-				"LLR: Short circuiting for status 0x%x\n",
-				lp->status);
-
-	  return;
+	  signo = saved_signo;
+	  lp->status = 0;
 	}
-
-      /* Mark LWP as not stopped to prevent it from being continued by
-         resume_callback.  */
-      lp->stopped = 0;
     }
+
+  if (lp->status)
+    {
+      /* FIXME: What should we do if we are supposed to continue
+	 this thread with a signal?  */
+      gdb_assert (signo == TARGET_SIGNAL_0);
+
+      if (debug_linux_nat)
+	fprintf_unfiltered (gdb_stdlog,
+			    "LLR: Short circuiting for status 0x%x\n",
+			    lp->status);
+
+      return;
+    }
+
+  /* Mark LWP as not stopped to prevent it from being continued by
+     resume_callback.  */
+  lp->stopped = 0;
 
   if (resume_all)
     iterate_over_lwps (resume_callback, NULL);
 
   linux_ops->to_resume (ptid, step, signo);
+  memset (&lp->siginfo, 0, sizeof (lp->siginfo));
+
   if (debug_linux_nat)
     fprintf_unfiltered (gdb_stdlog,
 			"LLR: %s %s, %s (resume event thread)\n",
@@ -1416,6 +1430,22 @@ wait_lwp (struct lwp_info *lp)
   return status;
 }
 
+/* Save the most recent siginfo for LP.  This is currently only called
+   for SIGTRAP; some ports use the si_addr field for
+   target_stopped_data_address.  In the future, it may also be used to
+   restore the siginfo of requeued signals.  */
+
+static void
+save_siginfo (struct lwp_info *lp)
+{
+  errno = 0;
+  ptrace (PTRACE_GETSIGINFO, GET_LWP (lp->ptid),
+	  (PTRACE_TYPE_ARG3) 0, &lp->siginfo);
+
+  if (errno != 0)
+    memset (&lp->siginfo, 0, sizeof (lp->siginfo));
+}
+
 /* Send a SIGSTOP to LP.  */
 
 static int
@@ -1500,6 +1530,9 @@ stop_wait_callback (struct lwp_info *lp, void *data)
 	         If we do not do this, then we run the risk that the
 	         user will delete or disable the breakpoint, but the
 	         thread will have already tripped on it.  */
+
+	      /* Save the trap's siginfo in case we need it later.  */
+	      save_siginfo (lp);
 
 	      /* Now resume this LWP and get the SIGSTOP event. */
 	      errno = 0;
@@ -2054,9 +2087,11 @@ retry:
 		}
 
 	      add_thread (lp->ptid);
-	      printf_unfiltered (_("[New %s]\n"),
-				 target_pid_to_str (lp->ptid));
 	    }
+
+	  /* Save the trap's siginfo in case we need it later.  */
+	  if (WIFSTOPPED (status) && WSTOPSIG (status) == SIGTRAP)
+	    save_siginfo (lp);
 
 	  /* Handle GNU/Linux's extended waitstatus for trace events.  */
 	  if (WIFSTOPPED (status) && WSTOPSIG (status) == SIGTRAP && status >> 16 != 0)
@@ -2313,11 +2348,18 @@ kill_wait_callback (struct lwp_info *lp, void *data)
       do
 	{
 	  pid = my_waitpid (GET_LWP (lp->ptid), NULL, __WCLONE);
-	  if (pid != (pid_t) -1 && debug_linux_nat)
+	  if (pid != (pid_t) -1)
 	    {
-	      fprintf_unfiltered (gdb_stdlog,
-				  "KWC: wait %s received unknown.\n",
-				  target_pid_to_str (lp->ptid));
+	      if (debug_linux_nat)
+		fprintf_unfiltered (gdb_stdlog,
+				    "KWC: wait %s received unknown.\n",
+				    target_pid_to_str (lp->ptid));
+	      /* The Linux kernel sometimes fails to kill a thread
+		 completely after PTRACE_KILL; that goes from the stop
+		 point in do_fork out to the one in
+		 get_signal_to_deliever and waits again.  So kill it
+		 again.  */
+	      kill_callback (lp, NULL);
 	    }
 	}
       while (pid == GET_LWP (lp->ptid));
@@ -2328,11 +2370,14 @@ kill_wait_callback (struct lwp_info *lp, void *data)
   do
     {
       pid = my_waitpid (GET_LWP (lp->ptid), NULL, 0);
-      if (pid != (pid_t) -1 && debug_linux_nat)
+      if (pid != (pid_t) -1)
 	{
-	  fprintf_unfiltered (gdb_stdlog,
-			      "KWC: wait %s received unk.\n",
-			      target_pid_to_str (lp->ptid));
+	  if (debug_linux_nat)
+	    fprintf_unfiltered (gdb_stdlog,
+				"KWC: wait %s received unk.\n",
+				target_pid_to_str (lp->ptid));
+	  /* See the call to kill_callback above.  */
+	  kill_callback (lp, NULL);
 	}
     }
   while (pid == GET_LWP (lp->ptid));
@@ -3173,7 +3218,7 @@ linux_xfer_partial (struct target_ops *ops, enum target_object object,
 			     offset, len);
 }
 
-/* Create a prototype generic Linux target.  The client can override
+/* Create a prototype generic GNU/Linux target.  The client can override
    it with local methods.  */
 
 static void
@@ -3248,6 +3293,27 @@ linux_nat_add_target (struct target_ops *t)
   /* TODO: Eliminate this and have libthread_db use
      find_target_beneath.  */
   thread_db_init (t);
+}
+
+/* Register a method to call whenever a new thread is attached.  */
+void
+linux_nat_set_new_thread (struct target_ops *t, void (*new_thread) (ptid_t))
+{
+  /* Save the pointer.  We only support a single registered instance
+     of the GNU/Linux native target, so we do not need to map this to
+     T.  */
+  linux_nat_new_thread = new_thread;
+}
+
+/* Return the saved siginfo associated with PTID.  */
+struct siginfo *
+linux_nat_get_siginfo (ptid_t ptid)
+{
+  struct lwp_info *lp = find_lwp_pid (ptid);
+
+  gdb_assert (lp != NULL);
+
+  return &lp->siginfo;
 }
 
 void

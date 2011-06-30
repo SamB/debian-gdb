@@ -1,6 +1,6 @@
 /* Handle OSF/1, Digital UNIX, and Tru64 shared libraries
    for GDB, the GNU Debugger.
-   Copyright (C) 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2007
+   Copyright (C) 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -324,7 +324,7 @@ osf_solib_create_inferior_hook (void)
   do
     {
       target_resume (minus_one_ptid, 0, stop_signal);
-      wait_for_inferior ();
+      wait_for_inferior (0);
     }
   while (stop_signal != TARGET_SIGNAL_TRAP);
 
@@ -336,9 +336,6 @@ osf_solib_create_inferior_hook (void)
      suppresses the warning.  */
   solib_add ((char *) 0, 0, (struct target_ops *) 0, auto_solib_add);
   stop_soon = NO_STOP_QUIETLY;
-
-  /* Enable breakpoints disabled (unnecessarily) by clear_solib().  */
-  re_enable_breakpoints_in_shlibs ();
 }
 
 /* target_so_ops callback.  Do additional symbol handling, lookup, etc. after

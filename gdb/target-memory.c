@@ -1,7 +1,7 @@
 /* Parts of target interface that deal with accessing memory and memory-like
    objects.
 
-   Copyright (C) 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -84,10 +84,10 @@ claim_memory (VEC(memory_write_request_s) *blocks,
 	{
 	  struct memory_write_request *n =
 	    VEC_safe_push (memory_write_request_s, *result, NULL);
-	  memset (n, 0, sizeof (struct memory_write_request));
+	  *n = *r;
 	  n->begin = claimed_begin;
 	  n->end = claimed_end;
-	  n->data = r->data + (claimed_begin - r->begin);
+	  n->data += claimed_begin - r->begin;
 	}
     }
 }

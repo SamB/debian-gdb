@@ -1,6 +1,6 @@
 /* Opcode table for the Atmel AVR micro controllers.
 
-   Copyright 2000, 2001, 2004, 2006 Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2004, 2006, 2008 Free Software Foundation, Inc.
    Contributed by Denis Chertykov <denisc@overta.ru>
    
    This program is free software; you can redistribute it and/or modify
@@ -34,12 +34,19 @@
 #define AVR_ISA_TINY1 (AVR_ISA_1200 | AVR_ISA_LPM)
 #define AVR_ISA_PWMx  (AVR_ISA_M8   | AVR_ISA_BRK)
 #define AVR_ISA_2xxx  (AVR_ISA_TINY1 | AVR_ISA_SRAM)
+/* For the attiny26 which is missing LPM Rd,Z+.  */
+#define AVR_ISA_2xxe  (AVR_ISA_2xxx | AVR_ISA_LPMX)
+#define AVR_ISA_RF401 (AVR_ISA_2xxx | AVR_ISA_MOVW | AVR_ISA_LPMX)
 #define AVR_ISA_TINY2 (AVR_ISA_2xxx | AVR_ISA_MOVW | AVR_ISA_LPMX | \
                        AVR_ISA_SPM  | AVR_ISA_BRK)
 #define AVR_ISA_M8    (AVR_ISA_2xxx | AVR_ISA_MUL | AVR_ISA_MOVW | \
                        AVR_ISA_LPMX | AVR_ISA_SPM)
 #define AVR_ISA_M603  (AVR_ISA_2xxx | AVR_ISA_MEGA)
 #define AVR_ISA_M103  (AVR_ISA_M603 | AVR_ISA_ELPM)
+#define AVR_ISA_USB162 (AVR_ISA_M603 | AVR_ISA_MOVW | \
+                       AVR_ISA_LPMX | AVR_ISA_SPM)
+#define AVR_ISA_AVR3 (AVR_ISA_M603 | AVR_ISA_MOVW | \
+                       AVR_ISA_LPMX | AVR_ISA_SPM  | AVR_ISA_ELPM)
 #define AVR_ISA_M161  (AVR_ISA_M603 | AVR_ISA_MUL | AVR_ISA_MOVW | \
                        AVR_ISA_LPMX | AVR_ISA_SPM)
 #define AVR_ISA_94K   (AVR_ISA_M603 | AVR_ISA_MUL | AVR_ISA_MOVW | AVR_ISA_LPMX)

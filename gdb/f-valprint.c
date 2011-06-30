@@ -1,7 +1,7 @@
 /* Support for printing Fortran values for GDB, the GNU debugger.
 
    Copyright (C) 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2003, 2005, 2006,
-   2007 Free Software Foundation, Inc.
+   2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Motorola.  Adapted from the C definitions by Farooq Butt
    (fmbutt@engage.sps.mot.com), additionally worked over by Stan Shebs.
@@ -407,7 +407,7 @@ f_val_print (struct type *type, const gdb_byte *valaddr, int embedded_offset,
 	    }
 
 	  if (addressprint && format != 's')
-	    deprecated_print_address_numeric (addr, 1, stream);
+	    fputs_filtered (paddress (addr), stream);
 
 	  /* For a pointer to char or unsigned char, also print the string
 	     pointed to, unless pointer is null.  */
@@ -431,7 +431,7 @@ f_val_print (struct type *type, const gdb_byte *valaddr, int embedded_offset,
 	  CORE_ADDR addr
 	    = extract_typed_address (valaddr + embedded_offset, type);
 	  fprintf_filtered (stream, "@");
-	  deprecated_print_address_numeric (addr, 1, stream);
+	  fputs_filtered (paddress (addr), stream);
 	  if (deref_ref)
 	    fputs_filtered (": ", stream);
 	}

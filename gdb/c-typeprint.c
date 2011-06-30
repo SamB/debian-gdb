@@ -1,6 +1,7 @@
 /* Support for printing C and C++ types for GDB, the GNU debugger.
    Copyright (C) 1986, 1988, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1998,
-   1999, 2000, 2001, 2002, 2003, 2006, 2007 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2002, 2003, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -277,6 +278,7 @@ c_type_print_varspec_prefix (struct type *type, struct ui_file *stream,
     case TYPE_CODE_COMPLEX:
     case TYPE_CODE_TEMPLATE:
     case TYPE_CODE_NAMESPACE:
+    case TYPE_CODE_DECFLOAT:
       /* These types need no prefix.  They are listed here so that
          gcc -Wall will reveal any types that haven't been handled.  */
       break;
@@ -599,6 +601,7 @@ c_type_print_varspec_suffix (struct type *type, struct ui_file *stream,
     case TYPE_CODE_COMPLEX:
     case TYPE_CODE_TEMPLATE:
     case TYPE_CODE_NAMESPACE:
+    case TYPE_CODE_DECFLOAT:
       /* These types do not need a suffix.  They are listed so that
          gcc -Wall will report types that may not have been considered.  */
       break;
@@ -832,11 +835,6 @@ c_type_print_base (struct type *type, struct ui_file *stream, int show,
 	    {
 	      QUIT;
 	      /* Don't print out virtual function table.  */
-	      /* HP ANSI C++ case */
-	      if (TYPE_HAS_VTABLE (type)
-		  && (strncmp (TYPE_FIELD_NAME (type, i), "__vfp", 5) == 0))
-		continue;
-	      /* Other compilers */
 	      if (strncmp (TYPE_FIELD_NAME (type, i), "_vptr", 5) == 0
 		  && is_cplus_marker ((TYPE_FIELD_NAME (type, i))[5]))
 		continue;

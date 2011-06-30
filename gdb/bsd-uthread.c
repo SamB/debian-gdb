@@ -1,6 +1,6 @@
 /* BSD user-level threads support.
 
-   Copyright (C) 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -266,7 +266,7 @@ bsd_uthread_mourn_inferior (void)
 static void
 bsd_uthread_fetch_registers (struct regcache *regcache, int regnum)
 {
-  struct gdbarch *gdbarch = current_gdbarch;
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct bsd_uthread_ops *ops = gdbarch_data (gdbarch, bsd_uthread_data);
   CORE_ADDR addr = ptid_get_tid (inferior_ptid);
   CORE_ADDR active_addr;
@@ -292,7 +292,7 @@ bsd_uthread_fetch_registers (struct regcache *regcache, int regnum)
 static void
 bsd_uthread_store_registers (struct regcache *regcache, int regnum)
 {
-  struct gdbarch *gdbarch = current_gdbarch;
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   struct bsd_uthread_ops *ops = gdbarch_data (gdbarch, bsd_uthread_data);
   CORE_ADDR addr = ptid_get_tid (inferior_ptid);
   CORE_ADDR active_addr;
@@ -366,7 +366,7 @@ bsd_uthread_wait (ptid_t ptid, struct target_waitstatus *status)
   if (ptid_get_tid (ptid) != 0 && !in_thread_list (ptid)
       && ptid_get_tid (inferior_ptid) == 0)
     {
-      add_thread (ptid);
+      add_thread_silent (ptid);
       inferior_ptid = ptid;
     }
 

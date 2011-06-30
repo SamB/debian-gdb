@@ -176,13 +176,14 @@ POSUB = @POSUB@
 RANLIB = @RANLIB@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
+SHARED_DEPENDENCIES = @SHARED_DEPENDENCIES@
+SHARED_LDFLAGS = @SHARED_LDFLAGS@
+SHARED_LIBADD = @SHARED_LIBADD@
 SHELL = @SHELL@
 STRIP = @STRIP@
 USE_NLS = @USE_NLS@
 VERSION = @VERSION@
 WARN_CFLAGS = @WARN_CFLAGS@
-WIN32LDFLAGS = @WIN32LDFLAGS@
-WIN32LIBADD = @WIN32LIBADD@
 XGETTEXT = @XGETTEXT@
 ac_ct_CC = @ac_ct_CC@
 ac_ct_DUMPBIN = @ac_ct_DUMPBIN@
@@ -260,6 +261,7 @@ HFILES = \
 	fr30-desc.h fr30-opc.h \
 	frv-desc.h frv-opc.h \
 	h8500-opc.h \
+	i386-init.h \
 	i386-opc.h \
 	i386-tbl.h \
 	ia64-asmtab.h \
@@ -589,10 +591,11 @@ libopcodes_la_SOURCES = dis-buf.c disassemble.c dis-init.c
 # Unfortunately this causes libtool to add -L$(libdir), referring to the
 # planned install directory of libbfd.  This can cause us to pick up an
 # old version of libbfd, or to pick up libbfd for the wrong architecture
-# if host != build.
-libopcodes_la_DEPENDENCIES = $(OFILES)
-libopcodes_la_LIBADD = $(OFILES) @WIN32LIBADD@
-libopcodes_la_LDFLAGS = -release `cat ../bfd/libtool-soversion` @WIN32LDFLAGS@
+# if host != build. So for building with shared libraries we use a
+# hardcoded path to libbfd.so instead of relying on the entries in libbfd.la.
+libopcodes_la_DEPENDENCIES = $(OFILES) @SHARED_DEPENDENCIES@
+libopcodes_la_LIBADD = $(OFILES) @SHARED_LIBADD@
+libopcodes_la_LDFLAGS = -release `cat ../bfd/libtool-soversion` @SHARED_LDFLAGS@
 
 # libtool will build .libs/libopcodes.a.  We create libopcodes.a in
 # the build directory so that we don't have to convert all the
@@ -1124,9 +1127,12 @@ stamp-xc16x: $(CGENDEPS) $(CPUDIR)/xc16x.cpu $(CPUDIR)/xc16x.opc
 i386-gen: i386-gen.o
 	$(LINK) i386-gen.o $(LIBIBERTY)
 
-i386-gen.o: i386-gen.c i386-opc.h
+i386-gen.o: i386-gen.c i386-opc.h $(srcdir)/../include/opcode/i386.h
 
-$(srcdir)/i386-tbl.h: @MAINT@ i386-gen i386-opc.tbl i386-reg.tbl
+$(srcdir)/i386-tbl.h: $(srcdir)/i386-init.h 
+	@echo $@
+
+$(srcdir)/i386-init.h: @MAINT@ i386-gen i386-opc.tbl i386-reg.tbl
 	./i386-gen --srcdir $(srcdir)
 
 ia64-gen: ia64-gen.o
@@ -1351,15 +1357,16 @@ i370-dis.lo: i370-dis.c sysdep.h config.h $(INCDIR)/ansidecl.h \
   $(INCDIR)/opcode/i370.h
 i370-opc.lo: i370-opc.c sysdep.h config.h $(INCDIR)/ansidecl.h \
   $(INCDIR)/opcode/i370.h
-i386-dis.lo: i386-dis.c $(INCDIR)/dis-asm.h $(BFD_H) \
-  $(INCDIR)/ansidecl.h $(INCDIR)/symcat.h sysdep.h config.h \
-  $(INCDIR)/ansidecl.h opintl.h $(INCDIR)/opcode/i386.h
+i386-dis.lo: i386-dis.c sysdep.h config.h $(INCDIR)/ansidecl.h \
+  $(INCDIR)/dis-asm.h $(BFD_H) $(INCDIR)/ansidecl.h $(INCDIR)/symcat.h \
+  opintl.h $(INCDIR)/opcode/i386.h $(INCDIR)/libiberty.h \
+  $(INCDIR)/ansidecl.h
 i386-opc.lo: i386-opc.c sysdep.h config.h $(INCDIR)/ansidecl.h \
   $(INCDIR)/libiberty.h $(INCDIR)/ansidecl.h i386-opc.h \
   $(INCDIR)/opcode/i386.h i386-tbl.h
-i386-gen.lo: i386-gen.c $(INCDIR)/getopt.h $(INCDIR)/libiberty.h \
-  $(INCDIR)/ansidecl.h $(INCDIR)/safe-ctype.h i386-opc.h \
-  $(INCDIR)/opcode/i386.h
+i386-gen.lo: i386-gen.c sysdep.h config.h $(INCDIR)/ansidecl.h \
+  $(INCDIR)/getopt.h $(INCDIR)/libiberty.h $(INCDIR)/ansidecl.h \
+  $(INCDIR)/safe-ctype.h i386-opc.h $(INCDIR)/opcode/i386.h
 i860-dis.lo: i860-dis.c $(INCDIR)/dis-asm.h $(BFD_H) \
   $(INCDIR)/ansidecl.h $(INCDIR)/symcat.h $(INCDIR)/opcode/i860.h
 i960-dis.lo: i960-dis.c sysdep.h config.h $(INCDIR)/ansidecl.h \

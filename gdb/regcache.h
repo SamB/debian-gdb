@@ -1,7 +1,7 @@
 /* Cache and manage the values of registers for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1987, 1989, 1991, 1994, 1995, 1996, 1998, 2000, 2001,
-   2002, 2007 Free Software Foundation, Inc.
+   2002, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -102,18 +102,6 @@ extern void regcache_raw_supply (struct regcache *regcache,
 				 int regnum, const void *buf);
 extern void regcache_raw_collect (const struct regcache *regcache,
 				  int regnum, void *buf);
-
-
-/* The register's ``offset''.
-
-   FIXME: cagney/2002-11-07: The frame_register() function, when
-   specifying the real location of a register, does so using that
-   registers offset in the register cache.  That offset is then used
-   by valops.c to determine the location of the register.  The code
-   should instead use the register's number and a location expression
-   to describe a value spread across multiple registers or memory.  */
-
-extern int register_offset_hack (struct gdbarch *gdbarch, int regnum);
 
 
 /* The type of a register.  This function is slightly more efficient

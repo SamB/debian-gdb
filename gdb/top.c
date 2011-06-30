@@ -1,8 +1,8 @@
 /* Top level stuff for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
-   Free Software Foundation, Inc.
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
+   2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -385,7 +385,7 @@ execute_command (char *p, int from_tty)
   if (p == NULL)
     return;
 
-  serial_log_command (p);
+  target_log_command (p);
 
   while (*p == ' ' || *p == '\t')
     p++;
@@ -545,9 +545,9 @@ command_loop (void)
 	  long space_now = lim - lim_at_start;
 	  long space_diff = space_now - space_at_cmd_start;
 
-	  printf_unfiltered (_("Space used: %ld (%c%ld for this command)\n"),
+	  printf_unfiltered (_("Space used: %ld (%s%ld for this command)\n"),
 			     space_now,
-			     (space_diff >= 0 ? '+' : '-'),
+			     (space_diff >= 0 ? "+" : ""),
 			     space_diff);
 #endif
 	}
@@ -1147,7 +1147,7 @@ print_gdb_version (struct ui_file *stream)
 
   /* Second line is a copyright notice. */
 
-  fprintf_filtered (stream, "Copyright (C) 2007 Free Software Foundation, Inc.\n");
+  fprintf_filtered (stream, "Copyright (C) 2008 Free Software Foundation, Inc.\n");
 
   /* Following the copyright is a brief statement that the program is
      free software, that users are free to copy and change it on

@@ -1,7 +1,8 @@
 /* Read ELF (Executable and Linking Format) object files for GDB.
 
    Copyright (C) 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    Written by Fred Fish at Cygnus Support.
 
@@ -180,14 +181,14 @@ record_minimal_symbol (char *name, CORE_ADDR address,
 
    SYNOPSIS
 
-   void elf_symtab_read (struct objfile *objfile, int dynamic,
+   void elf_symtab_read (struct objfile *objfile, int type,
 			 long number_of_symbols, asymbol **symbol_table)
 
    DESCRIPTION
 
    Given an objfile, a symbol table, and a flag indicating whether the
-   symbol table contains dynamic symbols, add all the global function
-   and data symbols to the minimal symbol table.
+   symbol table contains regular, dynamic, or synthetic symbols, add all
+   the global function and data symbols to the minimal symbol table.
 
    In stabs-in-ELF, as implemented by Sun, there are some local symbols
    defined in the ELF symbol table, which can be used to locate
@@ -197,8 +198,12 @@ record_minimal_symbol (char *name, CORE_ADDR address,
 
  */
 
+#define ST_REGULAR 0
+#define ST_DYNAMIC 1
+#define ST_SYNTHETIC 2
+
 static void
-elf_symtab_read (struct objfile *objfile, int dynamic,
+elf_symtab_read (struct objfile *objfile, int type,
 		 long number_of_symbols, asymbol **symbol_table)
 {
   long storage_needed;
@@ -213,10 +218,8 @@ elf_symtab_read (struct objfile *objfile, int dynamic,
   /* If filesym is nonzero, it points to a file symbol, but we haven't
      seen any section info for it yet.  */
   asymbol *filesym = 0;
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
   /* Name of filesym, as saved on the objfile_obstack.  */
   char *filesymname = obsavestring ("", 0, &objfile->objfile_obstack);
-#endif
   struct dbx_symfile_info *dbx = objfile->deprecated_sym_stab_info;
   int stripped = (bfd_get_symcount (objfile->obfd) == 0);
 
@@ -237,11 +240,13 @@ elf_symtab_read (struct objfile *objfile, int dynamic,
 	continue;
 
       offset = ANOFFSET (objfile->section_offsets, sym->section->index);
-      if (dynamic
+      if (type == ST_DYNAMIC
 	  && sym->section == &bfd_und_section
 	  && (sym->flags & BSF_FUNCTION))
 	{
 	  struct minimal_symbol *msym;
+	  bfd *abfd = objfile->obfd;
+	  asection *sect; 
 
 	  /* Symbol is a reference to a function defined in
 	     a shared library.
@@ -254,21 +259,37 @@ elf_symtab_read (struct objfile *objfile, int dynamic,
 	  symaddr = sym->value;
 	  if (symaddr == 0)
 	    continue;
-	  symaddr += offset;
+
+	  /* sym->section is the undefined section.  However, we want to
+	     record the section where the PLT stub resides with the
+	     minimal symbol.  Search the section table for the one that
+	     covers the stub's address.  */
+	  for (sect = abfd->sections; sect != NULL; sect = sect->next)
+	    {
+	      if ((bfd_get_section_flags (abfd, sect) & SEC_ALLOC) == 0)
+		continue;
+
+	      if (symaddr >= bfd_get_section_vma (abfd, sect)
+		  && symaddr < bfd_get_section_vma (abfd, sect)
+			       + bfd_get_section_size (sect))
+		break;
+	    }
+	  if (!sect)
+	    continue;
+
+	  symaddr += ANOFFSET (objfile->section_offsets, sect->index);
+
 	  msym = record_minimal_symbol
-	    ((char *) sym->name, symaddr,
-	     mst_solib_trampoline, sym->section, objfile);
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
+	    ((char *) sym->name, symaddr, mst_solib_trampoline, sect, objfile);
 	  if (msym != NULL)
 	    msym->filename = filesymname;
-#endif
 	  continue;
 	}
 
       /* If it is a nonstripped executable, do not enter dynamic
 	 symbols, as the dynamic symbol table is usually a subset
 	 of the main symbol table.  */
-      if (dynamic && !stripped)
+      if (type == ST_DYNAMIC && !stripped)
 	continue;
       if (sym->flags & BSF_FILE)
 	{
@@ -281,11 +302,9 @@ elf_symtab_read (struct objfile *objfile, int dynamic,
 	      sectinfo = NULL;
 	    }
 	  filesym = sym;
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
 	  filesymname =
 	    obsavestring ((char *) filesym->name, strlen (filesym->name),
 			  &objfile->objfile_obstack);
-#endif
 	}
       else if (sym->flags & BSF_SECTION_SYM)
 	continue;
@@ -310,8 +329,11 @@ elf_symtab_read (struct objfile *objfile, int dynamic,
 	    {
 	      /* This is a hack to get the minimal symbol type
 		 right for Irix 5, which has absolute addresses
-		 with special section indices for dynamic symbols. */
-	      unsigned short shndx =
+		 with special section indices for dynamic symbols.
+
+		 NOTE: uweigand-20071112: Synthetic symbols do not
+		 have an ELF-private part, so do not touch those.  */
+	      unsigned short shndx = type == ST_SYNTHETIC ? 0 : 
 		((elf_symbol_type *) sym)->internal_elf_sym.st_shndx;
 
 	      switch (shndx)
@@ -470,16 +492,27 @@ elf_symtab_read (struct objfile *objfile, int dynamic,
 	  msym = record_minimal_symbol
 	    ((char *) sym->name, symaddr,
 	     ms_type, sym->section, objfile);
+
 	  if (msym)
 	    {
 	      /* Pass symbol size field in via BFD.  FIXME!!!  */
-	      unsigned long size = ((elf_symbol_type *) sym)->internal_elf_sym.st_size;
-	      MSYMBOL_SIZE(msym) = size;
+	      elf_symbol_type *elf_sym;
+
+	      /* NOTE: uweigand-20071112: A synthetic symbol does not have an
+		 ELF-private part.  However, in some cases (e.g. synthetic
+		 'dot' symbols on ppc64) the udata.p entry is set to point back
+		 to the original ELF symbol it was derived from.  Get the size
+		 from that symbol.  */ 
+	      if (type != ST_SYNTHETIC)
+		elf_sym = (elf_symbol_type *) sym;
+	      else
+		elf_sym = (elf_symbol_type *) sym->udata.p;
+
+	      if (elf_sym)
+		MSYMBOL_SIZE(msym) = elf_sym->internal_elf_sym.st_size;
 	    }
-#ifdef SOFUN_ADDRESS_MAYBE_MISSING
 	  if (msym != NULL)
 	    msym->filename = filesymname;
-#endif
 	  gdbarch_elf_make_msymbol_special (current_gdbarch, sym, msym);
 	}
     }
@@ -557,7 +590,7 @@ elf_symfile_read (struct objfile *objfile, int mainline)
 	error (_("Can't read symbols from %s: %s"), bfd_get_filename (objfile->obfd),
 	       bfd_errmsg (bfd_get_error ()));
 
-      elf_symtab_read (objfile, 0, symcount, symbol_table);
+      elf_symtab_read (objfile, ST_REGULAR, symcount, symbol_table);
     }
 
   /* Add the dynamic symbols.  */
@@ -575,7 +608,7 @@ elf_symfile_read (struct objfile *objfile, int mainline)
 	error (_("Can't read symbols from %s: %s"), bfd_get_filename (objfile->obfd),
 	       bfd_errmsg (bfd_get_error ()));
 
-      elf_symtab_read (objfile, 1, dynsymcount, dyn_symbol_table);
+      elf_symtab_read (objfile, ST_DYNAMIC, dynsymcount, dyn_symbol_table);
     }
 
   /* Add synthetic symbols - for instance, names for any PLT entries.  */
@@ -593,7 +626,7 @@ elf_symfile_read (struct objfile *objfile, int mainline)
       for (i = 0; i < synthcount; i++)
 	synth_symbol_table[i] = synthsyms + i;
       make_cleanup (xfree, synth_symbol_table);
-      elf_symtab_read (objfile, 0, synthcount, synth_symbol_table);
+      elf_symtab_read (objfile, ST_SYNTHETIC, synthcount, synth_symbol_table);
     }
 
   /* Install any minimal symbols that have been collected as the current
@@ -717,6 +750,8 @@ elf_symfile_finish (struct objfile *objfile)
     {
       xfree (objfile->deprecated_sym_stab_info);
     }
+
+  dwarf2_free_objfile (objfile);
 }
 
 /* ELF specific initialization routine for reading symbols.
@@ -813,6 +848,7 @@ static struct sym_fns elf_sym_fns =
   default_symfile_offsets,	/* sym_offsets:  Translate ext. to int. relocation */
   elf_symfile_segments,		/* sym_segments: Get segment information from
 				   a file.  */
+  NULL,                         /* sym_read_linetable */
   NULL				/* next: pointer to next struct sym_fns */
 };
 

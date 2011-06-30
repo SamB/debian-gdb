@@ -1,7 +1,7 @@
 /* Support for GDB maintenance commands.
 
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1999, 2000, 2001, 2002,
-   2003, 2004, 2007 Free Software Foundation, Inc.
+   2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    Written by Fred Fish at Cygnus Support.
 
@@ -638,15 +638,15 @@ show_maintenance_profile_p (struct ui_file *file, int from_tty,
   fprintf_filtered (file, _("Internal profiling is %s.\n"), value);
 }
 
-#if defined (HAVE_MONSTARTUP) && defined (HAVE__MCLEANUP)
-
 #ifdef HAVE__ETEXT
 extern char _etext;
 #define TEXTEND &_etext
-#else
+#elif defined (HAVE_ETEXT)
 extern char etext;
 #define TEXTEND &etext
 #endif
+
+#if defined (HAVE_MONSTARTUP) && defined (HAVE__MCLEANUP) && defined (TEXTEND)
 
 static int profiling_state;
 

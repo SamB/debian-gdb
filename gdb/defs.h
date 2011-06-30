@@ -1,7 +1,7 @@
 /* *INDENT-OFF* */ /* ATTR_FORMAT confuses indent, avoid running it for now */
 /* Basic, host-specific, and target-specific definitions for GDB.
    Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -84,6 +84,9 @@ typedef bfd_byte gdb_byte;
 /* An address in the program being debugged.  Host byte order.  */
 typedef bfd_vma CORE_ADDR;
 
+/* The largest CORE_ADDR value.  */
+#define CORE_ADDR_MAX (~ (CORE_ADDR) 0)
+
 /* This is to make sure that LONGEST is at least as big as CORE_ADDR.  */
 
 #ifndef LONGEST
@@ -120,38 +123,6 @@ typedef bfd_vma CORE_ADDR;
 #ifndef max
 #define max(a, b) ((a) > (b) ? (a) : (b))
 #endif
-
-/* Macros to do string compares.
-
-   NOTE: cagney/2000-03-14:
-
-   While old code can continue to refer to these macros, new code is
-   probably better off using strcmp() directly vis: ``strcmp() == 0''
-   and ``strcmp() != 0''.
-
-   This is because modern compilers can directly inline strcmp()
-   making the original justification for these macros - avoid function
-   call overhead by pre-testing the first characters
-   (``*X==*Y?...:0'') - redundant.
-
-   ``Even if [...] testing the first character does have a modest
-   performance improvement, I'd rather that whenever a performance
-   issue is found that we spend the effort on algorithmic
-   optimizations than micro-optimizing.'' J.T. */
-
-/* NOTE: cagney/2003-11-23: All instances of STREQ[N] covered by
-   testing GDB on a stabs system have been replaced by equivalent
-   str[n]cmp calls.  To avoid the possability of introducing bugs when
-   making untested changes, the remaining references were deprecated
-   rather than replaced.  */
-
-/* DISCLAIMER: cagney/2003-11-23: Simplified definition of these
-   macros so that they just map directly onto strcmp equivalent.  I'm
-   not responsible for any breakage due to code that relied on the old
-   underlying implementation.  */
-
-#define DEPRECATED_STREQ(a,b) (strcmp ((a), (b)) == 0)
-#define DEPRECATED_STREQN(a,b,c) (strncmp ((a), (b), (c)) == 0)
 
 /* Check if a character is one of the commonly used C++ marker characters.  */
 extern int is_cplus_marker (int);
@@ -347,7 +318,6 @@ extern char *safe_strerror (int);
 
 extern void do_cleanups (struct cleanup *);
 extern void do_final_cleanups (struct cleanup *);
-extern void do_run_cleanups (struct cleanup *);
 extern void do_exec_cleanups (struct cleanup *);
 extern void do_exec_error_cleanups (struct cleanup *);
 
@@ -382,8 +352,6 @@ extern struct cleanup *make_final_cleanup (make_cleanup_ftype *, void *);
 
 extern struct cleanup *make_my_cleanup (struct cleanup **,
 					make_cleanup_ftype *, void *);
-
-extern struct cleanup *make_run_cleanup (make_cleanup_ftype *, void *);
 
 extern struct cleanup *make_exec_cleanup (make_cleanup_ftype *, void *);
 extern struct cleanup *make_exec_error_cleanup (make_cleanup_ftype *, void *);
@@ -421,12 +389,6 @@ char *ldirname (const char *filename);
 /* From demangle.c */
 
 extern void set_demangling_style (char *);
-
-/* From tm.h */
-
-struct type;
-typedef int (use_struct_convention_fn) (int gcc_p, struct type * value_type);
-extern use_struct_convention_fn generic_use_struct_convention;
 
 
 /* Annotation stuff.  */
@@ -712,7 +674,7 @@ extern void free_command_lines (struct command_line **);
 /* To continue the execution commands when running gdb asynchronously. 
    A continuation structure contains a pointer to a function to be called 
    to finish the command, once the target has stopped. Such mechanism is
-   used bt the finish and until commands, and in the remote protocol
+   used by the finish and until commands, and in the remote protocol
    when opening an extended-remote connection. */
 
 struct continuation_arg
@@ -804,14 +766,6 @@ typedef struct ptid ptid_t;
 
 
 
-/* Optional host machine definition.  Pure autoconf targets will not
-   need a "xm.h" file.  This will be a symlink to one of the xm-*.h
-   files, built by the `configure' script.  */
-
-#ifdef GDB_XM_FILE
-#include "xm.h"
-#endif
-
 /* Optional native machine support.  Non-native (and possibly pure
    multi-arch) targets do not need a "nm.h" file.  This will be a
    symlink to one of the nm-*.h files, built by the `configure'
@@ -819,14 +773,6 @@ typedef struct ptid ptid_t;
 
 #ifdef GDB_NM_FILE
 #include "nm.h"
-#endif
-
-/* Optional target machine definition.  Pure multi-arch configurations
-   do not need a "tm.h" file.  This will be a symlink to one of the
-   tm-*.h files, built by the `configure' script.  */
-
-#ifdef GDB_TM_FILE
-#include "tm.h"
 #endif
 
 /* Assume that fopen accepts the letter "b" in the mode string.
@@ -1063,14 +1009,6 @@ enum { MAX_REGISTER_SIZE = 16 };
 #define HOST_CHAR_BIT CHAR_BIT
 #else
 #define HOST_CHAR_BIT TARGET_CHAR_BIT
-#endif
-
-/* The bit byte-order has to do just with numbering of bits in
-   debugging symbols and such.  Conceptually, it's quite separate
-   from byte/word byte order.  */
-
-#if !defined (BITS_BIG_ENDIAN)
-#define BITS_BIG_ENDIAN (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
 #endif
 
 /* In findvar.c.  */

@@ -1,5 +1,5 @@
 /* Internal interfaces for the Win32 specific target code for gdbserver.
-   Copyright (C) 2007 Free Software Foundation, Inc.
+   Copyright (C) 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,9 +22,21 @@
    each thread.  */
 typedef struct win32_thread_info
 {
+  /* The Win32 thread identifier.  */
   DWORD tid;
+
+  /* The handle to the thread.  */
   HANDLE h;
-  int suspend_count;
+
+  /* Non zero if SuspendThread was called on this thread.  */
+  int suspended;
+
+#ifdef _WIN32_WCE
+  /* The context as retrieved right after suspending the thread. */
+  CONTEXT base_context;
+#endif
+
+  /* The context of the thread, including any manipulations.  */
   CONTEXT context;
 } win32_thread_info;
 

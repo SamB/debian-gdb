@@ -1,7 +1,7 @@
 /* Target-dependent code for Renesas M32R, for GDB.
 
-   Copyright (C) 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
-   Free Software Foundation, Inc.
+   Copyright (C) 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007,
+   2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -79,7 +79,8 @@ m32r_frame_align (struct gdbarch *gdbarch, CORE_ADDR sp)
    The following functions take care of this behavior. */
 
 static int
-m32r_memory_insert_breakpoint (struct bp_target_info *bp_tgt)
+m32r_memory_insert_breakpoint (struct gdbarch *gdbarch,
+			       struct bp_target_info *bp_tgt)
 {
   CORE_ADDR addr = bp_tgt->placed_address;
   int val;
@@ -95,7 +96,7 @@ m32r_memory_insert_breakpoint (struct bp_target_info *bp_tgt)
   bp_tgt->placed_size = bp_tgt->shadow_len = 4;
 
   /* Determine appropriate breakpoint contents and size for this address.  */
-  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
     {
       if ((addr & 3) == 0)
 	{
@@ -136,7 +137,8 @@ m32r_memory_insert_breakpoint (struct bp_target_info *bp_tgt)
 }
 
 static int
-m32r_memory_remove_breakpoint (struct bp_target_info *bp_tgt)
+m32r_memory_remove_breakpoint (struct gdbarch *gdbarch,
+			       struct bp_target_info *bp_tgt)
 {
   CORE_ADDR addr = bp_tgt->placed_address;
   int val;
@@ -149,7 +151,7 @@ m32r_memory_remove_breakpoint (struct bp_target_info *bp_tgt)
   buf[3] = contents_cache[3];
 
   /* Remove parallel bit.  */
-  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
     {
       if ((buf[0] & 0x80) == 0 && (buf[2] & 0x80) != 0)
 	buf[2] &= 0x7f;
@@ -166,14 +168,14 @@ m32r_memory_remove_breakpoint (struct bp_target_info *bp_tgt)
 }
 
 static const gdb_byte *
-m32r_breakpoint_from_pc (CORE_ADDR *pcptr, int *lenptr)
+m32r_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr, int *lenptr)
 {
   static gdb_byte be_bp_entry[] = { 0x10, 0xf1, 0x70, 0x00 };	/* dpt -> nop */
   static gdb_byte le_bp_entry[] = { 0x00, 0x70, 0xf1, 0x10 };	/* dpt -> nop */
   gdb_byte *bp;
 
   /* Determine appropriate breakpoint.  */
-  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
     {
       if ((*pcptr & 3) == 0)
 	{
@@ -212,7 +214,7 @@ char *m32r_register_names[] = {
 };
 
 static const char *
-m32r_register_name (int reg_nr)
+m32r_register_name (struct gdbarch *gdbarch, int reg_nr)
 {
   if (reg_nr < 0)
     return NULL;
@@ -349,7 +351,7 @@ decode_prologue (CORE_ADDR start_pc, CORE_ADDR scan_limit,
       if ((insn >> 8) == 0x4f)	/* addi sp, xx */
 	/* add 8 bit sign-extended offset */
 	{
-	  int stack_adjust = (gdb_byte) (insn & 0xff);
+	  int stack_adjust = (signed char) (insn & 0xff);
 
 	  /* there are probably two of these stack adjustments:
 	     1) A negative one in the prologue, and
@@ -448,7 +450,7 @@ decode_prologue (CORE_ADDR start_pc, CORE_ADDR scan_limit,
 #define DEFAULT_SEARCH_LIMIT 128
 
 CORE_ADDR
-m32r_skip_prologue (CORE_ADDR pc)
+m32r_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   CORE_ADDR func_addr, func_end;
   struct symtab_and_line sal;
@@ -578,7 +580,7 @@ m32r_frame_unwind_cache (struct frame_info *next_frame,
       else if ((op & 0xff00) == 0x4f00)
 	{
 	  /* addi sp, xx */
-	  int n = (gdb_byte) (op & 0xff);
+	  int n = (signed char) (op & 0xff);
 	  info->sp_offset += n;
 	}
       else if (op == 0x1d8f)
@@ -623,7 +625,7 @@ m32r_frame_unwind_cache (struct frame_info *next_frame,
 
   /* Adjust all the saved registers so that they contain addresses and
      not offsets.  */
-  for (i = 0; i < gdbarch_num_regs (current_gdbarch) - 1; i++)
+  for (i = 0; i < gdbarch_num_regs (get_frame_arch (next_frame)) - 1; i++)
     if (trad_frame_addr_p (info->saved_regs, i))
       info->saved_regs[i].addr = (info->prev_sp + info->saved_regs[i].addr);
 

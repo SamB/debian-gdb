@@ -1,7 +1,7 @@
 /* Target-dependent code for the S+core architecture, for GDB,
    the GNU Debugger.
 
-   Copyright (C) 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Qinwei (qinwei@sunnorth.com.cn)
    Contributed by Ching-Peng Lin (cplin@sunplus.com)
@@ -284,7 +284,7 @@ score_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
 }
 
 static const char *
-score_register_name (int regnum)
+score_register_name (struct gdbarch *gdbarch, int regnum)
 {
   const char *score_register_names[] = {
     "r0",  "r1",  "r2",  "r3",  "r4",  "r5",  "r6",  "r7",
@@ -305,7 +305,7 @@ score_register_name (int regnum)
 }
 
 static int
-score_register_sim_regno (int regnum)
+score_register_sim_regno (struct gdbarch *gdbarch, int regnum)
 {
   gdb_assert (regnum >= 0 && regnum < SCORE_NUM_REGS);
   return regnum;
@@ -321,7 +321,8 @@ score_print_insn (bfd_vma memaddr, struct disassemble_info *info)
 }
 
 static const gdb_byte *
-score_breakpoint_from_pc (CORE_ADDR *pcptr, int *lenptr)
+score_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
+			  int *lenptr)
 {
   gdb_byte buf[SCORE_INSTLEN] = { 0 };
   int ret;
@@ -334,7 +335,7 @@ score_breakpoint_from_pc (CORE_ADDR *pcptr, int *lenptr)
     }
   raw = extract_unsigned_integer (buf, SCORE_INSTLEN);
 
-  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
     {
       if (!(raw & 0x80008000))
         {
@@ -433,7 +434,7 @@ score_return_value (struct gdbarch *gdbarch, struct type *type,
           if (offset + xfer > TYPE_LENGTH (type))
             xfer = TYPE_LENGTH (type) - offset;
           score_xfer_register (regcache, regnum, xfer,
-			       gdbarch_byte_order (current_gdbarch),
+			       gdbarch_byte_order (gdbarch),
                                readbuf, writebuf, offset);
         }
       return RETURN_VALUE_REGISTER_CONVENTION;
@@ -543,7 +544,7 @@ score_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
          Where X is a hole.  */
 
-      if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG
+      if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG
           && (typecode == TYPE_CODE_STRUCT
               || typecode == TYPE_CODE_UNION)
           && argreg > SCORE_LAST_ARG_REGNUM
@@ -557,7 +558,7 @@ score_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
           /* The last part of a arg should shift left when
              gdbarch_byte_order is BFD_ENDIAN_BIG.  */
-          if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG
+          if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG
               && arg_last_part_p == 1
               && (typecode == TYPE_CODE_STRUCT
                   || typecode == TYPE_CODE_UNION))
@@ -640,7 +641,7 @@ score_adjust_memblock_ptr (char **memblock, CORE_ADDR prev_pc,
 }
 
 static inst_t *
-score_fetch_inst (CORE_ADDR addr, char *memblock)
+score_fetch_inst (struct gdbarch *gdbarch, CORE_ADDR addr, char *memblock)
 {
   static inst_t inst = { 0, 0 };
   char buf[SCORE_INSTLEN] = { 0 };
@@ -667,7 +668,7 @@ score_fetch_inst (CORE_ADDR addr, char *memblock)
   inst.raw = extract_unsigned_integer (buf, SCORE_INSTLEN);
   inst.is15 = !(inst.raw & 0x80008000);
   inst.v = RM_PBITS (inst.raw);
-  big = (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG);
+  big = (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG);
   if (inst.is15)
     {
       if (big ^ ((addr & 0x2) == 2))
@@ -679,13 +680,13 @@ score_fetch_inst (CORE_ADDR addr, char *memblock)
 }
 
 static CORE_ADDR
-score_skip_prologue (CORE_ADDR pc)
+score_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   CORE_ADDR cpc = pc;
   int iscan = 32, stack_sub = 0;
   while (iscan-- > 0)
     {
-      inst_t *inst = score_fetch_inst (cpc, NULL);
+      inst_t *inst = score_fetch_inst (gdbarch, cpc, NULL);
       if (!inst)
         break;
       if (!inst->is15 && !stack_sub
@@ -730,7 +731,7 @@ score_skip_prologue (CORE_ADDR pc)
 static int
 score_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR cur_pc)
 {
-  inst_t *inst = score_fetch_inst (cur_pc, NULL);
+  inst_t *inst = score_fetch_inst (gdbarch, cur_pc, NULL);
 
   if (inst->v == 0x23)
     return 1;   /* mv! r0, r2 */
@@ -756,6 +757,7 @@ score_analyze_prologue (CORE_ADDR startaddr, CORE_ADDR pc,
                         struct frame_info *next_frame,
                         struct score_frame_cache *this_cache)
 {
+  struct gdbarch *gdbarch = get_frame_arch (next_frame);
   CORE_ADDR sp;
   CORE_ADDR fp;
   CORE_ADDR cur_pc = startaddr;
@@ -786,13 +788,13 @@ score_analyze_prologue (CORE_ADDR startaddr, CORE_ADDR pc,
           /* Reading memory block from target succefully and got all
              the instructions(from STARTADDR to PC) needed.  */
           score_adjust_memblock_ptr (&memblock, prev_pc, cur_pc);
-          inst = score_fetch_inst (cur_pc, memblock);
+          inst = score_fetch_inst (gdbarch, cur_pc, memblock);
         }
       else
         {
           /* Otherwise, we fetch 4 bytes from target, and GDB also
              work correctly.  */
-          inst = score_fetch_inst (cur_pc, NULL);
+          inst = score_fetch_inst (gdbarch, cur_pc, NULL);
         }
 
       if (inst->is15 == 1)
@@ -894,7 +896,7 @@ score_analyze_prologue (CORE_ADDR startaddr, CORE_ADDR pc,
                 {
                   unsigned int save_v = inst->v;
                   inst_t *inst2 =
-                    score_fetch_inst (cur_pc + SCORE_INSTLEN, NULL);
+                    score_fetch_inst (gdbarch, cur_pc + SCORE_INSTLEN, NULL);
                   if (inst2->v == 0x23)
                     {
                       /* mv! r0, r2 */

@@ -1,7 +1,7 @@
 /* Target-dependent code for Atmel AVR, for GDB.
 
    Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2006, 2007 Free Software Foundation, Inc.
+   2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -188,7 +188,7 @@ struct gdbarch_tdep
 /* Lookup the name of a register given it's number. */
 
 static const char *
-avr_register_name (int regnum)
+avr_register_name (struct gdbarch *gdbarch, int regnum)
 {
   static char *register_names[] = {
     "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
@@ -744,7 +744,7 @@ avr_scan_prologue (CORE_ADDR pc, struct avr_unwind_cache *info)
 }
 
 static CORE_ADDR
-avr_skip_prologue (CORE_ADDR pc)
+avr_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   CORE_ADDR func_addr, func_end;
   CORE_ADDR prologue_end = pc;
@@ -788,7 +788,7 @@ avr_skip_prologue (CORE_ADDR pc)
    only target, this shouldn't be a problem (I hope). TRoth/2003-05-14  */
 
 static const unsigned char *
-avr_breakpoint_from_pc (CORE_ADDR * pcptr, int *lenptr)
+avr_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR * pcptr, int *lenptr)
 {
     static unsigned char avr_break_insn [] = { 0x98, 0x95 };
     *lenptr = sizeof (avr_break_insn);
@@ -826,6 +826,44 @@ avr_extract_return_value (struct type *type, struct regcache *regcache,
         }
     }
 }
+
+/* Determine, for architecture GDBARCH, how a return value of TYPE
+   should be returned.  If it is supposed to be returned in registers,
+   and READBUF is non-zero, read the appropriate value from REGCACHE,
+   and copy it into READBUF.  If WRITEBUF is non-zero, write the value
+   from WRITEBUF into REGCACHE.  */
+
+enum return_value_convention
+avr_return_value (struct gdbarch *gdbarch, struct type *valtype,
+		  struct regcache *regcache, gdb_byte *readbuf,
+		  const gdb_byte *writebuf)
+{
+  int struct_return = ((TYPE_CODE (valtype) == TYPE_CODE_STRUCT
+			|| TYPE_CODE (valtype) == TYPE_CODE_UNION
+			|| TYPE_CODE (valtype) == TYPE_CODE_ARRAY)
+		       && !(TYPE_LENGTH (valtype) == 1
+			    || TYPE_LENGTH (valtype) == 2
+			    || TYPE_LENGTH (valtype) == 4
+			    || TYPE_LENGTH (valtype) == 8));
+
+  if (writebuf != NULL)
+    {
+      gdb_assert (!struct_return);
+      error (_("Cannot store return value."));
+    }
+
+  if (readbuf != NULL)
+    {
+      gdb_assert (!struct_return);
+      avr_extract_return_value (valtype, regcache, readbuf);
+    }
+
+  if (struct_return)
+    return RETURN_VALUE_STRUCT_CONVENTION;
+  else
+    return RETURN_VALUE_REGISTER_CONVENTION;
+}
+
 
 /* Put here the code to store, into fi->saved_regs, the addresses of
    the saved registers of frame described by FRAME_INFO.  This
@@ -866,8 +904,8 @@ avr_frame_unwind_cache (struct frame_info *next_frame,
       /* The SP was moved to the FP.  This indicates that a new frame
          was created.  Get THIS frame's FP value by unwinding it from
          the next frame.  */
-      frame_unwind_unsigned_register (next_frame, AVR_FP_REGNUM, &this_base);
-      frame_unwind_unsigned_register (next_frame, AVR_FP_REGNUM+1, &high_base);
+      this_base = frame_unwind_register_unsigned (next_frame, AVR_FP_REGNUM);
+      high_base = frame_unwind_register_unsigned (next_frame, AVR_FP_REGNUM+1);
       this_base += (high_base << 8);
       
       /* The FP points at the last saved register.  Adjust the FP back
@@ -878,7 +916,7 @@ avr_frame_unwind_cache (struct frame_info *next_frame,
     {
       /* Assume that the FP is this frame's SP but with that pushed
          stack space added back.  */
-      frame_unwind_unsigned_register (next_frame, AVR_SP_REGNUM, &this_base);
+      this_base = frame_unwind_register_unsigned (next_frame, AVR_SP_REGNUM);
       prev_sp = this_base + info->size;
     }
 
@@ -890,7 +928,7 @@ avr_frame_unwind_cache (struct frame_info *next_frame,
 
   /* Adjust all the saved registers so that they contain addresses and not
      offsets.  */
-  for (i = 0; i < gdbarch_num_regs (current_gdbarch) - 1; i++)
+  for (i = 0; i < gdbarch_num_regs (get_frame_arch (next_frame)) - 1; i++)
     if (info->saved_regs[i].addr)
       {
         info->saved_regs[i].addr = (info->prev_sp - info->saved_regs[i].addr);
@@ -916,7 +954,7 @@ avr_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   ULONGEST pc;
 
-  frame_unwind_unsigned_register (next_frame, AVR_PC_REGNUM, &pc);
+  pc = frame_unwind_register_unsigned (next_frame, AVR_PC_REGNUM);
 
   return avr_make_iaddr (pc);
 }
@@ -926,7 +964,7 @@ avr_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   ULONGEST sp;
 
-  frame_unwind_unsigned_register (next_frame, AVR_SP_REGNUM, &sp);
+  sp = frame_unwind_register_unsigned (next_frame, AVR_SP_REGNUM);
 
   return avr_make_saddr (sp);
 }
@@ -1008,9 +1046,9 @@ avr_frame_prev_register (struct frame_info *next_frame,
               buf[1] = tmp;
 
               pc = (extract_unsigned_integer (buf, 2) * 2);
-              store_unsigned_integer (bufferp,
-                                      register_size (current_gdbarch, regnum),
-                                      pc);
+              store_unsigned_integer
+		(bufferp, register_size (get_frame_arch (next_frame), regnum),
+		 pc);
             }
         }
     }
@@ -1057,7 +1095,7 @@ avr_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   ULONGEST base;
 
-  frame_unwind_unsigned_register (next_frame, AVR_SP_REGNUM, &base);
+  base = frame_unwind_register_unsigned (next_frame, AVR_SP_REGNUM);
   return frame_id_build (avr_make_saddr (base), frame_pc_unwind (next_frame));
 }
 
@@ -1271,7 +1309,7 @@ avr_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_register_name (gdbarch, avr_register_name);
   set_gdbarch_register_type (gdbarch, avr_register_type);
 
-  set_gdbarch_extract_return_value (gdbarch, avr_extract_return_value);
+  set_gdbarch_return_value (gdbarch, avr_return_value);
   set_gdbarch_print_insn (gdbarch, print_insn_avr);
 
   set_gdbarch_push_dummy_call (gdbarch, avr_push_dummy_call);

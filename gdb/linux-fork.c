@@ -1,6 +1,6 @@
 /* GNU/Linux native-dependent code for debugging multiple forks.
 
-   Copyright (C) 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -28,9 +28,9 @@
 #include "linux-nat.h"
 
 #include <sys/ptrace.h>
-#include <sys/wait.h>
+#include "gdb_wait.h"
 #include <sys/param.h>
-#include <dirent.h>
+#include "gdb_dirent.h"
 #include <ctype.h>
 
 struct fork_info *fork_list;
@@ -468,7 +468,7 @@ info_forks_command (char *arg, int from_tty)
       if (fp->num == 0)
 	printf_filtered (_(" (main process)"));
       printf_filtered (_(" at "));
-      deprecated_print_address_numeric (pc, 1, gdb_stdout);
+      fputs_filtered (paddress (pc), gdb_stdout);
 
       sal = find_pc_line (pc, 0);
       if (sal.symtab)

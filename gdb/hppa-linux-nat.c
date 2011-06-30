@@ -1,6 +1,6 @@
 /* Functions specific to running GDB native on HPPA running GNU/Linux.
 
-   Copyright (C) 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -29,11 +29,8 @@
 #include <sys/ptrace.h>
 #include <linux/version.h>
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,5,43)
-#include <asm/offset.h>
-#else
-#include <asm/offsets.h>
-#endif
+#include <asm/ptrace.h>
+#include "hppa-linux-offsets.h"
 
 #include "hppa-tdep.h"
 
@@ -156,7 +153,7 @@ hppa_linux_register_addr (int regno, CORE_ADDR blockend)
 {
   CORE_ADDR addr;
 
-  if ((unsigned) regno >= gdbarch_num_regs (current_gdbarch))
+  if ((unsigned) regno >= ARRAY_SIZE (u_offsets))
     error (_("Invalid register number %d."), regno);
 
   if (u_offsets[regno] == -1)
@@ -216,10 +213,11 @@ static const int greg_map[] =
 static void
 fetch_register (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   int tid;
   int val;
 
-  if (gdbarch_cannot_fetch_register (current_gdbarch, regno))
+  if (gdbarch_cannot_fetch_register (gdbarch, regno))
     {
       regcache_raw_supply (regcache, regno, NULL);
       return;
@@ -234,7 +232,7 @@ fetch_register (struct regcache *regcache, int regno)
   val = ptrace (PTRACE_PEEKUSER, tid, hppa_linux_register_addr (regno, 0), 0);
   if (errno != 0)
     error (_("Couldn't read register %s (#%d): %s."), 
-	   gdbarch_register_name (current_gdbarch, regno),
+	   gdbarch_register_name (gdbarch, regno),
 	   regno, safe_strerror (errno));
 
   regcache_raw_supply (regcache, regno, &val);
@@ -245,10 +243,11 @@ fetch_register (struct regcache *regcache, int regno)
 static void
 store_register (const struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   int tid;
   int val;
 
-  if (gdbarch_cannot_store_register (current_gdbarch, regno))
+  if (gdbarch_cannot_store_register (gdbarch, regno))
     return;
 
   /* GNU/Linux LWP ID's are process ID's.  */
@@ -261,7 +260,7 @@ store_register (const struct regcache *regcache, int regno)
   ptrace (PTRACE_POKEUSER, tid, hppa_linux_register_addr (regno, 0), val);
   if (errno != 0)
     error (_("Couldn't write register %s (#%d): %s."),
-	   gdbarch_register_name (current_gdbarch, regno),
+	   gdbarch_register_name (gdbarch, regno),
 	   regno, safe_strerror (errno));
 }
 
@@ -274,7 +273,9 @@ hppa_linux_fetch_inferior_registers (struct regcache *regcache, int regno)
 {
   if (-1 == regno)
     {
-      for (regno = 0; regno < gdbarch_num_regs (current_gdbarch); regno++)
+      for (regno = 0;
+	   regno < gdbarch_num_regs (get_regcache_arch (regcache));
+	   regno++)
         fetch_register (regcache, regno);
     }
   else 
@@ -292,7 +293,9 @@ hppa_linux_store_inferior_registers (struct regcache *regcache, int regno)
 {
   if (-1 == regno)
     {
-      for (regno = 0; regno < gdbarch_num_regs (current_gdbarch); regno++)
+      for (regno = 0;
+	   regno < gdbarch_num_regs (get_regcache_arch (regcache));
+	   regno++)
 	store_register (regcache, regno);
     }
   else

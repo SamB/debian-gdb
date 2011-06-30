@@ -1,6 +1,7 @@
 /* Target-dependent code for HP-UX on PA-RISC.
 
-   Copyright (C) 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -299,6 +300,7 @@ hppa_hpux_in_solib_return_trampoline (CORE_ADDR pc, char *name)
 static CORE_ADDR
 hppa_hpux_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
 {
+  struct gdbarch *gdbarch = get_frame_arch (frame);
   long orig_pc = pc;
   long prev_inst, curr_inst, loc;
   struct minimal_symbol *msym;
@@ -315,13 +317,13 @@ hppa_hpux_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
          itself.  Bit 31 has meaning too, but only for MPE.  */
       if (pc & 0x2)
 	pc = (CORE_ADDR) read_memory_integer
-			   (pc & ~0x3, gdbarch_ptr_bit (current_gdbarch) / 8);
+			   (pc & ~0x3, gdbarch_ptr_bit (gdbarch) / 8);
     }
   if (pc == hppa_symbol_address("$$dyncall_external"))
     {
       pc = (CORE_ADDR) get_frame_register_unsigned (frame, 22);
       pc = (CORE_ADDR) read_memory_integer
-			 (pc & ~0x3, gdbarch_ptr_bit (current_gdbarch) / 8);
+			 (pc & ~0x3, gdbarch_ptr_bit (gdbarch) / 8);
     }
   else if (pc == hppa_symbol_address("_sr4export"))
     pc = (CORE_ADDR) get_frame_register_unsigned (frame, 22);
@@ -374,7 +376,8 @@ hppa_hpux_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
 	  ALL_MSYMBOLS (objfile, msymbol)
 	  {
 	    if (MSYMBOL_TYPE (msymbol) == mst_text
-		&& DEPRECATED_STREQ (DEPRECATED_SYMBOL_NAME (msymbol), DEPRECATED_SYMBOL_NAME (msym)))
+		&& strcmp (DEPRECATED_SYMBOL_NAME (msymbol),
+			    DEPRECATED_SYMBOL_NAME (msym)) == 0)
 	      {
 		function_found = 1;
 		break;
@@ -517,7 +520,7 @@ hppa_hpux_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
 	{
 	  return (read_memory_integer
 		  (get_frame_register_unsigned (frame, HPPA_SP_REGNUM) - 24,
-		   gdbarch_ptr_bit (current_gdbarch) / 8)) & ~0x3;
+		   gdbarch_ptr_bit (gdbarch) / 8)) & ~0x3;
 	}
 
       /* What about be,n 0(sr0,%rp)?  It's just another way we return to
@@ -530,7 +533,7 @@ hppa_hpux_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
 	     mtsp %r1,%sr0 if we want to do sanity checking.  */
 	  return (read_memory_integer
 		  (get_frame_register_unsigned (frame, HPPA_SP_REGNUM) - 24,
-		   gdbarch_ptr_bit (current_gdbarch) / 8)) & ~0x3;
+		   gdbarch_ptr_bit (gdbarch) / 8)) & ~0x3;
 	}
 
       /* Haven't found the branch yet, but we're still in the stub.
@@ -738,7 +741,8 @@ hppa_hpux_sigtramp_unwind_sniffer (struct frame_info *next_frame)
 }
 
 static CORE_ADDR
-hppa32_hpux_find_global_pointer (struct value *function)
+hppa32_hpux_find_global_pointer (struct gdbarch *gdbarch,
+				 struct value *function)
 {
   CORE_ADDR faddr;
   
@@ -757,11 +761,12 @@ hppa32_hpux_find_global_pointer (struct value *function)
 	return extract_unsigned_integer (buf, sizeof (buf));
     }
 
-  return gdbarch_tdep (current_gdbarch)->solib_get_got_by_pc (faddr);
+  return gdbarch_tdep (gdbarch)->solib_get_got_by_pc (faddr);
 }
 
 static CORE_ADDR
-hppa64_hpux_find_global_pointer (struct value *function)
+hppa64_hpux_find_global_pointer (struct gdbarch *gdbarch,
+				 struct value *function)
 {
   CORE_ADDR faddr;
   char buf[32];
@@ -775,7 +780,7 @@ hppa64_hpux_find_global_pointer (struct value *function)
     }
   else
     {
-      return gdbarch_tdep (current_gdbarch)->solib_get_got_by_pc (faddr);
+      return gdbarch_tdep (gdbarch)->solib_get_got_by_pc (faddr);
     }
 }
 
@@ -1028,11 +1033,11 @@ hppa_hpux_find_import_stub_for_addr (CORE_ADDR funcaddr)
 }
 
 static int
-hppa_hpux_sr_for_addr (CORE_ADDR addr)
+hppa_hpux_sr_for_addr (struct gdbarch *gdbarch, CORE_ADDR addr)
 {
   int sr;
   /* The space register to use is encoded in the top 2 bits of the address.  */
-  sr = addr >> (gdbarch_tdep (current_gdbarch)->bytes_per_address * 8 - 2);
+  sr = addr >> (gdbarch_tdep (gdbarch)->bytes_per_address * 8 - 2);
   return sr + 4;
 }
 
@@ -1092,7 +1097,7 @@ hppa_hpux_find_dummy_bpaddr (CORE_ADDR addr)
 
 static CORE_ADDR
 hppa_hpux_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp,
-			   CORE_ADDR funcaddr, int using_gcc,
+			   CORE_ADDR funcaddr,
 			   struct value **args, int nargs,
 			   struct type *value_type,
 			   CORE_ADDR *real_pc, CORE_ADDR *bp_addr,
@@ -1109,7 +1114,8 @@ hppa_hpux_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp,
 
   /* The simple case is where we call a function in the same space that we are
      currently in; in that case we don't really need to do anything.  */
-  if (hppa_hpux_sr_for_addr (pc) == hppa_hpux_sr_for_addr (funcaddr))
+  if (hppa_hpux_sr_for_addr (gdbarch, pc)
+      == hppa_hpux_sr_for_addr (gdbarch, funcaddr))
     {
       /* Intraspace call.  */
       *bp_addr = hppa_hpux_find_dummy_bpaddr (pc);
@@ -1422,6 +1428,7 @@ static void
 hppa_hpux_unwind_adjust_stub (struct frame_info *next_frame, CORE_ADDR base,
 			      struct trad_frame_saved_reg *saved_regs)
 {
+  struct gdbarch *gdbarch = get_frame_arch (next_frame);
   int optimized, realreg;
   enum lval_type lval;
   CORE_ADDR addr;
@@ -1441,14 +1448,14 @@ hppa_hpux_unwind_adjust_stub (struct frame_info *next_frame, CORE_ADDR base,
   if (u && u->stub_unwind.stub_type == EXPORT)
     {
       stubpc = read_memory_integer
-		 (base - 24, gdbarch_ptr_bit (current_gdbarch) / 8);
+		 (base - 24, gdbarch_ptr_bit (gdbarch) / 8);
       trad_frame_set_value (saved_regs, HPPA_PCOQ_HEAD_REGNUM, stubpc);
     }
   else if (hppa_symbol_address ("__gcc_plt_call") 
            == get_pc_function_start (val))
     {
       stubpc = read_memory_integer
-		 (base - 8, gdbarch_ptr_bit (current_gdbarch) / 8);
+		 (base - 8, gdbarch_ptr_bit (gdbarch) / 8);
       trad_frame_set_value (saved_regs, HPPA_PCOQ_HEAD_REGNUM, stubpc);
     }
 }
@@ -1494,7 +1501,7 @@ hppa_hpux_som_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->find_global_pointer = hppa32_hpux_find_global_pointer;
 
   hppa_hpux_init_abi (info, gdbarch);
-  som_solib_select (tdep);
+  som_solib_select (gdbarch);
 }
 
 static void
@@ -1506,7 +1513,7 @@ hppa_hpux_elf_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->find_global_pointer = hppa64_hpux_find_global_pointer;
 
   hppa_hpux_init_abi (info, gdbarch);
-  pa64_solib_select (tdep);
+  pa64_solib_select (gdbarch);
 }
 
 static enum gdb_osabi

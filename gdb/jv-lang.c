@@ -1,6 +1,6 @@
 /* Java language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 1997, 1998, 1999, 2000, 2003, 2004, 2005, 2007
+   Copyright (C) 1997, 1998, 1999, 2000, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -943,37 +943,6 @@ nosideret:
   return value_from_longest (builtin_type_long, (LONGEST) 1);
 }
 
-static struct type *
-java_create_fundamental_type (struct objfile *objfile, int typeid)
-{
-  switch (typeid)
-    {
-    case FT_VOID:
-      return java_void_type;
-    case FT_BOOLEAN:
-      return java_boolean_type;
-    case FT_CHAR:
-      return java_char_type;
-    case FT_FLOAT:
-      return java_float_type;
-    case FT_DBL_PREC_FLOAT:
-      return java_double_type;
-    case FT_BYTE:
-    case FT_SIGNED_CHAR:
-      return java_byte_type;
-    case FT_SHORT:
-    case FT_SIGNED_SHORT:
-      return java_short_type;
-    case FT_INTEGER:
-    case FT_SIGNED_INTEGER:
-      return java_int_type;
-    case FT_LONG:
-    case FT_SIGNED_LONG:
-      return java_long_type;
-    }
-  return c_create_fundamental_type (objfile, typeid);
-}
-
 static char *java_demangle (const char *mangled, int options)
 {
   return cplus_demangle (mangled, options | DMGL_JAVA);
@@ -1086,7 +1055,6 @@ const struct language_defn java_language_defn =
 {
   "java",			/* Language name */
   language_java,
-  NULL,
   range_check_off,
   type_check_off,
   case_sensitive_on,
@@ -1098,7 +1066,6 @@ const struct language_defn java_language_defn =
   c_printchar,			/* Print a character constant */
   c_printstr,			/* Function to print string constant */
   java_emit_char,		/* Function to print a single character */
-  java_create_fundamental_type,	/* Create fundamental type in this language */
   java_print_type,		/* Print a type using appropriate syntax */
   java_val_print,		/* Print a value using appropriate syntax */
   java_value_print,		/* Print a top-level value */
@@ -1111,10 +1078,11 @@ const struct language_defn java_language_defn =
   java_op_print_tab,		/* expression operators for printing */
   0,				/* not c-style arrays */
   0,				/* String lower bound */
-  NULL,
   default_word_break_characters,
+  default_make_symbol_completion_list,
   c_language_arch_info,
   default_print_array_index,
+  default_pass_by_reference,
   LANG_MAGIC
 };
 
@@ -1133,26 +1101,4 @@ _initialize_java_language (void)
   java_void_type = init_type (TYPE_CODE_VOID, 1, 0, "void", NULL);
 
   add_language (&java_language_defn);
-}
-
-/* Cleanup code that should be run on every "run".
-   We should use make_run_cleanup to have this be called.
-   But will that mess up values in value histry?  FIXME */
-
-extern void java_rerun_cleanup (void);
-void
-java_rerun_cleanup (void)
-{
-  if (class_symtab != NULL)
-    {
-      free_symtab (class_symtab);	/* ??? */
-      class_symtab = NULL;
-    }
-  if (dynamics_objfile != NULL)
-    {
-      free_objfile (dynamics_objfile);
-      dynamics_objfile = NULL;
-    }
-
-  java_object_type = NULL;
 }

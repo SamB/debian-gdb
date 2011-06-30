@@ -1,6 +1,6 @@
 /* Frame unwinder for frames with DWARF Call Frame Information.
 
-   Copyright (C) 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Mark Kettenis.
 
@@ -235,7 +235,7 @@ read_reg (void *baton, int reg)
   int regnum;
   gdb_byte *buf;
 
-  regnum = gdbarch_dwarf2_reg_to_regnum (current_gdbarch, reg);
+  regnum = gdbarch_dwarf2_reg_to_regnum (gdbarch, reg);
 
   buf = alloca (register_size (gdbarch, regnum));
   frame_unwind_register (next_frame, regnum, buf);
@@ -266,6 +266,36 @@ no_get_tls_address (void *baton, CORE_ADDR offset)
 {
   internal_error (__FILE__, __LINE__,
 		  _("Support for DW_OP_GNU_push_tls_address is unimplemented"));
+}
+
+/* Execute the required actions for both the DW_CFA_restore and
+DW_CFA_restore_extended instructions.  */
+static void
+dwarf2_restore_rule (struct gdbarch *gdbarch, ULONGEST reg_num,
+		     struct dwarf2_frame_state *fs, int eh_frame_p)
+{
+  ULONGEST reg;
+
+  gdb_assert (fs->initial.reg);
+  reg = dwarf2_frame_adjust_regnum (gdbarch, reg_num, eh_frame_p);
+  dwarf2_frame_state_alloc_regs (&fs->regs, reg + 1);
+
+  /* Check if this register was explicitly initialized in the
+  CIE initial instructions.  If not, default the rule to
+  UNSPECIFIED.  */
+  if (reg < fs->initial.num_regs)
+    fs->regs.reg[reg] = fs->initial.reg[reg];
+  else
+    fs->regs.reg[reg].how = DWARF2_FRAME_REG_UNSPECIFIED;
+
+  if (fs->regs.reg[reg].how == DWARF2_FRAME_REG_UNSPECIFIED)
+    complaint (&symfile_complaints, _("\
+incomplete CFI data; DW_CFA_restore unspecified\n\
+register %s (#%d) at 0x%s"),
+		       gdbarch_register_name
+		       (gdbarch, gdbarch_dwarf2_reg_to_regnum (gdbarch, reg)),
+		       gdbarch_dwarf2_reg_to_regnum (gdbarch, reg),
+		       paddr (fs->pc));
 }
 
 static CORE_ADDR
@@ -324,24 +354,8 @@ execute_cfa_program (gdb_byte *insn_ptr, gdb_byte *insn_end,
 	}
       else if ((insn & 0xc0) == DW_CFA_restore)
 	{
-	  gdb_assert (fs->initial.reg);
 	  reg = insn & 0x3f;
-	  reg = dwarf2_frame_adjust_regnum (gdbarch, reg, eh_frame_p);
-	  dwarf2_frame_state_alloc_regs (&fs->regs, reg + 1);
-	  if (reg < fs->initial.num_regs)
-	    fs->regs.reg[reg] = fs->initial.reg[reg];
-	  else 
-	    fs->regs.reg[reg].how = DWARF2_FRAME_REG_UNSPECIFIED;
-
-	  if (fs->regs.reg[reg].how == DWARF2_FRAME_REG_UNSPECIFIED)
-	    complaint (&symfile_complaints, _("\
-incomplete CFI data; DW_CFA_restore unspecified\n\
-register %s (#%d) at 0x%s"),
-		       gdbarch_register_name
-			 (current_gdbarch, gdbarch_dwarf2_reg_to_regnum
-					     (current_gdbarch, reg)),
-		       gdbarch_dwarf2_reg_to_regnum (current_gdbarch, reg),
-		       paddr (fs->pc));
+	  dwarf2_restore_rule (gdbarch, reg, fs, eh_frame_p);
 	}
       else
 	{
@@ -379,11 +393,8 @@ register %s (#%d) at 0x%s"),
 	      break;
 
 	    case DW_CFA_restore_extended:
-	      gdb_assert (fs->initial.reg);
 	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &reg);
-	      reg = dwarf2_frame_adjust_regnum (gdbarch, reg, eh_frame_p);
-	      dwarf2_frame_state_alloc_regs (&fs->regs, reg + 1);
-	      fs->regs.reg[reg] = fs->initial.reg[reg];
+	      dwarf2_restore_rule (gdbarch, reg, fs, eh_frame_p);
 	      break;
 
 	    case DW_CFA_undefined:
@@ -647,9 +658,9 @@ dwarf2_frame_default_init_reg (struct gdbarch *gdbarch, int regnum,
      (e.g. IBM S/390 and zSeries).  Those architectures should provide
      their own architecture-specific initialization function.  */
 
-  if (regnum == gdbarch_pc_regnum (current_gdbarch))
+  if (regnum == gdbarch_pc_regnum (gdbarch))
     reg->how = DWARF2_FRAME_REG_RA;
-  else if (regnum == gdbarch_sp_regnum (current_gdbarch))
+  else if (regnum == gdbarch_sp_regnum (gdbarch))
     reg->how = DWARF2_FRAME_REG_CFA;
 }
 
@@ -809,8 +820,8 @@ dwarf2_frame_cache (struct frame_info *next_frame, void **this_cache)
 {
   struct cleanup *old_chain;
   struct gdbarch *gdbarch = get_frame_arch (next_frame);
-  const int num_regs = gdbarch_num_regs (current_gdbarch)
-		       + gdbarch_num_pseudo_regs (current_gdbarch);
+  const int num_regs = gdbarch_num_regs (gdbarch)
+		       + gdbarch_num_pseudo_regs (gdbarch);
   struct dwarf2_frame_cache *cache;
   struct dwarf2_frame_state *fs;
   struct dwarf2_fde *fde;
@@ -909,7 +920,7 @@ dwarf2_frame_cache (struct frame_info *next_frame, void **this_cache)
     for (column = 0; column < fs->regs.num_regs; column++)
       {
 	/* Use the GDB register number as the destination index.  */
-	int regnum = gdbarch_dwarf2_reg_to_regnum (current_gdbarch, column);
+	int regnum = gdbarch_dwarf2_reg_to_regnum (gdbarch, column);
 
 	/* If there's no corresponding GDB register, ignore it.  */
 	if (regnum < 0 || regnum >= num_regs)
@@ -1068,7 +1079,7 @@ dwarf2_frame_prev_register (struct frame_info *next_frame, void **this_cache,
       *lvalp = lval_register;
       *addrp = 0;
       *realnump = gdbarch_dwarf2_reg_to_regnum
-		    (current_gdbarch, cache->reg[regnum].loc.reg);
+		    (gdbarch, cache->reg[regnum].loc.reg);
       if (valuep)
 	frame_unwind_register (next_frame, (*realnump), valuep);
       break;
@@ -1163,7 +1174,7 @@ dwarf2_frame_prev_register (struct frame_info *next_frame, void **this_cache,
           CORE_ADDR pc = cache->reg[regnum].loc.offset;
 
           regnum = gdbarch_dwarf2_reg_to_regnum
-		     (current_gdbarch, cache->retaddr_reg.loc.reg);
+		     (gdbarch, cache->retaddr_reg.loc.reg);
           pc += frame_unwind_register_unsigned (next_frame, regnum);
           pack_long (valuep, register_type (gdbarch, regnum), pc);
         }

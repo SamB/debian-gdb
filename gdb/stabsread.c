@@ -1,8 +1,8 @@
 /* Support routines for decoding "stabs" debugging information format.
 
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
-   Free Software Foundation, Inc.
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
+   2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -664,11 +664,11 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
 	  /* This was an anonymous type that was never fixed up.  */
 	  goto normal;
 
-#ifdef STATIC_TRANSFORM_NAME
 	case 'X':
 	  /* SunPRO (3.0 at least) static variable encoding.  */
-	  goto normal;
-#endif
+	  if (gdbarch_static_transform_name_p (current_gdbarch))
+	    goto normal;
+	  /* ... fall through ... */
 
 	default:
 	  complaint (&symfile_complaints, _("Unknown C++ symbol name `%s'"),
@@ -725,24 +725,19 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
 	  {
 	    double d = atof (p);
 	    gdb_byte *dbl_valu;
+	    struct type *dbl_type;
 
 	    /* FIXME-if-picky-about-floating-accuracy: Should be using
 	       target arithmetic to get the value.  real.c in GCC
 	       probably has the necessary code.  */
 
-	    /* FIXME: lookup_fundamental_type is a hack.  We should be
-	       creating a type especially for the type of float constants.
-	       Problem is, what type should it be?
-
-	       Also, what should the name of this type be?  Should we
-	       be using 'S' constants (see stabs.texinfo) instead?  */
-
-	    SYMBOL_TYPE (sym) = lookup_fundamental_type (objfile,
-							 FT_DBL_PREC_FLOAT);
+	    dbl_type = builtin_type (current_gdbarch)->builtin_double;
 	    dbl_valu =
 	      obstack_alloc (&objfile->objfile_obstack,
-			     TYPE_LENGTH (SYMBOL_TYPE (sym)));
-	    store_typed_floating (dbl_valu, SYMBOL_TYPE (sym), d);
+			     TYPE_LENGTH (dbl_type));
+	    store_typed_floating (dbl_valu, dbl_type, d);
+
+	    SYMBOL_TYPE (sym) = dbl_type;
 	    SYMBOL_VALUE_BYTES (sym) = dbl_valu;
 	    SYMBOL_CLASS (sym) = LOC_CONST_BYTES;
 	  }
@@ -756,22 +751,7 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
 	       types; other languages probably should have at least
 	       unsigned as well as signed constants.  */
 
-	    /* We just need one int constant type for all objfiles.
-	       It doesn't depend on languages or anything (arguably its
-	       name should be a language-specific name for a type of
-	       that size, but I'm inclined to say that if the compiler
-	       wants a nice name for the type, it can use 'e').  */
-	    static struct type *int_const_type;
-
-	    /* Yes, this is as long as a *host* int.  That is because we
-	       use atoi.  */
-	    if (int_const_type == NULL)
-	      int_const_type =
-		init_type (TYPE_CODE_INT,
-			   sizeof (int) * HOST_CHAR_BIT / TARGET_CHAR_BIT, 0,
-			   "integer constant",
-			     (struct objfile *) NULL);
-	    SYMBOL_TYPE (sym) = int_const_type;
+	    SYMBOL_TYPE (sym) = builtin_type (current_gdbarch)->builtin_long;
 	    SYMBOL_VALUE (sym) = atoi (p);
 	    SYMBOL_CLASS (sym) = LOC_CONST;
 	  }
@@ -1096,18 +1076,21 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
       SYMBOL_TYPE (sym) = read_type (&p, objfile);
       SYMBOL_CLASS (sym) = LOC_STATIC;
       SYMBOL_VALUE_ADDRESS (sym) = valu;
-#ifdef STATIC_TRANSFORM_NAME
-      if (IS_STATIC_TRANSFORM_NAME (DEPRECATED_SYMBOL_NAME (sym)))
+      if (gdbarch_static_transform_name_p (current_gdbarch)
+	  && gdbarch_static_transform_name (current_gdbarch,
+					    DEPRECATED_SYMBOL_NAME (sym))
+	     != DEPRECATED_SYMBOL_NAME (sym))
 	{
 	  struct minimal_symbol *msym;
 	  msym = lookup_minimal_symbol (DEPRECATED_SYMBOL_NAME (sym), NULL, objfile);
 	  if (msym != NULL)
 	    {
-	      DEPRECATED_SYMBOL_NAME (sym) = STATIC_TRANSFORM_NAME (DEPRECATED_SYMBOL_NAME (sym));
+	      DEPRECATED_SYMBOL_NAME (sym) = gdbarch_static_transform_name
+					       (current_gdbarch,	
+						DEPRECATED_SYMBOL_NAME (sym));
 	      SYMBOL_VALUE_ADDRESS (sym) = SYMBOL_VALUE_ADDRESS (msym);
 	    }
 	}
-#endif
       SYMBOL_DOMAIN (sym) = VAR_DOMAIN;
       add_symbol_to_list (sym, &file_symbols);
       break;
@@ -1276,18 +1259,21 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
       SYMBOL_TYPE (sym) = read_type (&p, objfile);
       SYMBOL_CLASS (sym) = LOC_STATIC;
       SYMBOL_VALUE_ADDRESS (sym) = valu;
-#ifdef STATIC_TRANSFORM_NAME
-      if (IS_STATIC_TRANSFORM_NAME (DEPRECATED_SYMBOL_NAME (sym)))
+      if (gdbarch_static_transform_name_p (current_gdbarch)
+	  && gdbarch_static_transform_name (current_gdbarch,
+					    DEPRECATED_SYMBOL_NAME (sym))
+	     != DEPRECATED_SYMBOL_NAME (sym))
 	{
 	  struct minimal_symbol *msym;
 	  msym = lookup_minimal_symbol (DEPRECATED_SYMBOL_NAME (sym), NULL, objfile);
 	  if (msym != NULL)
 	    {
-	      DEPRECATED_SYMBOL_NAME (sym) = STATIC_TRANSFORM_NAME (DEPRECATED_SYMBOL_NAME (sym));
+	      DEPRECATED_SYMBOL_NAME (sym) = gdbarch_static_transform_name
+					       (current_gdbarch,	
+						DEPRECATED_SYMBOL_NAME (sym));
 	      SYMBOL_VALUE_ADDRESS (sym) = SYMBOL_VALUE_ADDRESS (msym);
 	    }
 	}
-#endif
       SYMBOL_DOMAIN (sym) = VAR_DOMAIN;
 	add_symbol_to_list (sym, &local_symbols);
       break;
@@ -3703,15 +3689,14 @@ read_huge_number (char **pp, int end, int *bits, int twos_complement_bits)
 {
   char *p = *pp;
   int sign = 1;
-  int sign_bit;
+  int sign_bit = 0;
   long n = 0;
-  long sn = 0;
   int radix = 10;
   char overflow = 0;
   int nbits = 0;
   int c;
   long upper_limit;
-  int twos_complement_representation = radix == 8 && twos_complement_bits > 0;
+  int twos_complement_representation = 0;
 
   if (*p == '-')
     {
@@ -3727,6 +3712,37 @@ read_huge_number (char **pp, int end, int *bits, int twos_complement_bits)
       p++;
     }
 
+  /* Skip extra zeros.  */
+  while (*p == '0')
+    p++;
+
+  if (sign > 0 && radix == 8 && twos_complement_bits > 0)
+    {
+      /* Octal, possibly signed.  Check if we have enough chars for a
+	 negative number.  */
+
+      size_t len;
+      char *p1 = p;
+      while ((c = *p1) >= '0' && c < '8')
+	p1++;
+
+      len = p1 - p;
+      if (len > twos_complement_bits / 3
+	  || (twos_complement_bits % 3 == 0 && len == twos_complement_bits / 3))
+	{
+	  /* Ok, we have enough characters for a signed value, check
+	     for signness by testing if the sign bit is set.  */
+	  sign_bit = (twos_complement_bits % 3 + 2) % 3;
+	  c = *p - '0';
+	  if (c & (1 << sign_bit))
+	    {
+	      /* Definitely signed.  */
+	      twos_complement_representation = 1;
+	      sign = -1;
+	    }
+	}
+    }
+
   upper_limit = LONG_MAX / radix;
 
   while ((c = *p++) >= '0' && c < ('0' + radix))
@@ -3735,23 +3751,18 @@ read_huge_number (char **pp, int end, int *bits, int twos_complement_bits)
         {
           if (twos_complement_representation)
             {
-              /* Octal, signed, twos complement representation. In this case,
-                 sn is the signed value, n is the corresponding absolute
-                 value. signed_bit is the position of the sign bit in the
-                 first three bits.  */
-              if (sn == 0)
-                {
-                  sign_bit = (twos_complement_bits % 3 + 2) % 3;
-                  sn = c - '0' - ((2 * (c - '0')) | (2 << sign_bit));
-                }
+	      /* Octal, signed, twos complement representation.  In
+		 this case, n is the corresponding absolute value.  */
+	      if (n == 0)
+		{
+		  long sn = c - '0' - ((2 * (c - '0')) | (2 << sign_bit));
+		  n = -sn;
+		}
               else
                 {
-                  sn *= radix;
-                  sn += c - '0';
+                  n *= radix;
+                  n -= c - '0';
                 }
-
-              if (sn < 0)
-                n = -sn;
             }
           else
             {
@@ -3795,6 +3806,15 @@ read_huge_number (char **pp, int end, int *bits, int twos_complement_bits)
   else
     --p;
 
+  if (radix == 8 && twos_complement_bits > 0 && nbits > twos_complement_bits)
+    {
+      /* We were supposed to parse a number with maximum
+	 TWOS_COMPLEMENT_BITS bits, but something went wrong.  */
+      if (bits != NULL)
+	*bits = -1;
+      return 0;
+    }
+
   *pp = p;
   if (overflow)
     {
@@ -3808,8 +3828,9 @@ read_huge_number (char **pp, int end, int *bits, int twos_complement_bits)
 	}
 
       /* -0x7f is the same as 0x80.  So deal with it by adding one to
-         the number of bits.  */
-      if (sign == -1)
+         the number of bits.  Two's complement represention octals
+         can't have a '-' in front.  */
+      if (sign == -1 && !twos_complement_representation)
 	++nbits;
       if (bits)
 	*bits = nbits;
@@ -3818,10 +3839,7 @@ read_huge_number (char **pp, int end, int *bits, int twos_complement_bits)
     {
       if (bits)
 	*bits = 0;
-      if (twos_complement_representation)
-        return sn;
-      else
-        return n * sign;
+      return n * sign;
     }
   /* It's *BITS which has the interesting information.  */
   return 0;
@@ -3946,15 +3964,20 @@ read_range_type (char **pp, int typenums[2], int type_size,
 	return float_type;
     }
 
-  /* If the upper bound is -1, it must really be an unsigned int.  */
+  /* If the upper bound is -1, it must really be an unsigned integral.  */
 
   else if (n2 == 0 && n3 == -1)
     {
-      /* It is unsigned int or unsigned long.  */
-      /* GCC 2.3.3 uses this for long long too, but that is just a GDB 3.5
-         compatibility hack.  */
-      return init_type (TYPE_CODE_INT, 
-			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
+      int bits = type_size;
+      if (bits <= 0)
+	{
+	  /* We don't know its size.  It is unsigned int or unsigned
+	     long.  GCC 2.3.3 uses this for long long too, but that is
+	     just a GDB 3.5 compatibility hack.  */
+	  bits = gdbarch_int_bit (current_gdbarch);
+	}
+
+      return init_type (TYPE_CODE_INT, bits / TARGET_CHAR_BIT,
 			TYPE_FLAG_UNSIGNED, NULL, objfile);
     }
 

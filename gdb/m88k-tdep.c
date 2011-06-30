@@ -1,6 +1,6 @@
 /* Target-dependent code for the Motorola 88000 series.
 
-   Copyright (C) 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -49,7 +49,7 @@ m88k_fetch_instruction (CORE_ADDR pc)
 /* Return the name of register REGNUM.  */
 
 static const char *
-m88k_register_name (int regnum)
+m88k_register_name (struct gdbarch *gdbarch, int regnum)
 {
   static char *register_names[] =
   {
@@ -101,7 +101,7 @@ m88k_addr_bits_remove (CORE_ADDR addr)
    location for inserting the breakpoint.  */
    
 static const gdb_byte *
-m88k_breakpoint_from_pc (CORE_ADDR *pc, int *len)
+m88k_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pc, int *len)
 {
   /* tb 0,r0,511 */
   static gdb_byte break_insn[] = { 0xf0, 0x00, 0xd1, 0xff };
@@ -626,7 +626,7 @@ const int m88k_max_prologue_size = 128 * M88K_INSN_SIZE;
    starting at PC.  */
 
 static CORE_ADDR
-m88k_skip_prologue (CORE_ADDR pc)
+m88k_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   struct symtab_and_line sal;
   CORE_ADDR func_start, func_end;

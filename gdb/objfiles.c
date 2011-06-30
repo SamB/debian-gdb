@@ -1,7 +1,7 @@
 /* GDB routines for manipulating objfiles.
 
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2007 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support, using pieces from other GDB modules.
 
@@ -47,6 +47,7 @@
 #include "block.h"
 #include "dictionary.h"
 #include "source.h"
+#include "addrmap.h"
 
 /* Prototypes for local functions */
 
@@ -564,6 +565,9 @@ objfile_relocate (struct objfile *objfile, struct section_offsets *new_offsets)
 	  b = BLOCKVECTOR_BLOCK (bv, i);
 	  BLOCK_START (b) += ANOFFSET (delta, s->block_line_section);
 	  BLOCK_END (b) += ANOFFSET (delta, s->block_line_section);
+          if (BLOCKVECTOR_MAP (bv))
+            addrmap_relocate (BLOCKVECTOR_MAP (bv),
+                              ANOFFSET (delta, s->block_line_section));
 
 	  ALL_BLOCK_SYMBOLS (b, iter, sym)
 	    {

@@ -1,6 +1,6 @@
 /* Generate a core file for the inferior process.
 
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -184,7 +184,7 @@ derive_stack_segment (bfd_vma *bottom, bfd_vma *top)
   /* Save frame pointer of TOS frame.  */
   *top = get_frame_base (fi);
   /* If current stack pointer is more "inner", use that instead.  */
-  if (gdbarch_inner_than (current_gdbarch, get_frame_sp (fi), *top))
+  if (gdbarch_inner_than (get_frame_arch (fi), get_frame_sp (fi), *top))
     *top = get_frame_sp (fi);
 
   /* Find prev-most frame.  */

@@ -1,6 +1,6 @@
 /* Target-dependent definitions for AMD64.
 
-   Copyright (C) 2001, 2003, 2004, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Jiri Smid, SuSE Labs.
 
    This file is part of GDB.
@@ -65,7 +65,7 @@ extern void amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch);
 /* Functions from amd64-tdep.c which may be needed on architectures
    with extra registers.  */
 
-extern const char *amd64_register_name (int regnum);
+extern const char *amd64_register_name (struct gdbarch *gdbarch, int regnum);
 extern struct type *amd64_register_type (struct gdbarch *gdbarch, int regnum);
 
 /* Fill register REGNUM in REGCACHE with the appropriate

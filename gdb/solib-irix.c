@@ -1,6 +1,6 @@
 /* Shared library support for IRIX.
    Copyright (C) 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2002, 2004,
-   2007 Free Software Foundation, Inc.
+   2007, 2008 Free Software Foundation, Inc.
 
    This file was created using portions of irix5-nat.c originally
    contributed to GDB by Ian Lance Taylor.
@@ -33,6 +33,9 @@
 #include "inferior.h"
 
 #include "solist.h"
+#include "solib.h"
+#include "solib-irix.h"
+
 
 /* Link map info to include in an allocate so_list entry.  Unlike some
    of the other solib backends, this (Irix) backend chooses to decode
@@ -435,7 +438,7 @@ irix_solib_create_inferior_hook (void)
   do
     {
       target_resume (pid_to_ptid (-1), 0, stop_signal);
-      wait_for_inferior ();
+      wait_for_inferior (0);
     }
   while (stop_signal != TARGET_SIGNAL_TRAP);
 
@@ -457,7 +460,6 @@ irix_solib_create_inferior_hook (void)
      suppresses the warning.  */
   solib_add ((char *) 0, 0, (struct target_ops *) 0, auto_solib_add);
   stop_soon = NO_STOP_QUIETLY;
-  re_enable_breakpoints_in_shlibs ();
 }
 
 /* LOCAL FUNCTION
@@ -706,7 +708,7 @@ irix_in_dynsym_resolve_code (CORE_ADDR pc)
   return 0;
 }
 
-static struct target_so_ops irix_so_ops;
+struct target_so_ops irix_so_ops;
 
 void
 _initialize_irix_solib (void)
@@ -719,7 +721,4 @@ _initialize_irix_solib (void)
   irix_so_ops.current_sos = irix_current_sos;
   irix_so_ops.open_symbol_file_object = irix_open_symbol_file_object;
   irix_so_ops.in_dynsym_resolve_code = irix_in_dynsym_resolve_code;
-
-  /* FIXME: Don't do this here.  *_gdbarch_init() should set so_ops. */
-  current_target_so_ops = &irix_so_ops;
 }

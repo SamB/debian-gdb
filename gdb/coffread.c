@@ -1,6 +1,6 @@
 /* Read coff symbol tables and convert to internal format, for GDB.
    Copyright (C) 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by David D. Johnson, Brown University (ddj@cs.brown.edu).
 
@@ -198,7 +198,7 @@ coff_locate_sections (bfd *abfd, asection *sectp, void *csip)
 
   csi = (struct coff_symfile_info *) csip;
   name = bfd_get_section_name (abfd, sectp);
-  if (DEPRECATED_STREQ (name, ".text"))
+  if (strcmp (name, ".text") == 0)
     {
       csi->textaddr = bfd_section_vma (abfd, sectp);
       csi->textsize += bfd_section_size (abfd, sectp);
@@ -207,7 +207,7 @@ coff_locate_sections (bfd *abfd, asection *sectp, void *csip)
     {
       csi->textsize += bfd_section_size (abfd, sectp);
     }
-  else if (DEPRECATED_STREQ (name, ".stabstr"))
+  else if (strcmp (name, ".stabstr") == 0)
     {
       csi->stabstrsect = sectp;
     }
@@ -665,6 +665,8 @@ coff_symfile_finish (struct objfile *objfile)
 
   /* Let stabs reader clean up */
   stabsread_clear_cache ();
+
+  dwarf2_free_objfile (objfile);
 }
 
 
@@ -821,7 +823,7 @@ coff_symtab_read (long symtab_offset, unsigned int nsyms,
 	case C_THUMBSTATFUNC:
 	  if (cs->c_name[0] == '.')
 	    {
-	      if (DEPRECATED_STREQ (cs->c_name, ".text"))
+	      if (strcmp (cs->c_name, ".text") == 0)
 		{
 		  /* FIXME:  don't wire in ".text" as section name
 		     or symbol name! */
@@ -945,7 +947,7 @@ coff_symtab_read (long symtab_offset, unsigned int nsyms,
 	  break;
 
 	case C_FCN:
-	  if (DEPRECATED_STREQ (cs->c_name, ".bf"))
+	  if (strcmp (cs->c_name, ".bf") == 0)
 	    {
 	      within_function = 1;
 
@@ -967,7 +969,7 @@ coff_symtab_read (long symtab_offset, unsigned int nsyms,
 	      new->name =
 		process_coff_symbol (&fcn_cs_saved, &fcn_aux_saved, objfile);
 	    }
-	  else if (DEPRECATED_STREQ (cs->c_name, ".ef"))
+	  else if (strcmp (cs->c_name, ".ef") == 0)
 	    {
 	      if (!within_function)
 		error (_("Bad coff function information."));
@@ -1043,13 +1045,13 @@ coff_symtab_read (long symtab_offset, unsigned int nsyms,
 	  break;
 
 	case C_BLOCK:
-	  if (DEPRECATED_STREQ (cs->c_name, ".bb"))
+	  if (strcmp (cs->c_name, ".bb") == 0)
 	    {
 	      tmpaddr = cs->c_value;
 	      tmpaddr += ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
 	      push_context (++depth, tmpaddr);
 	    }
-	  else if (DEPRECATED_STREQ (cs->c_name, ".eb"))
+	  else if (strcmp (cs->c_name, ".eb") == 0)
 	    {
 	      if (context_stack_depth <= 0)
 		{		/* We attempted to pop an empty context stack */
@@ -1116,20 +1118,29 @@ read_one_sym (struct coff_symbol *cs,
 	      union internal_auxent *aux)
 {
   int i;
+  bfd_size_type bytes;
 
   cs->c_symnum = symnum;
-  bfd_bread (temp_sym, local_symesz, nlist_bfd_global);
+  bytes = bfd_bread (temp_sym, local_symesz, nlist_bfd_global);
+  if (bytes != local_symesz)
+    error ("%s: error reading symbols", current_objfile->name);
   bfd_coff_swap_sym_in (symfile_bfd, temp_sym, (char *) sym);
   cs->c_naux = sym->n_numaux & 0xff;
   if (cs->c_naux >= 1)
     {
-      bfd_bread (temp_aux, local_auxesz, nlist_bfd_global);
+      bytes  = bfd_bread (temp_aux, local_auxesz, nlist_bfd_global);
+      if (bytes != local_auxesz)
+	error ("%s: error reading symbols", current_objfile->name);
       bfd_coff_swap_aux_in (symfile_bfd, temp_aux, sym->n_type, sym->n_sclass,
 			    0, cs->c_naux, (char *) aux);
       /* If more than one aux entry, read past it (only the first aux
          is important). */
       for (i = 1; i < cs->c_naux; i++)
-	bfd_bread (temp_aux, local_auxesz, nlist_bfd_global);
+	{
+	  bytes = bfd_bread (temp_aux, local_auxesz, nlist_bfd_global);
+	  if (bytes != local_auxesz)
+	    error ("%s: error reading symbols", current_objfile->name);
+	}
     }
   cs->c_name = getsymname (sym);
   cs->c_value = sym->n_value;
@@ -1689,7 +1700,7 @@ decode_type (struct coff_symbol *cs, unsigned int c_type,
 	  *dim = 0;
 
 	  base_type = decode_type (cs, new_c_type, aux);
-	  index_type = lookup_fundamental_type (current_objfile, FT_INTEGER);
+	  index_type = builtin_type_int32;
 	  range_type =
 	    create_range_type ((struct type *) NULL, index_type, 0, n - 1);
 	  type =
@@ -1752,39 +1763,39 @@ decode_base_type (struct coff_symbol *cs, unsigned int c_type,
     {
     case T_NULL:
       /* shows up with "void (*foo)();" structure members */
-      return lookup_fundamental_type (current_objfile, FT_VOID);
+      return builtin_type (current_gdbarch)->builtin_void;
 
 #ifdef T_VOID
     case T_VOID:
       /* Intel 960 COFF has this symbol and meaning.  */
-      return lookup_fundamental_type (current_objfile, FT_VOID);
+      return builtin_type (current_gdbarch)->builtin_void;
 #endif
 
     case T_CHAR:
-      return lookup_fundamental_type (current_objfile, FT_CHAR);
+      return builtin_type (current_gdbarch)->builtin_char;
 
     case T_SHORT:
-      return lookup_fundamental_type (current_objfile, FT_SHORT);
+      return builtin_type (current_gdbarch)->builtin_short;
 
     case T_INT:
-      return lookup_fundamental_type (current_objfile, FT_INTEGER);
+      return builtin_type (current_gdbarch)->builtin_int;
 
     case T_LONG:
       if (cs->c_sclass == C_FIELD
 	  && aux->x_sym.x_misc.x_lnsz.x_size
 	     > gdbarch_long_bit (current_gdbarch))
-	return lookup_fundamental_type (current_objfile, FT_LONG_LONG);
+	return builtin_type (current_gdbarch)->builtin_long_long;
       else
-	return lookup_fundamental_type (current_objfile, FT_LONG);
+	return builtin_type (current_gdbarch)->builtin_long;
 
     case T_FLOAT:
-      return lookup_fundamental_type (current_objfile, FT_FLOAT);
+      return builtin_type (current_gdbarch)->builtin_float;
 
     case T_DOUBLE:
-      return lookup_fundamental_type (current_objfile, FT_DBL_PREC_FLOAT);
+      return builtin_type (current_gdbarch)->builtin_double;
 
     case T_LNGDBL:
-      return lookup_fundamental_type (current_objfile, FT_EXT_PREC_FLOAT);
+      return builtin_type (current_gdbarch)->builtin_long_double;
 
     case T_STRUCT:
       if (cs->c_naux != 1)
@@ -1862,24 +1873,24 @@ decode_base_type (struct coff_symbol *cs, unsigned int c_type,
       break;
 
     case T_UCHAR:
-      return lookup_fundamental_type (current_objfile, FT_UNSIGNED_CHAR);
+      return builtin_type (current_gdbarch)->builtin_unsigned_char;
 
     case T_USHORT:
-      return lookup_fundamental_type (current_objfile, FT_UNSIGNED_SHORT);
+      return builtin_type (current_gdbarch)->builtin_unsigned_short;
 
     case T_UINT:
-      return lookup_fundamental_type (current_objfile, FT_UNSIGNED_INTEGER);
+      return builtin_type (current_gdbarch)->builtin_unsigned_int;
 
     case T_ULONG:
       if (cs->c_sclass == C_FIELD
 	  && aux->x_sym.x_misc.x_lnsz.x_size
 	     > gdbarch_long_bit (current_gdbarch))
-	return lookup_fundamental_type (current_objfile, FT_UNSIGNED_LONG_LONG);
+	return builtin_type (current_gdbarch)->builtin_unsigned_long_long;
       else
-	return lookup_fundamental_type (current_objfile, FT_UNSIGNED_LONG);
+	return builtin_type (current_gdbarch)->builtin_unsigned_long;
     }
   complaint (&symfile_complaints, _("Unexpected type for symbol %s"), cs->c_name);
-  return lookup_fundamental_type (current_objfile, FT_VOID);
+  return builtin_type (current_gdbarch)->builtin_void;
 }
 
 /* This page contains subroutines of read_type.  */
@@ -2100,6 +2111,7 @@ static struct sym_fns coff_sym_fns =
   default_symfile_offsets,	/* sym_offsets:  xlate external to internal form */
   default_symfile_segments,	/* sym_segments: Get segment information from
 				   a file.  */
+  NULL,                         /* sym_read_linetable  */
   NULL				/* next: pointer to next struct sym_fns */
 };
 

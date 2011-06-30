@@ -1,6 +1,6 @@
 /* Target-dependent code for SPARC.
 
-   Copyright (C) 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -151,7 +151,8 @@ extern unsigned long sparc_fetch_instruction (CORE_ADDR pc);
 /* Fetch StackGhost Per-Process XOR cookie.  */
 extern ULONGEST sparc_fetch_wcookie (void);
 
-extern CORE_ADDR sparc_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
+extern CORE_ADDR sparc_analyze_prologue (struct gdbarch *gdbarch,
+					 CORE_ADDR pc, CORE_ADDR current_pc,
 					 struct sparc_frame_cache *cache);
 
 extern struct sparc_frame_cache *
@@ -189,6 +190,8 @@ extern void sparc32_collect_fpregset (const struct regcache *regcache,
 extern const struct sparc_gregset sparc32_sol2_gregset;
 
 extern int sparc_sol2_pc_in_sigtramp (CORE_ADDR pc, char *name);
+
+extern char *sparc_sol2_static_transform_name (char *name);
 
 extern void sparc32_sol2_init_abi (struct gdbarch_info info,
 				   struct gdbarch *gdbarch);

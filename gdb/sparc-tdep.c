@@ -1,6 +1,7 @@
 /* Target-dependent code for SPARC.
 
-   Copyright (C) 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -271,7 +272,7 @@ static const char *sparc32_pseudo_register_names[] =
 /* Return the name of register REGNUM.  */
 
 static const char *
-sparc32_register_name (int regnum)
+sparc32_register_name (struct gdbarch *gdbarch, int regnum)
 {
   if (regnum >= 0 && regnum < SPARC32_NUM_REGS)
     return sparc32_register_names[regnum];
@@ -378,7 +379,7 @@ sparc32_pseudo_register_write (struct gdbarch *gdbarch,
 
 static CORE_ADDR
 sparc32_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp,
-			 CORE_ADDR funcaddr, int using_gcc,
+			 CORE_ADDR funcaddr,
 			 struct value **args, int nargs,
 			 struct type *value_type,
 			 CORE_ADDR *real_pc, CORE_ADDR *bp_addr,
@@ -387,7 +388,7 @@ sparc32_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp,
   *bp_addr = sp - 4;
   *real_pc = funcaddr;
 
-  if (using_struct_return (value_type, using_gcc))
+  if (using_struct_return (value_type))
     {
       gdb_byte buf[4];
 
@@ -528,7 +529,7 @@ sparc32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
    location for inserting the breakpoint.  */
    
 static const gdb_byte *
-sparc_breakpoint_from_pc (CORE_ADDR *pc, int *len)
+sparc_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pc, int *len)
 {
   static const gdb_byte break_insn[] = { 0x91, 0xd0, 0x20, 0x01 };
 
@@ -710,10 +711,10 @@ sparc_skip_stack_check (const CORE_ADDR start_pc)
 }
 
 CORE_ADDR
-sparc_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
-			struct sparc_frame_cache *cache)
+sparc_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
+			CORE_ADDR current_pc, struct sparc_frame_cache *cache)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   unsigned long insn;
   int offset = 0;
   int dest = -1;
@@ -777,7 +778,7 @@ sparc_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
    START_PC.  */
 
 static CORE_ADDR
-sparc32_skip_prologue (CORE_ADDR start_pc)
+sparc32_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR start_pc)
 {
   struct symtab_and_line sal;
   CORE_ADDR func_start, func_end;
@@ -794,7 +795,7 @@ sparc32_skip_prologue (CORE_ADDR start_pc)
 	return sal.end;
     }
 
-  start_pc = sparc_analyze_prologue (start_pc, 0xffffffffUL, &cache);
+  start_pc = sparc_analyze_prologue (gdbarch, start_pc, 0xffffffffUL, &cache);
 
   /* The psABI says that "Although the first 6 words of arguments
      reside in registers, the standard stack frame reserves space for
@@ -841,7 +842,8 @@ sparc_frame_cache (struct frame_info *next_frame, void **this_cache)
 
   cache->pc = frame_func_unwind (next_frame, NORMAL_FRAME);
   if (cache->pc != 0)
-    sparc_analyze_prologue (cache->pc, frame_pc_unwind (next_frame), cache);
+    sparc_analyze_prologue (get_frame_arch (next_frame), cache->pc,
+			    frame_pc_unwind (next_frame), cache);
 
   if (cache->frameless_p)
     {
@@ -1354,37 +1356,6 @@ sparc_write_pc (struct regcache *regcache, CORE_ADDR pc)
   regcache_cooked_write_unsigned (regcache, tdep->npc_regnum, pc + 4);
 }
 
-/* Unglobalize NAME.  */
-
-char *
-sparc_stabs_unglobalize_name (char *name)
-{
-  /* The Sun compilers (Sun ONE Studio, Forte Developer, Sun WorkShop,
-     SunPRO) convert file static variables into global values, a
-     process known as globalization.  In order to do this, the
-     compiler will create a unique prefix and prepend it to each file
-     static variable.  For static variables within a function, this
-     globalization prefix is followed by the function name (nested
-     static variables within a function are supposed to generate a
-     warning message, and are left alone).  The procedure is
-     documented in the Stabs Interface Manual, which is distrubuted
-     with the compilers, although version 4.0 of the manual seems to
-     be incorrect in some places, at least for SPARC.  The
-     globalization prefix is encoded into an N_OPT stab, with the form
-     "G=<prefix>".  The globalization prefix always seems to start
-     with a dollar sign '$'; a dot '.' is used as a seperator.  So we
-     simply strip everything up until the last dot.  */
-
-  if (name[0] == '$')
-    {
-      char *p = strrchr (name, '.');
-      if (p)
-	return p + 1;
-    }
-
-  return name;
-}
-
 
 /* Return the appropriate register set for the core section identified
    by SECT_NAME and SECT_SIZE.  */
@@ -1532,7 +1503,7 @@ sparc_supply_rwindow (struct regcache *regcache, CORE_ADDR sp, int regnum)
 
       /* Clear out the top half of the temporary buffer, and put the
 	 register value in the bottom half if we're in 64-bit mode.  */
-      if (gdbarch_ptr_bit (current_gdbarch) == 64)
+      if (gdbarch_ptr_bit (get_regcache_arch (regcache)) == 64)
 	{
 	  memset (buf, 0, 4);
 	  offset = 4;
@@ -1599,7 +1570,7 @@ sparc_collect_rwindow (const struct regcache *regcache,
       sp &= 0xffffffffUL;
 
       /* Only use the bottom half if we're in 64-bit mode.  */
-      if (gdbarch_ptr_bit (current_gdbarch) == 64)
+      if (gdbarch_ptr_bit (get_regcache_arch (regcache)) == 64)
 	offset = 4;
 
       for (i = SPARC_L0_REGNUM; i <= SPARC_I7_REGNUM; i++)

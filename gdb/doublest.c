@@ -1,7 +1,7 @@
 /* Floating point routines for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2003, 2004, 2005, 2007
+   1997, 1998, 1999, 2000, 2001, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -200,6 +200,24 @@ convert_floatformat_to_doublest (const struct floatformat *fmt,
   if (order != fmt->byteorder)
     ufrom = newfrom;
 
+  if (fmt->split_half)
+    {
+      DOUBLEST dtop, dbot;
+      floatformat_to_doublest (fmt->split_half, ufrom, &dtop);
+      /* Preserve the sign of 0, which is the sign of the top
+	 half.  */
+      if (dtop == 0.0)
+	{
+	  *to = dtop;
+	  return;
+	}
+      floatformat_to_doublest (fmt->split_half,
+			     ufrom + fmt->totalsize / FLOATFORMAT_CHAR_BIT / 2,
+			     &dbot);
+      *to = dtop + dbot;
+      return;
+    }
+
   exponent = get_field (ufrom, order, fmt->totalsize, fmt->exp_start,
 			fmt->exp_len);
   /* Note that if exponent indicates a NaN, we can't really do anything useful
@@ -392,6 +410,30 @@ convert_doublest_to_floatformat (CONST struct floatformat *fmt,
   memcpy (&dfrom, from, sizeof (dfrom));
   memset (uto, 0, (fmt->totalsize + FLOATFORMAT_CHAR_BIT - 1) 
                     / FLOATFORMAT_CHAR_BIT);
+
+  if (fmt->split_half)
+    {
+      /* Use static volatile to ensure that any excess precision is
+	 removed via storing in memory, and so the top half really is
+	 the result of converting to double.  */
+      static volatile double dtop, dbot;
+      DOUBLEST dtopnv, dbotnv;
+      dtop = (double) dfrom;
+      /* If the rounded top half is Inf, the bottom must be 0 not NaN
+	 or Inf.  */
+      if (dtop + dtop == dtop && dtop != 0.0)
+	dbot = 0.0;
+      else
+	dbot = (double) (dfrom - (DOUBLEST) dtop);
+      dtopnv = dtop;
+      dbotnv = dbot;
+      floatformat_from_doublest (fmt->split_half, &dtopnv, uto);
+      floatformat_from_doublest (fmt->split_half, &dbotnv,
+			       (uto
+				+ fmt->totalsize / FLOATFORMAT_CHAR_BIT / 2));
+      return;
+    }
+
   if (dfrom == 0)
     return;			/* Result is zero */
   if (dfrom != dfrom)		/* Result is NaN */

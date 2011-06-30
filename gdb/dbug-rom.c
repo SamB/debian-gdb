@@ -1,5 +1,5 @@
 /* Remote debugging interface to dBUG ROM monitor for GDB, the GNU debugger.
-   Copyright (C) 1996, 1998, 1999, 2000, 2001, 2007
+   Copyright (C) 1996, 1998, 1999, 2000, 2001, 2007, 2008
    Free Software Foundation, Inc.
 
    Written by Stan Shebs of Cygnus Support.
@@ -40,6 +40,7 @@ dbug_supply_register (struct regcache *regcache, char *regname,
 		      int regnamelen, char *val, int vallen)
 {
   int regno;
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
 
   if (regnamelen != 2)
     return;
@@ -49,12 +50,12 @@ dbug_supply_register (struct regcache *regcache, char *regname,
     case 'S':
       if (regname[1] != 'R')
 	return;
-      regno = gdbarch_ps_regnum (current_gdbarch);
+      regno = gdbarch_ps_regnum (gdbarch);
       break;
     case 'P':
       if (regname[1] != 'C')
 	return;
-      regno = gdbarch_pc_regnum (current_gdbarch);
+      regno = gdbarch_pc_regnum (gdbarch);
       break;
     case 'D':
       if (regname[1] < '0' || regname[1] > '7')

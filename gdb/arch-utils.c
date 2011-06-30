@@ -1,7 +1,7 @@
 /* Dynamic architecture support for GDB, the GNU debugger.
 
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
-   Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
+   2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -36,60 +36,18 @@
 
 #include "floatformat.h"
 
-int
-always_use_struct_convention (int gcc_p, struct type *value_type)
-{
-  return 1;
-}
-
-enum return_value_convention
-legacy_return_value (struct gdbarch *gdbarch, struct type *valtype,
-		     struct regcache *regcache, gdb_byte *readbuf,
-		     const gdb_byte *writebuf)
-{
-  /* NOTE: cagney/2004-06-13: The gcc_p parameter to
-     USE_STRUCT_CONVENTION isn't used.  */
-  int struct_return = ((TYPE_CODE (valtype) == TYPE_CODE_STRUCT
-			|| TYPE_CODE (valtype) == TYPE_CODE_UNION
-			|| TYPE_CODE (valtype) == TYPE_CODE_ARRAY)
-		       && gdbarch_deprecated_use_struct_convention
-			    (current_gdbarch, 0, valtype));
-
-  if (writebuf != NULL)
-    {
-      gdb_assert (!struct_return);
-      /* NOTE: cagney/2004-06-13: See stack.c:return_command.  Old
-	 architectures don't expect store_return_value to handle small
-	 structures.  Should not be called with such types.  */
-      gdb_assert (TYPE_CODE (valtype) != TYPE_CODE_STRUCT
-		  && TYPE_CODE (valtype) != TYPE_CODE_UNION);
-      gdbarch_store_return_value (current_gdbarch, valtype, regcache, writebuf);
-    }
-
-  if (readbuf != NULL)
-    {
-      gdb_assert (!struct_return);
-      gdbarch_extract_return_value (current_gdbarch,
-				    valtype, regcache, readbuf);
-    }
-
-  if (struct_return)
-    return RETURN_VALUE_STRUCT_CONVENTION;
-  else
-    return RETURN_VALUE_REGISTER_CONVENTION;
-}
 
 int
-legacy_register_sim_regno (int regnum)
+legacy_register_sim_regno (struct gdbarch *gdbarch, int regnum)
 {
   /* Only makes sense to supply raw registers.  */
-  gdb_assert (regnum >= 0 && regnum < gdbarch_num_regs (current_gdbarch));
+  gdb_assert (regnum >= 0 && regnum < gdbarch_num_regs (gdbarch));
   /* NOTE: cagney/2002-05-13: The old code did it this way and it is
      suspected that some GDB/SIM combinations may rely on this
      behavour.  The default should be one2one_register_sim_regno
      (below).  */
-  if (gdbarch_register_name (current_gdbarch, regnum) != NULL
-      && gdbarch_register_name (current_gdbarch, regnum)[0] != '\0')
+  if (gdbarch_register_name (gdbarch, regnum) != NULL
+      && gdbarch_register_name (gdbarch, regnum)[0] != '\0')
     return regnum;
   else
     return LEGACY_SIM_REGNO_IGNORE;
@@ -149,7 +107,7 @@ convert_from_func_ptr_addr_identity (struct gdbarch *gdbarch, CORE_ADDR addr,
 }
 
 int
-no_op_reg_to_regnum (int reg)
+no_op_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 {
   return reg;
 }
@@ -167,7 +125,7 @@ default_coff_make_msymbol_special (int val, struct minimal_symbol *msym)
 }
 
 int
-cannot_register_not (int regnum)
+cannot_register_not (struct gdbarch *gdbarch, int regnum)
 {
   return 0;
 }
@@ -177,7 +135,8 @@ cannot_register_not (int regnum)
    raw.  */
 
 void
-legacy_virtual_frame_pointer (CORE_ADDR pc,
+legacy_virtual_frame_pointer (struct gdbarch *gdbarch, 
+			      CORE_ADDR pc,
 			      int *frame_regnum,
 			      LONGEST *frame_offset)
 {
@@ -186,14 +145,14 @@ legacy_virtual_frame_pointer (CORE_ADDR pc,
      register and an offset can determine this.  I think it should
      instead generate a byte code expression as that would work better
      with things like Dwarf2's CFI.  */
-  if (gdbarch_deprecated_fp_regnum (current_gdbarch) >= 0
-      && gdbarch_deprecated_fp_regnum (current_gdbarch)
-	   < gdbarch_num_regs (current_gdbarch))
-    *frame_regnum = gdbarch_deprecated_fp_regnum (current_gdbarch);
-  else if (gdbarch_sp_regnum (current_gdbarch) >= 0
-	   && gdbarch_sp_regnum (current_gdbarch)
-	        < gdbarch_num_regs (current_gdbarch))
-    *frame_regnum = gdbarch_sp_regnum (current_gdbarch);
+  if (gdbarch_deprecated_fp_regnum (gdbarch) >= 0
+      && gdbarch_deprecated_fp_regnum (gdbarch)
+	   < gdbarch_num_regs (gdbarch))
+    *frame_regnum = gdbarch_deprecated_fp_regnum (gdbarch);
+  else if (gdbarch_sp_regnum (gdbarch) >= 0
+	   && gdbarch_sp_regnum (gdbarch)
+	        < gdbarch_num_regs (gdbarch))
+    *frame_regnum = gdbarch_sp_regnum (gdbarch);
   else
     /* Should this be an internal error?  I guess so, it is reflecting
        an architectural limitation in the current design.  */
@@ -203,7 +162,8 @@ legacy_virtual_frame_pointer (CORE_ADDR pc,
 
 
 int
-generic_convert_register_p (int regnum, struct type *type)
+generic_convert_register_p (struct gdbarch *gdbarch, int regnum,
+			    struct type *type)
 {
   return 0;
 }
@@ -494,8 +454,6 @@ gdbarch_update_p (struct gdbarch_info info)
 struct gdbarch *
 gdbarch_from_bfd (bfd *abfd)
 {
-  struct gdbarch *old_gdbarch = current_gdbarch;
-  struct gdbarch *new_gdbarch;
   struct gdbarch_info info;
 
   /* If we call gdbarch_find_by_info without filling in info.abfd,
@@ -661,6 +619,8 @@ gdbarch_info_fill (struct gdbarch_info *info)
   /* Check for the current file.  */
   if (info->abfd == NULL)
     info->abfd = exec_bfd;
+  if (info->abfd == NULL)
+    info->abfd = core_bfd;
 
   /* Check for the current target description.  */
   if (info->target_desc == NULL)

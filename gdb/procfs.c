@@ -1,6 +1,6 @@
 /* Machine independent support for SVR4 /proc (process file system) for GDB.
 
-   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2006, 2007
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    Written by Michael Snyder at Cygnus Solutions.
@@ -2485,6 +2485,8 @@ proc_set_current_signal (procinfo *pi, int signo)
     char sinfo[sizeof (gdb_siginfo_t)];
   } arg;
   gdb_siginfo_t *mysinfo;
+  ptid_t wait_ptid;
+  struct target_waitstatus wait_status;
 
   /*
    * We should never have to apply this operation to any procinfo
@@ -2508,10 +2510,31 @@ proc_set_current_signal (procinfo *pi, int signo)
 
   /* The pointer is just a type alias.  */
   mysinfo = (gdb_siginfo_t *) &arg.sinfo;
-  mysinfo->si_signo = signo;
-  mysinfo->si_code  = 0;
-  mysinfo->si_pid   = getpid ();       /* ?why? */
-  mysinfo->si_uid   = getuid ();       /* ?why? */
+  get_last_target_status (&wait_ptid, &wait_status);
+  if (ptid_equal (wait_ptid, inferior_ptid)
+      && wait_status.kind == TARGET_WAITKIND_STOPPED
+      && wait_status.value.sig == target_signal_from_host (signo)
+      && proc_get_status (pi)
+#ifdef NEW_PROC_API
+      && pi->prstatus.pr_lwp.pr_info.si_signo == signo
+#else
+      && pi->prstatus.pr_info.si_signo == signo
+#endif
+      )
+    /* Use the siginfo associated with the signal being
+       redelivered.  */
+#ifdef NEW_PROC_API
+    memcpy (mysinfo, &pi->prstatus.pr_lwp.pr_info, sizeof (gdb_siginfo_t));
+#else
+    memcpy (mysinfo, &pi->prstatus.pr_info, sizeof (gdb_siginfo_t));
+#endif
+  else
+    {
+      mysinfo->si_signo = signo;
+      mysinfo->si_code  = 0;
+      mysinfo->si_pid   = getpid ();       /* ?why? */
+      mysinfo->si_uid   = getuid ();       /* ?why? */
+    }
 
 #ifdef NEW_PROC_API
   arg.cmd = PCSSIG;
@@ -2896,7 +2919,7 @@ proc_set_watchpoint (procinfo *pi, CORE_ADDR addr, int len, int wflags)
 #endif
 }
 
-#ifdef TM_I386SOL2_H		/* Is it hokey to use this? */
+#if (defined(__i386__) || defined(__x86_64__)) && defined (sun)
 
 #include <sys/sysi86.h>
 
@@ -2988,7 +3011,45 @@ proc_get_LDT_entry (procinfo *pi, int key)
 #endif
 }
 
-#endif /* TM_I386SOL2_H */
+/*
+ * Function: procfs_find_LDT_entry
+ *
+ * Input:
+ *   ptid_t ptid;	// The GDB-style pid-plus-LWP.
+ *
+ * Return:
+ *   pointer to the corresponding LDT entry.
+ */
+
+struct ssd *
+procfs_find_LDT_entry (ptid_t ptid)
+{
+  gdb_gregset_t *gregs;
+  int            key;
+  procinfo      *pi;
+
+  /* Find procinfo for the lwp. */
+  if ((pi = find_procinfo (PIDGET (ptid), TIDGET (ptid))) == NULL)
+    {
+      warning (_("procfs_find_LDT_entry: could not find procinfo for %d:%d."),
+	       PIDGET (ptid), TIDGET (ptid));
+      return NULL;
+    }
+  /* get its general registers. */
+  if ((gregs = proc_get_gregs (pi)) == NULL)
+    {
+      warning (_("procfs_find_LDT_entry: could not read gregs for %d:%d."),
+	       PIDGET (ptid), TIDGET (ptid));
+      return NULL;
+    }
+  /* Now extract the GS register's lower 16 bits. */
+  key = (*gregs)[GS] & 0xffff;
+
+  /* Find the matching entry and return it. */
+  return proc_get_LDT_entry (pi, key);
+}
+
+#endif
 
 /* =============== END, non-thread part of /proc  "MODULE" =============== */
 
@@ -3687,6 +3748,7 @@ procfs_fetch_registers (struct regcache *regcache, int regnum)
   procinfo *pi;
   int pid = PIDGET (inferior_ptid);
   int tid = TIDGET (inferior_ptid);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
 
   /* First look up procinfo for the main process.  */
   pi = find_procinfo_or_die (pid, 0);
@@ -3707,13 +3769,13 @@ procfs_fetch_registers (struct regcache *regcache, int regnum)
 
   supply_gregset (regcache, (const gdb_gregset_t *) gregs);
 
-  if (gdbarch_fp0_regnum (current_gdbarch) >= 0) /* Do we have an FPU?  */
+  if (gdbarch_fp0_regnum (gdbarch) >= 0) /* Do we have an FPU?  */
     {
       gdb_fpregset_t *fpregs;
 
-      if ((regnum >= 0 && regnum < gdbarch_fp0_regnum (current_gdbarch))
-	  || regnum == gdbarch_pc_regnum (current_gdbarch)
-	  || regnum == gdbarch_sp_regnum (current_gdbarch))
+      if ((regnum >= 0 && regnum < gdbarch_fp0_regnum (gdbarch))
+	  || regnum == gdbarch_pc_regnum (gdbarch)
+	  || regnum == gdbarch_sp_regnum (gdbarch))
 	return;			/* Not a floating point register.  */
 
       fpregs = proc_get_fpregs (pi);
@@ -3752,6 +3814,7 @@ procfs_store_registers (struct regcache *regcache, int regnum)
   procinfo *pi;
   int pid = PIDGET (inferior_ptid);
   int tid = TIDGET (inferior_ptid);
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
 
   /* First find procinfo for main process.  */
   pi = find_procinfo_or_die (pid, 0);
@@ -3774,13 +3837,13 @@ procfs_store_registers (struct regcache *regcache, int regnum)
   if (!proc_set_gregs (pi))
     proc_error (pi, "store_registers, set_gregs", __LINE__);
 
-  if (gdbarch_fp0_regnum (current_gdbarch) >= 0) /* Do we have an FPU?  */
+  if (gdbarch_fp0_regnum (gdbarch) >= 0) /* Do we have an FPU?  */
     {
       gdb_fpregset_t *fpregs;
 
-      if ((regnum >= 0 && regnum < gdbarch_fp0_regnum (current_gdbarch))
-	  || regnum == gdbarch_pc_regnum (current_gdbarch)
-	  || regnum == gdbarch_sp_regnum (current_gdbarch))
+      if ((regnum >= 0 && regnum < gdbarch_fp0_regnum (gdbarch))
+	  || regnum == gdbarch_pc_regnum (gdbarch)
+	  || regnum == gdbarch_sp_regnum (gdbarch))
 	return;			/* Not a floating point register.  */
 
       fpregs = proc_get_fpregs (pi);
@@ -4094,11 +4157,8 @@ wait_again:
 		    temp_ptid = MERGEPID (pi->pid, temp_tid);
 		    /* If not in GDB's thread list, add it.  */
 		    if (!in_thread_list (temp_ptid))
-		      {
-			printf_filtered (_("[New %s]\n"),
-					 target_pid_to_str (temp_ptid));
-			add_thread (temp_ptid);
-		      }
+		      add_thread (temp_ptid);
+
 		    /* Return to WFI, but tell it to immediately resume. */
 		    status->kind = TARGET_WAITKIND_SPURIOUS;
 		    return inferior_ptid;
@@ -4164,11 +4224,7 @@ wait_again:
 		    /* If not in GDB's thread list, add it.  */
 		    temp_ptid = MERGEPID (pi->pid, temp_tid);
 		    if (!in_thread_list (temp_ptid))
-		      {
-			printf_filtered (_("[New %s]\n"),
-					 target_pid_to_str (temp_ptid));
-			add_thread (temp_ptid);
-		      }
+		      add_thread (temp_ptid);
 
 		    status->kind = TARGET_WAITKIND_STOPPED;
 		    status->value.sig = 0;
@@ -4255,7 +4311,6 @@ wait_again:
 		   * If we don't create a procinfo, resume may be unhappy
 		   * later.
 		   */
-		  printf_filtered (_("[New %s]\n"), target_pid_to_str (retval));
 		  add_thread (retval);
 		  if (find_procinfo (PIDGET (retval), TIDGET (retval)) == NULL)
 		    create_procinfo (PIDGET (retval), TIDGET (retval));
@@ -4305,7 +4360,7 @@ procfs_xfer_partial (struct target_ops *ops, enum target_object object,
     case TARGET_OBJECT_MEMORY:
       if (readbuf)
 	return (*ops->deprecated_xfer_memory) (offset, readbuf, len,
-					       0/*write*/, NULL, ops);
+					       0/*read*/, NULL, ops);
       if (writebuf)
 	return (*ops->deprecated_xfer_memory) (offset, writebuf, len,
 					       1/*write*/, NULL, ops);
@@ -5313,46 +5368,6 @@ procfs_stopped_by_watchpoint (ptid_t ptid)
     }
   return 0;
 }
-
-#ifdef TM_I386SOL2_H
-/*
- * Function: procfs_find_LDT_entry
- *
- * Input:
- *   ptid_t ptid;	// The GDB-style pid-plus-LWP.
- *
- * Return:
- *   pointer to the corresponding LDT entry.
- */
-
-struct ssd *
-procfs_find_LDT_entry (ptid_t ptid)
-{
-  gdb_gregset_t *gregs;
-  int            key;
-  procinfo      *pi;
-
-  /* Find procinfo for the lwp. */
-  if ((pi = find_procinfo (PIDGET (ptid), TIDGET (ptid))) == NULL)
-    {
-      warning (_("procfs_find_LDT_entry: could not find procinfo for %d:%d."),
-	       PIDGET (ptid), TIDGET (ptid));
-      return NULL;
-    }
-  /* get its general registers. */
-  if ((gregs = proc_get_gregs (pi)) == NULL)
-    {
-      warning (_("procfs_find_LDT_entry: could not read gregs for %d:%d."),
-	       PIDGET (ptid), TIDGET (ptid));
-      return NULL;
-    }
-  /* Now extract the GS register's lower 16 bits. */
-  key = (*gregs)[GS] & 0xffff;
-
-  /* Find the matching entry and return it. */
-  return proc_get_LDT_entry (pi, key);
-}
-#endif /* TM_I386SOL2_H */
 
 /*
  * Memory Mappings Functions:

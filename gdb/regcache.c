@@ -1,7 +1,7 @@
 /* Cache and manage the values of registers for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1987, 1989, 1991, 1994, 1995, 1996, 1998, 2000, 2001,
-   2002, 2004, 2007 Free Software Foundation, Inc.
+   2002, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -92,11 +92,11 @@ init_regcache_descr (struct gdbarch *gdbarch)
   /* Total size of the register space.  The raw registers are mapped
      directly onto the raw register cache while the pseudo's are
      either mapped onto raw-registers or memory.  */
-  descr->nr_cooked_registers = gdbarch_num_regs (current_gdbarch)
-			       + gdbarch_num_pseudo_regs (current_gdbarch);
-  descr->sizeof_cooked_register_valid_p = gdbarch_num_regs (current_gdbarch)
+  descr->nr_cooked_registers = gdbarch_num_regs (gdbarch)
+			       + gdbarch_num_pseudo_regs (gdbarch);
+  descr->sizeof_cooked_register_valid_p = gdbarch_num_regs (gdbarch)
 					  + gdbarch_num_pseudo_regs 
-					      (current_gdbarch);
+					      (gdbarch);
 
   /* Fill in a table of register types.  */
   descr->register_type
@@ -106,7 +106,7 @@ init_regcache_descr (struct gdbarch *gdbarch)
 
   /* Construct a strictly RAW register cache.  Don't allow pseudo's
      into the register cache.  */
-  descr->nr_raw_registers = gdbarch_num_regs (current_gdbarch);
+  descr->nr_raw_registers = gdbarch_num_regs (gdbarch);
 
   /* FIXME: cagney/2002-08-13: Overallocate the register_valid_p
      array.  This pretects GDB from erant code that accesses elements
@@ -174,8 +174,8 @@ register_size (struct gdbarch *gdbarch, int regnum)
   struct regcache_descr *descr = regcache_descr (gdbarch);
   int size;
   gdb_assert (regnum >= 0
-	      && regnum < (gdbarch_num_regs (current_gdbarch)
-			   + gdbarch_num_pseudo_regs (current_gdbarch)));
+	      && regnum < (gdbarch_num_regs (gdbarch)
+			   + gdbarch_num_pseudo_regs (gdbarch)));
   size = descr->sizeof_register[regnum];
   return size;
 }
@@ -472,6 +472,9 @@ registers_changed (void)
   regcache_xfree (current_regcache);
   current_regcache = NULL;
 
+  /* Need to forget about any frames we have cached, too. */
+  reinit_frame_cache ();
+
   /* Force cleanup of any alloca areas if using C alloca instead of
      a builtin alloca.  This particular call is used to clean up
      areas allocated by low level target code which may build up
@@ -642,7 +645,7 @@ regcache_raw_write (struct regcache *regcache, int regnum,
 
   /* On the sparc, writing %g0 is a no-op, so we don't even want to
      change the registers array if something writes to this register.  */
-  if (gdbarch_cannot_store_register (current_gdbarch, regnum))
+  if (gdbarch_cannot_store_register (get_regcache_arch (regcache), regnum))
     return;
 
   /* If we have a valid copy of the register, and new value == old
@@ -761,18 +764,6 @@ regcache_cooked_write_part (struct regcache *regcache, int regnum,
 		      regcache_cooked_read, regcache_cooked_write);
 }
 
-/* Hack to keep code that view the register buffer as raw bytes
-   working.  */
-
-int
-register_offset_hack (struct gdbarch *gdbarch, int regnum)
-{
-  struct regcache_descr *descr = regcache_descr (gdbarch);
-  gdb_assert (regnum >= 0 && regnum < descr->nr_cooked_registers);
-  return descr->register_offset[regnum];
-}
-
-
 /* Supply register REGNUM, whose contents are stored in BUF, to REGCACHE.  */
 
 void
@@ -837,13 +828,13 @@ read_pc_pid (ptid_t ptid)
   if (gdbarch_read_pc_p (gdbarch))
     pc_val = gdbarch_read_pc (gdbarch, regcache);
   /* Else use per-frame method on get_current_frame.  */
-  else if (gdbarch_pc_regnum (current_gdbarch) >= 0)
+  else if (gdbarch_pc_regnum (gdbarch) >= 0)
     {
       ULONGEST raw_val;
       regcache_cooked_read_unsigned (regcache,
-				     gdbarch_pc_regnum (current_gdbarch),
+				     gdbarch_pc_regnum (gdbarch),
 				     &raw_val);
-      pc_val = gdbarch_addr_bits_remove (current_gdbarch, raw_val);
+      pc_val = gdbarch_addr_bits_remove (gdbarch, raw_val);
     }
   else
     internal_error (__FILE__, __LINE__, _("read_pc_pid: Unable to find PC"));
@@ -865,9 +856,9 @@ write_pc_pid (CORE_ADDR pc, ptid_t ptid)
 
   if (gdbarch_write_pc_p (gdbarch))
     gdbarch_write_pc (gdbarch, regcache, pc);
-  else if (gdbarch_pc_regnum (current_gdbarch) >= 0)
+  else if (gdbarch_pc_regnum (gdbarch) >= 0)
     regcache_cooked_write_unsigned (regcache,
-				    gdbarch_pc_regnum (current_gdbarch), pc);
+				    gdbarch_pc_regnum (gdbarch), pc);
   else
     internal_error (__FILE__, __LINE__,
 		    _("write_pc_pid: Unable to update PC"));
@@ -938,14 +929,14 @@ regcache_dump (struct regcache *regcache, struct ui_file *file,
   fprintf_unfiltered (file, "sizeof_raw_register_valid_p %ld\n",
 		      regcache->descr->sizeof_raw_register_valid_p);
   fprintf_unfiltered (file, "gdbarch_num_regs %d\n", 
-		      gdbarch_num_regs (current_gdbarch));
+		      gdbarch_num_regs (gdbarch));
   fprintf_unfiltered (file, "gdbarch_num_pseudo_regs %d\n",
-		      gdbarch_num_pseudo_regs (current_gdbarch));
+		      gdbarch_num_pseudo_regs (gdbarch));
 #endif
 
   gdb_assert (regcache->descr->nr_cooked_registers
-	      == (gdbarch_num_regs (current_gdbarch)
-		  + gdbarch_num_pseudo_regs (current_gdbarch)));
+	      == (gdbarch_num_regs (gdbarch)
+		  + gdbarch_num_pseudo_regs (gdbarch)));
 
   for (regnum = -1; regnum < regcache->descr->nr_cooked_registers; regnum++)
     {
@@ -954,7 +945,7 @@ regcache_dump (struct regcache *regcache, struct ui_file *file,
 	fprintf_unfiltered (file, " %-10s", "Name");
       else
 	{
-	  const char *p = gdbarch_register_name (current_gdbarch, regnum);
+	  const char *p = gdbarch_register_name (gdbarch, regnum);
 	  if (p == NULL)
 	    p = "";
 	  else if (p[0] == '\0')
@@ -971,11 +962,11 @@ regcache_dump (struct regcache *regcache, struct ui_file *file,
       /* Relative number.  */
       if (regnum < 0)
 	fprintf_unfiltered (file, " %4s", "Rel");
-      else if (regnum < gdbarch_num_regs (current_gdbarch))
+      else if (regnum < gdbarch_num_regs (gdbarch))
 	fprintf_unfiltered (file, " %4d", regnum);
       else
 	fprintf_unfiltered (file, " %4d",
-			    (regnum - gdbarch_num_regs (current_gdbarch)));
+			    (regnum - gdbarch_num_regs (gdbarch)));
 
       /* Offset.  */
       if (regnum < 0)
@@ -1050,7 +1041,7 @@ regcache_dump (struct regcache *regcache, struct ui_file *file,
 	      regcache_raw_read (regcache, regnum, buf);
 	      fprintf_unfiltered (file, "0x");
 	      dump_endian_bytes (file,
-				 gdbarch_byte_order (current_gdbarch), buf,
+				 gdbarch_byte_order (gdbarch), buf,
 				 regcache->descr->sizeof_register[regnum]);
 	    }
 	}
@@ -1065,7 +1056,7 @@ regcache_dump (struct regcache *regcache, struct ui_file *file,
 	      regcache_cooked_read (regcache, regnum, buf);
 	      fprintf_unfiltered (file, "0x");
 	      dump_endian_bytes (file,
-				 gdbarch_byte_order (current_gdbarch), buf,
+				 gdbarch_byte_order (gdbarch), buf,
 				 regcache->descr->sizeof_register[regnum]);
 	    }
 	}

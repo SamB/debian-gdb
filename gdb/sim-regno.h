@@ -1,6 +1,6 @@
 /* Generic remote debugging interface for simulators.
 
-   Copyright (C) 2002, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Red Hat, Inc.
 
@@ -38,6 +38,6 @@ enum sim_regno {
 
 /* Treat all raw registers as valid.  */
 
-extern int one2one_register_sim_regno (int regnum);
+extern int one2one_register_sim_regno (struct gdbarch *gdbarch, int regnum);
 
 #endif

@@ -1,6 +1,6 @@
 /* ppc-opc.c -- PowerPC opcode list
    Copyright 1994, 1995, 1996, 1997, 1998, 2000, 2001, 2002, 2003, 2004,
-   2005, 2006, 2007 Free Software Foundation, Inc.
+   2005, 2006, 2007, 2008 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support
 
    This file is part of the GNU opcodes library.
@@ -492,13 +492,13 @@ const struct powerpc_operand powerpc_operands[] =
 #define VS VD
   { 0x1f, 21, NULL, NULL, PPC_OPERAND_VR },
 
-  /* The SIMM field in a VX form instruction.  */
+  /* The SIMM field in a VX form instruction, and TE in Z form.  */
 #define SIMM VD + 1
+#define TE SIMM
   { 0x1f, 16, NULL, NULL, PPC_OPERAND_SIGNED},
 
-  /* The UIMM field in a VX form instruction, and TE in Z form.  */
+  /* The UIMM field in a VX form instruction.  */
 #define UIMM SIMM + 1
-#define TE UIMM
   { 0x1f, 16, NULL, NULL, 0 },
 
   /* The SHB field in a VA form instruction.  */
@@ -3373,7 +3373,7 @@ const struct powerpc_opcode powerpc_opcodes[] = {
 { "mtcr",    XFXM(31,144,0xff,0), XRARB_MASK, COM,	{ RS }},
 { "mtcrf",   X(31,144),	XFXFXM_MASK,	COM,		{ FXM, RS } },
 
-{ "mtmsr",   X(31,146),	XRARB_MASK,	COM,		{ RS } },
+{ "mtmsr",   X(31,146),	XRLARB_MASK,	COM,		{ RS, A_L } },
 
 { "stdx",    X(31,149), X_MASK,		PPC64,		{ RS, RA0, RB } },
 
@@ -4495,9 +4495,6 @@ const struct powerpc_opcode powerpc_opcodes[] = {
 { "fnmadds", A(59,31,0), A_MASK,	PPC,		{ FRT,FRA,FRC,FRB } },
 { "fnmadds.",A(59,31,1), A_MASK,	PPC,		{ FRT,FRA,FRC,FRB } },
 
-{ "psq_st",  OP(60),    OP_MASK,        PPCPS,          { FRS, PSD, RA, PSW, PSQ } },
-{ "psq_stu", OP(61),    OP_MASK,        PPCPS,          { FRS, PSD, RA, PSW, PSQ } },
-
 { "dmul",    XRC(59,34,0), X_MASK,	POWER6,		{ FRT, FRA, FRB } },
 { "dmul.",   XRC(59,34,1), X_MASK,	POWER6,		{ FRT, FRA, FRB } },
 
@@ -4550,9 +4547,6 @@ const struct powerpc_opcode powerpc_opcodes[] = {
 { "drsp",    XRC(59,770,0), X_MASK,	POWER6,		{ FRT, FRB } },
 { "drsp.",   XRC(59,770,1), X_MASK,	POWER6,		{ FRT, FRB } },
 
-{ "dcffix",  XRC(59,802,0), X_MASK,	POWER6,		{ FRT, FRB } },
-{ "dcffix.", XRC(59,802,1), X_MASK,	POWER6,		{ FRT, FRB } },
-
 { "denbcd",  XRC(59,834,0), X_MASK,	POWER6,		{ S, FRT, FRB } },
 { "denbcd.", XRC(59,834,1), X_MASK,	POWER6,		{ S, FRT, FRB } },
 
@@ -4560,6 +4554,9 @@ const struct powerpc_opcode powerpc_opcodes[] = {
 { "diex.",   XRC(59,866,1), X_MASK,	POWER6,		{ FRT, FRA, FRB } },
 
 { "stfq",    OP(60),	OP_MASK,	POWER2,		{ FRS, D, RA } },
+
+{ "psq_st",  OP(60),    OP_MASK,        PPCPS,          { FRS, PSD, RA, PSW, PSQ } },
+{ "psq_stu", OP(61),    OP_MASK,        PPCPS,          { FRS, PSD, RA, PSW, PSQ } },
 
 { "stfqu",   OP(61),	OP_MASK,	POWER2,		{ FRS, D, RA } },
 
@@ -4680,7 +4677,7 @@ const struct powerpc_opcode powerpc_opcodes[] = {
 { "dscliq.", ZRC(63,66,1), Z_MASK,	POWER6,		{ FRT, FRA, SH16 } },
 
 { "dquaiq",  ZRC(63,67,0), Z2_MASK,	POWER6,		{ TE,  FRT, FRB, RMC } },
-{ "dquaiq.", ZRC(63,67,1), Z2_MASK,	POWER6,		{ FRT, FRA, FRB, RMC } },
+{ "dquaiq.", ZRC(63,67,1), Z2_MASK,	POWER6,		{ TE,  FRT, FRB, RMC } },
 
 { "mtfsb0",  XRC(63,70,0), XRARB_MASK,	COM,		{ BT } },
 { "mtfsb0.", XRC(63,70,1), XRARB_MASK,	COM,		{ BT } },

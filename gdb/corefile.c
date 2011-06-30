@@ -1,7 +1,7 @@
 /* Core dump and executable file functions above target vector, for GDB.
 
    Copyright (C) 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1996, 1997, 1998,
-   1999, 2000, 2001, 2003, 2006, 2007 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2003, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -214,12 +214,12 @@ memory_error (int status, CORE_ADDR memaddr)
       /* Actually, address between memaddr and memaddr + len
          was out of bounds. */
       fprintf_unfiltered (tmp_stream, "Cannot access memory at address ");
-      deprecated_print_address_numeric (memaddr, 1, tmp_stream);
+      fputs_filtered (paddress (memaddr), tmp_stream);
     }
   else
     {
       fprintf_filtered (tmp_stream, "Error accessing memory address ");
-      deprecated_print_address_numeric (memaddr, 1, tmp_stream);
+      fputs_filtered (paddress (memaddr), tmp_stream);
       fprintf_filtered (tmp_stream, ": %s.",
 		       safe_strerror (status));
     }

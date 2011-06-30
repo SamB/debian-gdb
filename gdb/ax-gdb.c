@@ -1,6 +1,6 @@
 /* GDB-specific functions for operating on agent expressions.
 
-   Copyright (C) 1998, 1999, 2000, 2001, 2003, 2007
+   Copyright (C) 1998, 1999, 2000, 2001, 2003, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -319,7 +319,7 @@ gen_traced_pop (struct agent_expr *ax, struct axs_value *value)
 
       case axs_lvalue_memory:
 	{
-	  int length = TYPE_LENGTH (value->type);
+	  int length = TYPE_LENGTH (check_typedef (value->type));
 
 	  /* There's no point in trying to use a trace_quick bytecode
 	     here, since "trace_quick SIZE pop" is three bytes, whereas
@@ -650,7 +650,7 @@ gen_int_literal (struct agent_expr *ax, struct axs_value *value, LONGEST k,
 {
   ax_const_l (ax, k);
   value->kind = axs_rvalue;
-  value->type = type;
+  value->type = check_typedef (type);
 }
 
 
@@ -854,7 +854,7 @@ gen_usual_arithmetic (struct agent_expr *ax, struct axs_value *value1,
 	  ax_simple (ax, aop_swap);
 	}
 
-      value1->type = value2->type = target;
+      value1->type = value2->type = check_typedef (target);
     }
 }
 
@@ -905,9 +905,8 @@ gen_cast (struct agent_expr *ax, struct axs_value *value, struct type *type)
       /* We don't have to worry about the size of the value, because
          all our integral values are fully sign-extended, and when
          casting pointers we can do anything we like.  Is there any
-         way for us to actually know what GCC actually does with a
-         cast like this?  */
-      value->type = type;
+         way for us to know what GCC actually does with a cast like
+         this?  */
       break;
 
     case TYPE_CODE_INT:
@@ -1608,6 +1607,10 @@ gen_expr (union exp_element **pc, struct agent_expr *ax,
 	if (reg == -1)
 	  internal_error (__FILE__, __LINE__,
 			  _("Register $%s not available"), name);
+	if (reg >= gdbarch_num_regs (current_gdbarch))
+	  error (_("'%s' is a pseudo-register; "
+		   "GDB cannot yet trace pseudoregister contents."),
+		 name);
 	value->kind = axs_lvalue_register;
 	value->u.reg = reg;
 	value->type = register_type (current_gdbarch, reg);
@@ -1736,56 +1739,6 @@ gen_expr (union exp_element **pc, struct agent_expr *ax,
 
 
 /* Generating bytecode from GDB expressions: driver */
-
-/* Given a GDB expression EXPR, produce a string of agent bytecode
-   which computes its value.  Return the agent expression, and set
-   *VALUE to describe its type, and whether it's an lvalue or rvalue.  */
-struct agent_expr *
-expr_to_agent (struct expression *expr, struct axs_value *value)
-{
-  struct cleanup *old_chain = 0;
-  struct agent_expr *ax = new_agent_expr (0);
-  union exp_element *pc;
-
-  old_chain = make_cleanup_free_agent_expr (ax);
-
-  pc = expr->elts;
-  trace_kludge = 0;
-  gen_expr (&pc, ax, value);
-
-  /* We have successfully built the agent expr, so cancel the cleanup
-     request.  If we add more cleanups that we always want done, this
-     will have to get more complicated.  */
-  discard_cleanups (old_chain);
-  return ax;
-}
-
-
-#if 0				/* not used */
-/* Given a GDB expression EXPR denoting an lvalue in memory, produce a
-   string of agent bytecode which will leave its address and size on
-   the top of stack.  Return the agent expression.
-
-   Not sure this function is useful at all.  */
-struct agent_expr *
-expr_to_address_and_size (struct expression *expr)
-{
-  struct axs_value value;
-  struct agent_expr *ax = expr_to_agent (expr, &value);
-
-  /* Complain if the result is not a memory lvalue.  */
-  if (value.kind != axs_lvalue_memory)
-    {
-      free_agent_expr (ax);
-      error (_("Expression does not denote an object in memory."));
-    }
-
-  /* Push the object's size on the stack.  */
-  ax_const_l (ax, TYPE_LENGTH (value.type));
-
-  return ax;
-}
-#endif
 
 /* Given a GDB expression EXPR, return bytecode to trace its value.
    The result will use the `trace' and `trace_quick' bytecodes to

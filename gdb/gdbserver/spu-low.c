@@ -1,5 +1,5 @@
 /* Low level interface to SPUs, for the remote server for GDB.
-   Copyright (C) 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Ulrich Weigand <uweigand@de.ibm.com>.
 
@@ -348,9 +348,6 @@ spu_resume (struct thread_resume *resume_info)
 	 && resume_info->thread != current_tid)
     resume_info++;
 
-  block_async_io ();
-  enable_async_io ();
-
   if (resume_info->leave_stopped)
     return;
 
@@ -374,9 +371,6 @@ spu_wait (char *status)
   int tid = current_tid;
   int w;
   int ret;
-
-  enable_async_io ();
-  unblock_async_io ();
 
   while (1)
     {
@@ -406,8 +400,6 @@ spu_wait (char *status)
 	  waitpid (tid, NULL, __WALL | __WNOTHREAD);
 	}
     }
-
-  disable_async_io ();
 
   if (WIFEXITED (w))
     {
@@ -598,6 +590,7 @@ static struct target_ops spu_target_ops = {
   NULL,
   spu_arch_string,
   spu_proc_xfer_spu,
+  hostio_last_error_from_errno,
 };
 
 void

@@ -1,5 +1,5 @@
 /* Architecture-dependent code for the Fujitsu FR-V, for GDB, the GNU Debugger.
-   Copyright (C) 2004, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -114,3 +114,7 @@ CORE_ADDR frv_fdpic_find_canonical_descriptor (CORE_ADDR entry_point);
 /* Given an objfile, return the address of its link map.  This value is
    needed for TLS support.  */
 CORE_ADDR frv_fetch_objfile_link_map (struct objfile *objfile);
+
+struct target_so_ops;
+extern struct target_so_ops frv_so_ops;
+

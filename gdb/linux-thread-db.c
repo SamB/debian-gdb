@@ -1,6 +1,6 @@
 /* libthread_db assisted debugging support, generic parts.
 
-   Copyright (C) 1999, 2000, 2001, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 1999, 2000, 2001, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -118,7 +118,7 @@ static CORE_ADDR td_death_bp_addr;
 /* Prototypes for local functions.  */
 static void thread_db_find_new_threads (void);
 static void attach_thread (ptid_t ptid, const td_thrhandle_t *th_p,
-			   const td_thrinfo_t *ti_p, int verbose);
+			   const td_thrinfo_t *ti_p);
 static void detach_thread (ptid_t ptid, int verbose);
 
 
@@ -279,7 +279,7 @@ thread_get_info_callback (const td_thrhandle_t *thp, void *infop)
   if (thread_info == NULL)
     {
       /* New thread.  Attach to it now (why wait?).  */
-      attach_thread (thread_ptid, thp, &ti, 1);
+      attach_thread (thread_ptid, thp, &ti);
       thread_info = find_thread_pid (thread_ptid);
       gdb_assert (thread_info != NULL);
     }
@@ -608,8 +608,9 @@ check_for_thread_db (void)
 	/* Paranoid - don't let a NULL path slip through.  */
 	library = LIBTHREAD_DB_SO;
 
-      printf_unfiltered (_("Using host libthread_db library \"%s\".\n"),
-			 library);
+      if (info_verbose)
+	printf_unfiltered (_("Using host libthread_db library \"%s\".\n"),
+			   library);
       already_loaded = 1;
     }
 
@@ -669,7 +670,7 @@ thread_db_new_objfile (struct objfile *objfile)
 
 static void
 attach_thread (ptid_t ptid, const td_thrhandle_t *th_p,
-	       const td_thrinfo_t *ti_p, int verbose)
+	       const td_thrinfo_t *ti_p)
 {
   struct thread_info *tp;
   td_err_e err;
@@ -701,16 +702,13 @@ attach_thread (ptid_t ptid, const td_thrhandle_t *th_p,
     return;			/* A zombie thread -- do not attach.  */
 
   /* Under GNU/Linux, we have to attach to each and every thread.  */
-  if (lin_lwp_attach_lwp (BUILD_LWP (ti_p->ti_lid, GET_PID (ptid)), 0) < 0)
+  if (lin_lwp_attach_lwp (BUILD_LWP (ti_p->ti_lid, GET_PID (ptid))) < 0)
     return;
 
   /* Add the thread to GDB's thread list.  */
   tp = add_thread (ptid);
   tp->private = xmalloc (sizeof (struct private_thread_info));
   memset (tp->private, 0, sizeof (struct private_thread_info));
-
-  if (verbose)
-    printf_unfiltered (_("[New %s]\n"), target_pid_to_str (ptid));
 
   /* Enable thread event reporting for this thread.  */
   err = td_thr_event_enable_p (th_p, 1);
@@ -842,7 +840,7 @@ check_event (ptid_t ptid)
 	case TD_CREATE:
 	  /* Call attach_thread whether or not we already know about a
 	     thread with this thread ID.  */
-	  attach_thread (ptid, msg.th_p, &ti, 1);
+	  attach_thread (ptid, msg.th_p, &ti);
 
 	  break;
 
@@ -851,7 +849,7 @@ check_event (ptid_t ptid)
 	  if (!in_thread_list (ptid))
 	    error (_("Spurious thread death event."));
 
-	  detach_thread (ptid, 1);
+	  detach_thread (ptid, print_thread_events);
 
 	  break;
 
@@ -975,7 +973,7 @@ find_new_threads_callback (const td_thrhandle_t *th_p, void *data)
     }
 
   if (!in_thread_list (ptid))
-    attach_thread (ptid, th_p, &ti, 1);
+    attach_thread (ptid, th_p, &ti);
 
   return 0;
 }

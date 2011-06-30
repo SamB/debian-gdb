@@ -1,7 +1,7 @@
 /* Target-dependent code for the VAX.
 
    Copyright (C) 1986, 1989, 1991, 1992, 1995, 1996, 1998, 1999, 2000, 2002,
-   2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -40,7 +40,7 @@
 /* Return the name of register REGNUM.  */
 
 static const char *
-vax_register_name (int regnum)
+vax_register_name (struct gdbarch *gdbarch, int regnum)
 {
   static char *register_names[] =
   {
@@ -255,7 +255,7 @@ vax_return_value (struct gdbarch *gdbarch, struct type *type,
    location for inserting the breakpoint.  */
    
 static const gdb_byte *
-vax_breakpoint_from_pc (CORE_ADDR *pc, int *len)
+vax_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pc, int *len)
 {
   static gdb_byte break_insn[] = { 3 };
 
@@ -267,7 +267,7 @@ vax_breakpoint_from_pc (CORE_ADDR *pc, int *len)
    to reach some "real" code.  */
 
 static CORE_ADDR
-vax_skip_prologue (CORE_ADDR pc)
+vax_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   gdb_byte op = read_memory_unsigned_integer (pc, 1);
 

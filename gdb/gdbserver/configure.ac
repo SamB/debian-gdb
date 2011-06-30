@@ -25,6 +25,7 @@ AC_INIT(server.c)
 AC_CONFIG_HEADER(config.h:config.in)
 
 AC_PROG_CC
+AC_GNU_SOURCE
 
 AC_CANONICAL_SYSTEM
 
@@ -40,6 +41,7 @@ AC_CHECK_HEADERS(sgtty.h termio.h termios.h sys/reg.h string.h dnl
  		 errno.h fcntl.h signal.h sys/file.h malloc.h dnl
 		 sys/ioctl.h netinet/in.h sys/socket.h netdb.h dnl
 		 netinet/tcp.h arpa/inet.h sys/wait.h)
+AC_CHECK_FUNCS(pread pwrite pread64)
 
 have_errno=no
 AC_MSG_CHECKING(for errno)
@@ -78,6 +80,28 @@ got it
 				], [gdb_cv_arm_iwmmxt=yes],
 				[gdb_cv_arm_iwmmxt=no])
 		   CPPFLAGS="$save_CPPFLAGS"])
+    ;;
+  powerpc*-*-*)
+    AC_CACHE_CHECK([if Altivec is selected], [gdb_cv_ppc_altivec],
+      	           [save_CPPFLAGS="$CPPFLAGS"
+                    CPPFLAGS="$CPPFLAGS $CFLAGS"
+                    AC_EGREP_CPP([got it], [
+#ifdef __ALTIVEC__
+got it
+#endif
+                 ], [gdb_cv_ppc_altivec=yes],
+                    [gdb_cv_ppc_altivec=no])
+                    CPPFLAGS="$save_CPPFLAGS"])
+    AC_CACHE_CHECK([if SPE is selected], [gdb_cv_ppc_spe],
+      	           [save_CPPFLAGS="$CPPFLAGS"
+                    CPPFLAGS="$CPPFLAGS $CFLAGS"
+                    AC_EGREP_CPP([got it], [
+#ifdef __SPE__
+got it
+#endif
+                 ], [gdb_cv_ppc_spe=yes],
+                    [gdb_cv_ppc_spe=no])
+                    CPPFLAGS="$save_CPPFLAGS"])
     ;;
 esac
 
@@ -190,7 +214,7 @@ if test "$srv_xmltarget" != ""; then
   done
 fi
 
-GDBSERVER_DEPFILES="$srv_regobj $srv_tgtobj $srv_thread_depfiles"
+GDBSERVER_DEPFILES="$srv_regobj $srv_tgtobj $srv_hostio_err_objs $srv_thread_depfiles"
 GDBSERVER_LIBS="$srv_libs"
 
 AC_SUBST(GDBSERVER_DEPFILES)

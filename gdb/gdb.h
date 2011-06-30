@@ -1,5 +1,5 @@
 /* Library interface into GDB.
-   Copyright (C) 1999, 2001, 2007 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2001, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -46,12 +46,6 @@ enum gdb_rc {
    function will ``print'' the object on ``output''). */
 enum gdb_rc gdb_breakpoint_query (struct ui_out *uiout, int bnum,
 				  char **error_message);
-
-/* Create a breakpoint at ADDRESS (a GDB source and line). */
-enum gdb_rc gdb_breakpoint (char *address, char *condition,
-			    int hardwareflag, int tempflag,
-			    int thread, int ignore_count,
-			    char **error_message);
 
 /* Switch thread and print notification. */
 enum gdb_rc gdb_thread_select (struct ui_out *uiout, char *tidstr,

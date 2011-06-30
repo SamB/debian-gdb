@@ -1,7 +1,7 @@
 /* Generic remote debugging interface for simulators.
 
    Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-   2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
    Steve Chamberlain (sac@cygnus.com).
@@ -269,24 +269,25 @@ gdb_os_error (host_callback * p, const char *format,...)
 }
 
 int
-one2one_register_sim_regno (int regnum)
+one2one_register_sim_regno (struct gdbarch *gdbarch, int regnum)
 {
   /* Only makes sense to supply raw registers.  */
-  gdb_assert (regnum >= 0 && regnum < gdbarch_num_regs (current_gdbarch));
+  gdb_assert (regnum >= 0 && regnum < gdbarch_num_regs (gdbarch));
   return regnum;
 }
 
 static void
 gdbsim_fetch_register (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   if (regno == -1)
     {
-      for (regno = 0; regno < gdbarch_num_regs (current_gdbarch); regno++)
+      for (regno = 0; regno < gdbarch_num_regs (gdbarch); regno++)
 	gdbsim_fetch_register (regcache, regno);
       return;
     }
 
-  switch (gdbarch_register_sim_regno (current_gdbarch, regno))
+  switch (gdbarch_register_sim_regno (gdbarch, regno))
     {
     case LEGACY_SIM_REGNO_IGNORE:
       break;
@@ -306,22 +307,23 @@ gdbsim_fetch_register (struct regcache *regcache, int regno)
 	static int warn_user = 1;
 	char buf[MAX_REGISTER_SIZE];
 	int nr_bytes;
-	gdb_assert (regno >= 0 && regno < gdbarch_num_regs (current_gdbarch));
+	gdb_assert (regno >= 0 && regno < gdbarch_num_regs (gdbarch));
 	memset (buf, 0, MAX_REGISTER_SIZE);
 	nr_bytes = sim_fetch_register (gdbsim_desc,
 				       gdbarch_register_sim_regno
-					 (current_gdbarch, regno),
+					 (gdbarch, regno),
 				       buf,
-				       register_size (current_gdbarch, regno));
-	if (nr_bytes > 0 && nr_bytes != register_size (current_gdbarch, regno) && warn_user)
+				       register_size (gdbarch, regno));
+	if (nr_bytes > 0
+	    && nr_bytes != register_size (gdbarch, regno) && warn_user)
 	  {
 	    fprintf_unfiltered (gdb_stderr,
 				"Size of register %s (%d/%d) incorrect (%d instead of %d))",
-				gdbarch_register_name (current_gdbarch, regno),
+				gdbarch_register_name (gdbarch, regno),
 				regno,
 				gdbarch_register_sim_regno
-				  (current_gdbarch, regno),
-				nr_bytes, register_size (current_gdbarch, regno));
+				  (gdbarch, regno),
+				nr_bytes, register_size (gdbarch, regno));
 	    warn_user = 0;
 	  }
 	/* FIXME: cagney/2002-05-27: Should check `nr_bytes == 0'
@@ -334,7 +336,7 @@ gdbsim_fetch_register (struct regcache *regcache, int regno)
 	  {
 	    printf_filtered ("gdbsim_fetch_register: %d", regno);
 	    /* FIXME: We could print something more intelligible.  */
-	    dump_mem (buf, register_size (current_gdbarch, regno));
+	    dump_mem (buf, register_size (gdbarch, regno));
 	  }
 	break;
       }
@@ -345,22 +347,23 @@ gdbsim_fetch_register (struct regcache *regcache, int regno)
 static void
 gdbsim_store_register (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   if (regno == -1)
     {
-      for (regno = 0; regno < gdbarch_num_regs (current_gdbarch); regno++)
+      for (regno = 0; regno < gdbarch_num_regs (gdbarch); regno++)
 	gdbsim_store_register (regcache, regno);
       return;
     }
-  else if (gdbarch_register_sim_regno (current_gdbarch, regno) >= 0)
+  else if (gdbarch_register_sim_regno (gdbarch, regno) >= 0)
     {
       char tmp[MAX_REGISTER_SIZE];
       int nr_bytes;
       regcache_cooked_read (regcache, regno, tmp);
       nr_bytes = sim_store_register (gdbsim_desc,
 				     gdbarch_register_sim_regno
-				       (current_gdbarch, regno),
-				     tmp, register_size (current_gdbarch, regno));
-      if (nr_bytes > 0 && nr_bytes != register_size (current_gdbarch, regno))
+				       (gdbarch, regno),
+				     tmp, register_size (gdbarch, regno));
+      if (nr_bytes > 0 && nr_bytes != register_size (gdbarch, regno))
 	internal_error (__FILE__, __LINE__,
 			_("Register size different to expected"));
       /* FIXME: cagney/2002-05-27: Should check `nr_bytes == 0'
@@ -370,7 +373,7 @@ gdbsim_store_register (struct regcache *regcache, int regno)
 	{
 	  printf_filtered ("gdbsim_store_register: %d", regno);
 	  /* FIXME: We could print something more intelligible.  */
-	  dump_mem (tmp, register_size (current_gdbarch, regno));
+	  dump_mem (tmp, register_size (gdbarch, regno));
 	}
     }
 }

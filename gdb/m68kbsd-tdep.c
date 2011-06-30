@@ -1,6 +1,6 @@
 /* Target-dependent code for Motorola 68000 BSD's.
 
-   Copyright (C) 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,6 +25,7 @@
 #include "regset.h"
 #include "trad-frame.h"
 #include "tramp-frame.h"
+#include "gdbtypes.h"
 
 #include "gdb_assert.h"
 #include "gdb_string.h"

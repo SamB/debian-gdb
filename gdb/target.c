@@ -1,7 +1,7 @@
 /* Select target systems and architectures at runtime for GDB.
 
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
@@ -445,9 +445,8 @@ update_current_target (void)
       INHERIT (to_stop, t);
       /* Do not inherit to_xfer_partial.  */
       INHERIT (to_rcmd, t);
-      INHERIT (to_enable_exception_callback, t);
-      INHERIT (to_get_current_exception_event, t);
       INHERIT (to_pid_to_exec_file, t);
+      INHERIT (to_log_command, t);
       INHERIT (to_stratum, t);
       INHERIT (to_has_all_memory, t);
       INHERIT (to_has_memory, t);
@@ -624,12 +623,6 @@ update_current_target (void)
   de_fault (to_rcmd,
 	    (void (*) (char *, struct ui_file *))
 	    tcomplain);
-  de_fault (to_enable_exception_callback,
-	    (struct symtab_and_line * (*) (enum exception_event_kind, int))
-	    nosupport_runtime);
-  de_fault (to_get_current_exception_event,
-	    (struct exception_event_record * (*) (void))
-	    nosupport_runtime);
   de_fault (to_pid_to_exec_file,
 	    (char *(*) (int))
 	    return_zero);
@@ -649,6 +642,9 @@ update_current_target (void)
      "current_target".  That way code looking for a non-inherited
      target method can quickly and simply find it.  */
   current_target.beneath = target_stack;
+
+  if (targetdebug)
+    setup_target_debug ();
 }
 
 /* Mark OPS as a running target.  This reverses the effect
@@ -752,9 +748,6 @@ push_target (struct target_ops *t)
 
   update_current_target ();
 
-  if (targetdebug)
-    setup_target_debug ();
-
   /* Not on top?  */
   return (t != target_stack);
 }
@@ -811,7 +804,7 @@ pop_target (void)
   internal_error (__FILE__, __LINE__, _("failed internal consistency check"));
 }
 
-/* Using the objfile specified in BATON, find the address for the
+/* Using the objfile specified in OBJFILE, find the address for the
    current thread's thread-local storage with offset OFFSET.  */
 CORE_ADDR
 target_translate_tls_address (struct objfile *objfile, CORE_ADDR offset)
@@ -1337,8 +1330,8 @@ default_xfer_partial (struct target_ops *ops, enum target_object object,
 	  do_cleanups (cleanup);
 	}
       if (readbuf != NULL)
-	xfered = ops->deprecated_xfer_memory (offset, readbuf, len, 0/*read*/,
-					      NULL, ops);
+	xfered = ops->deprecated_xfer_memory (offset, readbuf, len, 
+					      0/*read*/, NULL, ops);
       if (xfered > 0)
 	return xfered;
       else if (xfered == 0 && errno == 0)
@@ -2165,18 +2158,19 @@ static void
 debug_print_register (const char * func,
 		      struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   fprintf_unfiltered (gdb_stdlog, "%s ", func);
-  if (regno >= 0 && regno < gdbarch_num_regs (current_gdbarch)
-			    + gdbarch_num_pseudo_regs (current_gdbarch)
-      && gdbarch_register_name (current_gdbarch, regno) != NULL
-      && gdbarch_register_name (current_gdbarch, regno)[0] != '\0')
-    fprintf_unfiltered (gdb_stdlog, "(%s)", gdbarch_register_name
-					      (current_gdbarch, regno));
+  if (regno >= 0 && regno < gdbarch_num_regs (gdbarch)
+			    + gdbarch_num_pseudo_regs (gdbarch)
+      && gdbarch_register_name (gdbarch, regno) != NULL
+      && gdbarch_register_name (gdbarch, regno)[0] != '\0')
+    fprintf_unfiltered (gdb_stdlog, "(%s)",
+			gdbarch_register_name (gdbarch, regno));
   else
     fprintf_unfiltered (gdb_stdlog, "(%d)", regno);
   if (regno >= 0)
     {
-      int i, size = register_size (current_gdbarch, regno);
+      int i, size = register_size (gdbarch, regno);
       unsigned char buf[MAX_REGISTER_SIZE];
       regcache_cooked_read (regcache, regno, buf);
       fprintf_unfiltered (gdb_stdlog, " = ");
@@ -2670,26 +2664,6 @@ debug_to_rcmd (char *command,
   fprintf_unfiltered (gdb_stdlog, "target_rcmd (%s, ...)\n", command);
 }
 
-static struct symtab_and_line *
-debug_to_enable_exception_callback (enum exception_event_kind kind, int enable)
-{
-  struct symtab_and_line *result;
-  result = debug_target.to_enable_exception_callback (kind, enable);
-  fprintf_unfiltered (gdb_stdlog,
-		      "target get_exception_callback_sal (%d, %d)\n",
-		      kind, enable);
-  return result;
-}
-
-static struct exception_event_record *
-debug_to_get_current_exception_event (void)
-{
-  struct exception_event_record *result;
-  result = debug_target.to_get_current_exception_event ();
-  fprintf_unfiltered (gdb_stdlog, "target get_current_exception_event ()\n");
-  return result;
-}
-
 static char *
 debug_to_pid_to_exec_file (int pid)
 {
@@ -2757,8 +2731,6 @@ setup_target_debug (void)
   current_target.to_find_new_threads = debug_to_find_new_threads;
   current_target.to_stop = debug_to_stop;
   current_target.to_rcmd = debug_to_rcmd;
-  current_target.to_enable_exception_callback = debug_to_enable_exception_callback;
-  current_target.to_get_current_exception_event = debug_to_get_current_exception_event;
   current_target.to_pid_to_exec_file = debug_to_pid_to_exec_file;
 }
 

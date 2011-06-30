@@ -1,7 +1,8 @@
 /* Work with executable files, for GDB. 
 
    Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2001, 2002, 2003, 2007 Free Software Foundation, Inc.
+   1998, 1999, 2000, 2001, 2002, 2003, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -30,6 +31,7 @@
 #include "value.h"
 #include "exec.h"
 #include "observer.h"
+#include "arch-utils.c"
 
 #include <fcntl.h>
 #include "readline/readline.h"
@@ -531,7 +533,7 @@ print_section_info (struct target_ops *t, bfd *abfd)
 {
   struct section_table *p;
   /* FIXME: 16 is not wide enough when gdbarch_addr_bit > 64.  */
-  int wid = gdbarch_addr_bit (current_gdbarch) <= 32 ? 8 : 16;
+  int wid = gdbarch_addr_bit (gdbarch_from_bfd (abfd)) <= 32 ? 8 : 16;
 
   printf_filtered ("\t`%s', ", bfd_get_filename (abfd));
   wrap_here ("        ");
@@ -539,8 +541,7 @@ print_section_info (struct target_ops *t, bfd *abfd)
   if (abfd == exec_bfd)
     {
       printf_filtered (_("\tEntry point: "));
-      deprecated_print_address_numeric (bfd_get_start_address (abfd), 1, gdb_stdout);
-      printf_filtered ("\n");
+      fputs_filtered (paddress (bfd_get_start_address (abfd)), gdb_stdout);
     }
   for (p = t->to_sections; p < t->to_sections_end; p++)
     {

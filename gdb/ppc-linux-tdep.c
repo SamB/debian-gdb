@@ -1,7 +1,7 @@
 /* Target-dependent code for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -57,10 +57,10 @@ ppc_linux_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
   char symname[1024];
   struct minimal_symbol *msymbol;
 
-  /* Find the section pc is in; return if not in .plt */
+  /* Find the section pc is in; if not in .plt, try the default method.  */
   sect = find_pc_section (pc);
   if (!sect || strcmp (sect->the_bfd_section->name, ".plt") != 0)
-    return 0;
+    return find_solib_trampoline_target (frame, pc);
 
   objfile = sect->objfile;
 
@@ -273,7 +273,8 @@ ppc_linux_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
    regard to removing breakpoints in some potentially self modifying
    code.  */
 int
-ppc_linux_memory_remove_breakpoint (struct bp_target_info *bp_tgt)
+ppc_linux_memory_remove_breakpoint (struct gdbarch *gdbarch,
+				    struct bp_target_info *bp_tgt)
 {
   CORE_ADDR addr = bp_tgt->placed_address;
   const unsigned char *bp;
@@ -282,7 +283,7 @@ ppc_linux_memory_remove_breakpoint (struct bp_target_info *bp_tgt)
   gdb_byte old_contents[BREAKPOINT_MAX];
 
   /* Determine appropriate breakpoint contents and size for this address.  */
-  bp = gdbarch_breakpoint_from_pc (current_gdbarch, &addr, &bplen);
+  bp = gdbarch_breakpoint_from_pc (gdbarch, &addr, &bplen);
   if (bp == NULL)
     error (_("Software breakpoints not implemented for this target."));
 
@@ -650,8 +651,8 @@ static const struct ppc_reg_offsets ppc32_linux_reg_offsets =
 
     /* AltiVec registers.  */
     /* .vr0_offset = */ 0,
-    /* .vrsave_offset = */ 512,
-    /* .vscr_offset = */ 512 + 12
+    /* .vscr_offset = */ 512 + 12,
+    /* .vrsave_offset = */ 528
   };
 
 static const struct ppc_reg_offsets ppc64_linux_reg_offsets =
@@ -675,8 +676,8 @@ static const struct ppc_reg_offsets ppc64_linux_reg_offsets =
 
     /* AltiVec registers.  */
     /* .vr0_offset = */ 0,
-    /* .vrsave_offset = */ 528,
-    /* .vscr_offset = */ 512 + 12
+    /* .vscr_offset = */ 512 + 12,
+    /* .vrsave_offset = */ 528
   };
 
 static const struct regset ppc32_linux_gregset = {
@@ -697,6 +698,13 @@ static const struct regset ppc32_linux_fpregset = {
   &ppc32_linux_reg_offsets,
   ppc_supply_fpregset,
   ppc_collect_fpregset,
+  NULL
+};
+
+static const struct regset ppc32_linux_vrregset = {
+  &ppc32_linux_reg_offsets,
+  ppc_supply_vrregset,
+  ppc_collect_vrregset,
   NULL
 };
 
@@ -726,6 +734,8 @@ ppc_linux_regset_from_core_section (struct gdbarch *core_arch,
     }
   if (strcmp (sect_name, ".reg2") == 0)
     return &ppc32_linux_fpregset;
+  if (strcmp (sect_name, ".reg-ppc-vmx") == 0)
+    return &ppc32_linux_vrregset;
   return NULL;
 }
 
@@ -744,7 +754,7 @@ ppc_linux_sigtramp_cache (struct frame_info *next_frame,
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   base = frame_unwind_register_unsigned (next_frame,
-					 gdbarch_sp_regnum (current_gdbarch));
+					 gdbarch_sp_regnum (gdbarch));
   if (bias > 0 && frame_pc_unwind (next_frame) != func)
     /* See below, some signal trampolines increment the stack as their
        first instruction, need to compensate for that.  */
@@ -764,7 +774,7 @@ ppc_linux_sigtramp_cache (struct frame_info *next_frame,
       trad_frame_set_reg_addr (this_cache, regnum, gpregs + i * tdep->wordsize);
     }
   trad_frame_set_reg_addr (this_cache,
-			   gdbarch_pc_regnum (current_gdbarch),
+			   gdbarch_pc_regnum (gdbarch),
 			   gpregs + 32 * tdep->wordsize);
   trad_frame_set_reg_addr (this_cache, tdep->ppc_ctr_regnum,
 			   gpregs + 35 * tdep->wordsize);
@@ -780,7 +790,7 @@ ppc_linux_sigtramp_cache (struct frame_info *next_frame,
       /* Floating point registers.  */
       for (i = 0; i < 32; i++)
 	{
-	  int regnum = i + gdbarch_fp0_regnum (current_gdbarch);
+	  int regnum = i + gdbarch_fp0_regnum (gdbarch);
 	  trad_frame_set_reg_addr (this_cache, regnum,
 				   fpregs + i * tdep->wordsize);
 	}
@@ -887,15 +897,13 @@ ppc_linux_init_abi (struct gdbarch_info info,
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
-  /* NOTE: jimb/2004-03-26: The System V ABI PowerPC Processor
-     Supplement says that long doubles are sixteen bytes long.
-     However, as one of the known warts of its ABI, PPC GNU/Linux uses
-     eight-byte long doubles.  GCC only recently got 128-bit long
-     double support on PPC, so it may be changing soon.  The
-     Linux[sic] Standards Base says that programs that use 'long
-     double' on PPC GNU/Linux are non-conformant.  */
-  /* NOTE: cagney/2005-01-25: True for both 32- and 64-bit.  */
-  set_gdbarch_long_double_bit (gdbarch, 8 * TARGET_CHAR_BIT);
+  /* PPC GNU/Linux uses either 64-bit or 128-bit long doubles; where
+     128-bit, they are IBM long double, not IEEE quad long double as
+     in the System V ABI PowerPC Processor Supplement.  We can safely
+     let them default to 128-bit, since the debug info will give the
+     size of type actually used in each case.  */
+  set_gdbarch_long_double_bit (gdbarch, 16 * TARGET_CHAR_BIT);
+  set_gdbarch_long_double_format (gdbarch, floatformats_ibm_long_double);
 
   /* Handle PPC GNU/Linux 64-bit function pointers (which are really
      function descriptors) and 32-bit secure PLT entries.  */

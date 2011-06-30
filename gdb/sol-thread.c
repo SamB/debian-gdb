@@ -1,7 +1,7 @@
 /* Solaris threads debugging interface.
 
    Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2007 Free Software Foundation, Inc.
+   2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -461,10 +461,7 @@ sol_thread_wait (ptid_t ptid, struct target_waitstatus *ourstatus)
       if (is_thread (rtnval)
 	  && !ptid_equal (rtnval, save_ptid)
 	  && !in_thread_list (rtnval))
-	{
-	  printf_filtered ("[New %s]\n", target_pid_to_str (rtnval));
-	  add_thread (rtnval);
-	}
+	add_thread (rtnval);
     }
 
   /* During process initialization, we may get here without the thread
@@ -1286,9 +1283,12 @@ ps_pdmodel (gdb_ps_prochandle_t ph, int *data_model)
 }
 #endif /* PR_MODEL_LP64 */
 
-#ifdef TM_I386SOL2_H
+#if (defined(__i386__) || defined(__x86_64__)) && defined (sun)
 
-/* Reads the local descriptor table of a LWP.  */
+/* Reads the local descriptor table of a LWP.
+
+   This function is necessary on x86-solaris only.  Without it, the loading
+   of libthread_db would fail because of ps_lgetLDT being undefined.  */
 
 ps_err_e
 ps_lgetLDT (gdb_ps_prochandle_t ph, lwpid_t lwpid,
@@ -1314,7 +1314,7 @@ ps_lgetLDT (gdb_ps_prochandle_t ph, lwpid_t lwpid,
     /* LDT not found.  */
     return PS_ERR;
 }
-#endif /* TM_I386SOL2_H */
+#endif
 
 
 /* Convert PTID to printable form.  */

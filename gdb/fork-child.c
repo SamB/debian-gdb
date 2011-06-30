@@ -1,7 +1,7 @@
 /* Fork a Unix child process, and set up to debug it, for GDB.
 
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000,
-   2001, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2001, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
 
@@ -36,9 +36,7 @@
 #include <signal.h>
 
 /* This just gets used as a default if we can't find SHELL.  */
-#ifndef SHELL_FILE
 #define SHELL_FILE "/bin/sh"
-#endif
 
 extern char **environ;
 
@@ -162,15 +160,8 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
      fact that it may expand when quoted; it is a worst-case number
      based on every character being '.  */
   len = 5 + 4 * strlen (exec_file) + 1 + strlen (allargs) + 1 + /*slop */ 12;
-  /* If desired, concat something onto the front of ALLARGS.
-     SHELL_COMMAND is the result.  */
-#ifdef SHELL_COMMAND_CONCAT
-  shell_command = (char *) alloca (strlen (SHELL_COMMAND_CONCAT) + len);
-  strcpy (shell_command, SHELL_COMMAND_CONCAT);
-#else
   shell_command = (char *) alloca (len);
   shell_command[0] = '\0';
-#endif
 
   if (!shell)
     {
@@ -419,7 +410,7 @@ startup_inferior (int ntraps)
     {
       /* Make wait_for_inferior be quiet. */
       stop_soon = STOP_QUIETLY;
-      wait_for_inferior ();
+      wait_for_inferior (1);
       if (stop_signal != TARGET_SIGNAL_TRAP)
 	{
 	  /* Let shell child handle its own signals in its own way.

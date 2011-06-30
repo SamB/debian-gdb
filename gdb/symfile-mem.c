@@ -1,7 +1,7 @@
 /* Reading symbol files from memory.
 
    Copyright (C) 1986, 1987, 1989, 1991, 1994, 1995, 1996, 1998, 2000, 2001,
-   2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -196,7 +196,7 @@ try using the \"file\" command first."));
 	}
       args.bfd = bfd;
       args.sysinfo_ehdr = sysinfo_ehdr;
-      xasprintf (&args.name, "system-supplied DSO at 0x%s",
+      args.name = xstrprintf ("system-supplied DSO at 0x%s",
 		 paddr_nz (sysinfo_ehdr));
       /* Pass zero for FROM_TTY, because the action of loading the
 	 vsyscall DSO was not triggered by the user, even if the user

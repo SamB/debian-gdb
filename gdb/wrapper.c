@@ -1,6 +1,6 @@
 /* Longjump free calls to GDB internal routines.
 
-   Copyright (C) 1999, 2000, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -151,7 +151,7 @@ gdb_value_struct_elt (struct ui_out *uiout, struct value **result,
 {
   volatile struct gdb_exception except;
 
-  TRY_CATCH (except, RETURN_MASK_ALL)
+  TRY_CATCH (except, RETURN_MASK_ERROR)
     {
       *result = value_struct_elt (argp, args, name, static_memfuncp, err);
     }

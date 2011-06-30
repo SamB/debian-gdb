@@ -1,6 +1,6 @@
 /* User visible, per-frame registers, for GDB, the GNU debugger.
 
-   Copyright (C) 2002, 2003, 2004, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Red Hat.
 
@@ -154,8 +154,8 @@ user_reg_map_name_to_regnum (struct gdbarch *gdbarch, const char *name,
 	if ((len < 0 && strcmp (reg->name, name))
 	    || (len == strlen (reg->name)
 		&& strncmp (reg->name, name, len) == 0))
-	  return gdbarch_num_regs (current_gdbarch)
-		 + gdbarch_num_pseudo_regs (current_gdbarch) + nr;
+	  return gdbarch_num_regs (gdbarch)
+		 + gdbarch_num_pseudo_regs (gdbarch) + nr;
       }
   }
 

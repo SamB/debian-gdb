@@ -1,7 +1,7 @@
 /* Remote debugging interface for MIPS remote debugging protocol.
 
    Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004, 2006, 2007 Free Software Foundation, Inc.
+   2003, 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.  Written by Ian Lance Taylor
    <ian@cygnus.com>.
@@ -140,12 +140,13 @@ static void mips_load (char *file, int from_tty);
 static int mips_make_srec (char *buffer, int type, CORE_ADDR memaddr,
 			   unsigned char *myaddr, int len);
 
-static int set_breakpoint (CORE_ADDR addr, int len, enum break_type type);
+static int mips_set_breakpoint (CORE_ADDR addr, int len, enum break_type type);
 
-static int clear_breakpoint (CORE_ADDR addr, int len, enum break_type type);
+static int mips_clear_breakpoint (CORE_ADDR addr, int len,
+				  enum break_type type);
 
-static int common_breakpoint (int set, CORE_ADDR addr, int len,
-			      enum break_type type);
+static int mips_common_breakpoint (int set, CORE_ADDR addr, int len,
+				   enum break_type type);
 
 /* Forward declarations.  */
 extern struct target_ops mips_ops;
@@ -1450,7 +1451,7 @@ mips_initialize (void)
 
   /* Clear all breakpoints: */
   if ((mips_monitor == MON_IDT
-       && clear_breakpoint (-1, 0, BREAK_UNUSED) == 0)
+       && mips_clear_breakpoint (-1, 0, BREAK_UNUSED) == 0)
       || mips_monitor == MON_LSI)
     monitor_supports_breakpoints = 1;
   else
@@ -1754,30 +1755,29 @@ mips_wait (ptid_t ptid, struct target_waitstatus *status)
   if (nfields >= 3)
     {
       struct regcache *regcache = get_current_regcache ();
+      struct gdbarch *gdbarch = get_regcache_arch (regcache);
       char buf[MAX_REGISTER_SIZE];
 
       store_unsigned_integer (buf,
 			      register_size
-			        (current_gdbarch, gdbarch_pc_regnum
-						    (current_gdbarch)), rpc);
-      regcache_raw_supply (regcache, gdbarch_pc_regnum (current_gdbarch), buf);
+			        (gdbarch, gdbarch_pc_regnum (gdbarch)), rpc);
+      regcache_raw_supply (regcache, gdbarch_pc_regnum (gdbarch), buf);
 
       store_unsigned_integer
-	(buf, register_size (current_gdbarch,
-	 gdbarch_pc_regnum (current_gdbarch)), rfp);
+	(buf, register_size (gdbarch, gdbarch_pc_regnum (gdbarch)), rfp);
       regcache_raw_supply (regcache, 30, buf);	/* This register they are avoiding and so it is unnamed */
 
-      store_unsigned_integer (buf, register_size (current_gdbarch,
-			      gdbarch_sp_regnum (current_gdbarch)), rsp);
-      regcache_raw_supply (regcache, gdbarch_sp_regnum (current_gdbarch), buf);
+      store_unsigned_integer (buf, register_size (gdbarch,
+			      gdbarch_sp_regnum (gdbarch)), rsp);
+      regcache_raw_supply (regcache, gdbarch_sp_regnum (gdbarch), buf);
 
       store_unsigned_integer (buf,
-			      register_size (current_gdbarch,
+			      register_size (gdbarch,
 					     gdbarch_deprecated_fp_regnum
-					       (current_gdbarch)),
+					       (gdbarch)),
 			      0);
       regcache_raw_supply (regcache,
-			   gdbarch_deprecated_fp_regnum (current_gdbarch), buf);
+			   gdbarch_deprecated_fp_regnum (gdbarch), buf);
 
       if (nfields == 9)
 	{
@@ -1904,17 +1904,18 @@ mips_map_regno (int regno)
 static void
 mips_fetch_registers (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   unsigned LONGEST val;
   int err;
 
   if (regno == -1)
     {
-      for (regno = 0; regno < gdbarch_num_regs (current_gdbarch); regno++)
+      for (regno = 0; regno < gdbarch_num_regs (gdbarch); regno++)
 	mips_fetch_registers (regcache, regno);
       return;
     }
 
-  if (regno == gdbarch_deprecated_fp_regnum (current_gdbarch)
+  if (regno == gdbarch_deprecated_fp_regnum (gdbarch)
       || regno == MIPS_ZERO_REGNUM)
     /* gdbarch_deprecated_fp_regnum on the mips is a hack which is just
        supposed to read zero (see also mips-nat.c).  */
@@ -1948,7 +1949,7 @@ mips_fetch_registers (struct regcache *regcache, int regno)
 
     /* We got the number the register holds, but gdb expects to see a
        value in the target byte ordering.  */
-    store_unsigned_integer (buf, register_size (current_gdbarch, regno), val);
+    store_unsigned_integer (buf, register_size (gdbarch, regno), val);
     regcache_raw_supply (regcache, regno, buf);
   }
 }
@@ -1966,12 +1967,13 @@ mips_prepare_to_store (struct regcache *regcache)
 static void
 mips_store_registers (struct regcache *regcache, int regno)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   ULONGEST val;
   int err;
 
   if (regno == -1)
     {
-      for (regno = 0; regno < gdbarch_num_regs (current_gdbarch); regno++)
+      for (regno = 0; regno < gdbarch_num_regs (gdbarch); regno++)
 	mips_store_registers (regcache, regno);
       return;
     }
@@ -2235,8 +2237,8 @@ static int
 mips_insert_breakpoint (struct bp_target_info *bp_tgt)
 {
   if (monitor_supports_breakpoints)
-    return set_breakpoint (bp_tgt->placed_address, MIPS_INSN32_SIZE,
-			   BREAK_FETCH);
+    return mips_set_breakpoint (bp_tgt->placed_address, MIPS_INSN32_SIZE,
+				BREAK_FETCH);
   else
     return memory_insert_breakpoint (bp_tgt);
 }
@@ -2245,8 +2247,8 @@ static int
 mips_remove_breakpoint (struct bp_target_info *bp_tgt)
 {
   if (monitor_supports_breakpoints)
-    return clear_breakpoint (bp_tgt->placed_address, MIPS_INSN32_SIZE,
-			     BREAK_FETCH);
+    return mips_clear_breakpoint (bp_tgt->placed_address, MIPS_INSN32_SIZE,
+				  BREAK_FETCH);
   else
     return memory_remove_breakpoint (bp_tgt);
 }
@@ -2292,7 +2294,7 @@ calculate_mask (CORE_ADDR addr, int len)
 int
 mips_insert_watchpoint (CORE_ADDR addr, int len, int type)
 {
-  if (set_breakpoint (addr, len, type))
+  if (mips_set_breakpoint (addr, len, type))
     return -1;
 
   return 0;
@@ -2301,7 +2303,7 @@ mips_insert_watchpoint (CORE_ADDR addr, int len, int type)
 int
 mips_remove_watchpoint (CORE_ADDR addr, int len, int type)
 {
-  if (clear_breakpoint (addr, len, type))
+  if (mips_clear_breakpoint (addr, len, type))
     return -1;
 
   return 0;
@@ -2317,18 +2319,18 @@ mips_stopped_by_watchpoint (void)
 /* Insert a breakpoint.  */
 
 static int
-set_breakpoint (CORE_ADDR addr, int len, enum break_type type)
+mips_set_breakpoint (CORE_ADDR addr, int len, enum break_type type)
 {
-  return common_breakpoint (1, addr, len, type);
+  return mips_common_breakpoint (1, addr, len, type);
 }
 
 
 /* Clear a breakpoint.  */
 
 static int
-clear_breakpoint (CORE_ADDR addr, int len, enum break_type type)
+mips_clear_breakpoint (CORE_ADDR addr, int len, enum break_type type)
 {
-  return common_breakpoint (0, addr, len, type);
+  return mips_common_breakpoint (0, addr, len, type);
 }
 
 
@@ -2337,10 +2339,10 @@ clear_breakpoint (CORE_ADDR addr, int len, enum break_type type)
    print the warning text and return 0.  If it's an error, print
    the error text and return 1.  <ADDR> is the address of the breakpoint
    that was being set.  <RERRFLG> is the error code returned by PMON. 
-   This is a helper function for common_breakpoint.  */
+   This is a helper function for mips_common_breakpoint.  */
 
 static int
-check_lsi_error (CORE_ADDR addr, int rerrflg)
+mips_check_lsi_error (CORE_ADDR addr, int rerrflg)
 {
   struct lsi_error *err;
   char *saddr = paddr_nz (addr);	/* printable address string */
@@ -2359,15 +2361,15 @@ check_lsi_error (CORE_ADDR addr, int rerrflg)
 	      if ((err->code & rerrflg) == err->code)
 		{
 		  found = 1;
-		  fprintf_unfiltered (gdb_stderr,
-				  "common_breakpoint (0x%s): Warning: %s\n",
+		  fprintf_unfiltered (gdb_stderr, "\
+mips_common_breakpoint (0x%s): Warning: %s\n",
 				      saddr,
 				      err->string);
 		}
 	    }
 	  if (!found)
-	    fprintf_unfiltered (gdb_stderr,
-			"common_breakpoint (0x%s): Unknown warning: 0x%x\n",
+	    fprintf_unfiltered (gdb_stderr, "\
+mips_common_breakpoint (0x%s): Unknown warning: 0x%x\n",
 				saddr,
 				rerrflg);
 	}
@@ -2379,15 +2381,15 @@ check_lsi_error (CORE_ADDR addr, int rerrflg)
     {
       if ((err->code & rerrflg) == err->code)
 	{
-	  fprintf_unfiltered (gdb_stderr,
-			      "common_breakpoint (0x%s): Error: %s\n",
+	  fprintf_unfiltered (gdb_stderr, "\
+mips_common_breakpoint (0x%s): Error: %s\n",
 			      saddr,
 			      err->string);
 	  return 1;
 	}
     }
-  fprintf_unfiltered (gdb_stderr,
-		      "common_breakpoint (0x%s): Unknown error: 0x%x\n",
+  fprintf_unfiltered (gdb_stderr, "\
+mips_common_breakpoint (0x%s): Unknown error: 0x%x\n",
 		      saddr,
 		      rerrflg);
   return 1;
@@ -2408,7 +2410,7 @@ check_lsi_error (CORE_ADDR addr, int rerrflg)
    Return 0 if successful; otherwise 1.  */
 
 static int
-common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
+mips_common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
 {
   char buf[DATA_MAXLEN + 1];
   char cmd, rcmd;
@@ -2441,7 +2443,8 @@ common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
 	  /* Clear the table entry and tell PMON to clear the breakpoint.  */
 	  if (i == MAX_LSI_BREAKPOINTS)
 	    {
-	      warning ("common_breakpoint: Attempt to clear bogus breakpoint at %s\n",
+	      warning ("\
+mips_common_breakpoint: Attempt to clear bogus breakpoint at %s\n",
 		       paddr_nz (addr));
 	      return 1;
 	    }
@@ -2455,9 +2458,11 @@ common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
 
 	  nfields = sscanf (buf, "0x%x b 0x0 0x%x", &rpid, &rerrflg);
 	  if (nfields != 2)
-	    mips_error ("common_breakpoint: Bad response from remote board: %s", buf);
+	    mips_error ("\
+mips_common_breakpoint: Bad response from remote board: %s",
+			buf);
 
-	  return (check_lsi_error (addr, rerrflg));
+	  return (mips_check_lsi_error (addr, rerrflg));
 	}
       else
 	/* set a breakpoint */
@@ -2507,10 +2512,12 @@ common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
 	  nfields = sscanf (buf, "0x%x %c 0x%x 0x%x",
 			    &rpid, &rcmd, &rresponse, &rerrflg);
 	  if (nfields != 4 || rcmd != cmd || rresponse > 255)
-	    mips_error ("common_breakpoint: Bad response from remote board: %s", buf);
+	    mips_error ("\
+mips_common_breakpoint: Bad response from remote board: %s",
+			buf);
 
 	  if (rerrflg != 0)
-	    if (check_lsi_error (addr, rerrflg))
+	    if (mips_check_lsi_error (addr, rerrflg))
 	      return 1;
 
 	  /* rresponse contains PMON's breakpoint number.  Record the
@@ -2574,7 +2581,8 @@ common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
 			&rpid, &rcmd, &rerrflg, &rresponse);
 
       if (nfields != 4 || rcmd != cmd)
-	mips_error ("common_breakpoint: Bad response from remote board: %s",
+	mips_error ("\
+mips_common_breakpoint: Bad response from remote board: %s",
 		    buf);
 
       if (rerrflg != 0)
@@ -2584,8 +2592,8 @@ common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
 	  if (mips_monitor == MON_DDB)
 	    rresponse = rerrflg;
 	  if (rresponse != 22)	/* invalid argument */
-	    fprintf_unfiltered (gdb_stderr,
-			     "common_breakpoint (0x%s):  Got error: 0x%x\n",
+	    fprintf_unfiltered (gdb_stderr, "\
+mips_common_breakpoint (0x%s):  Got error: 0x%x\n",
 				paddr_nz (addr), rresponse);
 	  return 1;
 	}
@@ -3273,7 +3281,8 @@ mips_load (char *file, int from_tty)
       /* Work around problem where PMON monitor updates the PC after a load
          to a different value than GDB thinks it has. The following ensures
          that the write_pc() WILL update the PC value: */
-      deprecated_register_valid[gdbarch_pc_regnum (current_gdbarch)] = 0;
+      regcache_set_valid_p (get_current_regcache (),
+			    gdbarch_pc_regnum (current_gdbarch), 0);
     }
   if (exec_bfd)
     write_pc (bfd_get_start_address (exec_bfd));
@@ -3332,6 +3341,7 @@ _initialize_remote_mips (void)
   mips_ops.to_load = mips_load;
   mips_ops.to_create_inferior = mips_create_inferior;
   mips_ops.to_mourn_inferior = mips_mourn_inferior;
+  mips_ops.to_log_command = serial_log_command;
   mips_ops.to_stratum = process_stratum;
   mips_ops.to_has_all_memory = 1;
   mips_ops.to_has_memory = 1;

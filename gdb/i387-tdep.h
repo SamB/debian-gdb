@@ -1,6 +1,6 @@
 /* Target-dependent code for the i387.
 
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2007
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -54,6 +54,12 @@ extern void i387_print_float_info (struct gdbarch *gdbarch,
 				   struct ui_file *file,
 				   struct frame_info *frame,
 				   const char *args);
+
+/* Return nonzero if a value of type TYPE stored in register REGNUM
+   needs any special handling.  */
+
+extern int i387_convert_register_p (struct gdbarch *gdbarch, int regnum,
+				    struct type *type);
 
 /* Read a value of type TYPE from register REGNUM in frame FRAME, and
    return its contents in TO.  */

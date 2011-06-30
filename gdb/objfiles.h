@@ -1,7 +1,7 @@
 /* Definitions for symbol file management in GDB.
 
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2007 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -278,18 +278,6 @@ struct objfile
        demangled names.  */
 
     struct minimal_symbol *msymbol_demangled_hash[MINIMAL_SYMBOL_HASH_SIZE];
-
-    /* For object file formats which don't specify fundamental types, gdb
-       can create such types.  For now, it maintains a vector of pointers
-       to these internally created fundamental types on a per objfile basis,
-       however it really should ultimately keep them on a per-compilation-unit
-       basis, to account for linkage-units that consist of a number of
-       compilation units that may have different fundamental types, such as
-       linking C modules with ADA modules, or linking C modules that are
-       compiled with 32-bit ints with C modules that are compiled with 64-bit
-       ints (not inherently evil with a smarter linker). */
-
-    struct type **fundamental_types;
 
     /* The mmalloc() malloc-descriptor for this objfile if we are using
        the memory mapped malloc() package to manage storage for this objfile's

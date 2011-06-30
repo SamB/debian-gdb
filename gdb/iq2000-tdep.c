@@ -1,7 +1,7 @@
 /* Target-dependent code for the IQ2000 architecture, for GDB, the GNU
    Debugger.
 
-   Copyright (C) 2000, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by Red Hat.
 
@@ -86,7 +86,7 @@ insn_addr_from_ptr (CORE_ADDR ptr)	/* target_pointer to CORE_ADDR.  */
    Convert a target pointer to an address in host (CORE_ADDR) format. */
 
 static CORE_ADDR
-iq2000_pointer_to_address (struct type * type, const void * buf)
+iq2000_pointer_to_address (struct type * type, const gdb_byte * buf)
 {
   enum type_code target = TYPE_CODE (TYPE_TARGET_TYPE (type));
   CORE_ADDR addr = extract_unsigned_integer (buf, TYPE_LENGTH (type));
@@ -103,7 +103,7 @@ iq2000_pointer_to_address (struct type * type, const void * buf)
    Convert a host-format address (CORE_ADDR) into a target pointer.  */
 
 static void
-iq2000_address_to_pointer (struct type *type, void *buf, CORE_ADDR addr)
+iq2000_address_to_pointer (struct type *type, gdb_byte *buf, CORE_ADDR addr)
 {
   enum type_code target = TYPE_CODE (TYPE_TARGET_TYPE (type));
 
@@ -118,7 +118,7 @@ iq2000_address_to_pointer (struct type *type, void *buf, CORE_ADDR addr)
    Returns the name of the iq2000 register number N.  */
 
 static const char *
-iq2000_register_name (int regnum)
+iq2000_register_name (struct gdbarch *gdbarch, int regnum)
 {
   static const char * names[E_NUM_REGS] =
     {
@@ -331,7 +331,7 @@ iq2000_init_frame_cache (struct iq2000_frame_cache *cache)
    stepped into a function call.  */
 
 static CORE_ADDR
-iq2000_skip_prologue (CORE_ADDR pc)
+iq2000_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   CORE_ADDR func_addr = 0 , func_end = 0;
 
@@ -393,7 +393,7 @@ static void
 iq2000_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 			    int regnum, int *optimizedp,
 			    enum lval_type *lvalp, CORE_ADDR *addrp,
-			    int *realnump, void *valuep)
+			    int *realnump, gdb_byte *valuep)
 {
   struct iq2000_frame_cache *cache = iq2000_frame_cache (next_frame, this_cache);
   if (regnum == E_SP_REGNUM && cache->saved_sp)
@@ -417,7 +417,8 @@ iq2000_frame_prev_register (struct frame_info *next_frame, void **this_cache,
       *addrp = cache->saved_regs[regnum];
       *realnump = -1;
       if (valuep)
-        read_memory (*addrp, valuep, register_size (current_gdbarch, regnum));
+        read_memory (*addrp, valuep,
+		     register_size (get_frame_arch (next_frame), regnum));
       return;
     }
 
@@ -489,7 +490,8 @@ static const struct frame_base iq2000_frame_base = {
 };
 
 static const unsigned char *
-iq2000_breakpoint_from_pc (CORE_ADDR *pcptr, int *lenptr)
+iq2000_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
+			   int *lenptr)
 {
   static const unsigned char big_breakpoint[] = { 0x00, 0x00, 0x00, 0x0d };
   static const unsigned char little_breakpoint[] = { 0x0d, 0x00, 0x00, 0x00 };
@@ -499,9 +501,8 @@ iq2000_breakpoint_from_pc (CORE_ADDR *pcptr, int *lenptr)
 	   (long) *pcptr);
 
   *lenptr = 4;
-  return (gdbarch_byte_order (current_gdbarch)
-	  == BFD_ENDIAN_BIG) ? big_breakpoint
-					       : little_breakpoint;
+  return (gdbarch_byte_order (gdbarch)
+	  == BFD_ENDIAN_BIG) ? big_breakpoint : little_breakpoint;
 }
 
 /* Target function return value methods: */
@@ -557,7 +558,6 @@ iq2000_extract_return_value (struct type *type, struct regcache *regcache,
      returned in a register, and if larger than 8 bytes, it is 
      returned in a stack location which is pointed to by the same
      register.  */
-  CORE_ADDR return_buffer;
   int len = TYPE_LENGTH (type);
 
   if (len <= (2 * 4))
@@ -583,7 +583,9 @@ iq2000_extract_return_value (struct type *type, struct regcache *regcache,
     {
       /* Return values > 8 bytes are returned in memory,
 	 pointed to by FN_RETURN_REGNUM.  */
-      regcache_cooked_read (regcache, E_FN_RETURN_REGNUM, & return_buffer);
+      ULONGEST return_buffer;
+      regcache_cooked_read_unsigned (regcache, E_FN_RETURN_REGNUM,
+				     &return_buffer);
       read_memory (return_buffer, valbuf, TYPE_LENGTH (type));
     }
 }
@@ -591,7 +593,7 @@ iq2000_extract_return_value (struct type *type, struct regcache *regcache,
 static enum return_value_convention
 iq2000_return_value (struct gdbarch *gdbarch, struct type *type,
 		     struct regcache *regcache,
-		     void *readbuf, const void *writebuf)
+		     gdb_byte *readbuf, const gdb_byte *writebuf)
 {
   if (iq2000_use_struct_convention (type))
     return RETURN_VALUE_STRUCT_CONVENTION;

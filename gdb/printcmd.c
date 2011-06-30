@@ -1,8 +1,8 @@
 /* Print values for GNU debugger GDB.
 
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
-   Free Software Foundation, Inc.
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
+   2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -41,6 +41,7 @@
 #include "gdb_assert.h"
 #include "block.h"
 #include "disasm.h"
+#include "dfp.h"
 
 #ifdef TUI
 #include "tui/tui.h"		/* For tui_active et.al.   */
@@ -284,6 +285,7 @@ print_formatted (struct value *val, int format, int size,
     }
 
   if (format == 0 || format == 's'
+      || TYPE_CODE (type) == TYPE_CODE_REF
       || TYPE_CODE (type) == TYPE_CODE_ARRAY
       || TYPE_CODE (type) == TYPE_CODE_STRING
       || TYPE_CODE (type) == TYPE_CODE_STRUCT
@@ -690,7 +692,7 @@ deprecated_print_address_numeric (CORE_ADDR addr, int use_local,
 void
 print_address (CORE_ADDR addr, struct ui_file *stream)
 {
-  deprecated_print_address_numeric (addr, 1, stream);
+  fputs_filtered (paddress (addr), stream);
   print_address_symbolic (addr, stream, asm_demangle, " ");
 }
 
@@ -709,7 +711,7 @@ print_address_demangle (CORE_ADDR addr, struct ui_file *stream,
     }
   else if (addressprint)
     {
-      deprecated_print_address_numeric (addr, 1, stream);
+      fputs_filtered (paddress (addr), stream);
       print_address_symbolic (addr, stream, do_demangle, " ");
     }
   else
@@ -1067,14 +1069,14 @@ address_info (char *exp, int from_tty)
 	  fprintf_symbol_filtered (gdb_stdout, exp,
 				   current_language->la_language, DMGL_ANSI);
 	  printf_filtered ("\" is at ");
-	  deprecated_print_address_numeric (load_addr, 1, gdb_stdout);
+	  fputs_filtered (paddress (load_addr), gdb_stdout);
 	  printf_filtered (" in a file compiled without debugging");
 	  section = SYMBOL_BFD_SECTION (msymbol);
 	  if (section_is_overlay (section))
 	    {
 	      load_addr = overlay_unmapped_address (load_addr, section);
 	      printf_filtered (",\n -- loaded at ");
-	      deprecated_print_address_numeric (load_addr, 1, gdb_stdout);
+	      fputs_filtered (paddress (load_addr), gdb_stdout);
 	      printf_filtered (" in overlay section %s", section->name);
 	    }
 	  printf_filtered (".\n");
@@ -1101,13 +1103,13 @@ address_info (char *exp, int from_tty)
 
     case LOC_LABEL:
       printf_filtered ("a label at address ");
-      deprecated_print_address_numeric (load_addr = SYMBOL_VALUE_ADDRESS (sym),
-			     1, gdb_stdout);
+      fputs_filtered (paddress (load_addr = SYMBOL_VALUE_ADDRESS (sym)),
+		      gdb_stdout);
       if (section_is_overlay (section))
 	{
 	  load_addr = overlay_unmapped_address (load_addr, section);
 	  printf_filtered (",\n -- loaded at ");
-	  deprecated_print_address_numeric (load_addr, 1, gdb_stdout);
+	  fputs_filtered (paddress (load_addr), gdb_stdout);
 	  printf_filtered (" in overlay section %s", section->name);
 	}
       break;
@@ -1129,27 +1131,27 @@ address_info (char *exp, int from_tty)
 
     case LOC_STATIC:
       printf_filtered (_("static storage at address "));
-      deprecated_print_address_numeric (load_addr = SYMBOL_VALUE_ADDRESS (sym),
-			     1, gdb_stdout);
+     fputs_filtered (paddress (load_addr = SYMBOL_VALUE_ADDRESS (sym)),
+		     gdb_stdout);
       if (section_is_overlay (section))
 	{
 	  load_addr = overlay_unmapped_address (load_addr, section);
 	  printf_filtered (_(",\n -- loaded at "));
-	  deprecated_print_address_numeric (load_addr, 1, gdb_stdout);
+	  fputs_filtered (paddress (load_addr), gdb_stdout);
 	  printf_filtered (_(" in overlay section %s"), section->name);
 	}
       break;
 
     case LOC_INDIRECT:
       printf_filtered (_("external global (indirect addressing), at address *("));
-      deprecated_print_address_numeric (load_addr = SYMBOL_VALUE_ADDRESS (sym),
-			     1, gdb_stdout);
+      fputs_filtered (paddress (load_addr = SYMBOL_VALUE_ADDRESS (sym)),
+		      gdb_stdout);
       printf_filtered (")");
       if (section_is_overlay (section))
 	{
 	  load_addr = overlay_unmapped_address (load_addr, section);
 	  printf_filtered (_(",\n -- loaded at "));
-	  deprecated_print_address_numeric (load_addr, 1, gdb_stdout);
+	  fputs_filtered (paddress (load_addr), gdb_stdout);
 	  printf_filtered (_(" in overlay section %s"), section->name);
 	}
       break;
@@ -1197,12 +1199,12 @@ address_info (char *exp, int from_tty)
     case LOC_BLOCK:
       printf_filtered (_("a function at address "));
       load_addr = BLOCK_START (SYMBOL_BLOCK_VALUE (sym));
-      deprecated_print_address_numeric (load_addr, 1, gdb_stdout);
+      fputs_filtered (paddress (load_addr), gdb_stdout);
       if (section_is_overlay (section))
 	{
 	  load_addr = overlay_unmapped_address (load_addr, section);
 	  printf_filtered (_(",\n -- loaded at "));
-	  deprecated_print_address_numeric (load_addr, 1, gdb_stdout);
+	  fputs_filtered (paddress (load_addr), gdb_stdout);
 	  printf_filtered (_(" in overlay section %s"), section->name);
 	}
       break;
@@ -1219,12 +1221,12 @@ address_info (char *exp, int from_tty)
 	    section = SYMBOL_BFD_SECTION (msym);
 	    printf_filtered (_("static storage at address "));
 	    load_addr = SYMBOL_VALUE_ADDRESS (msym);
-	    deprecated_print_address_numeric (load_addr, 1, gdb_stdout);
+	    fputs_filtered (paddress (load_addr), gdb_stdout);
 	    if (section_is_overlay (section))
 	      {
 		load_addr = overlay_unmapped_address (load_addr, section);
 		printf_filtered (_(",\n -- loaded at "));
-		deprecated_print_address_numeric (load_addr, 1, gdb_stdout);
+		fputs_filtered (paddress (load_addr), gdb_stdout);
 		printf_filtered (_(" in overlay section %s"), section->name);
 	      }
 	  }
@@ -1819,7 +1821,7 @@ printf_command (char *arg, int from_tty)
     enum argclass
       {
 	int_arg, long_arg, long_long_arg, ptr_arg, string_arg,
-	double_arg, long_double_arg
+	double_arg, long_double_arg, decfloat_arg
       };
     enum argclass *argclass;
     enum argclass this_argclass;
@@ -1836,7 +1838,8 @@ printf_command (char *arg, int from_tty)
 	{
 	  int seen_hash = 0, seen_zero = 0, lcount = 0, seen_prec = 0;
 	  int seen_space = 0, seen_plus = 0;
-	  int seen_big_l = 0, seen_h = 0;
+	  int seen_big_l = 0, seen_h = 0, seen_big_h = 0;
+	  int seen_big_d = 0, seen_double_big_d = 0;
 	  int bad = 0;
 
 	  /* Check the validity of the format specifier, and work
@@ -1900,6 +1903,26 @@ printf_command (char *arg, int from_tty)
 	      seen_big_l = 1;
 	      f++;
 	    }
+	  /* Decimal32 modifier.  */
+	  else if (*f == 'H')
+	    {
+	      seen_big_h = 1;
+	      f++;
+	    }
+	  /* Decimal64 and Decimal128 modifiers.  */
+	  else if (*f == 'D')
+	    {
+	      f++;
+
+	      /* Check for a Decimal128.  */
+	      if (*f == 'D')
+		{
+		  f++;
+		  seen_double_big_d = 1;
+		}
+	      else
+		seen_big_d = 1;
+	    }
 
 	  switch (*f)
 	    {
@@ -1957,7 +1980,9 @@ printf_command (char *arg, int from_tty)
 	    case 'g':
 	    case 'E':
 	    case 'G':
-	      if (seen_big_l)
+	      if (seen_big_h || seen_big_d || seen_double_big_d)
+		this_argclass = decfloat_arg;
+	      else if (seen_big_l)
 		this_argclass = long_double_arg;
 	      else
 		this_argclass = double_arg;
@@ -2094,6 +2119,106 @@ printf_command (char *arg, int from_tty)
 	      printf_filtered (current_substring, val);
 	      break;
 	    }
+
+	  /* Handles decimal floating values.  */
+	case decfloat_arg:
+	    {
+	      const gdb_byte *param_ptr = value_contents (val_args[i]);
+#if defined (PRINTF_HAS_DECFLOAT)
+	      /* If we have native support for Decimal floating
+		 printing, handle it here.  */
+	      printf_filtered (current_substring, param_ptr);
+#else
+
+	      /* As a workaround until vasprintf has native support for DFP
+	       we convert the DFP values to string and print them using
+	       the %s format specifier.  */
+
+	      char *eos, *sos;
+	      int nnull_chars = 0;
+
+	      /* Parameter data.  */
+	      struct type *param_type = value_type (val_args[i]);
+	      unsigned int param_len = TYPE_LENGTH (param_type);
+
+	      /* DFP output data.  */
+	      struct value *dfp_value = NULL;
+	      gdb_byte *dfp_ptr;
+	      int dfp_len = 16;
+	      gdb_byte dec[16];
+	      struct type *dfp_type = NULL;
+	      char decstr[MAX_DECIMAL_STRING];
+
+	      /* Points to the end of the string so that we can go back
+		 and check for DFP length modifiers.  */
+	      eos = current_substring + strlen (current_substring);
+
+	      /* Look for the float/double format specifier.  */
+	      while (*eos != 'f' && *eos != 'e' && *eos != 'E'
+		     && *eos != 'g' && *eos != 'G')
+		  eos--;
+
+	      sos = eos;
+
+	      /* Search for the '%' char and extract the size and type of
+		 the output decimal value based on its modifiers
+		 (%Hf, %Df, %DDf).  */
+	      while (*--sos != '%')
+		{
+		  if (*sos == 'H')
+		    {
+		      dfp_len = 4;
+		      dfp_type = builtin_type (current_gdbarch)->builtin_decfloat;
+		    }
+		  else if (*sos == 'D' && *(sos - 1) == 'D')
+		    {
+		      dfp_len = 16;
+		      dfp_type = builtin_type (current_gdbarch)->builtin_declong;
+		      sos--;
+		    }
+		  else
+		    {
+		      dfp_len = 8;
+		      dfp_type = builtin_type (current_gdbarch)->builtin_decdouble;
+		    }
+		}
+
+	      /* Replace %Hf, %Df and %DDf with %s's.  */
+	      *++sos = 's';
+
+	      /* Go through the whole format string and pull the correct
+		 number of chars back to compensate for the change in the
+		 format specifier.  */
+	      while (nnull_chars < nargs - i)
+		{
+		  if (*eos == '\0')
+		    nnull_chars++;
+
+		  *++sos = *++eos;
+		}
+
+	      /* Conversion between different DFP types.  */
+	      if (TYPE_CODE (param_type) == TYPE_CODE_DECFLOAT)
+		decimal_convert (param_ptr, param_len, dec, dfp_len);
+	      else
+		/* If this is a non-trivial conversion, just output 0.
+		   A correct converted value can be displayed by explicitly
+		   casting to a DFP type.  */
+		decimal_from_string (dec, dfp_len, "0");
+
+	      dfp_value = value_from_decfloat (dfp_type, dec);
+
+	      dfp_ptr = (gdb_byte *) value_contents (dfp_value);
+
+	      decimal_to_string (dfp_ptr, dfp_len, decstr);
+
+	      /* Print the DFP value.  */
+	      printf_filtered (current_substring, decstr);
+
+	      break;
+#endif
+	    }
+
 	  case ptr_arg:
 	    {
 	      /* We avoid the host's %p because pointers are too

@@ -1,6 +1,7 @@
 /* Native-dependent code for MIPS systems running NetBSD.
 
-   Copyright (C) 2000, 2001, 2002, 2004, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2004, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -54,7 +55,7 @@ mipsnbsd_fetch_inferior_registers (struct regcache *regcache, int regno)
 	return;
     }
 
-  if (regno == -1 || regno >= gdbarch_fp0_regnum (current_gdbarch))
+  if (regno == -1 || regno >= gdbarch_fp0_regnum (get_regcache_arch (regcache)))
     {
       struct fpreg fpregs;
 
@@ -87,7 +88,7 @@ mipsnbsd_store_inferior_registers (struct regcache *regcache, int regno)
 	return;
     }
 
-  if (regno == -1 || regno >= gdbarch_fp0_regnum (current_gdbarch))
+  if (regno == -1 || regno >= gdbarch_fp0_regnum (get_regcache_arch (regcache)))
     {
       struct fpreg fpregs; 
 

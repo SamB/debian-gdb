@@ -1,6 +1,6 @@
 /* Target-dependent code for the IA-64 for GDB, the GNU debugger.
 
-   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -274,9 +274,6 @@ struct ia64_frame_cache
 
 };
 
-#define SIGCONTEXT_REGISTER_ADDRESS \
-  (gdbarch_tdep (current_gdbarch)->sigcontext_register_address)
-
 int
 ia64_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 			  struct reggroup *group)
@@ -301,7 +298,7 @@ ia64_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 }
 
 static const char *
-ia64_register_name (int reg)
+ia64_register_name (struct gdbarch *gdbarch, int reg)
 {
   return ia64_register_names[reg];
 }
@@ -316,7 +313,7 @@ ia64_register_type (struct gdbarch *arch, int reg)
 }
 
 static int
-ia64_dwarf_reg_to_regnum (int reg)
+ia64_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 {
   if (reg >= IA64_GR32_REGNUM && reg <= IA64_GR127_REGNUM)
     return V32_REGNUM + (reg - IA64_GR32_REGNUM);
@@ -332,7 +329,7 @@ floatformat_valid (const struct floatformat *fmt, const void *from)
 const struct floatformat floatformat_ia64_ext =
 {
   floatformat_little, 82, 0, 1, 17, 65535, 0x1ffff, 18, 64,
-  floatformat_intbit_yes, "floatformat_ia64_ext", floatformat_valid
+  floatformat_intbit_yes, "floatformat_ia64_ext", floatformat_valid, NULL
 };
 
 const struct floatformat *floatformats_ia64_ext[2] =
@@ -556,7 +553,8 @@ fetch_instruction (CORE_ADDR addr, instruction_type *it, long long *instr)
 #define IA64_BREAKPOINT 0x00003333300LL
 
 static int
-ia64_memory_insert_breakpoint (struct bp_target_info *bp_tgt)
+ia64_memory_insert_breakpoint (struct gdbarch *gdbarch,
+			       struct bp_target_info *bp_tgt)
 {
   CORE_ADDR addr = bp_tgt->placed_address;
   char bundle[BUNDLE_LEN];
@@ -591,7 +589,8 @@ ia64_memory_insert_breakpoint (struct bp_target_info *bp_tgt)
 }
 
 static int
-ia64_memory_remove_breakpoint (struct bp_target_info *bp_tgt)
+ia64_memory_remove_breakpoint (struct gdbarch *gdbarch,
+			       struct bp_target_info *bp_tgt)
 {
   CORE_ADDR addr = bp_tgt->placed_address;
   char bundle[BUNDLE_LEN];
@@ -623,7 +622,7 @@ ia64_memory_remove_breakpoint (struct bp_target_info *bp_tgt)
 /* We don't really want to use this, but remote.c needs to call it in order
    to figure out if Z-packets are supported or not.  Oh, well. */
 const unsigned char *
-ia64_breakpoint_from_pc (CORE_ADDR *pcptr, int *lenptr)
+ia64_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr, int *lenptr)
 {
   static unsigned char breakpoint[] =
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
@@ -715,10 +714,10 @@ ia64_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
 	    {
 	      ULONGEST reg_addr = rse_address_add (bsp, (regnum - V32_REGNUM));
 	      reg = read_memory_integer ((CORE_ADDR)reg_addr, 8);
-	      store_unsigned_integer (buf, register_size (current_gdbarch, regnum), reg);
+	      store_unsigned_integer (buf, register_size (gdbarch, regnum), reg);
 	    }
 	  else
-	    store_unsigned_integer (buf, register_size (current_gdbarch, regnum), 0);
+	    store_unsigned_integer (buf, register_size (gdbarch, regnum), 0);
 	}
     }
   else if (IA64_NAT0_REGNUM <= regnum && regnum <= IA64_NAT31_REGNUM)
@@ -727,7 +726,7 @@ ia64_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
       ULONGEST unat;
       regcache_cooked_read_unsigned (regcache, IA64_UNAT_REGNUM, &unat);
       unatN_val = (unat & (1LL << (regnum - IA64_NAT0_REGNUM))) != 0;
-      store_unsigned_integer (buf, register_size (current_gdbarch, regnum), unatN_val);
+      store_unsigned_integer (buf, register_size (gdbarch, regnum), unatN_val);
     }
   else if (IA64_NAT32_REGNUM <= regnum && regnum <= IA64_NAT127_REGNUM)
     {
@@ -762,7 +761,7 @@ ia64_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
 	  natN_val = (nat_collection >> nat_bit) & 1;
 	}
       
-      store_unsigned_integer (buf, register_size (current_gdbarch, regnum), natN_val);
+      store_unsigned_integer (buf, register_size (gdbarch, regnum), natN_val);
     }
   else if (regnum == VBOF_REGNUM)
     {
@@ -777,7 +776,7 @@ ia64_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
       /* The bsp points at the end of the register frame so we
 	 subtract the size of frame from it to get beginning of frame.  */
       vbsp = rse_address_add (bsp, -(cfm & 0x7f));
-      store_unsigned_integer (buf, register_size (current_gdbarch, regnum), vbsp);
+      store_unsigned_integer (buf, register_size (gdbarch, regnum), vbsp);
     }
   else if (VP0_REGNUM <= regnum && regnum <= VP63_REGNUM)
     {
@@ -799,10 +798,10 @@ ia64_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
 	         + ((regnum - VP16_REGNUM) + rrb_pr) % 48;
 	}
       prN_val = (pr & (1LL << (regnum - VP0_REGNUM))) != 0;
-      store_unsigned_integer (buf, register_size (current_gdbarch, regnum), prN_val);
+      store_unsigned_integer (buf, register_size (gdbarch, regnum), prN_val);
     }
   else
-    memset (buf, 0, register_size (current_gdbarch, regnum));
+    memset (buf, 0, register_size (gdbarch, regnum));
 }
 
 static void
@@ -829,7 +828,7 @@ ia64_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
     {
       ULONGEST unatN_val, unat, unatN_mask;
       regcache_cooked_read_unsigned (regcache, IA64_UNAT_REGNUM, &unat);
-      unatN_val = extract_unsigned_integer (buf, register_size (current_gdbarch, regnum)); 
+      unatN_val = extract_unsigned_integer (buf, register_size (gdbarch, regnum)); 
       unatN_mask = (1LL << (regnum - IA64_NAT0_REGNUM));
       if (unatN_val == 0)
 	unat &= ~unatN_mask;
@@ -853,7 +852,7 @@ ia64_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
       if ((cfm & 0x7f) > regnum - V32_REGNUM) 
 	gr_addr = rse_address_add (bsp, (regnum - V32_REGNUM));
       
-      natN_val = extract_unsigned_integer (buf, register_size (current_gdbarch, regnum)); 
+      natN_val = extract_unsigned_integer (buf, register_size (gdbarch, regnum)); 
 
       if (gr_addr != 0 && (natN_val == 0 || natN_val == 1))
 	{
@@ -882,7 +881,7 @@ ia64_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
 		nat_collection |= natN_mask;
 	      else
 		nat_collection &= ~natN_mask;
-	      store_unsigned_integer (nat_buf, register_size (current_gdbarch, regnum), nat_collection);
+	      store_unsigned_integer (nat_buf, register_size (gdbarch, regnum), nat_collection);
 	      write_memory (nat_addr, nat_buf, 8);
 	    }
 	}
@@ -907,7 +906,7 @@ ia64_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
 	  regnum = VP16_REGNUM 
 	         + ((regnum - VP16_REGNUM) + rrb_pr) % 48;
 	}
-      prN_val = extract_unsigned_integer (buf, register_size (current_gdbarch, regnum)); 
+      prN_val = extract_unsigned_integer (buf, register_size (gdbarch, regnum)); 
       prN_mask = (1LL << (regnum - VP0_REGNUM));
       if (prN_val == 0)
 	pr &= ~prN_mask;
@@ -921,9 +920,10 @@ ia64_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
    and the special ia64 floating point register format.  */
 
 static int
-ia64_convert_register_p (int regno, struct type *type)
+ia64_convert_register_p (struct gdbarch *gdbarch, int regno, struct type *type)
 {
-  return (regno >= IA64_FR0_REGNUM && regno <= IA64_FR127_REGNUM);
+  return (regno >= IA64_FR0_REGNUM && regno <= IA64_FR127_REGNUM
+	  && type != builtin_type_ia64_ext);
 }
 
 static void
@@ -1514,7 +1514,7 @@ examine_prologue (CORE_ADDR pc, CORE_ADDR lim_pc, struct frame_info *next_frame,
 }
 
 CORE_ADDR
-ia64_skip_prologue (CORE_ADDR pc)
+ia64_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   struct ia64_frame_cache cache;
   cache.base = 0;
@@ -1600,6 +1600,7 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 			  enum lval_type *lvalp, CORE_ADDR *addrp,
 			  int *realnump, gdb_byte *valuep)
 {
+  struct gdbarch *gdbarch = get_frame_arch (next_frame);
   struct ia64_frame_cache *cache =
     ia64_frame_cache (next_frame, this_cache);
   char dummy_valp[MAX_REGISTER_SIZE];
@@ -1620,12 +1621,12 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
   if (!valuep)
     valuep = dummy_valp;
   
-  memset (valuep, 0, register_size (current_gdbarch, regnum));
+  memset (valuep, 0, register_size (gdbarch, regnum));
  
-  if (regnum == gdbarch_sp_regnum (current_gdbarch))
+  if (regnum == gdbarch_sp_regnum (gdbarch))
     {
       /* Handle SP values for all frames but the topmost. */
-      store_unsigned_integer (valuep, register_size (current_gdbarch, regnum),
+      store_unsigned_integer (valuep, register_size (gdbarch, regnum),
 			      cache->base);
     }
   else if (regnum == IA64_BSP_REGNUM)
@@ -1650,7 +1651,7 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
       bsp = rse_address_add (cache->bsp, -(cache->sof));
       prev_bsp = rse_address_add (bsp, (prev_cfm & 0x7f) - ((prev_cfm >> 7) & 0x7f));
 
-      store_unsigned_integer (valuep, register_size (current_gdbarch, regnum), 
+      store_unsigned_integer (valuep, register_size (gdbarch, regnum), 
 			      prev_bsp);
     }
   else if (regnum == IA64_CFM_REGNUM)
@@ -1661,10 +1662,10 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	{
 	  *lvalp = lval_memory;
 	  *addrp = addr;
-	  read_memory (addr, valuep, register_size (current_gdbarch, regnum));
+	  read_memory (addr, valuep, register_size (gdbarch, regnum));
 	}
       else if (cache->prev_cfm)
-	store_unsigned_integer (valuep, register_size (current_gdbarch, regnum), cache->prev_cfm);
+	store_unsigned_integer (valuep, register_size (gdbarch, regnum), cache->prev_cfm);
       else if (cache->frameless)
 	{
 	  CORE_ADDR cfm = 0;
@@ -1678,7 +1679,7 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	 above.  If the function lacks one of these frame pointers, we can
 	 still provide a value since we know the size of the frame.  */
       CORE_ADDR vfp = cache->base;
-      store_unsigned_integer (valuep, register_size (current_gdbarch, IA64_VFP_REGNUM), vfp);
+      store_unsigned_integer (valuep, register_size (gdbarch, IA64_VFP_REGNUM), vfp);
     }
   else if (VP0_REGNUM <= regnum && regnum <= VP63_REGNUM)
     {
@@ -1702,7 +1703,7 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	}
       prN_val = extract_bit_field ((unsigned char *) pr_valuep,
                                    regnum - VP0_REGNUM, 1);
-      store_unsigned_integer (valuep, register_size (current_gdbarch, regnum), prN_val);
+      store_unsigned_integer (valuep, register_size (gdbarch, regnum), prN_val);
     }
   else if (IA64_NAT0_REGNUM <= regnum && regnum <= IA64_NAT31_REGNUM)
     {
@@ -1716,7 +1717,7 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 				&unat_optim, &unat_lval, &unat_addr, &unat_realnum, unat_valuep);
       unatN_val = extract_bit_field ((unsigned char *) unat_valuep,
                                    regnum - IA64_NAT0_REGNUM, 1);
-      store_unsigned_integer (valuep, register_size (current_gdbarch, regnum), 
+      store_unsigned_integer (valuep, register_size (gdbarch, regnum), 
                               unatN_val);
     }
   else if (IA64_NAT32_REGNUM <= regnum && regnum <= IA64_NAT127_REGNUM)
@@ -1751,7 +1752,7 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	  natval = (nat_collection >> nat_bit) & 1;
 	}
 
-      store_unsigned_integer (valuep, register_size (current_gdbarch, regnum), natval);
+      store_unsigned_integer (valuep, register_size (gdbarch, regnum), natval);
     }
   else if (regnum == IA64_IP_REGNUM)
     {
@@ -1762,7 +1763,7 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	{
 	  *lvalp = lval_memory;
 	  *addrp = addr;
-	  read_memory (addr, buf, register_size (current_gdbarch, IA64_IP_REGNUM));
+	  read_memory (addr, buf, register_size (gdbarch, IA64_IP_REGNUM));
 	  pc = extract_unsigned_integer (buf, 8);
 	}
       else if (cache->frameless)
@@ -1791,7 +1792,7 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	{
 	  *lvalp = lval_memory;
 	  *addrp = addr;
-	  read_memory (addr, buf, register_size (current_gdbarch, IA64_IP_REGNUM));
+	  read_memory (addr, buf, register_size (gdbarch, IA64_IP_REGNUM));
 	  pc = extract_unsigned_integer (buf, 8);
 	}
       else if (cache->frameless)
@@ -1813,7 +1814,7 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	{
 	  *lvalp = lval_memory;
 	  *addrp = addr;
-	  read_memory (addr, buf, register_size (current_gdbarch, IA64_BR0_REGNUM));
+	  read_memory (addr, buf, register_size (gdbarch, IA64_BR0_REGNUM));
 	  br0 = extract_unsigned_integer (buf, 8);
 	}
       store_unsigned_integer (valuep, 8, br0);
@@ -1829,7 +1830,7 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	{
 	  *lvalp = lval_memory;
 	  *addrp = addr;
-	  read_memory (addr, valuep, register_size (current_gdbarch, regnum));
+	  read_memory (addr, valuep, register_size (gdbarch, regnum));
 	}
       else if (cache->frameless)
         {
@@ -1853,7 +1854,7 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	  addr = rse_address_add (prev_bof, (regnum - IA64_GR32_REGNUM));
 	  *lvalp = lval_memory;
 	  *addrp = addr;
-	  read_memory (addr, valuep, register_size (current_gdbarch, regnum));
+	  read_memory (addr, valuep, register_size (gdbarch, regnum));
         }
     }
   else
@@ -1877,7 +1878,7 @@ ia64_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 	{
 	  *lvalp = lval_memory;
 	  *addrp = addr;
-	  read_memory (addr, valuep, register_size (current_gdbarch, regnum));
+	  read_memory (addr, valuep, register_size (gdbarch, regnum));
 	}
       /* Otherwise, punt and get the current value of the register.  */
       else 
@@ -1908,41 +1909,44 @@ ia64_frame_sniffer (struct frame_info *next_frame)
 /* Signal trampolines.  */
 
 static void
-ia64_sigtramp_frame_init_saved_regs (struct ia64_frame_cache *cache)
+ia64_sigtramp_frame_init_saved_regs (struct frame_info *next_frame,
+				     struct ia64_frame_cache *cache)
 {
-  if (SIGCONTEXT_REGISTER_ADDRESS)
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (next_frame));
+
+  if (tdep->sigcontext_register_address)
     {
       int regno;
 
       cache->saved_regs[IA64_VRAP_REGNUM] = 
-	SIGCONTEXT_REGISTER_ADDRESS (cache->base, IA64_IP_REGNUM);
+	tdep->sigcontext_register_address (cache->base, IA64_IP_REGNUM);
       cache->saved_regs[IA64_CFM_REGNUM] = 
-	SIGCONTEXT_REGISTER_ADDRESS (cache->base, IA64_CFM_REGNUM);
+	tdep->sigcontext_register_address (cache->base, IA64_CFM_REGNUM);
       cache->saved_regs[IA64_PSR_REGNUM] = 
-	SIGCONTEXT_REGISTER_ADDRESS (cache->base, IA64_PSR_REGNUM);
+	tdep->sigcontext_register_address (cache->base, IA64_PSR_REGNUM);
       cache->saved_regs[IA64_BSP_REGNUM] = 
-	SIGCONTEXT_REGISTER_ADDRESS (cache->base, IA64_BSP_REGNUM);
+	tdep->sigcontext_register_address (cache->base, IA64_BSP_REGNUM);
       cache->saved_regs[IA64_RNAT_REGNUM] = 
-	SIGCONTEXT_REGISTER_ADDRESS (cache->base, IA64_RNAT_REGNUM);
+	tdep->sigcontext_register_address (cache->base, IA64_RNAT_REGNUM);
       cache->saved_regs[IA64_CCV_REGNUM] = 
-	SIGCONTEXT_REGISTER_ADDRESS (cache->base, IA64_CCV_REGNUM);
+	tdep->sigcontext_register_address (cache->base, IA64_CCV_REGNUM);
       cache->saved_regs[IA64_UNAT_REGNUM] = 
-	SIGCONTEXT_REGISTER_ADDRESS (cache->base, IA64_UNAT_REGNUM);
+	tdep->sigcontext_register_address (cache->base, IA64_UNAT_REGNUM);
       cache->saved_regs[IA64_FPSR_REGNUM] = 
-	SIGCONTEXT_REGISTER_ADDRESS (cache->base, IA64_FPSR_REGNUM);
+	tdep->sigcontext_register_address (cache->base, IA64_FPSR_REGNUM);
       cache->saved_regs[IA64_PFS_REGNUM] = 
-	SIGCONTEXT_REGISTER_ADDRESS (cache->base, IA64_PFS_REGNUM);
+	tdep->sigcontext_register_address (cache->base, IA64_PFS_REGNUM);
       cache->saved_regs[IA64_LC_REGNUM] = 
-	SIGCONTEXT_REGISTER_ADDRESS (cache->base, IA64_LC_REGNUM);
+	tdep->sigcontext_register_address (cache->base, IA64_LC_REGNUM);
       for (regno = IA64_GR1_REGNUM; regno <= IA64_GR31_REGNUM; regno++)
 	cache->saved_regs[regno] =
-	  SIGCONTEXT_REGISTER_ADDRESS (cache->base, regno);
+	  tdep->sigcontext_register_address (cache->base, regno);
       for (regno = IA64_BR0_REGNUM; regno <= IA64_BR7_REGNUM; regno++)
 	cache->saved_regs[regno] =
-	  SIGCONTEXT_REGISTER_ADDRESS (cache->base, regno);
+	  tdep->sigcontext_register_address (cache->base, regno);
       for (regno = IA64_FR2_REGNUM; regno <= IA64_FR31_REGNUM; regno++)
 	cache->saved_regs[regno] =
-	  SIGCONTEXT_REGISTER_ADDRESS (cache->base, regno);
+	  tdep->sigcontext_register_address (cache->base, regno);
     }
 }
 
@@ -1971,7 +1975,7 @@ ia64_sigtramp_frame_cache (struct frame_info *next_frame, void **this_cache)
   cache->cfm = extract_unsigned_integer (buf, 8);
   cache->sof = cache->cfm & 0x7f;
 
-  ia64_sigtramp_frame_init_saved_regs (cache);
+  ia64_sigtramp_frame_init_saved_regs (next_frame, cache);
 
   *this_cache = cache;
   return cache;
@@ -2003,6 +2007,7 @@ ia64_sigtramp_frame_prev_register (struct frame_info *next_frame,
   char dummy_valp[MAX_REGISTER_SIZE];
   char buf[MAX_REGISTER_SIZE];
 
+  struct gdbarch *gdbarch = get_frame_arch (next_frame);
   struct ia64_frame_cache *cache =
     ia64_sigtramp_frame_cache (next_frame, this_cache);
 
@@ -2021,7 +2026,7 @@ ia64_sigtramp_frame_prev_register (struct frame_info *next_frame,
   if (!valuep)
     valuep = dummy_valp;
   
-  memset (valuep, 0, register_size (current_gdbarch, regnum));
+  memset (valuep, 0, register_size (gdbarch, regnum));
  
   if (regnum == IA64_IP_REGNUM)
     {
@@ -2032,7 +2037,7 @@ ia64_sigtramp_frame_prev_register (struct frame_info *next_frame,
 	{
 	  *lvalp = lval_memory;
 	  *addrp = addr;
-	  read_memory (addr, buf, register_size (current_gdbarch, IA64_IP_REGNUM));
+	  read_memory (addr, buf, register_size (gdbarch, IA64_IP_REGNUM));
 	  pc = extract_unsigned_integer (buf, 8);
 	}
       pc &= ~0xf;
@@ -2049,7 +2054,7 @@ ia64_sigtramp_frame_prev_register (struct frame_info *next_frame,
 	{
 	  *lvalp = lval_memory;
 	  *addrp = addr;
-	  read_memory (addr, valuep, register_size (current_gdbarch, regnum));
+	  read_memory (addr, valuep, register_size (gdbarch, regnum));
 	}
     }
   else
@@ -2060,7 +2065,7 @@ ia64_sigtramp_frame_prev_register (struct frame_info *next_frame,
 	{
 	  *lvalp = lval_memory;
 	  *addrp = addr;
-	  read_memory (addr, valuep, register_size (current_gdbarch, regnum));
+	  read_memory (addr, valuep, register_size (gdbarch, regnum));
 	}
     }
 
@@ -2701,6 +2706,7 @@ ia64_libunwind_frame_prev_register (struct frame_info *next_frame,
 {
   int reg = regnum;
 
+  struct gdbarch *gdbarch = get_frame_arch (next_frame);
   if (VP0_REGNUM <= regnum && regnum <= VP63_REGNUM)
     reg = IA64_PR_REGNUM;
   else if (IA64_NAT0_REGNUM <= regnum && regnum <= IA64_NAT127_REGNUM)
@@ -2736,7 +2742,7 @@ ia64_libunwind_frame_prev_register (struct frame_info *next_frame,
 	}
       prN_val = extract_bit_field ((unsigned char *) valuep,
 				   regnum - VP0_REGNUM, 1);
-      store_unsigned_integer (valuep, register_size (current_gdbarch, regnum), prN_val);
+      store_unsigned_integer (valuep, register_size (gdbarch, regnum), prN_val);
     }
   else if (IA64_NAT0_REGNUM <= regnum && regnum <= IA64_NAT127_REGNUM)
     {
@@ -2744,7 +2750,7 @@ ia64_libunwind_frame_prev_register (struct frame_info *next_frame,
 
       unatN_val = extract_bit_field ((unsigned char *) valuep,
                                    regnum - IA64_NAT0_REGNUM, 1);
-      store_unsigned_integer (valuep, register_size (current_gdbarch, regnum), 
+      store_unsigned_integer (valuep, register_size (gdbarch, regnum), 
                               unatN_val);
     }
   else if (regnum == IA64_BSP_REGNUM)
@@ -2766,7 +2772,7 @@ ia64_libunwind_frame_prev_register (struct frame_info *next_frame,
       prev_cfm = extract_unsigned_integer (cfm_valuep, 8);
       prev_bsp = rse_address_add (prev_bsp, (prev_cfm & 0x7f));
 
-      store_unsigned_integer (valuep, register_size (current_gdbarch, regnum), 
+      store_unsigned_integer (valuep, register_size (gdbarch, regnum), 
 			      prev_bsp);
     }
 
@@ -2926,13 +2932,17 @@ static struct libunwind_descr ia64_libunwind_descr =
 
 #endif /* HAVE_LIBUNWIND_IA64_H  */
 
-/* Should we use DEPRECATED_EXTRACT_STRUCT_VALUE_ADDRESS instead of
-   gdbarch_extract_return_value?  GCC_P is true if compiled with gcc and TYPE
-   is the type (which is known to be struct, union or array).  */
-int
-ia64_use_struct_convention (int gcc_p, struct type *type)
+static int
+ia64_use_struct_convention (struct type *type)
 {
   struct type *float_elt_type;
+
+  /* Don't use the struct convention for anything but structure,
+     union, or array types.  */
+  if (!(TYPE_CODE (type) == TYPE_CODE_STRUCT
+	|| TYPE_CODE (type) == TYPE_CODE_UNION
+	|| TYPE_CODE (type) == TYPE_CODE_ARRAY))
+    return 0;
 
   /* HFAs are structures (or arrays) consisting entirely of floating
      point values of the same length.  Up to 8 of these are returned
@@ -2948,7 +2958,7 @@ ia64_use_struct_convention (int gcc_p, struct type *type)
   return TYPE_LENGTH (type) > 32;
 }
 
-void
+static void
 ia64_extract_return_value (struct type *type, struct regcache *regcache,
 			   gdb_byte *valbuf)
 {
@@ -2998,6 +3008,80 @@ ia64_extract_return_value (struct type *type, struct regcache *regcache,
     }
 }
 
+static void
+ia64_store_return_value (struct type *type, struct regcache *regcache, 
+			 const gdb_byte *valbuf)
+{
+  struct type *float_elt_type;
+
+  float_elt_type = is_float_or_hfa_type (type);
+  if (float_elt_type != NULL)
+    {
+      char to[MAX_REGISTER_SIZE];
+      int offset = 0;
+      int regnum = IA64_FR8_REGNUM;
+      int n = TYPE_LENGTH (type) / TYPE_LENGTH (float_elt_type);
+
+      while (n-- > 0)
+	{
+	  convert_typed_floating ((char *)valbuf + offset, float_elt_type,
+				  to, builtin_type_ia64_ext);
+	  regcache_cooked_write (regcache, regnum, to);
+	  offset += TYPE_LENGTH (float_elt_type);
+	  regnum++;
+	}
+    }
+  else
+    {
+      ULONGEST val;
+      int offset = 0;
+      int regnum = IA64_GR8_REGNUM;
+      int reglen = TYPE_LENGTH (register_type (get_regcache_arch (regcache),
+					       IA64_GR8_REGNUM));
+      int n = TYPE_LENGTH (type) / reglen;
+      int m = TYPE_LENGTH (type) % reglen;
+
+      while (n-- > 0)
+	{
+	  ULONGEST val;
+	  memcpy (&val, (char *)valbuf + offset, reglen);
+	  regcache_cooked_write_unsigned (regcache, regnum, val);
+	  offset += reglen;
+	  regnum++;
+	}
+
+      if (m)
+	{
+	  memcpy (&val, (char *)valbuf + offset, m);
+          regcache_cooked_write_unsigned (regcache, regnum, val);
+	}
+    }
+}
+  
+static enum return_value_convention
+ia64_return_value (struct gdbarch *gdbarch, struct type *valtype,
+		   struct regcache *regcache, gdb_byte *readbuf,
+		   const gdb_byte *writebuf)
+{
+  int struct_return = ia64_use_struct_convention (valtype);
+
+  if (writebuf != NULL)
+    {
+      gdb_assert (!struct_return);
+      ia64_store_return_value (valtype, regcache, writebuf);
+    }
+
+  if (readbuf != NULL)
+    {
+      gdb_assert (!struct_return);
+      ia64_extract_return_value (valtype, regcache, readbuf);
+    }
+
+  if (struct_return)
+    return RETURN_VALUE_STRUCT_CONVENTION;
+  else
+    return RETURN_VALUE_REGISTER_CONVENTION;
+}
 
 static int
 is_float_or_hfa_type_recurse (struct type *t, struct type **etp)
@@ -3459,21 +3543,6 @@ ia64_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
   return pc;
 }
 
-static void
-ia64_store_return_value (struct type *type, struct regcache *regcache, 
-			const gdb_byte *valbuf)
-{
-  if (TYPE_CODE (type) == TYPE_CODE_FLT)
-    {
-      char to[MAX_REGISTER_SIZE];
-      convert_typed_floating (valbuf, type, to, builtin_type_ia64_ext);
-      regcache_cooked_write (regcache, IA64_FR8_REGNUM, (void *)to);
-      target_store_registers (regcache, IA64_FR8_REGNUM);
-    }
-  else
-    regcache_cooked_write (regcache, IA64_GR8_REGNUM, valbuf);
-}
-
 static int
 ia64_print_insn (bfd_vma memaddr, struct disassemble_info *info)
 {
@@ -3497,12 +3566,6 @@ ia64_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   tdep->sigcontext_register_address = 0;
   tdep->pc_in_sigtramp = 0;
-
-  /* Define the ia64 floating-point format to gdb.  */
-  builtin_type_ia64_ext =
-    init_type (TYPE_CODE_FLT, 128 / 8,
-               0, "builtin_type_ia64_ext", NULL);
-  TYPE_FLOATFORMAT (builtin_type_ia64_ext) = floatformats_ia64_ext;
 
   /* According to the ia64 specs, instructions that store long double
      floats in memory use a long-double format different than that
@@ -3541,10 +3604,7 @@ ia64_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_skip_prologue (gdbarch, ia64_skip_prologue);
 
-  set_gdbarch_deprecated_use_struct_convention (gdbarch, ia64_use_struct_convention);
-  set_gdbarch_extract_return_value (gdbarch, ia64_extract_return_value);
-
-  set_gdbarch_store_return_value (gdbarch, ia64_store_return_value);
+  set_gdbarch_return_value (gdbarch, ia64_return_value);
 
   set_gdbarch_memory_insert_breakpoint (gdbarch, ia64_memory_insert_breakpoint);
   set_gdbarch_memory_remove_breakpoint (gdbarch, ia64_memory_remove_breakpoint);
@@ -3589,5 +3649,11 @@ extern initialize_file_ftype _initialize_ia64_tdep; /* -Wmissing-prototypes */
 void
 _initialize_ia64_tdep (void)
 {
+  /* Define the ia64 floating-point format to gdb.  */
+  builtin_type_ia64_ext =
+    init_type (TYPE_CODE_FLT, 128 / 8,
+               0, "builtin_type_ia64_ext", NULL);
+  TYPE_FLOATFORMAT (builtin_type_ia64_ext) = floatformats_ia64_ext;
+
   gdbarch_register (bfd_arch_ia64, ia64_gdbarch_init, NULL);
 }

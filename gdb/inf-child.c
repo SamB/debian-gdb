@@ -2,7 +2,8 @@
    Unix.
 
    Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998,
-   1999, 2000, 2001, 2002, 2004, 2005, 2007 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2002, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -35,7 +36,9 @@ inf_child_fetch_inferior_registers (struct regcache *regcache, int regnum)
 {
   if (regnum == -1)
     {
-      for (regnum = 0; regnum < gdbarch_num_regs (current_gdbarch); regnum++)
+      for (regnum = 0;
+	   regnum < gdbarch_num_regs (get_regcache_arch (regcache));
+	   regnum++)
 	regcache_raw_supply (regcache, regnum, NULL);
     }
   else
@@ -155,19 +158,6 @@ inf_child_can_run (void)
   return 1;
 }
 
-static struct symtab_and_line *
-inf_child_enable_exception_callback (enum exception_event_kind kind,
-				     int enable)
-{
-  return (struct symtab_and_line *) NULL;
-}
-
-static struct exception_event_record *
-inf_child_get_current_exception_event (void)
-{
-  return (struct exception_event_record *) NULL;
-}
-
 static char *
 inf_child_pid_to_exec_file (int pid)
 {
@@ -208,8 +198,6 @@ inf_child_target (void)
   t->to_reported_exec_events_per_exec_call =
     inf_child_reported_exec_events_per_exec_call;
   t->to_can_run = inf_child_can_run;
-  t->to_enable_exception_callback = inf_child_enable_exception_callback;
-  t->to_get_current_exception_event = inf_child_get_current_exception_event;
   t->to_pid_to_exec_file = inf_child_pid_to_exec_file;
   t->to_stratum = process_stratum;
   t->to_has_all_memory = 1;

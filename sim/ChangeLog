@@ -1,3 +1,26 @@
+2008-02-05  DJ Delorie  <dj@redhat.com>
+
+	* configure.ac (v850): V850 now has a testsuite.
+	* configure (v850): Likewise.
+
+2008-01-01  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	Updated copyright notices for most files.
+
+2007-12-19  DJ Delorie  <dj@redhat.com>
+
+	* frv/frv.c (frvbf_cut): Only look at the six LSBs of
+	cut_point.
+
+2007-10-22  Hans-Peter Nilsson  <hp@axis.com>
+
+	* cris/arch.c, cris/arch.h, cris/cpuall.h, cris/cpuv10.c,
+	cris/cpuv10.h, cris/cpuv32.c, cris/cpuv32.h, cris/cris-desc.c,
+	cris/cris-desc.h, cris/cris-opc.h, cris/decodev10.c,
+	cris/decodev10.h, cris/decodev32.c, cris/decodev32.h,
+	cris/modelv10.c, cris/modelv32.c, cris/semcrisv10f-switch.c,
+	cris/semcrisv32f-switch.c: Regenerate.
+
 2007-08-24  Joel Brobecker  <brobecker@adacore.com>
 
 	Switch the license of all files explicitly copyright the FSF

@@ -1,5 +1,5 @@
 # Copyright 1992, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
-# 2004, 2006, 2007 Free Software Foundation, Inc.
+# 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -581,7 +581,14 @@ proc do_tests {} {
 
     gdb_breakpoint enums2
     gdb_test "continue" ".*Breakpoint .* enums2.*" "continue to enums2(\\(\\)|)"
-    gdb_test "finish" "" ""
+    # Leave enums2.  Make sure we reach the next line, in case there
+    # are any more instructions to finish the function call.
+    gdb_test_multiple "finish" "" {
+	-re "enums2 \\(\\);.*$gdb_prompt $" {
+	    gdb_test "next" "" ""
+	}
+	-re "$gdb_prompt $" { }
+    }
     test_enums
 
     gdb_test "finish" "" ""

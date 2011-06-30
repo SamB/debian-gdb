@@ -1,6 +1,6 @@
 /* Target description support for GDB.
 
-   Copyright (C) 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by CodeSourcery.
 
@@ -61,8 +61,12 @@ void set_tdesc_pseudo_register_reggroup_p
   (struct gdbarch *gdbarch,
    gdbarch_register_reggroup_p_ftype *pseudo_reggroup_p);
 
-/* Update GDBARCH to use the target description for registers.  Fixed
-   register assignments are taken from EARLY_DATA, which is freed.
+/* Update GDBARCH to use the TARGET_DESC for registers.  TARGET_DESC
+   may be GDBARCH's target description or (if GDBARCH does not have
+   one which describes registers) another target description
+   constructed by the gdbarch initialization routine.
+
+   Fixed register assignments are taken from EARLY_DATA, which is freed.
    All registers which have not been assigned fixed numbers are given
    numbers above the current value of gdbarch_num_regs.
    gdbarch_num_regs and various  register-related predicates are updated to
@@ -71,6 +75,7 @@ void set_tdesc_pseudo_register_reggroup_p
    successfully validating the required registers.  */
 
 void tdesc_use_registers (struct gdbarch *gdbarch,
+			  const struct target_desc *target_desc,
 			  struct tdesc_arch_data *early_data);
 
 /* Allocate initial data for validation of a target description during
@@ -92,6 +97,12 @@ void tdesc_data_cleanup (void *data_untyped);
 int tdesc_numbered_register (const struct tdesc_feature *feature,
 			     struct tdesc_arch_data *data,
 			     int regno, const char *name);
+
+/* Search FEATURE for a register named NAME, and return its size in
+   bits.  The register must exist.  */
+
+int tdesc_register_size (const struct tdesc_feature *feature,
+			 const char *name);
 
 /* Search FEATURE for a register with any of the names from NAMES
    (NULL-terminated).  Record REGNO and the register in DATA; when
@@ -141,7 +152,7 @@ struct type *tdesc_named_type (const struct tdesc_feature *feature,
 /* Return the name of register REGNO, from the target description or
    from an architecture-provided pseudo_register_name method.  */
 
-const char *tdesc_register_name (int regno);
+const char *tdesc_register_name (struct gdbarch *gdbarch, int regno);
 
 /* Check whether REGNUM is a member of REGGROUP using the target
    description.  Return -1 if the target description does not

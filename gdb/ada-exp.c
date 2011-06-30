@@ -237,7 +237,8 @@ static struct stoken string_to_operator (struct stoken);
 
 static void write_int (LONGEST, struct type *);
 
-static void write_object_renaming (struct block *, struct symbol *, int);
+static void write_object_renaming (struct block *, const char *, int,
+				   const char *, int);
 
 static struct type* write_var_or_type (struct block *, struct stoken);
 
@@ -283,7 +284,7 @@ static struct type *type_system_address (void);
 #endif
 
 #if ! defined (YYSTYPE) && ! defined (YYSTYPE_IS_DECLARED)
-#line 160 "ada-exp.y"
+#line 161 "ada-exp.y"
 typedef union YYSTYPE {
     LONGEST lval;
     struct {
@@ -300,7 +301,7 @@ typedef union YYSTYPE {
     struct internalvar *ivar;
   } YYSTYPE;
 /* Line 191 of yacc.c.  */
-#line 304 "ada-exp.c.tmp"
+#line 305 "ada-exp.c.tmp"
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
 # define YYSTYPE_IS_TRIVIAL 1
@@ -312,7 +313,7 @@ typedef union YYSTYPE {
 
 
 /* Line 214 of yacc.c.  */
-#line 316 "ada-exp.c.tmp"
+#line 317 "ada-exp.c.tmp"
 
 #if ! defined (yyoverflow) || YYERROR_VERBOSE
 
@@ -418,7 +419,7 @@ union yyalloc
 /* YYFINAL -- State number of the termination state. */
 #define YYFINAL  55
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   705
+#define YYLAST   741
 
 /* YYNTOKENS -- Number of terminals. */
 #define YYNTOKENS  67
@@ -504,7 +505,7 @@ static const yysigned_char yyrhs[] =
       -1,    12,    -1,    87,    -1,    70,    -1,    29,    73,    -1,
       28,    73,    -1,    36,    73,    -1,    37,    73,    -1,    -1,
       76,    -1,     9,    41,    76,    -1,    74,    63,    76,    -1,
-      74,    63,     9,    41,    76,    -1,    64,    85,    65,    73,
+      74,    63,     9,    41,    76,    -1,    64,    85,    65,    70,
       -1,    73,    38,    73,    -1,    73,    32,    73,    -1,    73,
       33,    73,    -1,    73,    34,    73,    -1,    73,    35,    73,
       -1,    73,    27,    73,    -1,    73,    28,    73,    -1,    73,
@@ -544,19 +545,19 @@ static const yysigned_char yyrhs[] =
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
 static const unsigned short yyrline[] =
 {
-       0,   224,   224,   228,   229,   231,   236,   240,   244,   250,
-     269,   269,   281,   285,   287,   295,   306,   316,   320,   323,
-     326,   330,   334,   338,   342,   345,   347,   349,   351,   355,
-     368,   372,   376,   380,   384,   388,   392,   396,   400,   404,
-     407,   411,   415,   419,   421,   426,   434,   438,   444,   455,
-     459,   463,   467,   468,   469,   470,   471,   472,   476,   478,
-     483,   485,   490,   492,   497,   499,   503,   505,   517,   519,
-     525,   528,   531,   534,   536,   538,   540,   542,   544,   546,
-     550,   552,   557,   567,   569,   575,   579,   586,   594,   598,
-     604,   608,   610,   612,   620,   631,   633,   638,   647,   648,
-     654,   659,   665,   674,   675,   676,   680,   685,   700,   699,
-     702,   705,   704,   710,   709,   712,   715,   714,   722,   724,
-     726
+       0,   225,   225,   229,   230,   232,   237,   241,   245,   251,
+     270,   270,   282,   286,   288,   296,   307,   317,   321,   324,
+     327,   331,   335,   339,   343,   346,   348,   350,   352,   356,
+     369,   373,   377,   381,   385,   389,   393,   397,   401,   405,
+     408,   412,   416,   420,   422,   427,   435,   439,   445,   456,
+     460,   464,   468,   469,   470,   471,   472,   473,   477,   479,
+     484,   486,   491,   493,   498,   500,   504,   506,   518,   520,
+     526,   529,   532,   535,   537,   539,   541,   543,   545,   547,
+     551,   553,   558,   568,   570,   576,   580,   587,   595,   599,
+     605,   609,   611,   613,   621,   632,   634,   639,   648,   649,
+     655,   660,   666,   675,   676,   677,   681,   686,   701,   700,
+     703,   706,   705,   711,   710,   713,   716,   715,   723,   725,
+     727
 };
 #endif
 
@@ -604,7 +605,7 @@ static const unsigned char yyr1[] =
 {
        0,    67,    68,    69,    69,    69,    70,    70,    70,    70,
       71,    70,    72,    70,    70,    70,    70,    70,    70,    73,
-      73,    73,    73,    73,    74,    74,    74,    74,    74,    73,
+      73,    73,    73,    73,    74,    74,    74,    74,    74,    70,
       73,    73,    73,    73,    73,    73,    73,    73,    73,    75,
       75,    75,    75,    75,    75,    75,    75,    75,    75,    75,
       75,    75,    76,    76,    76,    76,    76,    76,    77,    77,
@@ -681,35 +682,35 @@ static const short yydefgoto[] =
 static const short yypact[] =
 {
      396,  -104,  -104,  -104,  -104,  -104,    16,  -104,   396,   396,
-     121,   121,   396,   396,   282,     2,     6,     9,   -28,   150,
-     629,    89,  -104,    20,    24,    33,    41,    35,    43,    18,
-     275,    55,  -104,  -104,  -104,   513,    -7,    -7,    -3,    -3,
-      -7,    -7,     3,    28,   -14,   566,    25,    31,   282,  -104,
+     137,   137,   396,   396,   282,     2,     6,     9,   -28,   481,
+     650,    89,  -104,    20,    24,    33,    41,    35,    43,    18,
+     275,    55,  -104,  -104,  -104,   534,    -7,    -7,    -3,    -3,
+      -7,    -7,     3,    28,   -14,   587,    25,    31,   282,  -104,
     -104,    37,  -104,  -104,    44,  -104,   396,  -104,  -104,   396,
       42,    42,    42,  -104,  -104,  -104,  -104,   272,   396,   396,
      396,   396,   396,   396,   396,   396,   396,   396,   396,   396,
      396,   396,   396,   396,    79,   396,   396,   339,   351,   396,
-      50,   396,    99,   396,  -104,    58,    59,    60,    63,   272,
+      50,   396,    99,   396,  -104,    58,    59,    60,    62,   272,
     -104,    17,  -104,  -104,   396,  -104,   396,   408,   396,  -104,
-    -104,    57,  -104,   282,   396,  -104,  -104,   119,  -104,  -104,
-    -104,    -1,   589,   -41,  -104,    65,   656,   656,   656,   476,
-     215,   173,   656,   656,   656,   667,    -7,    -7,    -7,    85,
+    -104,    57,  -104,   282,   137,  -104,  -104,   119,  -104,  -104,
+    -104,    -1,   610,   -41,  -104,    68,   692,   692,   692,   497,
+     215,   173,   692,   692,   692,   703,    -7,    -7,    -7,    85,
       85,    85,    85,   396,    85,  -104,   396,  -104,   396,  -104,
-    -104,   396,  -104,   396,  -104,   396,   396,   396,   396,   609,
-      34,  -104,  -104,  -104,   408,   396,  -104,   641,   466,  -104,
-    -104,  -104,  -104,  -104,    71,   396,   396,  -104,   453,  -104,
-      42,   396,   492,   441,   208,  -104,  -104,  -104,  -104,    73,
-      76,    81,    84,   396,  -104,    93,  -104,  -104,  -104,  -104,
-    -104,  -104,   108,    14,  -104,  -104,   656,    42,   396,  -104,
-     396,   396,  -104,   544,   396,   408,   396,  -104,   396,  -104,
-     656,    91,    98,  -104,   103,  -104,  -104,  -104,  -104,  -104,
+    -104,   396,  -104,   396,  -104,   396,   396,   396,   396,   630,
+      34,  -104,  -104,  -104,   408,   396,  -104,   677,    97,  -104,
+    -104,  -104,  -104,    -3,    75,   396,   396,  -104,   453,  -104,
+      42,   396,   518,   665,   208,  -104,  -104,  -104,  -104,    78,
+      81,    87,    90,   396,  -104,    96,  -104,  -104,  -104,  -104,
+    -104,  -104,   441,    14,  -104,  -104,   692,    42,   396,  -104,
+     396,   396,  -104,   565,   396,   408,   396,  -104,   396,  -104,
+     692,    92,    93,  -104,    98,  -104,  -104,  -104,  -104,  -104,
     -104
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const short yypgoto[] =
 {
-    -104,  -104,   136,    19,  -104,  -104,     4,    67,   -52,     0,
+    -104,  -104,   146,    19,  -104,  -104,     4,    64,   -52,     0,
     -104,  -104,  -104,  -104,  -104,   -59,  -104,  -104,   -15,  -104,
     -104,  -104,  -104,   -43,  -104,  -104,  -103,  -104,  -104,  -104,
     -104
@@ -733,16 +734,16 @@ static const short yytable[] =
      135,   136,   137,   138,   139,   140,   141,   142,   109,   144,
       94,   129,   110,    95,   185,   194,   186,   178,   117,   187,
      113,   188,   143,   159,   166,    86,    87,    88,   170,   114,
-     167,   168,   225,   153,   155,   156,   157,   168,   173,   158,
-     171,   205,   174,    85,     1,     2,     3,     4,   184,     5,
-       6,   179,   200,     7,   209,    76,    77,    78,    79,   210,
-      80,    81,    82,    83,   211,   212,    85,   183,   219,   214,
-      44,    10,   228,    11,     0,   189,   190,   191,   192,   229,
-      57,    58,   182,    59,   230,   197,   160,     0,   168,   217,
-       0,     0,     0,   -45,     0,   201,     0,    14,   204,    15,
+     167,   168,   225,   153,   155,   156,   157,   168,   158,   106,
+     171,   205,   174,    85,    76,    77,    78,    79,   184,    80,
+      81,    82,    83,   173,   179,    85,   200,   107,   108,   209,
+       1,     2,     3,     4,   210,     5,     6,   183,   219,     7,
+     211,   212,   214,   228,   229,   189,   190,   191,   192,   230,
+      44,     0,   182,   160,     0,   197,     0,    10,   168,    11,
+       0,     0,     0,   -45,     0,   201,     0,     0,   204,     0,
      202,     0,     0,     0,     0,   206,     0,     0,     0,   -45,
-     -45,   -45,    60,    61,    62,    63,    64,   213,     0,     0,
-       0,    65,    66,     0,     0,     0,    67,    68,   -48,     0,
+     -45,   -45,     0,    14,     0,    15,     0,   213,     0,     0,
+       0,    16,     0,     0,     0,     0,     0,     0,   -48,     0,
      221,   222,   220,     0,   224,     0,   226,     0,   227,   168,
      -82,   -82,   -82,   -82,   -48,   -48,   -48,   -82,     0,    99,
        0,     0,     0,   -45,   -45,   100,   -45,   181,     0,   -45,
@@ -768,31 +769,35 @@ static const short yytable[] =
        0,     0,    12,    13,     0,     0,     8,     9,    10,     0,
       11,     0,     0,     0,    12,    13,     0,     0,     0,     0,
        0,     0,    14,     0,    15,     0,     1,     2,     3,     4,
-      16,     5,   203,   208,    14,     7,    15,     0,    76,    77,
+      16,     5,   203,     0,    14,     7,    15,     0,    76,    77,
       78,    79,    16,    80,    81,    82,    83,     0,     0,    85,
-       0,     8,     9,    10,     0,    11,    57,    58,   106,    12,
-      13,     0,     0,    76,    77,    78,    79,     0,    80,    81,
-      82,    83,    57,    58,    85,     0,   107,   108,     0,    14,
-       0,    15,     0,     0,     0,     0,     0,    16,    60,    61,
-      62,    63,    64,    57,    58,     0,     0,    65,    66,   180,
-       0,     0,    67,    68,    60,    61,    62,    63,    64,     0,
-       0,     0,     0,    65,    66,   207,     0,     0,    67,    68,
-       0,     0,     0,     0,     0,    60,    61,    62,    63,    64,
-       0,     0,     0,     0,    65,    66,     0,     0,     0,    67,
-      68,    76,    77,    78,    79,     0,    80,    81,    82,    83,
-       0,     0,    85,     0,     0,    69,    70,    71,   106,    72,
-      73,    74,    75,    76,    77,    78,    79,     0,    80,    81,
-      82,    83,    84,     0,    85,   223,   107,   108,    69,    70,
-      71,   176,    72,    73,    74,    75,    76,    77,    78,    79,
-       0,    80,    81,    82,    83,    84,     0,    85,    69,    70,
-      71,   193,    72,    73,    74,    75,    76,    77,    78,    79,
-       0,    80,    81,    82,    83,    84,     0,    85,    69,    70,
-      71,     0,    72,    73,    74,    75,    76,    77,    78,    79,
-       0,    80,    81,    82,    83,    84,     0,    85,    76,    77,
-      78,    79,     0,    80,    81,    82,    83,     0,     0,    85,
-       0,   198,   199,    76,    77,    78,    79,     0,    80,    81,
-      82,    83,     0,     0,    85,    77,    78,    79,     0,    80,
-      81,    82,    83,     0,     0,    85
+       0,     8,     9,    10,     0,    11,     0,     0,     0,    12,
+      13,    57,    58,     0,    59,     0,     0,     0,     0,     0,
+       0,     0,   217,     0,     0,     0,     0,    57,    58,    14,
+       0,    15,     0,     0,     0,     0,     0,    16,     0,     0,
+       0,     0,     0,    60,    61,    62,    63,    64,    57,    58,
+       0,     0,    65,    66,     0,     0,     0,    67,    68,    60,
+      61,    62,    63,    64,    57,    58,     0,     0,    65,    66,
+     180,     0,     0,    67,    68,     0,     0,     0,     0,     0,
+      60,    61,    62,    63,    64,     0,     0,     0,     0,    65,
+      66,   207,     0,     0,    67,    68,    60,    61,    62,    63,
+      64,     0,     0,     0,     0,    65,    66,     0,     0,     0,
+      67,    68,    76,    77,    78,    79,     0,    80,    81,    82,
+      83,     0,     0,    85,     0,     0,    69,    70,    71,   106,
+      72,    73,    74,    75,    76,    77,    78,    79,     0,    80,
+      81,    82,    83,    84,     0,    85,   223,   107,   108,    69,
+      70,    71,   176,    72,    73,    74,    75,    76,    77,    78,
+      79,     0,    80,    81,    82,    83,    84,     0,    85,    69,
+      70,    71,   193,    72,    73,    74,    75,    76,    77,    78,
+      79,     0,    80,    81,    82,    83,    84,     0,    85,    69,
+      70,    71,     0,    72,    73,    74,    75,    76,    77,    78,
+      79,     0,    80,    81,    82,    83,    84,   208,    85,     0,
+       0,     0,    76,    77,    78,    79,     0,    80,    81,    82,
+      83,     0,     0,    85,    76,    77,    78,    79,     0,    80,
+      81,    82,    83,     0,     0,    85,     0,   198,   199,    76,
+      77,    78,    79,     0,    80,    81,    82,    83,     0,     0,
+      85,    77,    78,    79,     0,    80,    81,    82,    83,     0,
+       0,    85
 };
 
 static const short yycheck[] =
@@ -808,16 +813,16 @@ static const short yycheck[] =
       76,    77,    78,    79,    80,    81,    82,    83,    63,    85,
       47,    72,    61,    50,   146,    61,   148,    63,    56,   151,
       63,   153,    23,    99,   104,    16,    17,    18,   108,    65,
-     106,   107,   215,    14,    56,    56,    56,   113,   114,    56,
-      63,   180,     3,    38,     3,     4,     5,     6,   143,     8,
-       9,    66,    61,    12,    61,    27,    28,    29,    30,    63,
-      32,    33,    34,    35,    63,    61,    38,   143,   207,    56,
-      14,    30,    61,    32,    -1,   155,   156,   157,   158,    61,
-      10,    11,   143,    13,    61,   165,    99,    -1,   164,    61,
-      -1,    -1,    -1,     0,    -1,   175,    -1,    56,   178,    58,
+     106,   107,   215,    14,    56,    56,    56,   113,    56,    22,
+      63,   180,     3,    38,    27,    28,    29,    30,   143,    32,
+      33,    34,    35,   114,    66,    38,    61,    40,    41,    61,
+       3,     4,     5,     6,    63,     8,     9,   143,   207,    12,
+      63,    61,    56,    61,    61,   155,   156,   157,   158,    61,
+      14,    -1,   143,    99,    -1,   165,    -1,    30,   164,    32,
+      -1,    -1,    -1,     0,    -1,   175,    -1,    -1,   178,    -1,
      176,    -1,    -1,    -1,    -1,   181,    -1,    -1,    -1,    16,
-      17,    18,    42,    43,    44,    45,    46,   193,    -1,    -1,
-      -1,    51,    52,    -1,    -1,    -1,    56,    57,     0,    -1,
+      17,    18,    -1,    56,    -1,    58,    -1,   193,    -1,    -1,
+      -1,    64,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,
      210,   211,   208,    -1,   214,    -1,   216,    -1,   218,   215,
       47,    48,    49,    50,    16,    17,    18,    54,    -1,    56,
       -1,    -1,    -1,    60,    61,    62,    63,    22,    -1,    66,
@@ -843,31 +848,35 @@ static const short yycheck[] =
       -1,    -1,    36,    37,    -1,    -1,    28,    29,    30,    -1,
       32,    -1,    -1,    -1,    36,    37,    -1,    -1,    -1,    -1,
       -1,    -1,    56,    -1,    58,    -1,     3,     4,     5,     6,
-      64,     8,     9,    22,    56,    12,    58,    -1,    27,    28,
+      64,     8,     9,    -1,    56,    12,    58,    -1,    27,    28,
       29,    30,    64,    32,    33,    34,    35,    -1,    -1,    38,
-      -1,    28,    29,    30,    -1,    32,    10,    11,    22,    36,
-      37,    -1,    -1,    27,    28,    29,    30,    -1,    32,    33,
-      34,    35,    10,    11,    38,    -1,    40,    41,    -1,    56,
-      -1,    58,    -1,    -1,    -1,    -1,    -1,    64,    42,    43,
-      44,    45,    46,    10,    11,    -1,    -1,    51,    52,    53,
-      -1,    -1,    56,    57,    42,    43,    44,    45,    46,    -1,
-      -1,    -1,    -1,    51,    52,    53,    -1,    -1,    56,    57,
-      -1,    -1,    -1,    -1,    -1,    42,    43,    44,    45,    46,
-      -1,    -1,    -1,    -1,    51,    52,    -1,    -1,    -1,    56,
-      57,    27,    28,    29,    30,    -1,    32,    33,    34,    35,
-      -1,    -1,    38,    -1,    -1,    19,    20,    21,    22,    23,
-      24,    25,    26,    27,    28,    29,    30,    -1,    32,    33,
-      34,    35,    36,    -1,    38,    61,    40,    41,    19,    20,
-      21,    22,    23,    24,    25,    26,    27,    28,    29,    30,
-      -1,    32,    33,    34,    35,    36,    -1,    38,    19,    20,
-      21,    22,    23,    24,    25,    26,    27,    28,    29,    30,
-      -1,    32,    33,    34,    35,    36,    -1,    38,    19,    20,
-      21,    -1,    23,    24,    25,    26,    27,    28,    29,    30,
-      -1,    32,    33,    34,    35,    36,    -1,    38,    27,    28,
-      29,    30,    -1,    32,    33,    34,    35,    -1,    -1,    38,
-      -1,    40,    41,    27,    28,    29,    30,    -1,    32,    33,
-      34,    35,    -1,    -1,    38,    28,    29,    30,    -1,    32,
-      33,    34,    35,    -1,    -1,    38
+      -1,    28,    29,    30,    -1,    32,    -1,    -1,    -1,    36,
+      37,    10,    11,    -1,    13,    -1,    -1,    -1,    -1,    -1,
+      -1,    -1,    61,    -1,    -1,    -1,    -1,    10,    11,    56,
+      -1,    58,    -1,    -1,    -1,    -1,    -1,    64,    -1,    -1,
+      -1,    -1,    -1,    42,    43,    44,    45,    46,    10,    11,
+      -1,    -1,    51,    52,    -1,    -1,    -1,    56,    57,    42,
+      43,    44,    45,    46,    10,    11,    -1,    -1,    51,    52,
+      53,    -1,    -1,    56,    57,    -1,    -1,    -1,    -1,    -1,
+      42,    43,    44,    45,    46,    -1,    -1,    -1,    -1,    51,
+      52,    53,    -1,    -1,    56,    57,    42,    43,    44,    45,
+      46,    -1,    -1,    -1,    -1,    51,    52,    -1,    -1,    -1,
+      56,    57,    27,    28,    29,    30,    -1,    32,    33,    34,
+      35,    -1,    -1,    38,    -1,    -1,    19,    20,    21,    22,
+      23,    24,    25,    26,    27,    28,    29,    30,    -1,    32,
+      33,    34,    35,    36,    -1,    38,    61,    40,    41,    19,
+      20,    21,    22,    23,    24,    25,    26,    27,    28,    29,
+      30,    -1,    32,    33,    34,    35,    36,    -1,    38,    19,
+      20,    21,    22,    23,    24,    25,    26,    27,    28,    29,
+      30,    -1,    32,    33,    34,    35,    36,    -1,    38,    19,
+      20,    21,    -1,    23,    24,    25,    26,    27,    28,    29,
+      30,    -1,    32,    33,    34,    35,    36,    22,    38,    -1,
+      -1,    -1,    27,    28,    29,    30,    -1,    32,    33,    34,
+      35,    -1,    -1,    38,    27,    28,    29,    30,    -1,    32,
+      33,    34,    35,    -1,    -1,    38,    -1,    40,    41,    27,
+      28,    29,    30,    -1,    32,    33,    34,    35,    -1,    -1,
+      38,    28,    29,    30,    -1,    32,    33,    34,    35,    -1,
+      -1,    38
 };
 
 /* YYSTOS[STATE-NUM] -- The (internal number of the) accessing
@@ -891,7 +900,7 @@ static const unsigned char yystos[] =
       73,    73,    73,    23,    73,    75,    14,    75,    15,    75,
       75,    15,    75,    14,    75,    56,    56,    56,    56,    73,
       74,    72,     7,    46,    96,    94,    76,    73,    73,    93,
-      76,    63,    90,    73,     3,    41,    22,    61,    63,    66,
+      76,    63,    90,    70,     3,    41,    22,    61,    63,    66,
       53,    22,    70,    73,    85,    75,    75,    75,    75,    76,
       76,    76,    76,    22,    61,    71,    93,    76,    40,    41,
       61,    76,    73,     9,    76,    82,    73,    53,    22,    61,
@@ -1508,27 +1517,27 @@ yyreduce:
   switch (yyn)
     {
         case 4:
-#line 230 "ada-exp.y"
+#line 231 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_COMMA); }
     break;
 
   case 5:
-#line 232 "ada-exp.y"
+#line 233 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_ASSIGN); }
     break;
 
   case 6:
-#line 237 "ada-exp.y"
+#line 238 "ada-exp.y"
     { write_exp_elt_opcode (UNOP_IND); }
     break;
 
   case 7:
-#line 241 "ada-exp.y"
+#line 242 "ada-exp.y"
     { write_exp_op_with_string (STRUCTOP_STRUCT, yyvsp[0].sval); }
     break;
 
   case 8:
-#line 245 "ada-exp.y"
+#line 246 "ada-exp.y"
     {
 			  write_exp_elt_opcode (OP_FUNCALL);
 			  write_exp_elt_longcst (yyvsp[-1].lval);
@@ -1537,7 +1546,7 @@ yyreduce:
     break;
 
   case 9:
-#line 251 "ada-exp.y"
+#line 252 "ada-exp.y"
     {
 			  if (yyvsp[-3].tval != NULL)
 			    {
@@ -1557,12 +1566,12 @@ yyreduce:
     break;
 
   case 10:
-#line 269 "ada-exp.y"
+#line 270 "ada-exp.y"
     { type_qualifier = yyvsp[-2].tval; }
     break;
 
   case 11:
-#line 271 "ada-exp.y"
+#line 272 "ada-exp.y"
     {
 			  if (yyvsp[-6].tval == NULL)
 			    error (_("Type required for qualification"));
@@ -1574,17 +1583,17 @@ yyreduce:
     break;
 
   case 12:
-#line 281 "ada-exp.y"
+#line 282 "ada-exp.y"
     { yyval.tval = type_qualifier; }
     break;
 
   case 13:
-#line 286 "ada-exp.y"
+#line 287 "ada-exp.y"
     { write_exp_elt_opcode (TERNOP_SLICE); }
     break;
 
   case 14:
-#line 288 "ada-exp.y"
+#line 289 "ada-exp.y"
     { if (yyvsp[-5].tval == NULL) 
                             write_exp_elt_opcode (TERNOP_SLICE);
 			  else
@@ -1593,12 +1602,12 @@ yyreduce:
     break;
 
   case 15:
-#line 295 "ada-exp.y"
+#line 296 "ada-exp.y"
     { }
     break;
 
   case 16:
-#line 307 "ada-exp.y"
+#line 308 "ada-exp.y"
     { if (yyvsp[0].tval != NULL)
 			    {
 			      write_exp_elt_opcode (OP_TYPE);
@@ -1609,57 +1618,57 @@ yyreduce:
     break;
 
   case 17:
-#line 317 "ada-exp.y"
+#line 318 "ada-exp.y"
     { write_dollar_variable (yyvsp[0].sval); }
     break;
 
   case 20:
-#line 327 "ada-exp.y"
+#line 328 "ada-exp.y"
     { write_exp_elt_opcode (UNOP_NEG); }
     break;
 
   case 21:
-#line 331 "ada-exp.y"
+#line 332 "ada-exp.y"
     { write_exp_elt_opcode (UNOP_PLUS); }
     break;
 
   case 22:
-#line 335 "ada-exp.y"
+#line 336 "ada-exp.y"
     { write_exp_elt_opcode (UNOP_LOGICAL_NOT); }
     break;
 
   case 23:
-#line 339 "ada-exp.y"
+#line 340 "ada-exp.y"
     { write_exp_elt_opcode (UNOP_ABS); }
     break;
 
   case 24:
-#line 342 "ada-exp.y"
+#line 343 "ada-exp.y"
     { yyval.lval = 0; }
     break;
 
   case 25:
-#line 346 "ada-exp.y"
+#line 347 "ada-exp.y"
     { yyval.lval = 1; }
     break;
 
   case 26:
-#line 348 "ada-exp.y"
+#line 349 "ada-exp.y"
     { yyval.lval = 1; }
     break;
 
   case 27:
-#line 350 "ada-exp.y"
+#line 351 "ada-exp.y"
     { yyval.lval = yyvsp[-2].lval + 1; }
     break;
 
   case 28:
-#line 352 "ada-exp.y"
+#line 353 "ada-exp.y"
     { yyval.lval = yyvsp[-4].lval + 1; }
     break;
 
   case 29:
-#line 357 "ada-exp.y"
+#line 358 "ada-exp.y"
     { 
 			  if (yyvsp[-2].tval == NULL)
 			    error (_("Type required within braces in coercion"));
@@ -1670,72 +1679,72 @@ yyreduce:
     break;
 
   case 30:
-#line 369 "ada-exp.y"
+#line 370 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_EXP); }
     break;
 
   case 31:
-#line 373 "ada-exp.y"
+#line 374 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_MUL); }
     break;
 
   case 32:
-#line 377 "ada-exp.y"
+#line 378 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_DIV); }
     break;
 
   case 33:
-#line 381 "ada-exp.y"
+#line 382 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_REM); }
     break;
 
   case 34:
-#line 385 "ada-exp.y"
+#line 386 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_MOD); }
     break;
 
   case 35:
-#line 389 "ada-exp.y"
+#line 390 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_REPEAT); }
     break;
 
   case 36:
-#line 393 "ada-exp.y"
+#line 394 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_ADD); }
     break;
 
   case 37:
-#line 397 "ada-exp.y"
+#line 398 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_CONCAT); }
     break;
 
   case 38:
-#line 401 "ada-exp.y"
+#line 402 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_SUB); }
     break;
 
   case 40:
-#line 408 "ada-exp.y"
+#line 409 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_EQUAL); }
     break;
 
   case 41:
-#line 412 "ada-exp.y"
+#line 413 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_NOTEQUAL); }
     break;
 
   case 42:
-#line 416 "ada-exp.y"
+#line 417 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_LEQ); }
     break;
 
   case 43:
-#line 420 "ada-exp.y"
+#line 421 "ada-exp.y"
     { write_exp_elt_opcode (TERNOP_IN_RANGE); }
     break;
 
   case 44:
-#line 422 "ada-exp.y"
+#line 423 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_IN_BOUNDS);
 			  write_exp_elt_longcst ((LONGEST) yyvsp[0].lval);
 			  write_exp_elt_opcode (BINOP_IN_BOUNDS);
@@ -1743,7 +1752,7 @@ yyreduce:
     break;
 
   case 45:
-#line 427 "ada-exp.y"
+#line 428 "ada-exp.y"
     { 
 			  if (yyvsp[0].tval == NULL)
 			    error (_("Right operand of 'in' must be type"));
@@ -1754,14 +1763,14 @@ yyreduce:
     break;
 
   case 46:
-#line 435 "ada-exp.y"
+#line 436 "ada-exp.y"
     { write_exp_elt_opcode (TERNOP_IN_RANGE);
 		          write_exp_elt_opcode (UNOP_LOGICAL_NOT);
 			}
     break;
 
   case 47:
-#line 439 "ada-exp.y"
+#line 440 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_IN_BOUNDS);
 			  write_exp_elt_longcst ((LONGEST) yyvsp[0].lval);
 			  write_exp_elt_opcode (BINOP_IN_BOUNDS);
@@ -1770,7 +1779,7 @@ yyreduce:
     break;
 
   case 48:
-#line 445 "ada-exp.y"
+#line 446 "ada-exp.y"
     { 
 			  if (yyvsp[0].tval == NULL)
 			    error (_("Right operand of 'in' must be type"));
@@ -1782,77 +1791,77 @@ yyreduce:
     break;
 
   case 49:
-#line 456 "ada-exp.y"
+#line 457 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_GEQ); }
     break;
 
   case 50:
-#line 460 "ada-exp.y"
+#line 461 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_LESS); }
     break;
 
   case 51:
-#line 464 "ada-exp.y"
+#line 465 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_GTR); }
     break;
 
   case 58:
-#line 477 "ada-exp.y"
+#line 478 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_BITWISE_AND); }
     break;
 
   case 59:
-#line 479 "ada-exp.y"
+#line 480 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_BITWISE_AND); }
     break;
 
   case 60:
-#line 484 "ada-exp.y"
+#line 485 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_LOGICAL_AND); }
     break;
 
   case 61:
-#line 486 "ada-exp.y"
+#line 487 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_LOGICAL_AND); }
     break;
 
   case 62:
-#line 491 "ada-exp.y"
+#line 492 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_BITWISE_IOR); }
     break;
 
   case 63:
-#line 493 "ada-exp.y"
+#line 494 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_BITWISE_IOR); }
     break;
 
   case 64:
-#line 498 "ada-exp.y"
+#line 499 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_LOGICAL_OR); }
     break;
 
   case 65:
-#line 500 "ada-exp.y"
+#line 501 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_LOGICAL_OR); }
     break;
 
   case 66:
-#line 504 "ada-exp.y"
+#line 505 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_BITWISE_XOR); }
     break;
 
   case 67:
-#line 506 "ada-exp.y"
+#line 507 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_BITWISE_XOR); }
     break;
 
   case 68:
-#line 518 "ada-exp.y"
+#line 519 "ada-exp.y"
     { write_exp_elt_opcode (UNOP_ADDR); }
     break;
 
   case 69:
-#line 520 "ada-exp.y"
+#line 521 "ada-exp.y"
     { write_exp_elt_opcode (UNOP_ADDR);
 			  write_exp_elt_opcode (UNOP_CAST);
 			  write_exp_elt_type (type_system_address ());
@@ -1861,70 +1870,70 @@ yyreduce:
     break;
 
   case 70:
-#line 526 "ada-exp.y"
+#line 527 "ada-exp.y"
     { write_int (yyvsp[0].lval, type_int ());
 			  write_exp_elt_opcode (OP_ATR_FIRST); }
     break;
 
   case 71:
-#line 529 "ada-exp.y"
+#line 530 "ada-exp.y"
     { write_int (yyvsp[0].lval, type_int ());
 			  write_exp_elt_opcode (OP_ATR_LAST); }
     break;
 
   case 72:
-#line 532 "ada-exp.y"
+#line 533 "ada-exp.y"
     { write_int (yyvsp[0].lval, type_int ());
 			  write_exp_elt_opcode (OP_ATR_LENGTH); }
     break;
 
   case 73:
-#line 535 "ada-exp.y"
+#line 536 "ada-exp.y"
     { write_exp_elt_opcode (OP_ATR_SIZE); }
     break;
 
   case 74:
-#line 537 "ada-exp.y"
+#line 538 "ada-exp.y"
     { write_exp_elt_opcode (OP_ATR_TAG); }
     break;
 
   case 75:
-#line 539 "ada-exp.y"
+#line 540 "ada-exp.y"
     { write_exp_elt_opcode (OP_ATR_MIN); }
     break;
 
   case 76:
-#line 541 "ada-exp.y"
+#line 542 "ada-exp.y"
     { write_exp_elt_opcode (OP_ATR_MAX); }
     break;
 
   case 77:
-#line 543 "ada-exp.y"
+#line 544 "ada-exp.y"
     { write_exp_elt_opcode (OP_ATR_POS); }
     break;
 
   case 78:
-#line 545 "ada-exp.y"
+#line 546 "ada-exp.y"
     { write_exp_elt_opcode (OP_ATR_VAL); }
     break;
 
   case 79:
-#line 547 "ada-exp.y"
+#line 548 "ada-exp.y"
     { write_exp_elt_opcode (OP_ATR_MODULUS); }
     break;
 
   case 80:
-#line 551 "ada-exp.y"
+#line 552 "ada-exp.y"
     { yyval.lval = 1; }
     break;
 
   case 81:
-#line 553 "ada-exp.y"
+#line 554 "ada-exp.y"
     { yyval.lval = yyvsp[-1].typed_val.val; }
     break;
 
   case 82:
-#line 558 "ada-exp.y"
+#line 559 "ada-exp.y"
     { 
 			  if (yyvsp[0].tval == NULL)
 			    error (_("Prefix must be type"));
@@ -1934,19 +1943,19 @@ yyreduce:
     break;
 
   case 84:
-#line 569 "ada-exp.y"
+#line 570 "ada-exp.y"
     { write_exp_elt_opcode (OP_TYPE);
 			  write_exp_elt_type (builtin_type_void);
 			  write_exp_elt_opcode (OP_TYPE); }
     break;
 
   case 85:
-#line 576 "ada-exp.y"
+#line 577 "ada-exp.y"
     { write_int ((LONGEST) yyvsp[0].typed_val.val, yyvsp[0].typed_val.type); }
     break;
 
   case 86:
-#line 580 "ada-exp.y"
+#line 581 "ada-exp.y"
     { write_int (convert_char_literal (type_qualifier, yyvsp[0].typed_val.val),
 			       (type_qualifier == NULL) 
 			       ? yyvsp[0].typed_val.type : type_qualifier);
@@ -1954,7 +1963,7 @@ yyreduce:
     break;
 
   case 87:
-#line 587 "ada-exp.y"
+#line 588 "ada-exp.y"
     { write_exp_elt_opcode (OP_DOUBLE);
 			  write_exp_elt_type (yyvsp[0].typed_val_float.type);
 			  write_exp_elt_dblcst (yyvsp[0].typed_val_float.dval);
@@ -1963,34 +1972,34 @@ yyreduce:
     break;
 
   case 88:
-#line 595 "ada-exp.y"
+#line 596 "ada-exp.y"
     { write_int (0, type_int ()); }
     break;
 
   case 89:
-#line 599 "ada-exp.y"
+#line 600 "ada-exp.y"
     { 
 			  write_exp_op_with_string (OP_STRING, yyvsp[0].sval);
 			}
     break;
 
   case 90:
-#line 605 "ada-exp.y"
+#line 606 "ada-exp.y"
     { error (_("NEW not implemented.")); }
     break;
 
   case 91:
-#line 609 "ada-exp.y"
+#line 610 "ada-exp.y"
     { yyval.tval = write_var_or_type (NULL, yyvsp[0].sval); }
     break;
 
   case 92:
-#line 611 "ada-exp.y"
+#line 612 "ada-exp.y"
     { yyval.tval = write_var_or_type (yyvsp[-1].bval, yyvsp[0].sval); }
     break;
 
   case 93:
-#line 613 "ada-exp.y"
+#line 614 "ada-exp.y"
     { 
 			  yyval.tval = write_var_or_type (NULL, yyvsp[-1].sval);
 			  if (yyval.tval == NULL)
@@ -2001,7 +2010,7 @@ yyreduce:
     break;
 
   case 94:
-#line 621 "ada-exp.y"
+#line 622 "ada-exp.y"
     { 
 			  yyval.tval = write_var_or_type (yyvsp[-2].bval, yyvsp[-1].sval);
 			  if (yyval.tval == NULL)
@@ -2012,17 +2021,17 @@ yyreduce:
     break;
 
   case 95:
-#line 632 "ada-exp.y"
+#line 633 "ada-exp.y"
     { yyval.bval = block_lookup (NULL, yyvsp[-1].sval.ptr); }
     break;
 
   case 96:
-#line 634 "ada-exp.y"
+#line 635 "ada-exp.y"
     { yyval.bval = block_lookup (yyvsp[-2].bval, yyvsp[-1].sval.ptr); }
     break;
 
   case 97:
-#line 639 "ada-exp.y"
+#line 640 "ada-exp.y"
     {
 			  write_exp_elt_opcode (OP_AGGREGATE);
 			  write_exp_elt_longcst (yyvsp[-1].lval);
@@ -2031,12 +2040,12 @@ yyreduce:
     break;
 
   case 98:
-#line 647 "ada-exp.y"
+#line 648 "ada-exp.y"
     { yyval.lval = yyvsp[0].lval; }
     break;
 
   case 99:
-#line 649 "ada-exp.y"
+#line 650 "ada-exp.y"
     { write_exp_elt_opcode (OP_POSITIONAL);
 			  write_exp_elt_longcst (yyvsp[-1].lval);
 			  write_exp_elt_opcode (OP_POSITIONAL);
@@ -2045,12 +2054,12 @@ yyreduce:
     break;
 
   case 100:
-#line 655 "ada-exp.y"
+#line 656 "ada-exp.y"
     { yyval.lval = yyvsp[-1].lval + yyvsp[0].lval; }
     break;
 
   case 101:
-#line 660 "ada-exp.y"
+#line 661 "ada-exp.y"
     { write_exp_elt_opcode (OP_POSITIONAL);
 			  write_exp_elt_longcst (0);
 			  write_exp_elt_opcode (OP_POSITIONAL);
@@ -2059,7 +2068,7 @@ yyreduce:
     break;
 
   case 102:
-#line 666 "ada-exp.y"
+#line 667 "ada-exp.y"
     { write_exp_elt_opcode (OP_POSITIONAL);
 			  write_exp_elt_longcst (yyvsp[-2].lval);
 			  write_exp_elt_opcode (OP_POSITIONAL);
@@ -2068,27 +2077,27 @@ yyreduce:
     break;
 
   case 103:
-#line 674 "ada-exp.y"
-    { yyval.lval = 1; }
-    break;
-
-  case 104:
 #line 675 "ada-exp.y"
     { yyval.lval = 1; }
     break;
 
+  case 104:
+#line 676 "ada-exp.y"
+    { yyval.lval = 1; }
+    break;
+
   case 105:
-#line 677 "ada-exp.y"
+#line 678 "ada-exp.y"
     { yyval.lval = yyvsp[0].lval + 1; }
     break;
 
   case 106:
-#line 681 "ada-exp.y"
+#line 682 "ada-exp.y"
     { write_exp_elt_opcode (OP_OTHERS); }
     break;
 
   case 107:
-#line 686 "ada-exp.y"
+#line 687 "ada-exp.y"
     {
 			  write_exp_elt_opcode (OP_CHOICES);
 			  write_exp_elt_longcst (yyvsp[0].lval);
@@ -2097,69 +2106,69 @@ yyreduce:
     break;
 
   case 108:
-#line 700 "ada-exp.y"
+#line 701 "ada-exp.y"
     { write_name_assoc (yyvsp[-1].sval); }
     break;
 
   case 109:
-#line 701 "ada-exp.y"
+#line 702 "ada-exp.y"
     { yyval.lval = 1; }
     break;
 
   case 110:
-#line 703 "ada-exp.y"
+#line 704 "ada-exp.y"
     { yyval.lval = 1; }
     break;
 
   case 111:
-#line 705 "ada-exp.y"
+#line 706 "ada-exp.y"
     { write_exp_elt_opcode (OP_DISCRETE_RANGE);
 			  write_exp_op_with_string (OP_NAME, empty_stoken);
 			}
     break;
 
   case 112:
-#line 708 "ada-exp.y"
+#line 709 "ada-exp.y"
     { yyval.lval = 1; }
     break;
 
   case 113:
-#line 710 "ada-exp.y"
+#line 711 "ada-exp.y"
     { write_name_assoc (yyvsp[-1].sval); }
     break;
 
   case 114:
-#line 711 "ada-exp.y"
+#line 712 "ada-exp.y"
     { yyval.lval = yyvsp[0].lval + 1; }
     break;
 
   case 115:
-#line 713 "ada-exp.y"
+#line 714 "ada-exp.y"
     { yyval.lval = yyvsp[0].lval + 1; }
     break;
 
   case 116:
-#line 715 "ada-exp.y"
+#line 716 "ada-exp.y"
     { write_exp_elt_opcode (OP_DISCRETE_RANGE); }
     break;
 
   case 117:
-#line 716 "ada-exp.y"
+#line 717 "ada-exp.y"
     { yyval.lval = yyvsp[0].lval + 1; }
     break;
 
   case 118:
-#line 723 "ada-exp.y"
+#line 724 "ada-exp.y"
     { write_exp_elt_opcode (UNOP_IND); }
     break;
 
   case 119:
-#line 725 "ada-exp.y"
+#line 726 "ada-exp.y"
     { write_exp_elt_opcode (UNOP_ADDR); }
     break;
 
   case 120:
-#line 727 "ada-exp.y"
+#line 728 "ada-exp.y"
     { write_exp_elt_opcode (BINOP_SUBSCRIPT); }
     break;
 
@@ -2167,7 +2176,7 @@ yyreduce:
     }
 
 /* Line 1000 of yacc.c.  */
-#line 2171 "ada-exp.c.tmp"
+#line 2180 "ada-exp.c.tmp"
 
   yyvsp -= yylen;
   yyssp -= yylen;
@@ -2392,7 +2401,7 @@ yyreturn:
 }
 
 
-#line 730 "ada-exp.y"
+#line 731 "ada-exp.y"
 
 
 /* yylex defined in ada-lex.c: Reads one token, getting characters */
@@ -2505,82 +2514,86 @@ write_exp_op_with_string (enum exp_opcode opcode, struct stoken token)
   write_exp_elt_opcode (opcode);
 }
   
-/* Emit expression corresponding to the renamed object designated by
- * the type RENAMING, which must be the referent of an object renaming
- * type, in the context of ORIG_LEFT_CONTEXT.  MAX_DEPTH is the maximum
- * number of cascaded renamings to allow.  */
+/* Emit expression corresponding to the renamed object named 
+ * designated by RENAMED_ENTITY[0 .. RENAMED_ENTITY_LEN-1] in the
+ * context of ORIG_LEFT_CONTEXT, to which is applied the operations
+ * encoded by RENAMING_EXPR.  MAX_DEPTH is the maximum number of
+ * cascaded renamings to allow.  If ORIG_LEFT_CONTEXT is null, it
+ * defaults to the currently selected block. ORIG_SYMBOL is the 
+ * symbol that originally encoded the renaming.  It is needed only
+ * because its prefix also qualifies any index variables used to index
+ * or slice an array.  It should not be necessary once we go to the
+ * new encoding entirely (FIXME pnh 7/20/2007).  */
+
 static void
-write_object_renaming (struct block *orig_left_context, 
-		       struct symbol *renaming, int max_depth)
+write_object_renaming (struct block *orig_left_context,
+		       const char *renamed_entity, int renamed_entity_len,
+		       const char *renaming_expr, int max_depth)
 {
-  const char *qualification = SYMBOL_LINKAGE_NAME (renaming);
-  const char *simple_tail;
-  const char *expr = TYPE_FIELD_NAME (SYMBOL_TYPE (renaming), 0);
-  const char *suffix;
   char *name;
-  struct symbol *sym;
   enum { SIMPLE_INDEX, LOWER_BOUND, UPPER_BOUND } slice_state;
+  struct symbol *sym;
+  struct block *block;
 
   if (max_depth <= 0)
     error (_("Could not find renamed symbol"));
 
-  /* if orig_left_context is null, then use the currently selected
-     block; otherwise we might fail our symbol lookup below.  */
   if (orig_left_context == NULL)
     orig_left_context = get_selected_block (NULL);
 
-  for (simple_tail = qualification + strlen (qualification);
-       simple_tail != qualification; simple_tail -= 1)
-    {
-      if (*simple_tail == '.')
-	{
-	  simple_tail += 1;
-	  break;
-	}
-      else if (strncmp (simple_tail, "__", 2) == 0)
-	{
-	  simple_tail += 2;
-	  break;
-	}
-    }
-
-  suffix = strstr (expr, "___XE");
-  if (suffix == NULL)
-    goto BadEncoding;
-
-  name = (char *) obstack_alloc (&temp_parse_space, suffix - expr + 1);
-  strncpy (name, expr, suffix-expr);
-  name[suffix-expr] = '\000';
-  sym = lookup_symbol (name, orig_left_context, VAR_DOMAIN, 0, NULL);
+  name = obsavestring (renamed_entity, renamed_entity_len, &temp_parse_space);
+  sym = ada_lookup_encoded_symbol (name, orig_left_context, VAR_DOMAIN, 
+				   &block, NULL);
   if (sym == NULL)
     error (_("Could not find renamed variable: %s"), ada_decode (name));
-  if (ada_is_object_renaming (sym))
-    write_object_renaming (orig_left_context, sym, max_depth-1);
-  else
-    write_var_from_sym (orig_left_context, block_found, sym);
+  else if (SYMBOL_CLASS (sym) == LOC_TYPEDEF)
+    /* We have a renaming of an old-style renaming symbol.  Don't
+       trust the block information.  */
+    block = orig_left_context;
 
-  suffix += 5;
+  {
+    const char *inner_renamed_entity;
+    int inner_renamed_entity_len;
+    const char *inner_renaming_expr;
+
+    switch (ada_parse_renaming (sym, &inner_renamed_entity, 
+				&inner_renamed_entity_len,
+				&inner_renaming_expr))
+      {
+      case ADA_NOT_RENAMING:
+	write_var_from_sym (orig_left_context, block, sym);
+	break;
+      case ADA_OBJECT_RENAMING:
+	write_object_renaming (block,
+			       inner_renamed_entity, inner_renamed_entity_len,
+			       inner_renaming_expr, max_depth - 1);
+	break;
+      default:
+	goto BadEncoding;
+      }
+  }
+
   slice_state = SIMPLE_INDEX;
-  while (*suffix == 'X')
+  while (*renaming_expr == 'X')
     {
-      suffix += 1;
+      renaming_expr += 1;
 
-      switch (*suffix) {
+      switch (*renaming_expr) {
       case 'A':
-        suffix += 1;
+        renaming_expr += 1;
         write_exp_elt_opcode (UNOP_IND);
         break;
       case 'L':
 	slice_state = LOWER_BOUND;
       case 'S':
-	suffix += 1;
-	if (isdigit (*suffix))
+	renaming_expr += 1;
+	if (isdigit (*renaming_expr))
 	  {
 	    char *next;
-	    long val = strtol (suffix, &next, 10);
-	    if (next == suffix)
+	    long val = strtol (renaming_expr, &next, 10);
+	    if (next == renaming_expr)
 	      goto BadEncoding;
-	    suffix = next;
+	    renaming_expr = next;
 	    write_exp_elt_opcode (OP_LONG);
 	    write_exp_elt_type (type_int ());
 	    write_exp_elt_longcst ((LONGEST) val);
@@ -2590,27 +2603,26 @@ write_object_renaming (struct block *orig_left_context,
 	  {
 	    const char *end;
 	    char *index_name;
-	    int index_len;
 	    struct symbol *index_sym;
 
-	    end = strchr (suffix, 'X');
+	    end = strchr (renaming_expr, 'X');
 	    if (end == NULL)
-	      end = suffix + strlen (suffix);
+	      end = renaming_expr + strlen (renaming_expr);
 
-	    index_len = simple_tail - qualification + 2 + (suffix - end) + 1;
-	    index_name
-	      = (char *) obstack_alloc (&temp_parse_space, index_len);
-	    memset (index_name, '\000', index_len);
-	    strncpy (index_name, qualification, simple_tail - qualification);
-	    index_name[simple_tail - qualification] = '\000';
-	    strncat (index_name, suffix, suffix-end);
-	    suffix = end;
+	    index_name =
+	      obsavestring (renaming_expr, end - renaming_expr,
+			    &temp_parse_space);
+	    renaming_expr = end;
 
-	    index_sym =
-	      lookup_symbol (index_name, NULL, VAR_DOMAIN, 0, NULL);
+	    index_sym = ada_lookup_encoded_symbol (index_name, NULL,
+						   VAR_DOMAIN, &block,
+						   NULL);
 	    if (index_sym == NULL)
 	      error (_("Could not find %s"), index_name);
-	    write_var_from_sym (NULL, block_found, sym);
+	    else if (SYMBOL_CLASS (index_sym) == LOC_TYPEDEF)
+	      /* Index is an old-style renaming symbol.  */
+	      block = orig_left_context;
+	    write_var_from_sym (NULL, block, index_sym);
 	  }
 	if (slice_state == SIMPLE_INDEX)
 	  {
@@ -2631,18 +2643,18 @@ write_object_renaming (struct block *orig_left_context,
 	{
 	  struct stoken field_name;
 	  const char *end;
-	  suffix += 1;
+	  renaming_expr += 1;
 
 	  if (slice_state != SIMPLE_INDEX)
 	    goto BadEncoding;
-	  end = strchr (suffix, 'X');
+	  end = strchr (renaming_expr, 'X');
 	  if (end == NULL)
-	    end = suffix + strlen (suffix);
-	  field_name.length = end - suffix;
-	  field_name.ptr = xmalloc (end - suffix + 1);
-	  strncpy (field_name.ptr, suffix, end - suffix);
-	  field_name.ptr[end - suffix] = '\000';
-	  suffix = end;
+	    end = renaming_expr + strlen (renaming_expr);
+	  field_name.length = end - renaming_expr;
+	  field_name.ptr = xmalloc (end - renaming_expr + 1);
+	  strncpy (field_name.ptr, renaming_expr, end - renaming_expr);
+	  field_name.ptr[end - renaming_expr] = '\000';
+	  renaming_expr = end;
 	  write_exp_op_with_string (STRUCTOP_STRUCT, field_name);
 	  break;
 	}
@@ -2655,8 +2667,7 @@ write_object_renaming (struct block *orig_left_context,
     return;
 
  BadEncoding:
-  error (_("Internal error in encoding of renaming declaration: %s"),
-	 SYMBOL_LINKAGE_NAME (renaming));
+  error (_("Internal error in encoding of renaming declaration"));
 }
 
 static struct block*
@@ -2775,6 +2786,22 @@ chop_selector (char *name, int end)
   return -1;
 }
 
+/* If NAME is a string beginning with a separator (either '__', or
+   '.'), chop this separator and return the result; else, return
+   NAME.  */
+
+static char *
+chop_separator (char *name)
+{
+  if (*name == '.')
+   return name + 1;
+
+  if (name[0] == '_' && name[1] == '_')
+    return name + 2;
+
+  return name;
+}
+
 /* Given that SELS is a string of the form (<sep><identifier>)*, where
    <sep> is '__' or '.', write the indicated sequence of
    STRUCTOP_STRUCT expression operators. */
@@ -2784,10 +2811,8 @@ write_selectors (char *sels)
   while (*sels != '\0')
     {
       struct stoken field_name;
-      char *p;
-      while (*sels == '_' || *sels == '.')
-	sels += 1;
-      p = sels;
+      char *p = chop_separator (sels);
+      sels = p;
       while (*sels != '\0' && *sels != '.' 
 	     && (sels[0] != '_' || sels[1] != '_'))
 	sels += 1;
@@ -2817,6 +2842,70 @@ write_ambiguous_var (struct block *block, char *name, int len)
   write_exp_elt_opcode (OP_VAR_VALUE);
 }
 
+/* A convenient wrapper around ada_get_field_index that takes
+   a non NUL-terminated FIELD_NAME0 and a FIELD_NAME_LEN instead
+   of a NUL-terminated field name.  */
+
+static int
+ada_nget_field_index (const struct type *type, const char *field_name0,
+                      int field_name_len, int maybe_missing)
+{
+  char *field_name = alloca ((field_name_len + 1) * sizeof (char));
+
+  strncpy (field_name, field_name0, field_name_len);
+  field_name[field_name_len] = '\0';
+  return ada_get_field_index (type, field_name, maybe_missing);
+}
+
+/* If encoded_field_name is the name of a field inside symbol SYM,
+   then return the type of that field.  Otherwise, return NULL.
+
+   This function is actually recursive, so if ENCODED_FIELD_NAME
+   doesn't match one of the fields of our symbol, then try to see
+   if ENCODED_FIELD_NAME could not be a succession of field names
+   (in other words, the user entered an expression of the form
+   TYPE_NAME.FIELD1.FIELD2.FIELD3), in which case we evaluate
+   each field name sequentially to obtain the desired field type.
+   In case of failure, we return NULL.  */
+
+static struct type *
+get_symbol_field_type (struct symbol *sym, char *encoded_field_name)
+{
+  char *field_name = encoded_field_name;
+  char *subfield_name;
+  struct type *type = SYMBOL_TYPE (sym);
+  int fieldno;
+
+  if (type == NULL || field_name == NULL)
+    return NULL;
+
+  while (field_name[0] != '\0')
+    {
+      field_name = chop_separator (field_name);
+
+      fieldno = ada_get_field_index (type, field_name, 1);
+      if (fieldno >= 0)
+        return TYPE_FIELD_TYPE (type, fieldno);
+
+      subfield_name = field_name;
+      while (*subfield_name != '\0' && *subfield_name != '.' 
+	     && (subfield_name[0] != '_' || subfield_name[1] != '_'))
+	subfield_name += 1;
+
+      if (subfield_name[0] == '\0')
+        return NULL;
+
+      fieldno = ada_nget_field_index (type, field_name,
+                                      subfield_name - field_name, 1);
+      if (fieldno < 0)
+        return NULL;
+
+      type = TYPE_FIELD_TYPE (type, fieldno);
+      field_name = subfield_name;
+    }
+
+  return NULL;
+}
 
 /* Look up NAME0 (an unencoded identifier or dotted name) in BLOCK (or 
    expression_block_context if NULL).  If it denotes a type, return
@@ -2851,6 +2940,10 @@ write_var_or_type (struct block *block, struct stoken name0)
 	  int nsyms;
 	  struct ada_symbol_info *syms;
 	  struct symbol *type_sym;
+	  struct symbol *renaming_sym;
+	  const char* renaming;
+	  int renaming_len;
+	  const char* renaming_expr;
 	  int terminator = encoded_name[tail_index];
 
 	  encoded_name[tail_index] = '\0';
@@ -2860,51 +2953,72 @@ write_var_or_type (struct block *block, struct stoken name0)
 
 	  /* A single symbol may rename a package or object. */
 
-	  if (nsyms == 1 && !ada_is_object_renaming (syms[0].sym))
+	  /* This should go away when we move entirely to new version.
+	     FIXME pnh 7/20/2007. */
+	  if (nsyms == 1)
 	    {
-	      struct symbol *renaming_sym =
+	      struct symbol *renaming =
 		ada_find_renaming_symbol (SYMBOL_LINKAGE_NAME (syms[0].sym), 
 					  syms[0].block);
 
-	      if (renaming_sym != NULL)
-		syms[0].sym = renaming_sym;
+	      if (renaming != NULL)
+		syms[0].sym = renaming;
 	    }
 
 	  type_sym = select_possible_type_sym (syms, nsyms);
+
+	  if (type_sym != NULL)
+	    renaming_sym = type_sym;
+	  else if (nsyms == 1)
+	    renaming_sym = syms[0].sym;
+	  else 
+	    renaming_sym = NULL;
+
+	  switch (ada_parse_renaming (renaming_sym, &renaming,
+				      &renaming_len, &renaming_expr))
+	    {
+	    case ADA_NOT_RENAMING:
+	      break;
+	    case ADA_PACKAGE_RENAMING:
+	    case ADA_EXCEPTION_RENAMING:
+	    case ADA_SUBPROGRAM_RENAMING:
+	      {
+		char *new_name
+		  = obstack_alloc (&temp_parse_space,
+				   renaming_len + name_len - tail_index + 1);
+		strncpy (new_name, renaming, renaming_len);
+		strcpy (new_name + renaming_len, encoded_name + tail_index);
+		encoded_name = new_name;
+		name_len = renaming_len + name_len - tail_index;
+		goto TryAfterRenaming;
+	      }	
+	    case ADA_OBJECT_RENAMING:
+	      write_object_renaming (block, renaming, renaming_len, 
+				     renaming_expr, MAX_RENAMING_CHAIN_LENGTH);
+	      write_selectors (encoded_name + tail_index);
+	      return NULL;
+	    default:
+	      internal_error (__FILE__, __LINE__,
+			      _("impossible value from ada_parse_renaming"));
+	    }
+
 	  if (type_sym != NULL)
 	    {
-	      struct type *type = SYMBOL_TYPE (type_sym);
+              struct type *field_type;
+              
+              if (tail_index == name_len)
+                return SYMBOL_TYPE (type_sym);
 
-	      if (TYPE_CODE (type) == TYPE_CODE_VOID)
-		error (_("`%s' matches only void type name(s)"), name0.ptr);
-	      else if (ada_is_object_renaming (type_sym))
-		{
-		  write_object_renaming (block, type_sym, 
-					 MAX_RENAMING_CHAIN_LENGTH);
-		  write_selectors (encoded_name + tail_index);
-		  return NULL;
-		}
-	      else if (ada_renaming_type (SYMBOL_TYPE (type_sym)) != NULL)
-		{
-		  int result;
-		  char *renaming = ada_simple_renamed_entity (type_sym);
-		  int renaming_len = strlen (renaming);
-
-		  char *new_name
-		    = obstack_alloc (&temp_parse_space,
-				     renaming_len + name_len - tail_index 
-				     + 1);
-		  strcpy (new_name, renaming);
-		  xfree (renaming);
-		  strcpy (new_name + renaming_len, encoded_name + tail_index);
-		  encoded_name = new_name;
-		  name_len = renaming_len + name_len - tail_index;
-		  goto TryAfterRenaming;
-		}
-	      else if (tail_index == name_len)
-		return type;
+              /* We have some extraneous characters after the type name.
+                 If this is an expression "TYPE_NAME.FIELD0.[...].FIELDN",
+                 then try to get the type of FIELDN.  */
+              field_type
+                = get_symbol_field_type (type_sym, encoded_name + tail_index);
+              if (field_type != NULL)
+                return field_type;
 	      else 
-		error (_("Invalid attempt to select from type: \"%s\"."), name0.ptr);
+		error (_("Invalid attempt to select from type: \"%s\"."),
+                       name0.ptr);
 	    }
 	  else if (tail_index == name_len && nsyms == 0)
 	    {

@@ -1,7 +1,7 @@
 /* Target-dependent code for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -39,6 +39,8 @@
 #include "gdb/sim-ppc.h"
 #include "reggroups.h"
 #include "dwarf2-frame.h"
+#include "target-descriptions.h"
+#include "user-regs.h"
 
 #include "libbfd.h"		/* for bfd_default_set_arch_mach */
 #include "coff/internal.h"	/* for libcoff.h */
@@ -47,6 +49,7 @@
 #include "libxcoff.h"
 
 #include "elf-bfd.h"
+#include "elf/ppc.h"
 
 #include "solib-svr4.h"
 #include "ppc-tdep.h"
@@ -59,6 +62,52 @@
 #include "frame-base.h"
 
 #include "rs6000-tdep.h"
+
+#include "features/rs6000/powerpc-32.c"
+#include "features/rs6000/powerpc-403.c"
+#include "features/rs6000/powerpc-403gc.c"
+#include "features/rs6000/powerpc-505.c"
+#include "features/rs6000/powerpc-601.c"
+#include "features/rs6000/powerpc-602.c"
+#include "features/rs6000/powerpc-603.c"
+#include "features/rs6000/powerpc-604.c"
+#include "features/rs6000/powerpc-64.c"
+#include "features/rs6000/powerpc-7400.c"
+#include "features/rs6000/powerpc-750.c"
+#include "features/rs6000/powerpc-860.c"
+#include "features/rs6000/powerpc-e500.c"
+#include "features/rs6000/rs6000.c"
+
+/* Determine if regnum is an SPE pseudo-register.  */
+#define IS_SPE_PSEUDOREG(tdep, regnum) ((tdep)->ppc_ev0_regnum >= 0 \
+    && (regnum) >= (tdep)->ppc_ev0_regnum \
+    && (regnum) < (tdep)->ppc_ev0_regnum + 32)
+
+/* Determine if regnum is a decimal float pseudo-register.  */
+#define IS_DFP_PSEUDOREG(tdep, regnum) ((tdep)->ppc_dl0_regnum >= 0 \
+    && (regnum) >= (tdep)->ppc_dl0_regnum \
+    && (regnum) < (tdep)->ppc_dl0_regnum + 16)
+
+/* The list of available "set powerpc ..." and "show powerpc ..."
+   commands.  */
+static struct cmd_list_element *setpowerpccmdlist = NULL;
+static struct cmd_list_element *showpowerpccmdlist = NULL;
+
+static enum auto_boolean powerpc_soft_float_global = AUTO_BOOLEAN_AUTO;
+
+/* The vector ABI to use.  Keep this in sync with powerpc_vector_abi.  */
+static const char *powerpc_vector_strings[] =
+{
+  "auto",
+  "generic",
+  "altivec",
+  "spe",
+  NULL
+};
+
+/* A variable that can be configured by the user.  */
+static enum powerpc_vector_abi powerpc_vector_abi_global = POWERPC_VEC_AUTO;
+static const char *powerpc_vector_abi_string = "auto";
 
 /* If the kernel has to deliver a signal, it pushes a sigcontext
    structure on the stack and then calls the signal handler, passing
@@ -118,14 +167,14 @@ CORE_ADDR (*rs6000_find_toc_address_hook) (CORE_ADDR) = NULL;
 
 static CORE_ADDR branch_dest (struct frame_info *frame, int opcode,
 			      int instr, CORE_ADDR pc, CORE_ADDR safety);
-static CORE_ADDR skip_prologue (CORE_ADDR, CORE_ADDR,
+static CORE_ADDR skip_prologue (struct gdbarch *, CORE_ADDR, CORE_ADDR,
                                 struct rs6000_framedata *);
 
 /* Is REGNO an AltiVec register?  Return 1 if so, 0 otherwise.  */
 int
-altivec_register_p (int regno)
+altivec_register_p (struct gdbarch *gdbarch, int regno)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   if (tdep->ppc_vr0_regnum < 0 || tdep->ppc_vrsave_regnum < 0)
     return 0;
   else
@@ -135,14 +184,12 @@ altivec_register_p (int regno)
 
 /* Return true if REGNO is an SPE register, false otherwise.  */
 int
-spe_register_p (int regno)
+spe_register_p (struct gdbarch *gdbarch, int regno)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   
   /* Is it a reference to EV0 -- EV31, and do we have those?  */
-  if (tdep->ppc_ev0_regnum >= 0
-      && tdep->ppc_ev31_regnum >= 0
-      && tdep->ppc_ev0_regnum <= regno && regno <= tdep->ppc_ev31_regnum)
+  if (IS_SPE_PSEUDOREG (tdep, regno))
     return 1;
 
   /* Is it a reference to one of the raw upper GPR halves?  */
@@ -177,6 +224,16 @@ ppc_floating_point_unit_p (struct gdbarch *gdbarch)
           && tdep->ppc_fpscr_regnum >= 0);
 }
 
+/* Return non-zero if the architecture described by GDBARCH has
+   Altivec registers (vr0 --- vr31, vrsave and vscr).  */
+int
+ppc_altivec_support_p (struct gdbarch *gdbarch)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
+  return (tdep->ppc_vr0_regnum >= 0
+          && tdep->ppc_vrsave_regnum >= 0);
+}
 
 /* Check that TABLE[GDB_REGNO] is not already initialized, and then
    set it to SIM_REGNO.
@@ -202,10 +259,13 @@ static void
 init_sim_regno_table (struct gdbarch *arch)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (arch);
-  int total_regs = gdbarch_num_regs (arch) + gdbarch_num_pseudo_regs (arch);
-  const struct reg *regs = tdep->regs;
+  int total_regs = gdbarch_num_regs (arch);
   int *sim_regno = GDBARCH_OBSTACK_CALLOC (arch, total_regs, int);
   int i;
+  static const char *const segment_regs[] = {
+    "sr0", "sr1", "sr2", "sr3", "sr4", "sr5", "sr6", "sr7",
+    "sr8", "sr9", "sr10", "sr11", "sr12", "sr13", "sr14", "sr15"
+  };
 
   /* Presume that all registers not explicitly mentioned below are
      unavailable from the sim.  */
@@ -230,11 +290,14 @@ init_sim_regno_table (struct gdbarch *arch)
   set_sim_regno (sim_regno, tdep->ppc_cr_regnum, sim_ppc_cr_regnum);
 
   /* Segment registers.  */
-  if (tdep->ppc_sr0_regnum >= 0)
-    for (i = 0; i < ppc_num_srs; i++)
-      set_sim_regno (sim_regno,
-                     tdep->ppc_sr0_regnum + i,
-                     sim_ppc_sr0_regnum + i);
+  for (i = 0; i < ppc_num_srs; i++)
+    {
+      int gdb_regno;
+
+      gdb_regno = user_reg_map_name_to_regnum (arch, segment_regs[i], -1);
+      if (gdb_regno >= 0)
+	set_sim_regno (sim_regno, gdb_regno, sim_ppc_sr0_regnum + i);
+    }
 
   /* Altivec registers.  */
   if (tdep->ppc_vr0_regnum >= 0)
@@ -253,11 +316,6 @@ init_sim_regno_table (struct gdbarch *arch)
   /* vsave is a special-purpose register, so the code below handles it.  */
 
   /* SPE APU (E500) registers.  */
-  if (tdep->ppc_ev0_regnum >= 0)
-    for (i = 0; i < ppc_num_gprs; i++)
-      set_sim_regno (sim_regno,
-                     tdep->ppc_ev0_regnum + i,
-                     sim_ppc_ev0_regnum + i);
   if (tdep->ppc_ev0_upper_regnum >= 0)
     for (i = 0; i < ppc_num_gprs; i++)
       set_sim_regno (sim_regno,
@@ -267,12 +325,22 @@ init_sim_regno_table (struct gdbarch *arch)
     set_sim_regno (sim_regno, tdep->ppc_acc_regnum, sim_ppc_acc_regnum);
   /* spefscr is a special-purpose register, so the code below handles it.  */
 
+#ifdef WITH_SIM
   /* Now handle all special-purpose registers.  Verify that they
      haven't mistakenly been assigned numbers by any of the above
-     code).  */
-  for (i = 0; i < total_regs; i++)
-    if (regs[i].spr_num >= 0)
-      set_sim_regno (sim_regno, i, regs[i].spr_num + sim_ppc_spr0_regnum);
+     code.  */
+  for (i = 0; i < sim_ppc_num_sprs; i++)
+    {
+      const char *spr_name = sim_spr_register_name (i);
+      int gdb_regno = -1;
+
+      if (spr_name != NULL)
+	gdb_regno = user_reg_map_name_to_regnum (arch, spr_name, -1);
+
+      if (gdb_regno != -1)
+	set_sim_regno (sim_regno, gdb_regno, sim_ppc_spr0_regnum + i);
+    }
+#endif
 
   /* Drop the initialized array into place.  */
   tdep->sim_regno = sim_regno;
@@ -282,14 +350,17 @@ init_sim_regno_table (struct gdbarch *arch)
 /* Given a GDB register number REG, return the corresponding SIM
    register number.  */
 static int
-rs6000_register_sim_regno (int reg)
+rs6000_register_sim_regno (struct gdbarch *gdbarch, int reg)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int sim_regno;
 
+  if (tdep->sim_regno == NULL)
+    init_sim_regno_table (gdbarch);
+
   gdb_assert (0 <= reg 
-	      && reg <= gdbarch_num_regs (current_gdbarch)
-			+ gdbarch_num_pseudo_regs (current_gdbarch));
+	      && reg <= gdbarch_num_regs (gdbarch)
+			+ gdbarch_num_pseudo_regs (gdbarch));
   sim_regno = tdep->sim_regno[reg];
 
   if (sim_regno >= 0)
@@ -405,6 +476,24 @@ ppc_fpreg_offset (struct gdbarch_tdep *tdep,
   return -1;
 }
 
+static int
+ppc_vrreg_offset (struct gdbarch_tdep *tdep,
+		  const struct ppc_reg_offsets *offsets,
+		  int regnum)
+{
+  if (regnum >= tdep->ppc_vr0_regnum
+      && regnum < tdep->ppc_vr0_regnum + ppc_num_vrs)
+    return offsets->vr0_offset + (regnum - tdep->ppc_vr0_regnum) * 16;
+
+  if (regnum == tdep->ppc_vrsave_regnum - 1)
+    return offsets->vscr_offset;
+
+  if (regnum == tdep->ppc_vrsave_regnum)
+    return offsets->vrsave_offset;
+
+  return -1;
+}
+
 /* Supply register REGNUM in the general-purpose register set REGSET
    from the buffer specified by GREGS and LEN to register cache
    REGCACHE.  If REGNUM is -1, do this for all registers in REGSET.  */
@@ -485,6 +574,50 @@ ppc_supply_fpregset (const struct regset *regset, struct regcache *regcache,
   offset = ppc_fpreg_offset (tdep, offsets, regnum);
   ppc_supply_reg (regcache, regnum, fpregs, offset,
 		  regnum == tdep->ppc_fpscr_regnum ? offsets->fpscr_size : 8);
+}
+
+/* Supply register REGNUM in the Altivec register set REGSET
+   from the buffer specified by VRREGS and LEN to register cache
+   REGCACHE.  If REGNUM is -1, do this for all registers in REGSET.  */
+
+void
+ppc_supply_vrregset (const struct regset *regset, struct regcache *regcache,
+		     int regnum, const void *vrregs, size_t len)
+{
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep;
+  const struct ppc_reg_offsets *offsets;
+  size_t offset;
+
+  if (!ppc_altivec_support_p (gdbarch))
+    return;
+
+  tdep = gdbarch_tdep (gdbarch);
+  offsets = regset->descr;
+  if (regnum == -1)
+    {
+      int i;
+
+      for (i = tdep->ppc_vr0_regnum, offset = offsets->vr0_offset;
+	   i < tdep->ppc_vr0_regnum + ppc_num_vrs;
+	   i++, offset += 16)
+        ppc_supply_reg (regcache, i, vrregs, offset, 16);
+
+      ppc_supply_reg (regcache, (tdep->ppc_vrsave_regnum - 1),
+		      vrregs, offsets->vscr_offset, 4);
+
+      ppc_supply_reg (regcache, tdep->ppc_vrsave_regnum,
+		      vrregs, offsets->vrsave_offset, 4);
+      return;
+    }
+
+  offset = ppc_vrreg_offset (tdep, offsets, regnum);
+  if (regnum != tdep->ppc_vrsave_regnum
+      && regnum != tdep->ppc_vrsave_regnum - 1)
+    ppc_supply_reg (regcache, regnum, vrregs, offset, 16);
+  else
+    ppc_supply_reg (regcache, regnum,
+		    vrregs, offset, 4);
 }
 
 /* Collect register REGNUM in the general-purpose register set
@@ -572,6 +705,52 @@ ppc_collect_fpregset (const struct regset *regset,
   ppc_collect_reg (regcache, regnum, fpregs, offset,
 		   regnum == tdep->ppc_fpscr_regnum ? offsets->fpscr_size : 8);
 }
+
+/* Collect register REGNUM in the Altivec register set
+   REGSET from register cache REGCACHE into the buffer specified by
+   VRREGS and LEN.  If REGNUM is -1, do this for all registers in
+   REGSET.  */
+
+void
+ppc_collect_vrregset (const struct regset *regset,
+		      const struct regcache *regcache,
+		      int regnum, void *vrregs, size_t len)
+{
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep;
+  const struct ppc_reg_offsets *offsets;
+  size_t offset;
+
+  if (!ppc_altivec_support_p (gdbarch))
+    return;
+
+  tdep = gdbarch_tdep (gdbarch);
+  offsets = regset->descr;
+  if (regnum == -1)
+    {
+      int i;
+
+      for (i = tdep->ppc_vr0_regnum, offset = offsets->vr0_offset;
+	   i < tdep->ppc_vr0_regnum + ppc_num_vrs;
+	   i++, offset += 16)
+	ppc_collect_reg (regcache, i, vrregs, offset, 16);
+
+      ppc_collect_reg (regcache, (tdep->ppc_vrsave_regnum - 1),
+		       vrregs, offsets->vscr_offset, 4);
+
+      ppc_collect_reg (regcache, tdep->ppc_vrsave_regnum,
+		       vrregs, offsets->vrsave_offset, 4);
+      return;
+    }
+
+  offset = ppc_vrreg_offset (tdep, offsets, regnum);
+  if (regnum != tdep->ppc_vrsave_regnum
+      && regnum != tdep->ppc_vrsave_regnum - 1)
+    ppc_collect_reg (regcache, regnum, vrregs, offset, 16);
+  else
+    ppc_collect_reg (regcache, regnum,
+		    vrregs, offset, 4);
+}
 
 
 /* Read a LEN-byte address from debugged memory address MEMADDR. */
@@ -583,7 +762,7 @@ read_memory_addr (CORE_ADDR memaddr, int len)
 }
 
 static CORE_ADDR
-rs6000_skip_prologue (CORE_ADDR pc)
+rs6000_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   struct rs6000_framedata frame;
   CORE_ADDR limit_pc, func_addr;
@@ -608,7 +787,7 @@ rs6000_skip_prologue (CORE_ADDR pc)
   if (limit_pc == 0)
     limit_pc = pc + 100;          /* Magic.  */
 
-  pc = skip_prologue (pc, limit_pc, &frame);
+  pc = skip_prologue (gdbarch, pc, limit_pc, &frame);
   return pc;
 }
 
@@ -794,12 +973,13 @@ branch_dest (struct frame_info *frame, int opcode, int instr,
 /* Sequence of bytes for breakpoint instruction.  */
 
 const static unsigned char *
-rs6000_breakpoint_from_pc (CORE_ADDR *bp_addr, int *bp_size)
+rs6000_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *bp_addr,
+			   int *bp_size)
 {
   static unsigned char big_breakpoint[] = { 0x7d, 0x82, 0x10, 0x08 };
   static unsigned char little_breakpoint[] = { 0x08, 0x10, 0x82, 0x7d };
   *bp_size = 4;
-  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
     return big_breakpoint;
   else
     return little_breakpoint;
@@ -908,7 +1088,8 @@ rs6000_software_single_step (struct frame_info *frame)
 {
   CORE_ADDR dummy;
   int breakp_sz;
-  const gdb_byte *breakp = rs6000_breakpoint_from_pc (&dummy, &breakp_sz);
+  const gdb_byte *breakp
+    = rs6000_breakpoint_from_pc (get_frame_arch (frame), &dummy, &breakp_sz);
   int ii, insn;
   CORE_ADDR loc;
   CORE_ADDR breaks[2];
@@ -942,29 +1123,6 @@ rs6000_software_single_step (struct frame_info *frame)
   return 1;
 }
 
-
-/* return pc value after skipping a function prologue and also return
-   information about a function frame.
-
-   in struct rs6000_framedata fdata:
-   - frameless is TRUE, if function does not have a frame.
-   - nosavedpc is TRUE, if function does not save %pc value in its frame.
-   - offset is the initial size of this stack frame --- the amount by
-   which we decrement the sp to allocate the frame.
-   - saved_gpr is the number of the first saved gpr.
-   - saved_fpr is the number of the first saved fpr.
-   - saved_vr is the number of the first saved vr.
-   - saved_ev is the number of the first saved ev.
-   - alloca_reg is the number of the register used for alloca() handling.
-   Otherwise -1.
-   - gpr_offset is the offset of the first saved gpr from the previous frame.
-   - fpr_offset is the offset of the first saved fpr from the previous frame.
-   - vr_offset is the offset of the first saved vr from the previous frame.
-   - ev_offset is the offset of the first saved ev from the previous frame.
-   - lr_offset is the offset of the saved lr
-   - cr_offset is the offset of the saved cr
-   - vrsave_offset is the offset of the saved vrsave register
- */
 
 #define SIGNED_SHORT(x) 						\
   ((sizeof (short) == 2)						\
@@ -1077,8 +1235,32 @@ bl_to_blrl_insn_p (CORE_ADDR pc, int insn)
   return 0;
 }
 
+/* return pc value after skipping a function prologue and also return
+   information about a function frame.
+
+   in struct rs6000_framedata fdata:
+   - frameless is TRUE, if function does not have a frame.
+   - nosavedpc is TRUE, if function does not save %pc value in its frame.
+   - offset is the initial size of this stack frame --- the amount by
+   which we decrement the sp to allocate the frame.
+   - saved_gpr is the number of the first saved gpr.
+   - saved_fpr is the number of the first saved fpr.
+   - saved_vr is the number of the first saved vr.
+   - saved_ev is the number of the first saved ev.
+   - alloca_reg is the number of the register used for alloca() handling.
+   Otherwise -1.
+   - gpr_offset is the offset of the first saved gpr from the previous frame.
+   - fpr_offset is the offset of the first saved fpr from the previous frame.
+   - vr_offset is the offset of the first saved vr from the previous frame.
+   - ev_offset is the offset of the first saved ev from the previous frame.
+   - lr_offset is the offset of the saved lr
+   - cr_offset is the offset of the saved cr
+   - vrsave_offset is the offset of the saved vrsave register
+ */
+
 static CORE_ADDR
-skip_prologue (CORE_ADDR pc, CORE_ADDR lim_pc, struct rs6000_framedata *fdata)
+skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc, CORE_ADDR lim_pc,
+	       struct rs6000_framedata *fdata)
 {
   CORE_ADDR orig_pc = pc;
   CORE_ADDR last_prologue_pc = pc;
@@ -1099,8 +1281,8 @@ skip_prologue (CORE_ADDR pc, CORE_ADDR lim_pc, struct rs6000_framedata *fdata)
   int prev_insn_was_prologue_insn = 1;
   int num_skip_non_prologue_insns = 0;
   int r0_contains_arg = 0;
-  const struct bfd_arch_info *arch_info = gdbarch_bfd_arch_info (current_gdbarch);
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  const struct bfd_arch_info *arch_info = gdbarch_bfd_arch_info (gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   memset (fdata, 0, sizeof (struct rs6000_framedata));
   fdata->saved_gpr = -1;
@@ -1682,14 +1864,14 @@ rs6000_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 			int nargs, struct value **args, CORE_ADDR sp,
 			int struct_return, CORE_ADDR struct_addr)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int ii;
   int len = 0;
   int argno;			/* current argument number */
   int argbytes;			/* current argument byte */
   gdb_byte tmp_buffer[50];
   int f_argno = 0;		/* current floating point argno */
-  int wordsize = gdbarch_tdep (current_gdbarch)->wordsize;
+  int wordsize = gdbarch_tdep (gdbarch)->wordsize;
   CORE_ADDR func_addr = find_function_addr (function, NULL);
 
   struct value *arg = 0;
@@ -1700,7 +1882,7 @@ rs6000_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   /* The calling convention this function implements assumes the
      processor has floating-point registers.  We shouldn't be using it
      on PPC variants that lack them.  */
-  gdb_assert (ppc_floating_point_unit_p (current_gdbarch));
+  gdb_assert (ppc_floating_point_unit_p (gdbarch));
 
   /* The first eight words of ther arguments are passed in registers.
      Copy them appropriately.  */
@@ -1738,7 +1920,7 @@ rs6000_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
   for (argno = 0, argbytes = 0; argno < nargs && ii < 8; ++ii)
     {
-      int reg_size = register_size (current_gdbarch, ii + 3);
+      int reg_size = register_size (gdbarch, ii + 3);
 
       arg = args[argno];
       type = check_typedef (value_type (arg));
@@ -1785,7 +1967,7 @@ rs6000_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       else
 	{
 	  /* Argument can fit in one register.  No problem.  */
-	  int adj = gdbarch_byte_order (current_gdbarch)
+	  int adj = gdbarch_byte_order (gdbarch)
 		    == BFD_ENDIAN_BIG ? reg_size - len : 0;
 	  gdb_byte word[MAX_REGISTER_SIZE];
 
@@ -1799,7 +1981,7 @@ rs6000_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 ran_out_of_registers_for_arguments:
 
   regcache_cooked_read_unsigned (regcache,
-				 gdbarch_sp_regnum (current_gdbarch),
+				 gdbarch_sp_regnum (gdbarch),
 				 &saved_sp);
 
   /* Location for 8 parameters are always reserved.  */
@@ -1843,7 +2025,7 @@ ran_out_of_registers_for_arguments:
          else.  */
 
       regcache_raw_write_signed (regcache,
-				 gdbarch_sp_regnum (current_gdbarch), sp);
+				 gdbarch_sp_regnum (gdbarch), sp);
 
       /* If the last argument copied into the registers didn't fit there 
          completely, push the rest of it into stack.  */
@@ -1890,7 +2072,7 @@ ran_out_of_registers_for_arguments:
      Not doing this can lead to conflicts with the kernel which thinks
      that it still has control over this not-yet-allocated stack
      region.  */
-  regcache_raw_write_signed (regcache, gdbarch_sp_regnum (current_gdbarch), sp);
+  regcache_raw_write_signed (regcache, gdbarch_sp_regnum (gdbarch), sp);
 
   /* Set back chain properly.  */
   store_unsigned_integer (tmp_buffer, wordsize, saved_sp);
@@ -1917,13 +2099,13 @@ rs6000_return_value (struct gdbarch *gdbarch, struct type *valtype,
 		     struct regcache *regcache, gdb_byte *readbuf,
 		     const gdb_byte *writebuf)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   gdb_byte buf[8];
 
   /* The calling convention this function implements assumes the
      processor has floating-point registers.  We shouldn't be using it
      on PowerPC variants that lack them.  */
-  gdb_assert (ppc_floating_point_unit_p (current_gdbarch));
+  gdb_assert (ppc_floating_point_unit_p (gdbarch));
 
   /* AltiVec extension: Functions that declare a vector data type as a
      return value place that return value in VR2.  */
@@ -2124,7 +2306,8 @@ rs6000_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
 	return 0;
     }
   ii = get_frame_register_unsigned (frame, 11);	/* r11 holds destination addr   */
-  pc = read_memory_addr (ii, gdbarch_tdep (current_gdbarch)->wordsize); /* (r11) value */
+  pc = read_memory_addr (ii,
+			 gdbarch_tdep (get_frame_arch (frame))->wordsize); /* (r11) value */
   return pc;
 }
 
@@ -2170,46 +2353,6 @@ rs6000_builtin_type_vec64 (struct gdbarch *gdbarch)
   return tdep->ppc_builtin_type_vec64;
 }
 
-static struct type *
-rs6000_builtin_type_vec128 (struct gdbarch *gdbarch)
-{
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-
-  if (!tdep->ppc_builtin_type_vec128)
-    {
-      /* The type we're building is this: */
-#if 0
-      union __gdb_builtin_type_vec128
-	{
-	  int128_t uint128;
-	  float v4_float[4];
-	  int32_t v4_int32[4];
-	  int16_t v8_int16[8];
-	  int8_t v16_int8[16];
-	};
-#endif
-
-      struct type *t;
-
-      t = init_composite_type ("__ppc_builtin_type_vec128", TYPE_CODE_UNION);
-      append_composite_type_field (t, "uint128", builtin_type_int128);
-      append_composite_type_field (t, "v4_float",
-				   init_vector_type (builtin_type_float, 4));
-      append_composite_type_field (t, "v4_int32",
-				   init_vector_type (builtin_type_int32, 4));
-      append_composite_type_field (t, "v8_int16",
-				   init_vector_type (builtin_type_int16, 8));
-      append_composite_type_field (t, "v16_int8",
-				   init_vector_type (builtin_type_int8, 16));
-
-      TYPE_FLAGS (t) |= TYPE_FLAG_VECTOR;
-      TYPE_NAME (t) = "ppc_builtin_type_vec128";
-      tdep->ppc_builtin_type_vec128 = t;
-    }
-
-  return tdep->ppc_builtin_type_vec128;
-}
-
 /* Return the size of register REG when words are WORDSIZE bytes long.  If REG
    isn't available with that word size, return 0.  */
 
@@ -2219,122 +2362,102 @@ regsize (const struct reg *reg, int wordsize)
   return wordsize == 8 ? reg->sz64 : reg->sz32;
 }
 
-/* Return the name of register number N, or null if no such register exists
-   in the current architecture.  */
+/* Return the name of register number REGNO, or the empty string if it
+   is an anonymous register.  */
 
 static const char *
-rs6000_register_name (int n)
-{
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
-  const struct reg *reg = tdep->regs + n;
-
-  if (!regsize (reg, tdep->wordsize))
-    return NULL;
-  return reg->name;
-}
-
-/* Return the GDB type object for the "standard" data type
-   of data in register N.  */
-
-static struct type *
-rs6000_register_type (struct gdbarch *gdbarch, int n)
+rs6000_register_name (struct gdbarch *gdbarch, int regno)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  const struct reg *reg = tdep->regs + n;
 
-  if (reg->fpr)
-    return builtin_type_double;
-  else
+  /* The upper half "registers" have names in the XML description,
+     but we present only the low GPRs and the full 64-bit registers
+     to the user.  */
+  if (tdep->ppc_ev0_upper_regnum >= 0
+      && tdep->ppc_ev0_upper_regnum <= regno
+      && regno < tdep->ppc_ev0_upper_regnum + ppc_num_gprs)
+    return "";
+
+  /* Check if the SPE pseudo registers are available.  */
+  if (IS_SPE_PSEUDOREG (tdep, regno))
     {
-      int size = regsize (reg, tdep->wordsize);
-      switch (size)
-	{
-	case 0:
-	  return builtin_type_int0;
-	case 4:
-	  return builtin_type_uint32;
-	case 8:
-	  if (tdep->ppc_ev0_regnum <= n && n <= tdep->ppc_ev31_regnum)
-	    return rs6000_builtin_type_vec64 (gdbarch);
-	  else
-	    return builtin_type_uint64;
-	  break;
-	case 16:
-	  return rs6000_builtin_type_vec128 (gdbarch);
-	  break;
-	default:
-	  internal_error (__FILE__, __LINE__, _("Register %d size %d unknown"),
-			  n, size);
-	}
+      static const char *const spe_regnames[] = {
+	"ev0", "ev1", "ev2", "ev3", "ev4", "ev5", "ev6", "ev7",
+	"ev8", "ev9", "ev10", "ev11", "ev12", "ev13", "ev14", "ev15",
+	"ev16", "ev17", "ev18", "ev19", "ev20", "ev21", "ev22", "ev23",
+	"ev24", "ev25", "ev26", "ev27", "ev28", "ev29", "ev30", "ev31",
+      };
+      return spe_regnames[regno - tdep->ppc_ev0_regnum];
     }
+
+  /* Check if the decimal128 pseudo-registers are available.  */
+  if (IS_DFP_PSEUDOREG (tdep, regno))
+    {
+      static const char *const dfp128_regnames[] = {
+	"dl0", "dl1", "dl2", "dl3",
+	"dl4", "dl5", "dl6", "dl7",
+	"dl8", "dl9", "dl10", "dl11",
+	"dl12", "dl13", "dl14", "dl15"
+      };
+      return dfp128_regnames[regno - tdep->ppc_dl0_regnum];
+    }
+
+  return tdesc_register_name (gdbarch, regno);
+}
+
+/* Return the GDB type object for the "standard" data type of data in
+   register N.  */
+
+static struct type *
+rs6000_pseudo_register_type (struct gdbarch *gdbarch, int regnum)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
+  /* These are the only pseudo-registers we support.  */
+  gdb_assert (IS_SPE_PSEUDOREG (tdep, regnum)
+	      || IS_DFP_PSEUDOREG (tdep, regnum));
+
+  /* These are the e500 pseudo-registers.  */
+  if (IS_SPE_PSEUDOREG (tdep, regnum))
+    return rs6000_builtin_type_vec64 (gdbarch);
+  else
+    /* Could only be the ppc decimal128 pseudo-registers.  */
+    return builtin_type (gdbarch)->builtin_declong;
 }
 
 /* Is REGNUM a member of REGGROUP?  */
 static int
-rs6000_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
-			    struct reggroup *group)
+rs6000_pseudo_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
+				   struct reggroup *group)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  int float_p;
-  int vector_p;
-  int general_p;
 
-  if (gdbarch_register_name (current_gdbarch, regnum) == NULL
-      || *gdbarch_register_name (current_gdbarch, regnum) == '\0')
-    return 0;
-  if (group == all_reggroup)
-    return 1;
+  /* These are the only pseudo-registers we support.  */
+  gdb_assert (IS_SPE_PSEUDOREG (tdep, regnum)
+	      || IS_DFP_PSEUDOREG (tdep, regnum));
 
-  float_p = (regnum == tdep->ppc_fpscr_regnum
-	     || (regnum >= tdep->ppc_fp0_regnum
-		 && regnum < tdep->ppc_fp0_regnum + 32));
-  if (group == float_reggroup)
-    return float_p;
-
-  vector_p = ((tdep->ppc_vr0_regnum >= 0
-	       && regnum >= tdep->ppc_vr0_regnum
-	       && regnum < tdep->ppc_vr0_regnum + 32)
-	      || (tdep->ppc_ev0_regnum >= 0
-		  && regnum >= tdep->ppc_ev0_regnum
-		  && regnum < tdep->ppc_ev0_regnum + 32)
-	      || regnum == tdep->ppc_vrsave_regnum - 1 /* vscr */
-	      || regnum == tdep->ppc_vrsave_regnum
-	      || regnum == tdep->ppc_acc_regnum
-	      || regnum == tdep->ppc_spefscr_regnum);
-  if (group == vector_reggroup)
-    return vector_p;
-
-  /* Note that PS aka MSR isn't included - it's a system register (and
-     besides, due to GCC's CFI foobar you do not want to restore
-     it).  */
-  general_p = ((regnum >= tdep->ppc_gp0_regnum
-		&& regnum < tdep->ppc_gp0_regnum + 32)
-	       || regnum == tdep->ppc_toc_regnum
-	       || regnum == tdep->ppc_cr_regnum
-	       || regnum == tdep->ppc_lr_regnum
-	       || regnum == tdep->ppc_ctr_regnum
-	       || regnum == tdep->ppc_xer_regnum
-	       || regnum == gdbarch_pc_regnum (current_gdbarch));
-  if (group == general_reggroup)
-    return general_p;
-
-  if (group == save_reggroup || group == restore_reggroup)
-    return general_p || vector_p || float_p;
-
-  return 0;   
+  /* These are the e500 pseudo-registers.  */
+  if (IS_SPE_PSEUDOREG (tdep, regnum))
+    return group == all_reggroup || group == vector_reggroup;
+  else
+    /* Could only be the ppc decimal128 pseudo-registers.  */
+    return group == all_reggroup || group == float_reggroup;
 }
 
 /* The register format for RS/6000 floating point registers is always
    double, we need a conversion if the memory format is float.  */
 
 static int
-rs6000_convert_register_p (int regnum, struct type *type)
+rs6000_convert_register_p (struct gdbarch *gdbarch, int regnum,
+			   struct type *type)
 {
-  const struct reg *reg = gdbarch_tdep (current_gdbarch)->regs + regnum;
-  
-  return (reg->fpr
-          && TYPE_CODE (type) == TYPE_CODE_FLT
-          && TYPE_LENGTH (type) != TYPE_LENGTH (builtin_type_double));
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
+  return (tdep->ppc_fp0_regnum >= 0
+	  && regnum >= tdep->ppc_fp0_regnum
+	  && regnum < tdep->ppc_fp0_regnum + ppc_num_fprs
+	  && TYPE_CODE (type) == TYPE_CODE_FLT
+	  && TYPE_LENGTH (type) != TYPE_LENGTH (builtin_type_double));
 }
 
 static void
@@ -2343,10 +2466,8 @@ rs6000_register_to_value (struct frame_info *frame,
                           struct type *type,
                           gdb_byte *to)
 {
-  const struct reg *reg = gdbarch_tdep (current_gdbarch)->regs + regnum;
   gdb_byte from[MAX_REGISTER_SIZE];
   
-  gdb_assert (reg->fpr);
   gdb_assert (TYPE_CODE (type) == TYPE_CODE_FLT);
 
   get_frame_register (frame, regnum, from);
@@ -2359,10 +2480,8 @@ rs6000_value_to_register (struct frame_info *frame,
                           struct type *type,
                           const gdb_byte *from)
 {
-  const struct reg *reg = gdbarch_tdep (current_gdbarch)->regs + regnum;
   gdb_byte to[MAX_REGISTER_SIZE];
 
-  gdb_assert (reg->fpr);
   gdb_assert (TYPE_CODE (type) == TYPE_CODE_FLT);
 
   convert_typed_floating (from, type, to, builtin_type_double);
@@ -2403,12 +2522,11 @@ e500_move_ev_register (void (*move) (struct regcache *regcache,
   int reg_index;
   gdb_byte *byte_buffer = buffer;
 
-  gdb_assert (tdep->ppc_ev0_regnum <= ev_reg
-              && ev_reg < tdep->ppc_ev0_regnum + ppc_num_gprs);
+  gdb_assert (IS_SPE_PSEUDOREG (tdep, ev_reg));
 
   reg_index = ev_reg - tdep->ppc_ev0_regnum;
 
-  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (arch) == BFD_ENDIAN_BIG)
     {
       move (regcache, tdep->ppc_ev0_upper_regnum + reg_index, byte_buffer);
       move (regcache, tdep->ppc_gp0_regnum + reg_index, byte_buffer + 4);
@@ -2424,69 +2542,117 @@ static void
 e500_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
 			   int reg_nr, gdb_byte *buffer)
 {
-  struct gdbarch *regcache_arch = get_regcache_arch (regcache);
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch); 
-
-  gdb_assert (regcache_arch == gdbarch);
- 
-  if (tdep->ppc_ev0_regnum <= reg_nr
-      && reg_nr < tdep->ppc_ev0_regnum + ppc_num_gprs)
-    e500_move_ev_register (regcache_raw_read, regcache, reg_nr, buffer);
-  else
-    internal_error (__FILE__, __LINE__,
-                    _("e500_pseudo_register_read: "
-                    "called on unexpected register '%s' (%d)"),
-                    gdbarch_register_name (gdbarch, reg_nr), reg_nr);
+  e500_move_ev_register (regcache_raw_read, regcache, reg_nr, buffer);
 }
 
 static void
 e500_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
 			    int reg_nr, const gdb_byte *buffer)
 {
+  e500_move_ev_register ((void (*) (struct regcache *, int, gdb_byte *))
+			 regcache_raw_write,
+			 regcache, reg_nr, (gdb_byte *) buffer);
+}
+
+/* Read method for PPC pseudo-registers. Currently this is handling the
+   16 decimal128 registers that map into 16 pairs of FP registers.  */
+static void
+ppc_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
+			   int reg_nr, gdb_byte *buffer)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int reg_index = reg_nr - tdep->ppc_dl0_regnum;
+
+  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
+    {
+      /* Read two FP registers to form a whole dl register.  */
+      regcache_raw_read (regcache, tdep->ppc_fp0_regnum +
+			 2 * reg_index, buffer);
+      regcache_raw_read (regcache, tdep->ppc_fp0_regnum +
+			 2 * reg_index + 1, buffer + 8);
+    }
+  else
+    {
+      regcache_raw_read (regcache, tdep->ppc_fp0_regnum +
+			 2 * reg_index + 1, buffer + 8);
+      regcache_raw_read (regcache, tdep->ppc_fp0_regnum +
+			 2 * reg_index, buffer);
+    }
+}
+
+/* Write method for PPC pseudo-registers. Currently this is handling the
+   16 decimal128 registers that map into 16 pairs of FP registers.  */
+static void
+ppc_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
+			    int reg_nr, const gdb_byte *buffer)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  int reg_index = reg_nr - tdep->ppc_dl0_regnum;
+
+  if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
+    {
+      /* Write each half of the dl register into a separate
+      FP register.  */
+      regcache_raw_write (regcache, tdep->ppc_fp0_regnum +
+			  2 * reg_index, buffer);
+      regcache_raw_write (regcache, tdep->ppc_fp0_regnum +
+			  2 * reg_index + 1, buffer + 8);
+    }
+  else
+    {
+      regcache_raw_write (regcache, tdep->ppc_fp0_regnum +
+			  2 * reg_index + 1, buffer + 8);
+      regcache_raw_write (regcache, tdep->ppc_fp0_regnum +
+			  2 * reg_index, buffer);
+    }
+}
+
+static void
+rs6000_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
+			     int reg_nr, gdb_byte *buffer)
+{
   struct gdbarch *regcache_arch = get_regcache_arch (regcache);
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch); 
 
   gdb_assert (regcache_arch == gdbarch);
- 
-  if (tdep->ppc_ev0_regnum <= reg_nr
-      && reg_nr < tdep->ppc_ev0_regnum + ppc_num_gprs)
-    e500_move_ev_register ((void (*) (struct regcache *, int, gdb_byte *))
-                           regcache_raw_write,
-                           regcache, reg_nr, (gdb_byte *) buffer);
+
+  if (IS_SPE_PSEUDOREG (tdep, reg_nr))
+    e500_pseudo_register_read (gdbarch, regcache, reg_nr, buffer);
+  else if (IS_DFP_PSEUDOREG (tdep, reg_nr))
+    ppc_pseudo_register_read (gdbarch, regcache, reg_nr, buffer);
   else
     internal_error (__FILE__, __LINE__,
-                    _("e500_pseudo_register_read: "
-                    "called on unexpected register '%s' (%d)"),
-                    gdbarch_register_name (gdbarch, reg_nr), reg_nr);
+		    _("rs6000_pseudo_register_read: "
+		    "called on unexpected register '%s' (%d)"),
+		    gdbarch_register_name (gdbarch, reg_nr), reg_nr);
 }
 
-/* The E500 needs a custom reggroup function: it has anonymous raw
-   registers, and default_register_reggroup_p assumes that anonymous
-   registers are not members of any reggroup.  */
-static int
-e500_register_reggroup_p (struct gdbarch *gdbarch,
-                          int regnum,
-                          struct reggroup *group)
+static void
+rs6000_pseudo_register_write (struct gdbarch *gdbarch,
+			      struct regcache *regcache,
+			      int reg_nr, const gdb_byte *buffer)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  struct gdbarch *regcache_arch = get_regcache_arch (regcache);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch); 
 
-  /* The save and restore register groups need to include the
-     upper-half registers, even though they're anonymous.  */
-  if ((group == save_reggroup
-       || group == restore_reggroup)
-      && (tdep->ppc_ev0_upper_regnum <= regnum
-          && regnum < tdep->ppc_ev0_upper_regnum + ppc_num_gprs))
-    return 1;
+  gdb_assert (regcache_arch == gdbarch);
 
-  /* In all other regards, the default reggroup definition is fine.  */
-  return default_register_reggroup_p (gdbarch, regnum, group);
+  if (IS_SPE_PSEUDOREG (tdep, reg_nr))
+    e500_pseudo_register_write (gdbarch, regcache, reg_nr, buffer);
+  else if (IS_DFP_PSEUDOREG (tdep, reg_nr))
+    ppc_pseudo_register_write (gdbarch, regcache, reg_nr, buffer);
+  else
+    internal_error (__FILE__, __LINE__,
+		    _("rs6000_pseudo_register_write: "
+		    "called on unexpected register '%s' (%d)"),
+		    gdbarch_register_name (gdbarch, reg_nr), reg_nr);
 }
 
 /* Convert a DBX STABS register number to a GDB register number.  */
 static int
-rs6000_stab_reg_to_regnum (int num)
+rs6000_stab_reg_to_regnum (struct gdbarch *gdbarch, int num)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   if (0 <= num && num <= 31)
     return tdep->ppc_gp0_regnum + num;
@@ -2526,9 +2692,9 @@ rs6000_stab_reg_to_regnum (int num)
 
 /* Convert a Dwarf 2 register number to a GDB register number.  */
 static int
-rs6000_dwarf2_reg_to_regnum (int num)
+rs6000_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int num)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   if (0 <= num && num <= 31)
     return tdep->ppc_gp0_regnum + num;
@@ -2668,370 +2834,6 @@ rs6000_convert_from_func_ptr_addr (struct gdbarch *gdbarch,
 
 /* Handling the various POWER/PowerPC variants.  */
 
-
-/* The arrays here called registers_MUMBLE hold information about available
-   registers.
-
-   For each family of PPC variants, I've tried to isolate out the
-   common registers and put them up front, so that as long as you get
-   the general family right, GDB will correctly identify the registers
-   common to that family.  The common register sets are:
-
-   For the 60x family: hid0 hid1 iabr dabr pir
-
-   For the 505 and 860 family: eie eid nri
-
-   For the 403 and 403GC: icdbdr esr dear evpr cdbcr tsr tcr pit tbhi
-   tblo srr2 srr3 dbsr dbcr iac1 iac2 dac1 dac2 dccr iccr pbl1
-   pbu1 pbl2 pbu2
-
-   Most of these register groups aren't anything formal.  I arrived at
-   them by looking at the registers that occurred in more than one
-   processor.
-   
-   Note: kevinb/2002-04-30: Support for the fpscr register was added
-   during April, 2002.  Slot 70 is being used for PowerPC and slot 71
-   for Power.  For PowerPC, slot 70 was unused and was already in the
-   PPC_UISA_SPRS which is ideally where fpscr should go.  For Power,
-   slot 70 was being used for "mq", so the next available slot (71)
-   was chosen.  It would have been nice to be able to make the
-   register numbers the same across processor cores, but this wasn't
-   possible without either 1) renumbering some registers for some
-   processors or 2) assigning fpscr to a really high slot that's
-   larger than any current register number.  Doing (1) is bad because
-   existing stubs would break.  Doing (2) is undesirable because it
-   would introduce a really large gap between fpscr and the rest of
-   the registers for most processors.  */
-
-/* Convenience macros for populating register arrays.  */
-
-/* Within another macro, convert S to a string.  */
-
-#define STR(s)	#s
-
-/* Return a struct reg defining register NAME that's 32 bits on 32-bit systems
-   and 64 bits on 64-bit systems.  */
-#define R(name)		{ STR(name), 4, 8, 0, 0, -1 }
-
-/* Return a struct reg defining register NAME that's 32 bits on all
-   systems.  */
-#define R4(name)	{ STR(name), 4, 4, 0, 0, -1 }
-
-/* Return a struct reg defining register NAME that's 64 bits on all
-   systems.  */
-#define R8(name)	{ STR(name), 8, 8, 0, 0, -1 }
-
-/* Return a struct reg defining register NAME that's 128 bits on all
-   systems.  */
-#define R16(name)       { STR(name), 16, 16, 0, 0, -1 }
-
-/* Return a struct reg defining floating-point register NAME.  */
-#define F(name)		{ STR(name), 8, 8, 1, 0, -1 }
-
-/* Return a struct reg defining a pseudo register NAME that is 64 bits
-   long on all systems.  */
-#define P8(name)	{ STR(name), 8, 8, 0, 1, -1 }
-
-/* Return a struct reg defining register NAME that's 32 bits on 32-bit
-   systems and that doesn't exist on 64-bit systems.  */
-#define R32(name)	{ STR(name), 4, 0, 0, 0, -1 }
-
-/* Return a struct reg defining register NAME that's 64 bits on 64-bit
-   systems and that doesn't exist on 32-bit systems.  */
-#define R64(name)	{ STR(name), 0, 8, 0, 0, -1 }
-
-/* Return a struct reg placeholder for a register that doesn't exist.  */
-#define R0		{ 0, 0, 0, 0, 0, -1 }
-
-/* Return a struct reg defining an anonymous raw register that's 32
-   bits on all systems.  */
-#define A4              { 0, 4, 4, 0, 0, -1 }
-
-/* Return a struct reg defining an SPR named NAME that is 32 bits on
-   32-bit systems and 64 bits on 64-bit systems.  */
-#define S(name)         { STR(name), 4, 8, 0, 0, ppc_spr_ ## name }
-  
-/* Return a struct reg defining an SPR named NAME that is 32 bits on
-   all systems.  */
-#define S4(name)        { STR(name), 4, 4, 0, 0, ppc_spr_ ## name }
-  
-/* Return a struct reg defining an SPR named NAME that is 32 bits on
-   all systems, and whose SPR number is NUMBER.  */
-#define SN4(name, number) { STR(name), 4, 4, 0, 0, (number) }
-  
-/* Return a struct reg defining an SPR named NAME that's 64 bits on
-   64-bit systems and that doesn't exist on 32-bit systems.  */
-#define S64(name)       { STR(name), 0, 8, 0, 0, ppc_spr_ ## name }
-  
-/* UISA registers common across all architectures, including POWER.  */
-
-#define COMMON_UISA_REGS \
-  /*  0 */ R(r0), R(r1), R(r2), R(r3), R(r4), R(r5), R(r6), R(r7),  \
-  /*  8 */ R(r8), R(r9), R(r10),R(r11),R(r12),R(r13),R(r14),R(r15), \
-  /* 16 */ R(r16),R(r17),R(r18),R(r19),R(r20),R(r21),R(r22),R(r23), \
-  /* 24 */ R(r24),R(r25),R(r26),R(r27),R(r28),R(r29),R(r30),R(r31), \
-  /* 32 */ F(f0), F(f1), F(f2), F(f3), F(f4), F(f5), F(f6), F(f7),  \
-  /* 40 */ F(f8), F(f9), F(f10),F(f11),F(f12),F(f13),F(f14),F(f15), \
-  /* 48 */ F(f16),F(f17),F(f18),F(f19),F(f20),F(f21),F(f22),F(f23), \
-  /* 56 */ F(f24),F(f25),F(f26),F(f27),F(f28),F(f29),F(f30),F(f31), \
-  /* 64 */ R(pc), R(ps)
-
-/* UISA-level SPRs for PowerPC.  */
-#define PPC_UISA_SPRS \
-  /* 66 */ R4(cr),  S(lr), S(ctr), S4(xer), R4(fpscr)
-
-/* UISA-level SPRs for PowerPC without floating point support.  */
-#define PPC_UISA_NOFP_SPRS \
-  /* 66 */ R4(cr),  S(lr), S(ctr), S4(xer), R0
-
-/* Segment registers, for PowerPC.  */
-#define PPC_SEGMENT_REGS \
-  /* 71 */ R32(sr0),  R32(sr1),  R32(sr2),  R32(sr3),  \
-  /* 75 */ R32(sr4),  R32(sr5),  R32(sr6),  R32(sr7),  \
-  /* 79 */ R32(sr8),  R32(sr9),  R32(sr10), R32(sr11), \
-  /* 83 */ R32(sr12), R32(sr13), R32(sr14), R32(sr15)
-
-/* OEA SPRs for PowerPC.  */
-#define PPC_OEA_SPRS \
-  /*  87 */ S4(pvr), \
-  /*  88 */ S(ibat0u), S(ibat0l), S(ibat1u), S(ibat1l), \
-  /*  92 */ S(ibat2u), S(ibat2l), S(ibat3u), S(ibat3l), \
-  /*  96 */ S(dbat0u), S(dbat0l), S(dbat1u), S(dbat1l), \
-  /* 100 */ S(dbat2u), S(dbat2l), S(dbat3u), S(dbat3l), \
-  /* 104 */ S(sdr1),   S64(asr),  S(dar),    S4(dsisr), \
-  /* 108 */ S(sprg0),  S(sprg1),  S(sprg2),  S(sprg3),  \
-  /* 112 */ S(srr0),   S(srr1),   S(tbl),    S(tbu),    \
-  /* 116 */ S4(dec),   S(dabr),   S4(ear)
-
-/* AltiVec registers.  */
-#define PPC_ALTIVEC_REGS \
-  /*119*/R16(vr0), R16(vr1), R16(vr2), R16(vr3), R16(vr4), R16(vr5), R16(vr6), R16(vr7),  \
-  /*127*/R16(vr8), R16(vr9), R16(vr10),R16(vr11),R16(vr12),R16(vr13),R16(vr14),R16(vr15), \
-  /*135*/R16(vr16),R16(vr17),R16(vr18),R16(vr19),R16(vr20),R16(vr21),R16(vr22),R16(vr23), \
-  /*143*/R16(vr24),R16(vr25),R16(vr26),R16(vr27),R16(vr28),R16(vr29),R16(vr30),R16(vr31), \
-  /*151*/R4(vscr), R4(vrsave)
-
-
-/* On machines supporting the SPE APU, the general-purpose registers
-   are 64 bits long.  There are SIMD vector instructions to treat them
-   as pairs of floats, but the rest of the instruction set treats them
-   as 32-bit registers, and only operates on their lower halves.
-
-   In the GDB regcache, we treat their high and low halves as separate
-   registers.  The low halves we present as the general-purpose
-   registers, and then we have pseudo-registers that stitch together
-   the upper and lower halves and present them as pseudo-registers.  */
-
-/* SPE GPR lower halves --- raw registers.  */
-#define PPC_SPE_GP_REGS \
-  /*  0 */ R4(r0), R4(r1), R4(r2), R4(r3), R4(r4), R4(r5), R4(r6), R4(r7),  \
-  /*  8 */ R4(r8), R4(r9), R4(r10),R4(r11),R4(r12),R4(r13),R4(r14),R4(r15), \
-  /* 16 */ R4(r16),R4(r17),R4(r18),R4(r19),R4(r20),R4(r21),R4(r22),R4(r23), \
-  /* 24 */ R4(r24),R4(r25),R4(r26),R4(r27),R4(r28),R4(r29),R4(r30),R4(r31)
-
-/* SPE GPR upper halves --- anonymous raw registers.  */
-#define PPC_SPE_UPPER_GP_REGS                   \
-  /*  0 */ A4, A4, A4, A4, A4, A4, A4, A4,      \
-  /*  8 */ A4, A4, A4, A4, A4, A4, A4, A4,      \
-  /* 16 */ A4, A4, A4, A4, A4, A4, A4, A4,      \
-  /* 24 */ A4, A4, A4, A4, A4, A4, A4, A4
-
-/* SPE GPR vector registers --- pseudo registers based on underlying
-   gprs and the anonymous upper half raw registers.  */
-#define PPC_EV_PSEUDO_REGS \
-/* 0*/P8(ev0), P8(ev1), P8(ev2), P8(ev3), P8(ev4), P8(ev5), P8(ev6), P8(ev7), \
-/* 8*/P8(ev8), P8(ev9), P8(ev10),P8(ev11),P8(ev12),P8(ev13),P8(ev14),P8(ev15),\
-/*16*/P8(ev16),P8(ev17),P8(ev18),P8(ev19),P8(ev20),P8(ev21),P8(ev22),P8(ev23),\
-/*24*/P8(ev24),P8(ev25),P8(ev26),P8(ev27),P8(ev28),P8(ev29),P8(ev30),P8(ev31)
-
-/* IBM POWER (pre-PowerPC) architecture, user-level view.  We only cover
-   user-level SPR's.  */
-static const struct reg registers_power[] =
-{
-  COMMON_UISA_REGS,
-  /* 66 */ R4(cnd), S(lr), S(cnt), S4(xer), S4(mq),
-  /* 71 */ R4(fpscr)
-};
-
-/* PowerPC UISA - a PPC processor as viewed by user-level code.  A UISA-only
-   view of the PowerPC.  */
-static const struct reg registers_powerpc[] =
-{
-  COMMON_UISA_REGS,
-  PPC_UISA_SPRS,
-  PPC_ALTIVEC_REGS
-};
-
-/* IBM PowerPC 403.
-
-   Some notes about the "tcr" special-purpose register:
-   - On the 403 and 403GC, SPR 986 is named "tcr", and it controls the
-     403's programmable interval timer, fixed interval timer, and
-     watchdog timer.
-   - On the 602, SPR 984 is named "tcr", and it controls the 602's
-     watchdog timer, and nothing else.
-
-   Some of the fields are similar between the two, but they're not
-   compatible with each other.  Since the two variants have different
-   registers, with different numbers, but the same name, we can't
-   splice the register name to get the SPR number.  */
-static const struct reg registers_403[] =
-{
-  COMMON_UISA_REGS,
-  PPC_UISA_SPRS,
-  PPC_SEGMENT_REGS,
-  PPC_OEA_SPRS,
-  /* 119 */ S(icdbdr), S(esr),  S(dear), S(evpr),
-  /* 123 */ S(cdbcr),  S(tsr),  SN4(tcr, ppc_spr_403_tcr), S(pit),
-  /* 127 */ S(tbhi),   S(tblo), S(srr2), S(srr3),
-  /* 131 */ S(dbsr),   S(dbcr), S(iac1), S(iac2),
-  /* 135 */ S(dac1),   S(dac2), S(dccr), S(iccr),
-  /* 139 */ S(pbl1),   S(pbu1), S(pbl2), S(pbu2)
-};
-
-/* IBM PowerPC 403GC.
-   See the comments about 'tcr' for the 403, above.  */
-static const struct reg registers_403GC[] =
-{
-  COMMON_UISA_REGS,
-  PPC_UISA_SPRS,
-  PPC_SEGMENT_REGS,
-  PPC_OEA_SPRS,
-  /* 119 */ S(icdbdr), S(esr),  S(dear), S(evpr),
-  /* 123 */ S(cdbcr),  S(tsr),  SN4(tcr, ppc_spr_403_tcr), S(pit),
-  /* 127 */ S(tbhi),   S(tblo), S(srr2), S(srr3),
-  /* 131 */ S(dbsr),   S(dbcr), S(iac1), S(iac2),
-  /* 135 */ S(dac1),   S(dac2), S(dccr), S(iccr),
-  /* 139 */ S(pbl1),   S(pbu1), S(pbl2), S(pbu2),
-  /* 143 */ S(zpr),    S(pid),  S(sgr),  S(dcwr),
-  /* 147 */ S(tbhu),   S(tblu)
-};
-
-/* Motorola PowerPC 505.  */
-static const struct reg registers_505[] =
-{
-  COMMON_UISA_REGS,
-  PPC_UISA_SPRS,
-  PPC_SEGMENT_REGS,
-  PPC_OEA_SPRS,
-  /* 119 */ S(eie), S(eid), S(nri)
-};
-
-/* Motorola PowerPC 860 or 850.  */
-static const struct reg registers_860[] =
-{
-  COMMON_UISA_REGS,
-  PPC_UISA_SPRS,
-  PPC_SEGMENT_REGS,
-  PPC_OEA_SPRS,
-  /* 119 */ S(eie), S(eid), S(nri), S(cmpa),
-  /* 123 */ S(cmpb), S(cmpc), S(cmpd), S(icr),
-  /* 127 */ S(der), S(counta), S(countb), S(cmpe),
-  /* 131 */ S(cmpf), S(cmpg), S(cmph), S(lctrl1),
-  /* 135 */ S(lctrl2), S(ictrl), S(bar), S(ic_cst),
-  /* 139 */ S(ic_adr), S(ic_dat), S(dc_cst), S(dc_adr),
-  /* 143 */ S(dc_dat), S(dpdr), S(dpir), S(immr),
-  /* 147 */ S(mi_ctr), S(mi_ap), S(mi_epn), S(mi_twc),
-  /* 151 */ S(mi_rpn), S(md_ctr), S(m_casid), S(md_ap),
-  /* 155 */ S(md_epn), S(m_twb), S(md_twc), S(md_rpn),
-  /* 159 */ S(m_tw), S(mi_dbcam), S(mi_dbram0), S(mi_dbram1),
-  /* 163 */ S(md_dbcam), S(md_dbram0), S(md_dbram1)
-};
-
-/* Motorola PowerPC 601.  Note that the 601 has different register numbers
-   for reading and writing RTCU and RTCL.  However, how one reads and writes a
-   register is the stub's problem.  */
-static const struct reg registers_601[] =
-{
-  COMMON_UISA_REGS,
-  PPC_UISA_SPRS,
-  PPC_SEGMENT_REGS,
-  PPC_OEA_SPRS,
-  /* 119 */ S(hid0), S(hid1), S(iabr), S(dabr),
-  /* 123 */ S(pir), S(mq), S(rtcu), S(rtcl)
-};
-
-/* Motorola PowerPC 602.
-   See the notes under the 403 about 'tcr'.  */
-static const struct reg registers_602[] =
-{
-  COMMON_UISA_REGS,
-  PPC_UISA_SPRS,
-  PPC_SEGMENT_REGS,
-  PPC_OEA_SPRS,
-  /* 119 */ S(hid0), S(hid1), S(iabr), R0,
-  /* 123 */ R0, SN4(tcr, ppc_spr_602_tcr), S(ibr), S(esasrr),
-  /* 127 */ S(sebr), S(ser), S(sp), S(lt)
-};
-
-/* Motorola/IBM PowerPC 603 or 603e.  */
-static const struct reg registers_603[] =
-{
-  COMMON_UISA_REGS,
-  PPC_UISA_SPRS,
-  PPC_SEGMENT_REGS,
-  PPC_OEA_SPRS,
-  /* 119 */ S(hid0), S(hid1), S(iabr), R0,
-  /* 123 */ R0, S(dmiss), S(dcmp), S(hash1),
-  /* 127 */ S(hash2), S(imiss), S(icmp), S(rpa)
-};
-
-/* Motorola PowerPC 604 or 604e.  */
-static const struct reg registers_604[] =
-{
-  COMMON_UISA_REGS,
-  PPC_UISA_SPRS,
-  PPC_SEGMENT_REGS,
-  PPC_OEA_SPRS,
-  /* 119 */ S(hid0), S(hid1), S(iabr), S(dabr),
-  /* 123 */ S(pir), S(mmcr0), S(pmc1), S(pmc2),
-  /* 127 */ S(sia), S(sda)
-};
-
-/* Motorola/IBM PowerPC 750 or 740.  */
-static const struct reg registers_750[] =
-{
-  COMMON_UISA_REGS,
-  PPC_UISA_SPRS,
-  PPC_SEGMENT_REGS,
-  PPC_OEA_SPRS,
-  /* 119 */ S(hid0), S(hid1), S(iabr), S(dabr),
-  /* 123 */ R0, S(ummcr0), S(upmc1), S(upmc2),
-  /* 127 */ S(usia), S(ummcr1), S(upmc3), S(upmc4),
-  /* 131 */ S(mmcr0), S(pmc1), S(pmc2), S(sia),
-  /* 135 */ S(mmcr1), S(pmc3), S(pmc4), S(l2cr),
-  /* 139 */ S(ictc), S(thrm1), S(thrm2), S(thrm3)
-};
-
-
-/* Motorola PowerPC 7400.  */
-static const struct reg registers_7400[] =
-{
-  /* gpr0-gpr31, fpr0-fpr31 */
-  COMMON_UISA_REGS,
-  /* cr, lr, ctr, xer, fpscr */
-  PPC_UISA_SPRS,
-  /* sr0-sr15 */
-  PPC_SEGMENT_REGS,
-  PPC_OEA_SPRS,
-  /* vr0-vr31, vrsave, vscr */
-  PPC_ALTIVEC_REGS
-  /* FIXME? Add more registers? */
-};
-
-/* Motorola e500.  */
-static const struct reg registers_e500[] =
-{
-  /*   0 ..  31 */ PPC_SPE_GP_REGS,
-  /*  32 ..  63 */ PPC_SPE_UPPER_GP_REGS,
-  /*  64 ..  65 */ R(pc), R(ps),
-  /*  66 ..  70 */ PPC_UISA_NOFP_SPRS,
-  /*  71 ..  72 */ R8(acc), S4(spefscr),
-  /* NOTE: Add new registers here the end of the raw register
-     list and just before the first pseudo register.  */
-  /*  73 .. 104 */ PPC_EV_PSEUDO_REGS
-};
-
 /* Information about a particular processor variant.  */
 
 struct variant
@@ -3048,150 +2850,63 @@ struct variant
     /* bfd_arch_info.mach corresponding to variant.  */
     unsigned long mach;
 
-    /* Number of real registers.  */
-    int nregs;
-
-    /* Number of pseudo registers.  */
-    int npregs;
-
-    /* Number of total registers (the sum of nregs and npregs).  */
-    int num_tot_regs;
-
-    /* Table of register names; registers[R] is the name of the register
-       number R.  */
-    const struct reg *regs;
+    /* Target description for this variant.  */
+    struct target_desc **tdesc;
   };
-
-#define tot_num_registers(list) (sizeof (list) / sizeof((list)[0]))
-
-static int
-num_registers (const struct reg *reg_list, int num_tot_regs)
-{
-  int i;
-  int nregs = 0;
-
-  for (i = 0; i < num_tot_regs; i++)
-    if (!reg_list[i].pseudo)
-      nregs++;
-       
-  return nregs;
-}
-
-static int
-num_pseudo_registers (const struct reg *reg_list, int num_tot_regs)
-{
-  int i;
-  int npregs = 0;
-
-  for (i = 0; i < num_tot_regs; i++)
-    if (reg_list[i].pseudo)
-      npregs ++; 
-
-  return npregs;
-}
-
-/* Information in this table comes from the following web sites:
-   IBM:       http://www.chips.ibm.com:80/products/embedded/
-   Motorola:  http://www.mot.com/SPS/PowerPC/
-
-   I'm sure I've got some of the variant descriptions not quite right.
-   Please report any inaccuracies you find to GDB's maintainer.
-
-   If you add entries to this table, please be sure to allow the new
-   value as an argument to the --with-cpu flag, in configure.in.  */
 
 static struct variant variants[] =
 {
-
   {"powerpc", "PowerPC user-level", bfd_arch_powerpc,
-   bfd_mach_ppc, -1, -1, tot_num_registers (registers_powerpc),
-   registers_powerpc},
+   bfd_mach_ppc, &tdesc_powerpc_32},
   {"power", "POWER user-level", bfd_arch_rs6000,
-   bfd_mach_rs6k, -1, -1, tot_num_registers (registers_power),
-   registers_power},
+   bfd_mach_rs6k, &tdesc_rs6000},
   {"403", "IBM PowerPC 403", bfd_arch_powerpc,
-   bfd_mach_ppc_403, -1, -1, tot_num_registers (registers_403),
-   registers_403},
+   bfd_mach_ppc_403, &tdesc_powerpc_403},
   {"601", "Motorola PowerPC 601", bfd_arch_powerpc,
-   bfd_mach_ppc_601, -1, -1, tot_num_registers (registers_601),
-   registers_601},
+   bfd_mach_ppc_601, &tdesc_powerpc_601},
   {"602", "Motorola PowerPC 602", bfd_arch_powerpc,
-   bfd_mach_ppc_602, -1, -1, tot_num_registers (registers_602),
-   registers_602},
+   bfd_mach_ppc_602, &tdesc_powerpc_602},
   {"603", "Motorola/IBM PowerPC 603 or 603e", bfd_arch_powerpc,
-   bfd_mach_ppc_603, -1, -1, tot_num_registers (registers_603),
-   registers_603},
+   bfd_mach_ppc_603, &tdesc_powerpc_603},
   {"604", "Motorola PowerPC 604 or 604e", bfd_arch_powerpc,
-   604, -1, -1, tot_num_registers (registers_604),
-   registers_604},
+   604, &tdesc_powerpc_604},
   {"403GC", "IBM PowerPC 403GC", bfd_arch_powerpc,
-   bfd_mach_ppc_403gc, -1, -1, tot_num_registers (registers_403GC),
-   registers_403GC},
+   bfd_mach_ppc_403gc, &tdesc_powerpc_403gc},
   {"505", "Motorola PowerPC 505", bfd_arch_powerpc,
-   bfd_mach_ppc_505, -1, -1, tot_num_registers (registers_505),
-   registers_505},
+   bfd_mach_ppc_505, &tdesc_powerpc_505},
   {"860", "Motorola PowerPC 860 or 850", bfd_arch_powerpc,
-   bfd_mach_ppc_860, -1, -1, tot_num_registers (registers_860),
-   registers_860},
+   bfd_mach_ppc_860, &tdesc_powerpc_860},
   {"750", "Motorola/IBM PowerPC 750 or 740", bfd_arch_powerpc,
-   bfd_mach_ppc_750, -1, -1, tot_num_registers (registers_750),
-   registers_750},
+   bfd_mach_ppc_750, &tdesc_powerpc_750},
   {"7400", "Motorola/IBM PowerPC 7400 (G4)", bfd_arch_powerpc,
-   bfd_mach_ppc_7400, -1, -1, tot_num_registers (registers_7400),
-   registers_7400},
+   bfd_mach_ppc_7400, &tdesc_powerpc_7400},
   {"e500", "Motorola PowerPC e500", bfd_arch_powerpc,
-   bfd_mach_ppc_e500, -1, -1, tot_num_registers (registers_e500),
-   registers_e500},
+   bfd_mach_ppc_e500, &tdesc_powerpc_e500},
 
   /* 64-bit */
   {"powerpc64", "PowerPC 64-bit user-level", bfd_arch_powerpc,
-   bfd_mach_ppc64, -1, -1, tot_num_registers (registers_powerpc),
-   registers_powerpc},
+   bfd_mach_ppc64, &tdesc_powerpc_64},
   {"620", "Motorola PowerPC 620", bfd_arch_powerpc,
-   bfd_mach_ppc_620, -1, -1, tot_num_registers (registers_powerpc),
-   registers_powerpc},
+   bfd_mach_ppc_620, &tdesc_powerpc_64},
   {"630", "Motorola PowerPC 630", bfd_arch_powerpc,
-   bfd_mach_ppc_630, -1, -1, tot_num_registers (registers_powerpc),
-   registers_powerpc},
+   bfd_mach_ppc_630, &tdesc_powerpc_64},
   {"a35", "PowerPC A35", bfd_arch_powerpc,
-   bfd_mach_ppc_a35, -1, -1, tot_num_registers (registers_powerpc),
-   registers_powerpc},
+   bfd_mach_ppc_a35, &tdesc_powerpc_64},
   {"rs64ii", "PowerPC rs64ii", bfd_arch_powerpc,
-   bfd_mach_ppc_rs64ii, -1, -1, tot_num_registers (registers_powerpc),
-   registers_powerpc},
+   bfd_mach_ppc_rs64ii, &tdesc_powerpc_64},
   {"rs64iii", "PowerPC rs64iii", bfd_arch_powerpc,
-   bfd_mach_ppc_rs64iii, -1, -1, tot_num_registers (registers_powerpc),
-   registers_powerpc},
+   bfd_mach_ppc_rs64iii, &tdesc_powerpc_64},
 
   /* FIXME: I haven't checked the register sets of the following.  */
   {"rs1", "IBM POWER RS1", bfd_arch_rs6000,
-   bfd_mach_rs6k_rs1, -1, -1, tot_num_registers (registers_power),
-   registers_power},
+   bfd_mach_rs6k_rs1, &tdesc_rs6000},
   {"rsc", "IBM POWER RSC", bfd_arch_rs6000,
-   bfd_mach_rs6k_rsc, -1, -1, tot_num_registers (registers_power),
-   registers_power},
+   bfd_mach_rs6k_rsc, &tdesc_rs6000},
   {"rs2", "IBM POWER RS2", bfd_arch_rs6000,
-   bfd_mach_rs6k_rs2, -1, -1, tot_num_registers (registers_power),
-   registers_power},
+   bfd_mach_rs6k_rs2, &tdesc_rs6000},
 
-  {0, 0, 0, 0, 0, 0, 0, 0}
+  {0, 0, 0, 0, 0}
 };
-
-/* Initialize the number of registers and pseudo registers in each variant.  */
-
-static void
-init_variants (void)
-{
-  struct variant *v;
-
-  for (v = variants; v->name; v++)
-    {
-      if (v->nregs == -1)
-        v->nregs = num_registers (v->regs, v->num_tot_regs);
-      if (v->npregs == -1)
-        v->npregs = num_pseudo_registers (v->regs, v->num_tot_regs);
-    }  
-}
 
 /* Return the variant corresponding to architecture ARCH and machine number
    MACH.  If no such variant exists, return null.  */
@@ -3214,7 +2929,7 @@ gdb_print_insn_powerpc (bfd_vma memaddr, disassemble_info *info)
   if (!info->disassembler_options)
     info->disassembler_options = "any";
 
-  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+  if (info->endian == BFD_ENDIAN_BIG)
     return print_insn_big_powerpc (memaddr, info);
   else
     return print_insn_little_powerpc (memaddr, info);
@@ -3224,14 +2939,14 @@ static CORE_ADDR
 rs6000_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   return frame_unwind_register_unsigned (next_frame,
-					 gdbarch_pc_regnum (current_gdbarch));
+					 gdbarch_pc_regnum (gdbarch));
 }
 
 static struct frame_id
 rs6000_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   return frame_id_build (frame_unwind_register_unsigned
-			 (next_frame, gdbarch_sp_regnum (current_gdbarch)),
+			 (next_frame, gdbarch_sp_regnum (gdbarch)),
 			frame_pc_unwind (next_frame));
 }
 
@@ -3260,7 +2975,7 @@ rs6000_frame_cache (struct frame_info *next_frame, void **this_cache)
 
   func = frame_func_unwind (next_frame, NORMAL_FRAME);
   pc = frame_pc_unwind (next_frame);
-  skip_prologue (func, pc, &fdata);
+  skip_prologue (gdbarch, func, pc, &fdata);
 
   /* Figure out the parent's stack pointer.  */
 
@@ -3270,7 +2985,7 @@ rs6000_frame_cache (struct frame_info *next_frame, void **this_cache)
      the mean time, the address of the prev frame is used as the
      base address of this frame.  */
   cache->base = frame_unwind_register_unsigned
-		(next_frame, gdbarch_sp_regnum (current_gdbarch));
+		(next_frame, gdbarch_sp_regnum (gdbarch));
 
   /* If the function appears to be frameless, check a couple of likely
      indicators that we have simply failed to find the frame setup.
@@ -3309,7 +3024,7 @@ rs6000_frame_cache (struct frame_info *next_frame, void **this_cache)
     cache->base = read_memory_addr (cache->base, wordsize);
 
   trad_frame_set_value (cache->saved_regs,
-			gdbarch_sp_regnum (current_gdbarch), cache->base);
+			gdbarch_sp_regnum (gdbarch), cache->base);
 
   /* if != -1, fdata.saved_fpr is the smallest number of saved_fpr.
      All fpr's from saved_fpr to fp31 are saved.  */
@@ -3363,7 +3078,7 @@ rs6000_frame_cache (struct frame_info *next_frame, void **this_cache)
 
   /* if != -1, fdata.saved_ev is the smallest number of saved_ev.
      All vr's from saved_ev to ev31 are saved. ????? */
-  if (tdep->ppc_ev0_regnum != -1 && tdep->ppc_ev31_regnum != -1)
+  if (tdep->ppc_ev0_regnum != -1)
     {
       if (fdata.saved_ev >= 0)
 	{
@@ -3388,7 +3103,7 @@ rs6000_frame_cache (struct frame_info *next_frame, void **this_cache)
   if (fdata.lr_offset != 0)
     cache->saved_regs[tdep->ppc_lr_regnum].addr = cache->base + fdata.lr_offset;
   /* The PC is found in the link register.  */
-  cache->saved_regs[gdbarch_pc_regnum (current_gdbarch)] =
+  cache->saved_regs[gdbarch_pc_regnum (gdbarch)] =
     cache->saved_regs[tdep->ppc_lr_regnum];
 
   /* If != 0, fdata.vrsave_offset is the offset from the frame that
@@ -3400,7 +3115,7 @@ rs6000_frame_cache (struct frame_info *next_frame, void **this_cache)
     /* If no alloca register used, then fi->frame is the value of the
        %sp for this frame, and it is good enough.  */
     cache->initial_sp = frame_unwind_register_unsigned
-			(next_frame, gdbarch_sp_regnum (current_gdbarch));
+			(next_frame, gdbarch_sp_regnum (gdbarch));
   else
     cache->initial_sp = frame_unwind_register_unsigned (next_frame,
 							fdata.alloca_reg);
@@ -3523,9 +3238,9 @@ ppc_dwarf2_frame_init_reg (struct gdbarch *gdbarch, int regnum,
     }
 
   /* Handle PC register and Stack Pointer correctly.  */
-  if (regnum == gdbarch_pc_regnum (current_gdbarch))
+  if (regnum == gdbarch_pc_regnum (gdbarch))
     reg->how = DWARF2_FRAME_REG_RA;
-  else if (regnum == gdbarch_sp_regnum (current_gdbarch))
+  else if (regnum == gdbarch_sp_regnum (gdbarch))
     reg->how = DWARF2_FRAME_REG_CFA;
 }
 
@@ -3542,14 +3257,20 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 {
   struct gdbarch *gdbarch;
   struct gdbarch_tdep *tdep;
-  int wordsize, from_xcoff_exec, from_elf_exec, i, off;
-  struct reg *regs;
-  const struct variant *v;
+  int wordsize, from_xcoff_exec, from_elf_exec;
   enum bfd_architecture arch;
   unsigned long mach;
   bfd abfd;
   int sysv_abi;
   asection *sect;
+  enum auto_boolean soft_float_flag = powerpc_soft_float_global;
+  int soft_float;
+  enum powerpc_vector_abi vector_abi = powerpc_vector_abi_global;
+  int have_fpu = 1, have_spe = 0, have_mq = 0, have_altivec = 0, have_dfp = 0;
+  int tdesc_wordsize = -1;
+  const struct target_desc *tdesc = info.target_desc;
+  struct tdesc_arch_data *tdesc_data = NULL;
+  int num_pseudoregs = 0;
 
   from_xcoff_exec = info.abfd && info.abfd->format == bfd_object &&
     bfd_get_flavour (info.abfd) == bfd_target_xcoff_flavour;
@@ -3575,6 +3296,8 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       else
 	wordsize = 4;
     }
+  else if (tdesc_has_registers (tdesc))
+    wordsize = -1;
   else
     {
       if (info.bfd_arch_info != NULL && info.bfd_arch_info->bits_per_word != 0)
@@ -3583,27 +3306,6 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       else
 	wordsize = 4;
     }
-
-  /* Find a candidate among extant architectures.  */
-  for (arches = gdbarch_list_lookup_by_info (arches, &info);
-       arches != NULL;
-       arches = gdbarch_list_lookup_by_info (arches->next, &info))
-    {
-      /* Word size in the various PowerPC bfd_arch_info structs isn't
-         meaningful, because 64-bit CPUs can run in 32-bit mode.  So, perform
-         separate word size check.  */
-      tdep = gdbarch_tdep (arches->gdbarch);
-      if (tdep && tdep->wordsize == wordsize)
-	return arches->gdbarch;
-    }
-
-  /* None found, create a new architecture from INFO, whose bfd_arch_info
-     validity depends on the source:
-       - executable		useless
-       - rs6000_host_arch()	good
-       - core file		good
-       - "set arch"		trust blindly
-       - GDB startup		useless but harmless */
 
   if (!from_xcoff_exec)
     {
@@ -3617,8 +3319,6 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       info.bfd_arch_info = bfd_get_arch_info (&abfd);
       mach = info.bfd_arch_info->mach;
     }
-  tdep = XCALLOC (1, struct gdbarch_tdep);
-  tdep->wordsize = wordsize;
 
   /* For e500 executables, the apuinfo section is of help here.  Such
      section contains the identifier and revision number of each
@@ -3640,47 +3340,342 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	}
     }
 
+  /* Find a default target description which describes our register
+     layout, if we do not already have one.  */
+  if (! tdesc_has_registers (tdesc))
+    {
+      const struct variant *v;
+
+      /* Choose variant.  */
+      v = find_variant_by_arch (arch, mach);
+      if (!v)
+	return NULL;
+
+      tdesc = *v->tdesc;
+    }
+
+  gdb_assert (tdesc_has_registers (tdesc));
+
+  /* Check any target description for validity.  */
+  if (tdesc_has_registers (tdesc))
+    {
+      static const char *const gprs[] = {
+	"r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
+	"r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
+	"r16", "r17", "r18", "r19", "r20", "r21", "r22", "r23",
+	"r24", "r25", "r26", "r27", "r28", "r29", "r30", "r31"
+      };
+      static const char *const segment_regs[] = {
+	"sr0", "sr1", "sr2", "sr3", "sr4", "sr5", "sr6", "sr7",
+	"sr8", "sr9", "sr10", "sr11", "sr12", "sr13", "sr14", "sr15"
+      };
+      const struct tdesc_feature *feature;
+      int i, valid_p;
+      static const char *const msr_names[] = { "msr", "ps" };
+      static const char *const cr_names[] = { "cr", "cnd" };
+      static const char *const ctr_names[] = { "ctr", "cnt" };
+
+      feature = tdesc_find_feature (tdesc,
+				    "org.gnu.gdb.power.core");
+      if (feature == NULL)
+	return NULL;
+
+      tdesc_data = tdesc_data_alloc ();
+
+      valid_p = 1;
+      for (i = 0; i < ppc_num_gprs; i++)
+	valid_p &= tdesc_numbered_register (feature, tdesc_data, i, gprs[i]);
+      valid_p &= tdesc_numbered_register (feature, tdesc_data, PPC_PC_REGNUM,
+					  "pc");
+      valid_p &= tdesc_numbered_register (feature, tdesc_data, PPC_LR_REGNUM,
+					  "lr");
+      valid_p &= tdesc_numbered_register (feature, tdesc_data, PPC_XER_REGNUM,
+					  "xer");
+
+      /* Allow alternate names for these registers, to accomodate GDB's
+	 historic naming.  */
+      valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
+						  PPC_MSR_REGNUM, msr_names);
+      valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
+						  PPC_CR_REGNUM, cr_names);
+      valid_p &= tdesc_numbered_register_choices (feature, tdesc_data,
+						  PPC_CTR_REGNUM, ctr_names);
+
+      if (!valid_p)
+	{
+	  tdesc_data_cleanup (tdesc_data);
+	  return NULL;
+	}
+
+      have_mq = tdesc_numbered_register (feature, tdesc_data, PPC_MQ_REGNUM,
+					 "mq");
+
+      tdesc_wordsize = tdesc_register_size (feature, "pc") / 8;
+      if (wordsize == -1)
+	wordsize = tdesc_wordsize;
+
+      feature = tdesc_find_feature (tdesc,
+				    "org.gnu.gdb.power.fpu");
+      if (feature != NULL)
+	{
+	  static const char *const fprs[] = {
+	    "f0", "f1", "f2", "f3", "f4", "f5", "f6", "f7",
+	    "f8", "f9", "f10", "f11", "f12", "f13", "f14", "f15",
+	    "f16", "f17", "f18", "f19", "f20", "f21", "f22", "f23",
+	    "f24", "f25", "f26", "f27", "f28", "f29", "f30", "f31"
+	  };
+	  valid_p = 1;
+	  for (i = 0; i < ppc_num_fprs; i++)
+	    valid_p &= tdesc_numbered_register (feature, tdesc_data,
+						PPC_F0_REGNUM + i, fprs[i]);
+	  valid_p &= tdesc_numbered_register (feature, tdesc_data,
+					      PPC_FPSCR_REGNUM, "fpscr");
+
+	  if (!valid_p)
+	    {
+	      tdesc_data_cleanup (tdesc_data);
+	      return NULL;
+	    }
+	  have_fpu = 1;
+	}
+      else
+	have_fpu = 0;
+
+      /* The DFP pseudo-registers will be available when there are floating
+         point registers.  */
+      have_dfp = have_fpu;
+
+      feature = tdesc_find_feature (tdesc,
+				    "org.gnu.gdb.power.altivec");
+      if (feature != NULL)
+	{
+	  static const char *const vector_regs[] = {
+	    "vr0", "vr1", "vr2", "vr3", "vr4", "vr5", "vr6", "vr7",
+	    "vr8", "vr9", "vr10", "vr11", "vr12", "vr13", "vr14", "vr15",
+	    "vr16", "vr17", "vr18", "vr19", "vr20", "vr21", "vr22", "vr23",
+	    "vr24", "vr25", "vr26", "vr27", "vr28", "vr29", "vr30", "vr31"
+	  };
+
+	  valid_p = 1;
+	  for (i = 0; i < ppc_num_gprs; i++)
+	    valid_p &= tdesc_numbered_register (feature, tdesc_data,
+						PPC_VR0_REGNUM + i,
+						vector_regs[i]);
+	  valid_p &= tdesc_numbered_register (feature, tdesc_data,
+					      PPC_VSCR_REGNUM, "vscr");
+	  valid_p &= tdesc_numbered_register (feature, tdesc_data,
+					      PPC_VRSAVE_REGNUM, "vrsave");
+
+	  if (have_spe || !valid_p)
+	    {
+	      tdesc_data_cleanup (tdesc_data);
+	      return NULL;
+	    }
+	  have_altivec = 1;
+	}
+      else
+	have_altivec = 0;
+
+      /* On machines supporting the SPE APU, the general-purpose registers
+	 are 64 bits long.  There are SIMD vector instructions to treat them
+	 as pairs of floats, but the rest of the instruction set treats them
+	 as 32-bit registers, and only operates on their lower halves.
+
+	 In the GDB regcache, we treat their high and low halves as separate
+	 registers.  The low halves we present as the general-purpose
+	 registers, and then we have pseudo-registers that stitch together
+	 the upper and lower halves and present them as pseudo-registers.
+
+	 Thus, the target description is expected to supply the upper
+	 halves separately.  */
+
+      feature = tdesc_find_feature (tdesc,
+				    "org.gnu.gdb.power.spe");
+      if (feature != NULL)
+	{
+	  static const char *const upper_spe[] = {
+	    "ev0h", "ev1h", "ev2h", "ev3h",
+	    "ev4h", "ev5h", "ev6h", "ev7h",
+	    "ev8h", "ev9h", "ev10h", "ev11h",
+	    "ev12h", "ev13h", "ev14h", "ev15h",
+	    "ev16h", "ev17h", "ev18h", "ev19h",
+	    "ev20h", "ev21h", "ev22h", "ev23h",
+	    "ev24h", "ev25h", "ev26h", "ev27h",
+	    "ev28h", "ev29h", "ev30h", "ev31h"
+	  };
+
+	  valid_p = 1;
+	  for (i = 0; i < ppc_num_gprs; i++)
+	    valid_p &= tdesc_numbered_register (feature, tdesc_data,
+						PPC_SPE_UPPER_GP0_REGNUM + i,
+						upper_spe[i]);
+	  valid_p &= tdesc_numbered_register (feature, tdesc_data,
+					      PPC_SPE_ACC_REGNUM, "acc");
+	  valid_p &= tdesc_numbered_register (feature, tdesc_data,
+					      PPC_SPE_FSCR_REGNUM, "spefscr");
+
+	  if (have_mq || have_fpu || !valid_p)
+	    {
+	      tdesc_data_cleanup (tdesc_data);
+	      return NULL;
+	    }
+	  have_spe = 1;
+	}
+      else
+	have_spe = 0;
+    }
+
+  /* If we have a 64-bit binary on a 32-bit target, complain.  Also
+     complain for a 32-bit binary on a 64-bit target; we do not yet
+     support that.  For instance, the 32-bit ABI routines expect
+     32-bit GPRs.
+
+     As long as there isn't an explicit target description, we'll
+     choose one based on the BFD architecture and get a word size
+     matching the binary (probably powerpc:common or
+     powerpc:common64).  So there is only trouble if a 64-bit target
+     supplies a 64-bit description while debugging a 32-bit
+     binary.  */
+  if (tdesc_wordsize != -1 && tdesc_wordsize != wordsize)
+    {
+      tdesc_data_cleanup (tdesc_data);
+      return NULL;
+    }
+
+#ifdef HAVE_ELF
+  if (soft_float_flag == AUTO_BOOLEAN_AUTO && from_elf_exec)
+    {
+      switch (bfd_elf_get_obj_attr_int (info.abfd, OBJ_ATTR_GNU,
+					Tag_GNU_Power_ABI_FP))
+	{
+	case 1:
+	  soft_float_flag = AUTO_BOOLEAN_FALSE;
+	  break;
+	case 2:
+	  soft_float_flag = AUTO_BOOLEAN_TRUE;
+	  break;
+	default:
+	  break;
+	}
+    }
+
+  if (vector_abi == POWERPC_VEC_AUTO && from_elf_exec)
+    {
+      switch (bfd_elf_get_obj_attr_int (info.abfd, OBJ_ATTR_GNU,
+					Tag_GNU_Power_ABI_Vector))
+	{
+	case 1:
+	  vector_abi = POWERPC_VEC_GENERIC;
+	  break;
+	case 2:
+	  vector_abi = POWERPC_VEC_ALTIVEC;
+	  break;
+	case 3:
+	  vector_abi = POWERPC_VEC_SPE;
+	  break;
+	default:
+	  break;
+	}
+    }
+#endif
+
+  if (soft_float_flag == AUTO_BOOLEAN_TRUE)
+    soft_float = 1;
+  else if (soft_float_flag == AUTO_BOOLEAN_FALSE)
+    soft_float = 0;
+  else
+    soft_float = !have_fpu;
+
+  /* If we have a hard float binary or setting but no floating point
+     registers, downgrade to soft float anyway.  We're still somewhat
+     useful in this scenario.  */
+  if (!soft_float && !have_fpu)
+    soft_float = 1;
+
+  /* Similarly for vector registers.  */
+  if (vector_abi == POWERPC_VEC_ALTIVEC && !have_altivec)
+    vector_abi = POWERPC_VEC_GENERIC;
+
+  if (vector_abi == POWERPC_VEC_SPE && !have_spe)
+    vector_abi = POWERPC_VEC_GENERIC;
+
+  if (vector_abi == POWERPC_VEC_AUTO)
+    {
+      if (have_altivec)
+	vector_abi = POWERPC_VEC_ALTIVEC;
+      else if (have_spe)
+	vector_abi = POWERPC_VEC_SPE;
+      else
+	vector_abi = POWERPC_VEC_GENERIC;
+    }
+
+  /* Do not limit the vector ABI based on available hardware, since we
+     do not yet know what hardware we'll decide we have.  Yuck!  FIXME!  */
+
+  /* Find a candidate among extant architectures.  */
+  for (arches = gdbarch_list_lookup_by_info (arches, &info);
+       arches != NULL;
+       arches = gdbarch_list_lookup_by_info (arches->next, &info))
+    {
+      /* Word size in the various PowerPC bfd_arch_info structs isn't
+         meaningful, because 64-bit CPUs can run in 32-bit mode.  So, perform
+         separate word size check.  */
+      tdep = gdbarch_tdep (arches->gdbarch);
+      if (tdep && tdep->soft_float != soft_float)
+	continue;
+      if (tdep && tdep->vector_abi != vector_abi)
+	continue;
+      if (tdep && tdep->wordsize == wordsize)
+	{
+	  if (tdesc_data != NULL)
+	    tdesc_data_cleanup (tdesc_data);
+	  return arches->gdbarch;
+	}
+    }
+
+  /* None found, create a new architecture from INFO, whose bfd_arch_info
+     validity depends on the source:
+       - executable		useless
+       - rs6000_host_arch()	good
+       - core file		good
+       - "set arch"		trust blindly
+       - GDB startup		useless but harmless */
+
+  tdep = XCALLOC (1, struct gdbarch_tdep);
+  tdep->wordsize = wordsize;
+  tdep->soft_float = soft_float;
+  tdep->vector_abi = vector_abi;
+
   gdbarch = gdbarch_alloc (&info, tdep);
 
-  /* Initialize the number of real and pseudo registers in each variant.  */
-  init_variants ();
+  tdep->ppc_gp0_regnum = PPC_R0_REGNUM;
+  tdep->ppc_toc_regnum = PPC_R0_REGNUM + 2;
+  tdep->ppc_ps_regnum = PPC_MSR_REGNUM;
+  tdep->ppc_cr_regnum = PPC_CR_REGNUM;
+  tdep->ppc_lr_regnum = PPC_LR_REGNUM;
+  tdep->ppc_ctr_regnum = PPC_CTR_REGNUM;
+  tdep->ppc_xer_regnum = PPC_XER_REGNUM;
+  tdep->ppc_mq_regnum = have_mq ? PPC_MQ_REGNUM : -1;
 
-  /* Choose variant.  */
-  v = find_variant_by_arch (arch, mach);
-  if (!v)
-    return NULL;
+  tdep->ppc_fp0_regnum = have_fpu ? PPC_F0_REGNUM : -1;
+  tdep->ppc_fpscr_regnum = have_fpu ? PPC_FPSCR_REGNUM : -1;
+  tdep->ppc_vr0_regnum = have_altivec ? PPC_VR0_REGNUM : -1;
+  tdep->ppc_vrsave_regnum = have_altivec ? PPC_VRSAVE_REGNUM : -1;
+  tdep->ppc_ev0_upper_regnum = have_spe ? PPC_SPE_UPPER_GP0_REGNUM : -1;
+  tdep->ppc_acc_regnum = have_spe ? PPC_SPE_ACC_REGNUM : -1;
+  tdep->ppc_spefscr_regnum = have_spe ? PPC_SPE_FSCR_REGNUM : -1;
 
-  tdep->regs = v->regs;
-
-  tdep->ppc_gp0_regnum = 0;
-  tdep->ppc_toc_regnum = 2;
-  tdep->ppc_ps_regnum = 65;
-  tdep->ppc_cr_regnum = 66;
-  tdep->ppc_lr_regnum = 67;
-  tdep->ppc_ctr_regnum = 68;
-  tdep->ppc_xer_regnum = 69;
-  if (v->mach == bfd_mach_ppc_601)
-    tdep->ppc_mq_regnum = 124;
-  else if (arch == bfd_arch_rs6000)
-    tdep->ppc_mq_regnum = 70;
-  else
-    tdep->ppc_mq_regnum = -1;
-  tdep->ppc_fp0_regnum = 32;
-  tdep->ppc_fpscr_regnum = (arch == bfd_arch_rs6000) ? 71 : 70;
-  tdep->ppc_sr0_regnum = 71;
-  tdep->ppc_vr0_regnum = -1;
-  tdep->ppc_vrsave_regnum = -1;
-  tdep->ppc_ev0_upper_regnum = -1;
-  tdep->ppc_ev0_regnum = -1;
-  tdep->ppc_ev31_regnum = -1;
-  tdep->ppc_acc_regnum = -1;
-  tdep->ppc_spefscr_regnum = -1;
-
-  set_gdbarch_pc_regnum (gdbarch, 64);
-  set_gdbarch_sp_regnum (gdbarch, 1);
-  set_gdbarch_deprecated_fp_regnum (gdbarch, 1);
-  set_gdbarch_fp0_regnum (gdbarch, 32);
+  set_gdbarch_pc_regnum (gdbarch, PPC_PC_REGNUM);
+  set_gdbarch_sp_regnum (gdbarch, PPC_R0_REGNUM + 1);
+  set_gdbarch_deprecated_fp_regnum (gdbarch, PPC_R0_REGNUM + 1);
+  set_gdbarch_fp0_regnum (gdbarch, tdep->ppc_fp0_regnum);
   set_gdbarch_register_sim_regno (gdbarch, rs6000_register_sim_regno);
+
+  /* The XML specification for PowerPC sensibly calls the MSR "msr".
+     GDB traditionally called it "ps", though, so let GDB add an
+     alias.  */
+  set_gdbarch_ps_regnum (gdbarch, tdep->ppc_ps_regnum);
+
   if (sysv_abi && wordsize == 8)
     set_gdbarch_return_value (gdbarch, ppc64_sysv_abi_return_value);
   else if (sysv_abi && wordsize == 4)
@@ -3696,54 +3691,13 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   else
     tdep->lr_frame_offset = 8;
 
-  if (v->arch == bfd_arch_rs6000)
-    tdep->ppc_sr0_regnum = -1;
-  else if (v->arch == bfd_arch_powerpc)
-    switch (v->mach)
-      {
-      case bfd_mach_ppc: 
-        tdep->ppc_sr0_regnum = -1;
-	tdep->ppc_vr0_regnum = 71;
-	tdep->ppc_vrsave_regnum = 104;
-	break;
-      case bfd_mach_ppc_7400:
-	tdep->ppc_vr0_regnum = 119;
-	tdep->ppc_vrsave_regnum = 152;
-	break;
-      case bfd_mach_ppc_e500:
-        tdep->ppc_toc_regnum = -1;
-        tdep->ppc_ev0_upper_regnum = 32;
-	tdep->ppc_ev0_regnum = 73;
-	tdep->ppc_ev31_regnum = 104;
-        tdep->ppc_acc_regnum = 71;
-        tdep->ppc_spefscr_regnum = 72;
-        tdep->ppc_fp0_regnum = -1;
-        tdep->ppc_fpscr_regnum = -1;
-        tdep->ppc_sr0_regnum = -1;
-        set_gdbarch_pseudo_register_read (gdbarch, e500_pseudo_register_read);
-        set_gdbarch_pseudo_register_write (gdbarch, e500_pseudo_register_write);
-        set_gdbarch_register_reggroup_p (gdbarch, e500_register_reggroup_p);
-	break;
-
-      case bfd_mach_ppc64:
-      case bfd_mach_ppc_620:
-      case bfd_mach_ppc_630:
-      case bfd_mach_ppc_a35:
-      case bfd_mach_ppc_rs64ii:
-      case bfd_mach_ppc_rs64iii:
-        /* These processor's register sets don't have segment registers.  */
-        tdep->ppc_sr0_regnum = -1;
-        break;
-      }   
-  else
-    internal_error (__FILE__, __LINE__,
-                    _("rs6000_gdbarch_init: "
-                    "received unexpected BFD 'arch' value"));
+  if (have_spe || have_dfp)
+    {
+      set_gdbarch_pseudo_register_read (gdbarch, rs6000_pseudo_register_read);
+      set_gdbarch_pseudo_register_write (gdbarch, rs6000_pseudo_register_write);
+    }
 
   set_gdbarch_have_nonsteppable_watchpoint (gdbarch, 1);
-
-  /* Sanity check on registers.  */
-  gdb_assert (strcmp (tdep->regs[tdep->ppc_gp0_regnum].name, "r0") == 0);
 
   /* Select instruction printer.  */
   if (arch == bfd_arch_rs6000)
@@ -3751,11 +3705,14 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   else
     set_gdbarch_print_insn (gdbarch, gdb_print_insn_powerpc);
 
-  set_gdbarch_num_regs (gdbarch, v->nregs);
-  set_gdbarch_num_pseudo_regs (gdbarch, v->npregs);
-  set_gdbarch_register_name (gdbarch, rs6000_register_name);
-  set_gdbarch_register_type (gdbarch, rs6000_register_type);
-  set_gdbarch_register_reggroup_p (gdbarch, rs6000_register_reggroup_p);
+  set_gdbarch_num_regs (gdbarch, PPC_NUM_REGS);
+
+  if (have_spe)
+    num_pseudoregs += 32;
+  if (have_dfp)
+    num_pseudoregs += 16;
+
+  set_gdbarch_num_pseudo_regs (gdbarch, num_pseudoregs);
 
   set_gdbarch_ptr_bit (gdbarch, wordsize * TARGET_CHAR_BIT);
   set_gdbarch_short_bit (gdbarch, 2 * TARGET_CHAR_BIT);
@@ -3801,6 +3758,10 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
   set_gdbarch_breakpoint_from_pc (gdbarch, rs6000_breakpoint_from_pc);
 
+  /* The value of symbols of type N_SO and N_FUN maybe null when
+     it shouldn't be. */
+  set_gdbarch_sofun_address_maybe_missing (gdbarch, 1);
+
   /* Handles single stepping of atomic sequences.  */
   set_gdbarch_software_single_step (gdbarch, deal_with_atomic_sequence);
   
@@ -3845,17 +3806,6 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   switch (info.osabi)
     {
     case GDB_OSABI_LINUX:
-      /* FIXME: pgilliam/2005-10-21: Assume all PowerPC 64-bit linux systems
-         have altivec registers.  If not, ptrace will fail the first time it's
-         called to access one and will not be called again.  This wart will
-         be removed when Daniel Jacobowitz's proposal for autodetecting target
-         registers is implemented. */
-      if ((v->arch == bfd_arch_powerpc) && ((v->mach)== bfd_mach_ppc64))
-        {
-          tdep->ppc_vr0_regnum = 71;
-          tdep->ppc_vrsave_regnum = 104;
-        }
-      /* Fall Thru */
     case GDB_OSABI_NETBSD_AOUT:
     case GDB_OSABI_NETBSD_ELF:
     case GDB_OSABI_UNKNOWN:
@@ -3873,20 +3823,92 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
       frame_base_append_sniffer (gdbarch, rs6000_frame_base_sniffer);
     }
 
-  init_sim_regno_table (gdbarch);
+  set_tdesc_pseudo_register_type (gdbarch, rs6000_pseudo_register_type);
+  set_tdesc_pseudo_register_reggroup_p (gdbarch,
+					rs6000_pseudo_register_reggroup_p);
+  tdesc_use_registers (gdbarch, tdesc, tdesc_data);
+
+  /* Override the normal target description method to make the SPE upper
+     halves anonymous.  */
+  set_gdbarch_register_name (gdbarch, rs6000_register_name);
+
+  /* Recording the numbering of pseudo registers.  */
+  tdep->ppc_ev0_regnum = have_spe ? gdbarch_num_regs (gdbarch) : -1;
+
+  /* Set the register number for _Decimal128 pseudo-registers.  */
+  tdep->ppc_dl0_regnum = have_dfp? gdbarch_num_regs (gdbarch) : -1;
+
+  if (have_dfp && have_spe)
+    /* Put the _Decimal128 pseudo-registers after the SPE registers.  */
+    tdep->ppc_dl0_regnum += 32;
 
   return gdbarch;
 }
 
 static void
-rs6000_dump_tdep (struct gdbarch *current_gdbarch, struct ui_file *file)
+rs6000_dump_tdep (struct gdbarch *gdbarch, struct ui_file *file)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (current_gdbarch);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   if (tdep == NULL)
     return;
 
   /* FIXME: Dump gdbarch_tdep.  */
+}
+
+/* PowerPC-specific commands.  */
+
+static void
+set_powerpc_command (char *args, int from_tty)
+{
+  printf_unfiltered (_("\
+\"set powerpc\" must be followed by an appropriate subcommand.\n"));
+  help_list (setpowerpccmdlist, "set powerpc ", all_commands, gdb_stdout);
+}
+
+static void
+show_powerpc_command (char *args, int from_tty)
+{
+  cmd_show_list (showpowerpccmdlist, from_tty, "");
+}
+
+static void
+powerpc_set_soft_float (char *args, int from_tty,
+			struct cmd_list_element *c)
+{
+  struct gdbarch_info info;
+
+  /* Update the architecture.  */
+  gdbarch_info_init (&info);
+  if (!gdbarch_update_p (info))
+    internal_error (__FILE__, __LINE__, "could not update architecture");
+}
+
+static void
+powerpc_set_vector_abi (char *args, int from_tty,
+			struct cmd_list_element *c)
+{
+  struct gdbarch_info info;
+  enum powerpc_vector_abi vector_abi;
+
+  for (vector_abi = POWERPC_VEC_AUTO;
+       vector_abi != POWERPC_VEC_LAST;
+       vector_abi++)
+    if (strcmp (powerpc_vector_abi_string,
+		powerpc_vector_strings[vector_abi]) == 0)
+      {
+	powerpc_vector_abi_global = vector_abi;
+	break;
+      }
+
+  if (vector_abi == POWERPC_VEC_LAST)
+    internal_error (__FILE__, __LINE__, _("Invalid vector ABI accepted: %s."),
+		    powerpc_vector_abi_string);
+
+  /* Update the architecture.  */
+  gdbarch_info_init (&info);
+  if (!gdbarch_update_p (info))
+    internal_error (__FILE__, __LINE__, "could not update architecture");
 }
 
 /* Initialization code.  */
@@ -3898,4 +3920,46 @@ _initialize_rs6000_tdep (void)
 {
   gdbarch_register (bfd_arch_rs6000, rs6000_gdbarch_init, rs6000_dump_tdep);
   gdbarch_register (bfd_arch_powerpc, rs6000_gdbarch_init, rs6000_dump_tdep);
+
+  /* Initialize the standard target descriptions.  */
+  initialize_tdesc_powerpc_32 ();
+  initialize_tdesc_powerpc_403 ();
+  initialize_tdesc_powerpc_403gc ();
+  initialize_tdesc_powerpc_505 ();
+  initialize_tdesc_powerpc_601 ();
+  initialize_tdesc_powerpc_602 ();
+  initialize_tdesc_powerpc_603 ();
+  initialize_tdesc_powerpc_604 ();
+  initialize_tdesc_powerpc_64 ();
+  initialize_tdesc_powerpc_7400 ();
+  initialize_tdesc_powerpc_750 ();
+  initialize_tdesc_powerpc_860 ();
+  initialize_tdesc_powerpc_e500 ();
+  initialize_tdesc_rs6000 ();
+
+  /* Add root prefix command for all "set powerpc"/"show powerpc"
+     commands.  */
+  add_prefix_cmd ("powerpc", no_class, set_powerpc_command,
+		  _("Various PowerPC-specific commands."),
+		  &setpowerpccmdlist, "set powerpc ", 0, &setlist);
+
+  add_prefix_cmd ("powerpc", no_class, show_powerpc_command,
+		  _("Various PowerPC-specific commands."),
+		  &showpowerpccmdlist, "show powerpc ", 0, &showlist);
+
+  /* Add a command to allow the user to force the ABI.  */
+  add_setshow_auto_boolean_cmd ("soft-float", class_support,
+				&powerpc_soft_float_global,
+				_("Set whether to use a soft-float ABI."),
+				_("Show whether to use a soft-float ABI."),
+				NULL,
+				powerpc_set_soft_float, NULL,
+				&setpowerpccmdlist, &showpowerpccmdlist);
+
+  add_setshow_enum_cmd ("vector-abi", class_support, powerpc_vector_strings,
+			&powerpc_vector_abi_string,
+			_("Set the vector ABI."),
+			_("Show the vector ABI."),
+			NULL, powerpc_set_vector_abi, NULL,
+			&setpowerpccmdlist, &showpowerpccmdlist);
 }

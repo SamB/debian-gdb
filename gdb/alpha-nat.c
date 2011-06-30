@@ -1,5 +1,5 @@
 /* Low level Alpha interface, for GDB when running native.
-   Copyright (C) 1993, 1995, 1996, 1998, 1999, 2000, 2001, 2003, 2007
+   Copyright (C) 1993, 1995, 1996, 1998, 1999, 2000, 2001, 2003, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -49,6 +49,7 @@ fetch_osf_core_registers (struct regcache *regcache,
 			  char *core_reg_sect, unsigned core_reg_size,
 			  int which, CORE_ADDR reg_addr)
 {
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   int regno;
   int addr;
   int bad_reg = -1;
@@ -87,7 +88,7 @@ fetch_osf_core_registers (struct regcache *regcache,
 
   for (regno = 0; regno < ALPHA_NUM_REGS; regno++)
     {
-      if (gdbarch_cannot_fetch_register (current_gdbarch, regno))
+      if (gdbarch_cannot_fetch_register (gdbarch, regno))
 	{
 	  regcache_raw_supply (regcache, regno, NULL);
 	  continue;
@@ -112,7 +113,7 @@ fetch_osf_core_registers (struct regcache *regcache,
   if (bad_reg >= 0)
     {
       error (_("Register %s not found in core file."),
-	     gdbarch_register_name (current_gdbarch, bad_reg));
+	     gdbarch_register_name (gdbarch, bad_reg));
     }
 }
 

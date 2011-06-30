@@ -1,5 +1,5 @@
 /* Native debugging support for Intel x86 running DJGPP.
-   Copyright (C) 1997, 1999, 2000, 2001, 2005, 2006, 2007
+   Copyright (C) 1997, 1999, 2000, 2001, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
    Written by Robert Hoehne.
 
@@ -465,7 +465,7 @@ go32_wait (ptid_t ptid, struct target_waitstatus *status)
 static void
 fetch_register (struct regcache *regcache, int regno)
 {
-  if (regno < gdbarch_fp0_regnum (current_gdbarch))
+  if (regno < gdbarch_fp0_regnum (get_regcache_arch (regcache)))
     regcache_raw_supply (regcache, regno,
 			 (char *) &a_tss + regno_mapping[regno].tss_ofs);
   else if (i386_fp_regnum_p (regno) || i386_fpc_regnum_p (regno))
@@ -482,7 +482,9 @@ go32_fetch_registers (struct regcache *regcache, int regno)
     fetch_register (regcache, regno);
   else
     {
-      for (regno = 0; regno < gdbarch_fp0_regnum (current_gdbarch); regno++)
+      for (regno = 0;
+	   regno < gdbarch_fp0_regnum (get_regcache_arch (regcache));
+	   regno++)
 	fetch_register (regcache, regno);
       i387_supply_fsave (regcache, -1, &npx);
     }
@@ -491,7 +493,7 @@ go32_fetch_registers (struct regcache *regcache, int regno)
 static void
 store_register (const struct regcache *regcache, int regno)
 {
-  if (regno < gdbarch_fp0_regnum (current_gdbarch))
+  if (regno < gdbarch_fp0_regnum (get_regcache_arch (regcache)))
     regcache_raw_collect (regcache, regno,
 			  (char *) &a_tss + regno_mapping[regno].tss_ofs);
   else if (i386_fp_regnum_p (regno) || i386_fpc_regnum_p (regno))
@@ -510,7 +512,7 @@ go32_store_registers (struct regcache *regcache, int regno)
     store_register (regcache, regno);
   else
     {
-      for (r = 0; r < gdbarch_fp0_regnum (current_gdbarch); r++)
+      for (r = 0; r < gdbarch_fp0_regnum (get_regcache_arch (regcache)); r++)
 	store_register (regcache, r);
       i387_collect_fsave (regcache, -1, &npx);
     }

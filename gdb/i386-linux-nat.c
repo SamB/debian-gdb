@@ -1,6 +1,6 @@
 /* Native-dependent code for GNU/Linux i386.
 
-   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -161,7 +161,7 @@ fetch_register (struct regcache *regcache, int regno)
   val = ptrace (PTRACE_PEEKUSER, tid, 4 * regmap[regno], 0);
   if (errno != 0)
     error (_("Couldn't read register %s (#%d): %s."), 
-	   gdbarch_register_name (current_gdbarch, regno),
+	   gdbarch_register_name (get_regcache_arch (regcache), regno),
 	   regno, safe_strerror (errno));
 
   regcache_raw_supply (regcache, regno, &val);
@@ -189,7 +189,7 @@ store_register (const struct regcache *regcache, int regno)
   ptrace (PTRACE_POKEUSER, tid, 4 * regmap[regno], val);
   if (errno != 0)
     error (_("Couldn't write register %s (#%d): %s."),
-	   gdbarch_register_name (current_gdbarch, regno),
+	   gdbarch_register_name (get_regcache_arch (regcache), regno),
 	   regno, safe_strerror (errno));
 }
 
@@ -209,7 +209,8 @@ supply_gregset (struct regcache *regcache, const elf_gregset_t *gregsetp)
   for (i = 0; i < I386_NUM_GREGS; i++)
     regcache_raw_supply (regcache, i, regp + regmap[i]);
 
-  if (I386_LINUX_ORIG_EAX_REGNUM < gdbarch_num_regs (current_gdbarch))
+  if (I386_LINUX_ORIG_EAX_REGNUM
+	< gdbarch_num_regs (get_regcache_arch (regcache)))
     regcache_raw_supply (regcache, I386_LINUX_ORIG_EAX_REGNUM,
 			 regp + ORIG_EAX);
 }
@@ -230,7 +231,8 @@ fill_gregset (const struct regcache *regcache,
       regcache_raw_collect (regcache, i, regp + regmap[i]);
 
   if ((regno == -1 || regno == I386_LINUX_ORIG_EAX_REGNUM)
-      && I386_LINUX_ORIG_EAX_REGNUM < gdbarch_num_regs (current_gdbarch))
+      && I386_LINUX_ORIG_EAX_REGNUM
+	   < gdbarch_num_regs (get_regcache_arch (regcache)))
     regcache_raw_collect (regcache, I386_LINUX_ORIG_EAX_REGNUM,
 			  regp + ORIG_EAX);
 }
@@ -458,7 +460,7 @@ i386_linux_fetch_inferior_registers (struct regcache *regcache, int regno)
     {
       int i;
 
-      for (i = 0; i < gdbarch_num_regs (current_gdbarch); i++)
+      for (i = 0; i < gdbarch_num_regs (get_regcache_arch (regcache)); i++)
 	if (regno == -1 || regno == i)
 	  fetch_register (regcache, i);
 
@@ -530,7 +532,7 @@ i386_linux_store_inferior_registers (struct regcache *regcache, int regno)
     {
       int i;
 
-      for (i = 0; i < gdbarch_num_regs (current_gdbarch); i++)
+      for (i = 0; i < gdbarch_num_regs (get_regcache_arch (regcache)); i++)
 	if (regno == -1 || regno == i)
 	  store_register (regcache, i);
 
@@ -579,16 +581,17 @@ i386_linux_store_inferior_registers (struct regcache *regcache, int regno)
 
 /* Support for debug registers.  */
 
+static unsigned long i386_linux_dr[DR_CONTROL + 1];
+
 static unsigned long
-i386_linux_dr_get (int regnum)
+i386_linux_dr_get (ptid_t ptid, int regnum)
 {
   int tid;
   unsigned long value;
 
-  /* FIXME: kettenis/2001-01-29: It's not clear what we should do with
-     multi-threaded processes here.  For now, pretend there is just
-     one thread.  */
-  tid = PIDGET (inferior_ptid);
+  tid = TIDGET (ptid);
+  if (tid == 0)
+    tid = PIDGET (ptid);
 
   /* FIXME: kettenis/2001-03-27: Calling perror_with_name if the
      ptrace call fails breaks debugging remote targets.  The correct
@@ -609,14 +612,13 @@ i386_linux_dr_get (int regnum)
 }
 
 static void
-i386_linux_dr_set (int regnum, unsigned long value)
+i386_linux_dr_set (ptid_t ptid, int regnum, unsigned long value)
 {
   int tid;
 
-  /* FIXME: kettenis/2001-01-29: It's not clear what we should do with
-     multi-threaded processes here.  For now, pretend there is just
-     one thread.  */
-  tid = PIDGET (inferior_ptid);
+  tid = TIDGET (ptid);
+  if (tid == 0)
+    tid = PIDGET (ptid);
 
   errno = 0;
   ptrace (PTRACE_POKEUSER, tid,
@@ -628,29 +630,48 @@ i386_linux_dr_set (int regnum, unsigned long value)
 void
 i386_linux_dr_set_control (unsigned long control)
 {
-  i386_linux_dr_set (DR_CONTROL, control);
+  struct lwp_info *lp;
+  ptid_t ptid;
+
+  i386_linux_dr[DR_CONTROL] = control;
+  ALL_LWPS (lp, ptid)
+    i386_linux_dr_set (ptid, DR_CONTROL, control);
 }
 
 void
 i386_linux_dr_set_addr (int regnum, CORE_ADDR addr)
 {
+  struct lwp_info *lp;
+  ptid_t ptid;
+
   gdb_assert (regnum >= 0 && regnum <= DR_LASTADDR - DR_FIRSTADDR);
 
-  i386_linux_dr_set (DR_FIRSTADDR + regnum, addr);
+  i386_linux_dr[DR_FIRSTADDR + regnum] = addr;
+  ALL_LWPS (lp, ptid)
+    i386_linux_dr_set (ptid, DR_FIRSTADDR + regnum, addr);
 }
 
 void
 i386_linux_dr_reset_addr (int regnum)
 {
-  gdb_assert (regnum >= 0 && regnum <= DR_LASTADDR - DR_FIRSTADDR);
-
-  i386_linux_dr_set (DR_FIRSTADDR + regnum, 0L);
+  i386_linux_dr_set_addr (regnum, 0);
 }
 
 unsigned long
 i386_linux_dr_get_status (void)
 {
-  return i386_linux_dr_get (DR_STATUS);
+  return i386_linux_dr_get (inferior_ptid, DR_STATUS);
+}
+
+static void
+i386_linux_new_thread (ptid_t ptid)
+{
+  int i;
+
+  for (i = DR_FIRSTADDR; i <= DR_LASTADDR; i++)
+    i386_linux_dr_set (ptid, i, i386_linux_dr[i]);
+
+  i386_linux_dr_set (ptid, DR_CONTROL, i386_linux_dr[DR_CONTROL]);
 }
 
 
@@ -729,12 +750,6 @@ i386_linux_resume (ptid_t ptid, int step, enum target_signal signal)
 
   int request = PTRACE_CONT;
 
-  if (pid == -1)
-    /* Resume all threads.  */
-    /* I think this only gets used in the non-threaded case, where "resume
-       all threads" and "resume inferior_ptid" are the same.  */
-    pid = PIDGET (inferior_ptid);
-
   if (step)
     {
       struct regcache *regcache = get_thread_regcache (pid_to_ptid (pid));
@@ -743,8 +758,8 @@ i386_linux_resume (ptid_t ptid, int step, enum target_signal signal)
 
       request = PTRACE_SINGLESTEP;
 
-      regcache_cooked_read_unsigned (regcache,
-				     gdbarch_pc_regnum (current_gdbarch), &pc);
+      regcache_cooked_read_unsigned
+	(regcache, gdbarch_pc_regnum (get_regcache_arch (regcache)), &pc);
 
       /* Returning from a signal trampoline is done by calling a
          special system call (sigreturn or rt_sigreturn, see
@@ -818,4 +833,5 @@ _initialize_i386_linux_nat (void)
 
   /* Register the target.  */
   linux_nat_add_target (t);
+  linux_nat_set_new_thread (t, i386_linux_new_thread);
 }

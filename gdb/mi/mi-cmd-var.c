@@ -1,6 +1,7 @@
 /* MI Command Set - varobj commands.
 
-   Copyright (C) 2000, 2002, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2002, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions (a Red Hat company).
 
@@ -55,8 +56,7 @@ print_varobj (struct varobj *var, enum print_values print_values,
     ui_out_field_string (uiout, "exp", varobj_get_expression (var));
   ui_out_field_int (uiout, "numchild", varobj_get_num_children (var));
   
-  gdb_type = varobj_get_gdb_type (var);
-  if (gdb_type && mi_print_value_p (gdb_type, print_values))
+  if (mi_print_value_p (varobj_get_gdb_type (var), print_values))
     ui_out_field_string (uiout, "value", varobj_get_value (var));
 
   type = varobj_get_type (var);
@@ -231,6 +231,9 @@ mi_cmd_var_set_format (char *command, char **argv, int argc)
 
   /* Report the new current format */
   ui_out_field_string (uiout, "format", varobj_format_string[(int) format]);
+ 
+  /* Report the value in the new format */
+  ui_out_field_string (uiout, "value", varobj_get_value (var));
   return MI_CMD_DONE;
 }
 
@@ -327,7 +330,6 @@ Must be: 0 or \"%s\", 1 or \"%s\", 2 or \"%s\""),
 static int
 mi_print_value_p (struct type *type, enum print_values print_values)
 {
-  type = check_typedef (type);
 
   if (print_values == PRINT_NO_VALUES)
     return 0;
@@ -335,23 +337,30 @@ mi_print_value_p (struct type *type, enum print_values print_values)
   if (print_values == PRINT_ALL_VALUES)
     return 1;
 
-  /* For PRINT_SIMPLE_VALUES, only print the value if it has a type
-     and that type is not a compound type.  */
+  if (type == NULL)
+    return 1;
+  else
+    {
+      type = check_typedef (type);
 
-  return (TYPE_CODE (type) != TYPE_CODE_ARRAY
-	  && TYPE_CODE (type) != TYPE_CODE_STRUCT
-	  && TYPE_CODE (type) != TYPE_CODE_UNION);
+      /* For PRINT_SIMPLE_VALUES, only print the value if it has a type
+	 and that type is not a compound type.  */
+      return (TYPE_CODE (type) != TYPE_CODE_ARRAY
+	      && TYPE_CODE (type) != TYPE_CODE_STRUCT
+	      && TYPE_CODE (type) != TYPE_CODE_UNION);
+    }
 }
 
 enum mi_cmd_result
 mi_cmd_var_list_children (char *command, char **argv, int argc)
 {
-  struct varobj *var;
-  struct varobj **childlist;
-  struct varobj **cc;
+  struct varobj *var;  
+  VEC(varobj_p) *children;
+  struct varobj *child;
   struct cleanup *cleanup_children;
   int numchild;
   enum print_values print_values;
+  int ix;
 
   if (argc != 1 && argc != 2)
     error (_("mi_cmd_var_list_children: Usage: [PRINT_VALUES] NAME"));
@@ -364,34 +373,28 @@ mi_cmd_var_list_children (char *command, char **argv, int argc)
   if (var == NULL)
     error (_("Variable object not found"));
 
-  numchild = varobj_list_children (var, &childlist);
-  ui_out_field_int (uiout, "numchild", numchild);
+  children = varobj_list_children (var);
+  ui_out_field_int (uiout, "numchild", VEC_length (varobj_p, children));
   if (argc == 2)
     print_values = mi_parse_values_option (argv[0]);
   else
     print_values = PRINT_NO_VALUES;
 
-  if (numchild <= 0)
-    {
-      xfree (childlist);
-      return MI_CMD_DONE;
-    }
+  if (VEC_length (varobj_p, children) == 0)
+    return MI_CMD_DONE;
 
   if (mi_version (uiout) == 1)
     cleanup_children = make_cleanup_ui_out_tuple_begin_end (uiout, "children");
   else
     cleanup_children = make_cleanup_ui_out_list_begin_end (uiout, "children");
-  cc = childlist;
-  while (*cc != NULL)
+  for (ix = 0; VEC_iterate (varobj_p, children, ix, child); ++ix)
     {
       struct cleanup *cleanup_child;
       cleanup_child = make_cleanup_ui_out_tuple_begin_end (uiout, "child");
-      print_varobj (*cc, print_values, 1 /* print expression */);
-      cc++;
+      print_varobj (child, print_values, 1 /* print expression */);
       do_cleanups (cleanup_child);
     }
   do_cleanups (cleanup_children);
-  xfree (childlist);
   return MI_CMD_DONE;
 }
 
@@ -511,8 +514,7 @@ mi_cmd_var_assign (char *command, char **argv, int argc)
   if (var == NULL)
     error (_("mi_cmd_var_assign: Variable object not found"));
 
-  /* FIXME: define masks for attributes */
-  if (!(varobj_get_attributes (var) & 0x00000001))
+  if (!varobj_editable_p (var))
     error (_("mi_cmd_var_assign: Variable object is not editable"));
 
   expression = xstrdup (argv[1]);

@@ -1,7 +1,8 @@
 /* Parse expressions for GDB.
 
    Copyright (C) 1986, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2001, 2004, 2005, 2007 Free Software Foundation, Inc.
+   1998, 1999, 2000, 2001, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    Modified from expread.y by the Department of Computer Science at the
    State University of New York at Buffalo, 1991.
@@ -248,6 +249,18 @@ write_exp_elt_dblcst (DOUBLEST expelt)
 }
 
 void
+write_exp_elt_decfloatcst (gdb_byte expelt[16])
+{
+  union exp_element tmp;
+  int index;
+
+  for (index = 0; index < 16; index++)
+    tmp.decfloatconst[index] = expelt[index];
+
+  write_exp_elt (tmp);
+}
+
+void
 write_exp_elt_type (struct type *expelt)
 {
   union exp_element tmp;
@@ -469,6 +482,7 @@ write_dollar_variable (struct stoken str)
 {
   struct symbol *sym = NULL;
   struct minimal_symbol *msym = NULL;
+  struct internalvar *isym = NULL;
 
   /* Handle the tokens $digits; also $ (short for $0) and $$ (short for $$1)
      and $$digits (equivalent to $<-digits> if you could type that). */
@@ -507,6 +521,17 @@ write_dollar_variable (struct stoken str)
   if (i >= 0)
     goto handle_register;
 
+  /* Any names starting with $ are probably debugger internal variables.  */
+
+  isym = lookup_only_internalvar (copy_name (str) + 1);
+  if (isym)
+    {
+      write_exp_elt_opcode (OP_INTERNALVAR);
+      write_exp_elt_intern (isym);
+      write_exp_elt_opcode (OP_INTERNALVAR);
+      return;
+    }
+
   /* On some systems, such as HP-UX and hppa-linux, certain system routines 
      have names beginning with $ or $$.  Check for those, first. */
 
@@ -529,10 +554,10 @@ write_dollar_variable (struct stoken str)
       return;
     }
 
-  /* Any other names starting in $ are debugger internal variables.  */
+  /* Any other names are assumed to be debugger internal variables.  */
 
   write_exp_elt_opcode (OP_INTERNALVAR);
-  write_exp_elt_intern (lookup_internalvar (copy_name (str) + 1));
+  write_exp_elt_intern (create_internalvar (copy_name (str) + 1));
   write_exp_elt_opcode (OP_INTERNALVAR);
   return;
 handle_last:
@@ -637,8 +662,7 @@ copy_name (struct stoken token)
 static void
 prefixify_expression (struct expression *expr)
 {
-  int len =
-  sizeof (struct expression) + EXP_ELEM_TO_BYTES (expr->nelts);
+  int len = sizeof (struct expression) + EXP_ELEM_TO_BYTES (expr->nelts);
   struct expression *temp;
   int inpos = expr->nelts, outpos = 0;
 
@@ -706,6 +730,7 @@ operator_length_standard (struct expression *expr, int endpos,
 
     case OP_LONG:
     case OP_DOUBLE:
+    case OP_DECFLOAT:
     case OP_VAR_VALUE:
       oplen = 4;
       break;
@@ -999,20 +1024,6 @@ parse_expression (char *string)
   struct expression *exp;
   exp = parse_exp_1 (&string, 0, 0);
   if (*string)
-    error (_("Junk after end of expression."));
-  return exp;
-}
-
-
-/* As for parse_expression, except that if VOID_CONTEXT_P, then
-   no value is expected from the expression.  */
-
-struct expression *
-parse_expression_in_context (char *string, int void_context_p)
-{
-  struct expression *exp;
-  exp = parse_exp_in_context (&string, 0, 0, void_context_p);
-  if (*string != '\000')
     error (_("Junk after end of expression."));
   return exp;
 }

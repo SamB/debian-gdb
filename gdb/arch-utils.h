@@ -1,6 +1,6 @@
 /* Dynamic architecture support for GDB, the GNU debugger.
 
-   Copyright (C) 1998, 1999, 2000, 2002, 2003, 2004, 2007
+   Copyright (C) 1998, 1999, 2000, 2002, 2003, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -30,19 +30,6 @@ struct gdbarch_info;
 /* gdbarch trace variable */
 extern int gdbarch_debug;
 
-/* An implementation of return_value that props up architectures still
-   using USE_STRUCT_RETURN, gdbarch_extract_return_value and
-   store_return_value.  See also the hacks in "stack.c".  */
-enum return_value_convention legacy_return_value (struct gdbarch *gdbarch,
-						  struct type *valtype,
-						  struct regcache *regcache,
-						  gdb_byte *readbuf,
-						  const gdb_byte *writebuf);
-
-/* To return any structure or union type by value, store it at the
-   address passed as an invisible first argument to the function.  */
-extern gdbarch_deprecated_use_struct_convention_ftype always_use_struct_convention;
-
 /* The only possible cases for inner_than. */
 extern int core_addr_lessthan (CORE_ADDR lhs, CORE_ADDR rhs);
 extern int core_addr_greaterthan (CORE_ADDR lhs, CORE_ADDR rhs);
@@ -54,7 +41,7 @@ extern gdbarch_convert_from_func_ptr_addr_ftype convert_from_func_ptr_addr_ident
 
 /* No-op conversion of reg to regnum. */
 
-extern int no_op_reg_to_regnum (int reg);
+extern int no_op_reg_to_regnum (struct gdbarch *gdbarch, int reg);
 
 /* Do nothing version of elf_make_msymbol_special. */
 
@@ -67,7 +54,7 @@ void default_coff_make_msymbol_special (int val, struct minimal_symbol *msym);
 /* Version of cannot_fetch_register() / cannot_store_register() that
    always fails. */
 
-int cannot_register_not (int regnum);
+int cannot_register_not (struct gdbarch *gdbarch, int regnum);
 
 /* Legacy version of target_virtual_frame_pointer().  Assumes that
    there is an gdbarch_deprecated_fp_regnum and that it is the same, cooked or
@@ -86,7 +73,8 @@ extern int generic_in_solib_return_trampoline (CORE_ADDR pc, char *name);
 extern int generic_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR pc);
 
 /* By default, registers are not convertible.  */
-extern int generic_convert_register_p (int regnum, struct type *type);
+extern int generic_convert_register_p (struct gdbarch *gdbarch, int regnum,
+				       struct type *type);
 
 extern int default_stabs_argument_has_addr (struct gdbarch *gdbarch,
 					    struct type *type);
@@ -101,7 +89,7 @@ int default_remote_register_number (struct gdbarch *gdbarch,
    (LEGACY_SIM_REGNO_IGNORE) when the register doesn't have a valid
    name.  */
 
-extern int legacy_register_sim_regno (int regnum);
+extern int legacy_register_sim_regno (struct gdbarch *gdbarch, int regnum);
 
 /* Return the selected byte order, or BFD_ENDIAN_UNKNOWN if no byte
    order was explicitly selected.  */

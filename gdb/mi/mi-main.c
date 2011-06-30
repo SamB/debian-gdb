@@ -1,6 +1,6 @@
 /* MI Command Set.
 
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions (a Red Hat company).
@@ -643,36 +643,6 @@ mi_cmd_data_write_register_values (char *command, char **argv, int argc)
   return MI_CMD_DONE;
 }
 
-#if 0
-/* This is commented out because we decided it was not useful.  I leave
-   it, just in case.  ezannoni:1999-12-08 */
-
-/* Assign a value to a variable.  The expression argument must be in
-   the form A=2 or "A = 2" i.e. if there are spaces it needs to be
-   quoted.  */
-enum mi_cmd_result
-mi_cmd_data_assign (char *command, char **argv, int argc)
-{
-  struct expression *expr;
-  struct cleanup *old_chain;
-
-  if (argc != 1)
-    {
-      mi_error_message = xstrprintf ("mi_cmd_data_assign: Usage: -data-assign expression");
-      return MI_CMD_ERROR;
-    }
-
-  /* NOTE what follows is a clone of set_command().  FIXME: ezannoni
-     01-12-1999: Need to decide what to do with this for libgdb purposes.  */
-
-  expr = parse_expression (argv[0]);
-  old_chain = make_cleanup (free_current_contents, &expr);
-  evaluate_expression (expr);
-  do_cleanups (old_chain);
-  return MI_CMD_DONE;
-}
-#endif
-
 /* Evaluate the value of the argument.  The argument is an
    expression. If the expression contains spaces it needs to be
    included in double quotes.  */
@@ -1075,6 +1045,26 @@ mi_cmd_enable_timings (char *command, char **argv, int argc)
   return MI_CMD_ERROR;
 }
 
+enum mi_cmd_result
+mi_cmd_list_features (char *command, char **argv, int argc)
+{
+  if (argc == 0)
+    {
+      struct cleanup *cleanup = NULL;
+      cleanup = make_cleanup_ui_out_list_begin_end (uiout, "features");      
+
+      ui_out_field_string (uiout, NULL, "frozen-varobjs");
+      ui_out_field_string (uiout, NULL, "pending-breakpoints");
+      
+      do_cleanups (cleanup);
+
+      return MI_CMD_DONE;
+    }
+
+  error ("-list-features should be passed no arguments");
+  return MI_CMD_ERROR;
+}
+ 
 /* Execute a command within a safe environment.
    Return <0 for error; >=0 for ok.
 

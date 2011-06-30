@@ -1,7 +1,7 @@
 /* Multiple source language support for GDB.
 
    Copyright (C) 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    Contributed by the Department of Computer Science at the State University
    of New York at Buffalo.
@@ -43,6 +43,7 @@
 #include "parser-defs.h"
 #include "jv-lang.h"
 #include "demangle.h"
+#include "symfile.h"
 
 extern void _initialize_language (void);
 
@@ -67,8 +68,6 @@ static void set_type_range_case (void);
 static void unk_lang_emit_char (int c, struct ui_file *stream, int quoter);
 
 static void unk_lang_printchar (int c, struct ui_file *stream);
-
-static struct type *unk_lang_create_fundamental_type (struct objfile *, int);
 
 static void unk_lang_print_type (struct type *, char *, struct ui_file *,
 				 int, int);
@@ -187,11 +186,14 @@ local or auto    Automatic setting based on source file\n"));
 	  /* Found it!  Go into manual mode, and use this language.  */
 	  if (languages[i]->la_language == language_auto)
 	    {
-	      /* Enter auto mode.  Set to the current frame's language, if known.  */
+	      /* Enter auto mode.  Set to the current frame's language, if
+                 known, or fallback to the initial language.  */
 	      language_mode = language_mode_auto;
 	      flang = get_frame_language ();
 	      if (flang != language_unknown)
 		set_language (flang);
+	      else
+		set_initial_language ();
 	      expected_language = current_language;
 	      return;
 	    }
@@ -803,6 +805,7 @@ lang_bool_type (void)
       return builtin_type_f_logical_s2;
     case language_cplus:
     case language_pascal:
+    case language_ada:
       if (current_language->la_language==language_cplus)
         {sym = lookup_symbol ("bool", NULL, VAR_DOMAIN, NULL, NULL);}
       else
@@ -823,6 +826,7 @@ lang_bool_type (void)
 	    return type;
 	}
       return java_boolean_type;
+      
     default:
       return builtin_type_int;
     }
@@ -1045,6 +1049,23 @@ language_class_name_from_physname (const struct language_defn *current_language,
   return NULL;
 }
 
+/* Return non-zero if TYPE should be passed (and returned) by
+   reference at the language level.  */
+int
+language_pass_by_reference (struct type *type)
+{
+  return current_language->la_pass_by_reference (type);
+}
+
+/* Return zero; by default, types are passed by value at the language
+   level.  The target ABI may pass or return some structs by reference
+   independent of this.  */
+int
+default_pass_by_reference (struct type *type)
+{
+  return 0;
+}
+
 /* Return the default string containing the list of characters
    delimiting words.  This is a reasonable default value that
    most languages should be able to use.  */
@@ -1097,12 +1118,6 @@ unk_lang_printstr (struct ui_file *stream, const gdb_byte *string,
 		   unsigned int length, int width, int force_ellipses)
 {
   error (_("internal error - unimplemented function unk_lang_printstr called."));
-}
-
-static struct type *
-unk_lang_create_fundamental_type (struct objfile *objfile, int typeid)
-{
-  error (_("internal error - unimplemented function unk_lang_create_fundamental_type called."));
 }
 
 static void
@@ -1162,7 +1177,6 @@ const struct language_defn unknown_language_defn =
 {
   "unknown",
   language_unknown,
-  NULL,
   range_check_off,
   type_check_off,
   array_row_major,
@@ -1174,7 +1188,6 @@ const struct language_defn unknown_language_defn =
   unk_lang_printchar,		/* Print character constant */
   unk_lang_printstr,
   unk_lang_emit_char,
-  unk_lang_create_fundamental_type,
   unk_lang_print_type,		/* Print a type using appropriate syntax */
   unk_lang_val_print,		/* Print a value using appropriate syntax */
   unk_lang_value_print,		/* Print a top-level value */
@@ -1187,10 +1200,11 @@ const struct language_defn unknown_language_defn =
   unk_op_print_tab,		/* expression operators for printing */
   1,				/* c-style arrays */
   0,				/* String lower bound */
-  NULL,
   default_word_break_characters,
+  default_make_symbol_completion_list,
   unknown_language_arch_info,	/* la_language_arch_info.  */
   default_print_array_index,
+  default_pass_by_reference,
   LANG_MAGIC
 };
 
@@ -1199,7 +1213,6 @@ const struct language_defn auto_language_defn =
 {
   "auto",
   language_auto,
-  NULL,
   range_check_off,
   type_check_off,
   array_row_major,
@@ -1211,7 +1224,6 @@ const struct language_defn auto_language_defn =
   unk_lang_printchar,		/* Print character constant */
   unk_lang_printstr,
   unk_lang_emit_char,
-  unk_lang_create_fundamental_type,
   unk_lang_print_type,		/* Print a type using appropriate syntax */
   unk_lang_val_print,		/* Print a value using appropriate syntax */
   unk_lang_value_print,		/* Print a top-level value */
@@ -1224,10 +1236,11 @@ const struct language_defn auto_language_defn =
   unk_op_print_tab,		/* expression operators for printing */
   1,				/* c-style arrays */
   0,				/* String lower bound */
-  NULL,
   default_word_break_characters,
+  default_make_symbol_completion_list,
   unknown_language_arch_info,	/* la_language_arch_info.  */
   default_print_array_index,
+  default_pass_by_reference,
   LANG_MAGIC
 };
 
@@ -1235,7 +1248,6 @@ const struct language_defn local_language_defn =
 {
   "local",
   language_auto,
-  NULL,
   range_check_off,
   type_check_off,
   case_sensitive_on,
@@ -1247,7 +1259,6 @@ const struct language_defn local_language_defn =
   unk_lang_printchar,		/* Print character constant */
   unk_lang_printstr,
   unk_lang_emit_char,
-  unk_lang_create_fundamental_type,
   unk_lang_print_type,		/* Print a type using appropriate syntax */
   unk_lang_val_print,		/* Print a value using appropriate syntax */
   unk_lang_value_print,		/* Print a top-level value */
@@ -1260,10 +1271,11 @@ const struct language_defn local_language_defn =
   unk_op_print_tab,		/* expression operators for printing */
   1,				/* c-style arrays */
   0,				/* String lower bound */
-  NULL,
   default_word_break_characters,
+  default_make_symbol_completion_list,
   unknown_language_arch_info,	/* la_language_arch_info.  */
   default_print_array_index,
+  default_pass_by_reference,
   LANG_MAGIC
 };
 
@@ -1301,10 +1313,7 @@ language_string_char_type (const struct language_defn *la,
 {
   struct language_gdbarch *ld = gdbarch_data (gdbarch,
 					      language_gdbarch_data);
-  if (ld->arch_info[la->la_language].string_char_type != NULL)
-    return ld->arch_info[la->la_language].string_char_type;
-  else
-    return (*la->string_char_type);
+  return ld->arch_info[la->la_language].string_char_type;
 }
 
 struct type *
@@ -1314,25 +1323,13 @@ language_lookup_primitive_type_by_name (const struct language_defn *la,
 {
   struct language_gdbarch *ld = gdbarch_data (gdbarch,
 					      language_gdbarch_data);
-  if (ld->arch_info[la->la_language].primitive_type_vector != NULL)
+  struct type *const *p;
+  for (p = ld->arch_info[la->la_language].primitive_type_vector;
+       (*p) != NULL;
+       p++)
     {
-      struct type *const *p;
-      for (p = ld->arch_info[la->la_language].primitive_type_vector;
-	   (*p) != NULL;
-	   p++)
-	{
-	  if (strcmp (TYPE_NAME (*p), name) == 0)
-	    return (*p);
-	}
-    }
-  else
-    {
-      struct type **const *p;
-      for (p = current_language->la_builtin_type_vector; *p != NULL; p++)
-	{
-	  if (strcmp (TYPE_NAME (**p), name) == 0)
-	    return (**p);
-	}
+      if (strcmp (TYPE_NAME (*p), name) == 0)
+	return (*p);
     }
   return (NULL);
 }

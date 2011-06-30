@@ -91,6 +91,25 @@ esac
 
 AC_CONFIG_SUBDIRS(doc testsuite)
 
+# Check whether to support alternative target configurations
+AC_ARG_ENABLE(targets,
+[  --enable-targets        alternative target configurations],
+[case "${enableval}" in
+  yes | "") AC_ERROR(enable-targets option must specify target names or 'all')
+            ;;
+  no)       enable_targets= ;;
+  *)        enable_targets=$enableval ;;
+esac])
+
+# Check whether to enable 64-bit support on 32-bit hosts
+AC_ARG_ENABLE(64-bit-bfd,
+[  --enable-64-bit-bfd     64-bit support (on hosts with narrower word sizes)],
+[case "${enableval}" in
+  yes)  want64=true  ;;
+  no)   want64=false ;;
+  *)    AC_MSG_ERROR(bad value ${enableval} for 64-bit-bfd option) ;;
+esac],[want64=false])dnl
+
 # Provide defaults for some variables set by the per-host and per-target
 # configuration.
 gdb_host_obs=posix-hdep.o
@@ -103,7 +122,74 @@ fi
 
 . $srcdir/configure.host
 
-. $srcdir/configure.tgt
+# Accumulate some settings from configure.tgt over all enabled targets
+
+TARGET_OBS=
+all_targets=
+
+for targ_alias in `echo $target_alias $enable_targets | sed 's/,/ /g'`
+do
+  if test "$targ_alias" = "all"; then
+    all_targets=true
+  else
+    # Canonicalize the secondary target names.
+    result=`$ac_config_sub $targ_alias 2>/dev/null`
+    if test -n "$result"; then
+        targ=$result
+    else
+        targ=$targ_alias
+    fi
+
+    . ${srcdir}/configure.tgt
+
+    # Target-specific object files
+    for i in ${gdb_target_obs}; do
+        case " $TARGET_OBS " in
+        *" ${i} "*) ;;
+        *)
+          TARGET_OBS="$TARGET_OBS ${i}"
+          ;;
+        esac
+    done
+
+    # Check whether this target needs 64-bit CORE_ADDR
+    if test x${want64} = xfalse; then
+      . ${srcdir}/../bfd/config.bfd
+    fi
+  fi
+done
+
+if test x${all_targets} = xtrue; then
+
+  # We want all 64-bit targets if we either:
+  #  - run on a 64-bit host  or
+  #  - already require 64-bit support for some other target  or
+  #  - the --enable-64-bit-bfd option was supplied
+  # Otherwise we only support all 32-bit targets.
+  #
+  # NOTE: This test must be in sync with the corresponding
+  #       tests in BFD!
+
+  if test x${want64} = xfalse; then
+    AC_CHECK_SIZEOF(long)
+    if test "x${ac_cv_sizeof_long}" = "x8"; then
+      want64=true
+    fi
+  fi
+  if test x${want64} = xtrue; then
+    TARGET_OBS='$(ALL_TARGET_OBS) $(ALL_64_TARGET_OBS)'
+  else
+    TARGET_OBS='$(ALL_TARGET_OBS)'
+  fi
+fi
+
+AC_SUBST(TARGET_OBS)
+
+# For other settings, only the main target counts.
+gdb_sim=
+gdb_osabi=
+build_gdbserver=
+targ=$target; . ${srcdir}/configure.tgt
 
 # Fetch the default architecture and default target vector from BFD.
 targ=$target; . $srcdir/../bfd/config.bfd
@@ -242,6 +328,16 @@ if test $ac_cv_var__etext = yes; then
   AC_DEFINE(HAVE__ETEXT, 1,
             [Define to 1 if your system has the _etext variable. ])
 fi
+AC_CACHE_CHECK([for etext], ac_cv_var_etext,
+[AC_TRY_LINK(
+[#include <stdlib.h>
+extern char etext;
+],
+[free (&etext);], ac_cv_var_etext=yes, ac_cv_var_etext=no)])
+if test $ac_cv_var_etext = yes; then
+  AC_DEFINE(HAVE_ETEXT, 1,
+            [Define to 1 if your system has the etext variable. ])
+fi
 if test "$enable_profiling" = yes ; then
   if test $ac_cv_func_monstartup = no || test $ac_cv_func__mcleanup = no; then
     AC_MSG_ERROR(--enable-profiling requires monstartup and _mcleanup)
@@ -308,6 +404,9 @@ AC_SEARCH_LIBS(socketpair, socket)
 # default installation of ncurses on alpha*-dec-osf* will lead to such
 # a situation.
 AC_SEARCH_LIBS(waddstr, [ncurses cursesX curses])
+
+# On HP/UX we may need libxpdl for dlgetmodinfo (used by solib-pa64.c).
+AC_SEARCH_LIBS(dlgetmodinfo, [dl xpdl])
 
 # Since GDB uses Readline, we need termcap functionality.  In many
 # cases this will be provided by the curses library, but some systems
@@ -447,6 +546,9 @@ AC_CHECK_HEADERS(term.h, [], [],
 #endif
 ])
 
+# Check for HP/UX 64-bit shared library support
+AC_CHECK_HEADERS(elf_hp.h)
+
 # FIXME: kettenis/20030102: In most cases we include these
 # unconditionally, so what's the point in checking these?
 AC_CHECK_HEADERS(ctype.h time.h)
@@ -486,6 +588,7 @@ AC_CHECK_TYPES(uintptr_t, [], [], [#include <stdint.h>])
 
 AC_C_CONST
 AC_C_INLINE
+AC_C_BIGENDIAN
 
 # ------------------------------ #
 # Checks for library functions.  #
@@ -537,7 +640,7 @@ AC_DEFINE_UNQUOTED(PTRACE_TYPE_RET, $gdb_cv_func_ptrace_ret,
 AC_CACHE_CHECK([types of arguments for ptrace], gdb_cv_func_ptrace_args, [
 for gdb_arg1 in 'int' 'long'; do
  for gdb_arg2 in 'pid_t' 'int' 'long'; do
-  for gdb_arg3 in 'int *' 'caddr_t' 'int' 'long'; do
+  for gdb_arg3 in 'int *' 'caddr_t' 'int' 'long' 'void *'; do
    for gdb_arg4 in 'int' 'long'; do
      AC_TRY_COMPILE($gdb_ptrace_headers, [
 extern $gdb_cv_func_ptrace_ret
@@ -725,7 +828,7 @@ if test "${target}" = "${host}"; then
       [Define if you want to use new multi-fd /proc interface
        (replaces HAVE_MULTIPLE_PROC_FDS as well as other macros).])
       ;;
-  *-*-solaris2.[[6789]] | *-*-solaris2.1[[0-9]])
+  *-*-solaris2.[[6789]] | *-*-solaris2.1[[0-9]]*)
       AC_DEFINE(NEW_PROC_API, 1,
       [Define if you want to use new multi-fd /proc interface
        (replaces HAVE_MULTIPLE_PROC_FDS as well as other macros).])
@@ -909,6 +1012,25 @@ AC_CACHE_CHECK([for long long support in printf],
 if test $gdb_cv_printf_has_long_long = yes; then
   AC_DEFINE(PRINTF_HAS_LONG_LONG, 1,
             [Define to 1 if the "%ll" format works to print long longs.])
+fi
+
+# Check if the compiler and runtime support printing decfloats.
+
+AC_CACHE_CHECK([for decfloat support in printf],
+               gdb_cv_printf_has_decfloat,
+               [AC_RUN_IFELSE([AC_LANG_PROGRAM([AC_INCLUDES_DEFAULT],
+[[char buf[64];
+  _Decimal32 d32 = 1.2345df;
+  _Decimal64 d64 = 1.2345dd;
+  _Decimal128 d128 = 1.2345dl;
+  sprintf (buf, "Decimal32: %H\nDecimal64: %D\nDecimal128: %DD", d32, d64, d128);
+  return (strcmp ("Decimal32: 1.2345\nDecimal64: 1.2345\nDecimal128: 1.2345", buf));]])],
+                              gdb_cv_printf_has_decfloat=yes,
+                              gdb_cv_printf_has_decfloat=no,
+                              gdb_cv_printf_has_decfloat=no)])
+if test $gdb_cv_printf_has_decfloat = yes; then
+  AC_DEFINE(PRINTF_HAS_DECFLOAT, 1,
+            [Define to 1 if the "%H, %D and %DD" formats work to print decfloats.])
 fi
 
 # Check if the compiler supports the `long double' type.  We can't use
@@ -1454,7 +1576,7 @@ if test x"$enable_tui" = xyes; then
 fi
 
 # Unlike the sim directory, whether a simulator is linked is controlled by 
-# presence of a SIM= and a SIM_OBS= definition in the target '.mt' file.  
+# presence of a gdb_sim definition in the target configure.tgt entry.  
 # This code just checks for a few cases where we'd like to ignore those
 # definitions, even when they're present in the '.mt' file.  These cases
 # are when --disable-sim is specified, or if the simulator directory is
@@ -1475,16 +1597,17 @@ if test ! -d "${srcdir}/../sim"; then
   ignore_sim=true
 fi
 
-if test "${ignore_sim}" = "true"; then
-    IGNORE_SIM="SIM="
-    IGNORE_SIM_OBS="SIM_OBS="
-else
-    IGNORE_SIM=""
-    IGNORE_SIM_OBS=""
+SIM=
+SIM_OBS=
+if test "${ignore_sim}" = "false"; then
+  if test x"${gdb_sim}" != x ; then
+    SIM="${gdb_sim}"
+    SIM_OBS="remote-sim.o"
     AC_DEFINE(WITH_SIM, 1, [Define if the simulator is being linked in.])
+  fi
 fi
-AC_SUBST(IGNORE_SIM)
-AC_SUBST(IGNORE_SIM_OBS)
+AC_SUBST(SIM)
+AC_SUBST(SIM_OBS)
 
 AC_SUBST(ENABLE_CFLAGS)
 AC_SUBST(PROFILE_CFLAGS)
@@ -1520,25 +1643,10 @@ else
   host_makefile_frag=/dev/null
 fi
 
-target_makefile_frag=${srcdir}/config/${gdb_target_cpu}/${gdb_target}.mt
-if test ! -f ${target_makefile_frag}; then
-  AC_MSG_ERROR("*** Gdb does not support target ${target}")
-fi
-frags="$frags $target_makefile_frag"
-
 AC_SUBST_FILE(host_makefile_frag)
-AC_SUBST_FILE(target_makefile_frag)
 AC_SUBST(frags)
 
 changequote(,)dnl
-hostfile=`sed -n '
-s/XM_FILE[ 	]*=[ 	]*\([^ 	]*\)/\1/p
-' ${host_makefile_frag}`
-
-targetfile=`sed -n '
-s/^[ 	]*DEPRECATED_TM_FILE[ 	]*=[ 	]*\([^ 	]*\)/\1/p
-' ${target_makefile_frag}`
-
 if test "${gdb_native}" = "yes"; then
 # We pick this up from the host configuration file (.mh) because we
 # do not have a native configuration Makefile fragment.
@@ -1576,40 +1684,11 @@ if test "$gdb_native" = "yes"; then
   fi
 fi
 
-# If hostfile (XM_FILE) and/or targetfile (DEPRECATED_TM_FILE) and/or
-# nativefile (NAT_FILE) is not set in config/*/*.m[ht] files, we link
+# If nativefile (NAT_FILE) is not set in config/*/*.m[ht] files, we link
 # to an empty version.
 
 files=
 links=
-
-rm -f xm.h
-xm_h=""
-if test "${hostfile}" != ""; then
-    xm_h=xm.h
-    case "${hostfile}" in
-      xm-*.h ) GDB_XM_FILE="config/${gdb_host_cpu}/${hostfile}" ;;
-      * ) GDB_XM_FILE="${hostfile}"
-    esac
-    files="${files} ${GDB_XM_FILE}"
-    links="${links} xm.h"
-    AC_DEFINE_UNQUOTED(GDB_XM_FILE, "${GDB_XM_FILE}", [hostfile])
-fi
-AC_SUBST(xm_h)
-
-rm -f tm.h
-tm_h=""
-if test "${targetfile}" != ""; then
-    tm_h=tm.h
-    case "${targetfile}" in
-      tm-*.h ) GDB_TM_FILE="config/${gdb_target_cpu}/${targetfile}" ;;
-      * ) GDB_TM_FILE="${targetfile}"
-    esac
-    files="${files} ${GDB_TM_FILE}"
-    links="${links} tm.h"
-    AC_DEFINE_UNQUOTED(GDB_TM_FILE, "${GDB_TM_FILE}", [targetfile])
-fi
-AC_SUBST(tm_h)
 
 rm -f nm.h
 nm_h=""
@@ -1649,9 +1728,7 @@ dnl provided by makefile fragments.
 dnl
 
 changequote(,)dnl
-sed -e '/^DEPRECATED_TM_FILE[ 	]*=/s,^DEPRECATED_TM_FILE[ 	]*=[ 	]*,&config/'"${gdb_target_cpu}"'/,
-/^XM_FILE[ 	]*=/s,^XM_FILE[ 	]*=[ 	]*,&config/'"${gdb_host_cpu}"'/,
-/^NAT_FILE[ 	]*=/s,^NAT_FILE[ 	]*=[ 	]*,&config/'"${gdb_host_cpu}"'/,' <Makefile >Makefile.tmp
+sed -e '/^NAT_FILE[ 	]*=/s,^NAT_FILE[ 	]*=[ 	]*,&config/'"${gdb_host_cpu}"'/,' <Makefile >Makefile.tmp
 mv -f Makefile.tmp Makefile
 changequote([,])dnl
 
@@ -1663,7 +1740,6 @@ esac
 ],
 [
 gdb_host_cpu=$gdb_host_cpu
-gdb_target_cpu=$gdb_target_cpu
 nativefile=$nativefile
 ])
 

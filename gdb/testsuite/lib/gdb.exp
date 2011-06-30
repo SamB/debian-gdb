@@ -1,5 +1,5 @@
 # Copyright 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-# 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+# 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -84,6 +84,8 @@ if ![info exists env(EXEEXT)] {
 } else {
     set EXEEXT $env(EXEEXT)
 }
+
+set octal "\[0-7\]+"
 
 ### Only procedures should come after this point.
 
@@ -275,13 +277,13 @@ proc gdb_run_cmd {args} {
     }
     send_gdb "run $args\n"
 # This doesn't work quite right yet.
-    gdb_expect 60 {
+# Use -notransfer here so that test cases (like chng-sym.exp)
+# may test for additional start-up messages.
+   gdb_expect 60 {
 	-re "The program .* has been started already.*y or n. $" {
 	    send_gdb "y\n"
 	    exp_continue
 	}
-	# Use -notransfer here so that test cases (like chng-sym.exp)
-	# may test for additional start-up messages.
 	-notransfer -re "Starting program: \[^\r\n\]*" {}
     }
 }
@@ -1520,11 +1522,13 @@ proc gdb_compile {source dest type options} {
     global gdb_wrapper_flags;
     global gdb_wrapper_initialized;
 
-     # Add platform-specific options if a shared library was specified using
-     # "shlib=librarypath" in OPTIONS.
-     set new_options ""
-     set shlib_found 0
-     foreach opt $options {
+    set outdir [file dirname $dest]
+
+    # Add platform-specific options if a shared library was specified using
+    # "shlib=librarypath" in OPTIONS.
+    set new_options ""
+    set shlib_found 0
+    foreach opt $options {
         if [regexp {^shlib=(.*)} $opt dummy_var shlib_name] {
             if [test_compiler_info "xlc-*"] {
 		# IBM xlc compiler doesn't accept shared library named other
@@ -1542,9 +1546,9 @@ proc gdb_compile {source dest type options} {
                 if { ([test_compiler_info "gcc-*"]
                       &&  ([istarget "powerpc*-*-aix*"]
                         || [istarget "rs6000*-*-aix*"] )) } {
-                    lappend options "additional_flags=-L${objdir}/${subdir}"
+                    lappend options "additional_flags=-L${outdir}"
                 } elseif { [istarget "mips-sgi-irix*"] } {
-                    lappend options "additional_flags=-rpath ${objdir}/${subdir}"
+                    lappend options "additional_flags=-rpath ${outdir}"
                 }
             }
 	} elseif { $opt == "shlib_load" } {
@@ -1554,6 +1558,8 @@ proc gdb_compile {source dest type options} {
 		  || [istarget arm*-*-symbianelf*]
 		  || [istarget hppa*-*-hpux*])} {
 		# Do not need anything.
+	    } elseif { [istarget *-*-openbsd*] } {
+		lappend new_options "additional_flags=-Wl,-rpath,${outdir}"
 	    } else {
 		lappend new_options "libs=-ldl"
 		lappend new_options "additional_flags=-Wl,-rpath,\\\$ORIGIN"
@@ -1561,8 +1567,8 @@ proc gdb_compile {source dest type options} {
         } else {
             lappend new_options $opt
         }
-     }
-     set options $new_options
+    }
+    set options $new_options
 
     if [target_info exists gdb_stub] {
 	set options2 { "additional_flags=-Dusestubs" }
@@ -1986,7 +1992,7 @@ proc gdb_load_cmd { args } {
 	set loadtimeout 1600
     }
     send_gdb "load $args\n"
-    verbose "Timeout is now $timeout seconds" 2
+    verbose "Timeout is now $loadtimeout seconds" 2
     gdb_expect $loadtimeout {
 	-re "Loading section\[^\r\]*\r\n" {
 	    exp_continue
@@ -2487,14 +2493,22 @@ proc separate_debug_filename { exec } {
 # Return "" if no build-id found.
 proc build_id_debug_filename_get { exec } {
     set tmp "${exec}-tmp"
-    exec objcopy -j .note.gnu.build-id -O binary $exec $tmp
+    set objcopy_program [transform objcopy]
+
+    set result [catch "exec $objcopy_program -j .note.gnu.build-id -O binary $exec $tmp" output]
+    verbose "result is $result"
+    verbose "output is $output"
+    if {$result == 1} {
+	return ""
+    }
     set fi [open $tmp]
+    fconfigure $fi -translation binary
     # Skip the NOTE header.
     read $fi 16
     set data [read $fi]
     close $fi
     file delete $tmp
-    if {$data eq ""} {
+    if ![string compare $data ""] then {
 	return ""
     }
     # Convert it to hex.
@@ -2508,40 +2522,6 @@ proc build_id_debug_filename_get { exec } {
 # which removes the symbol entry for main from the separate debug file.
 
 proc gdb_gnu_strip_debug { dest args } {
-
-    # First, make sure that we can do this.  This is nasty. We need to
-    # check for the stabs debug format.  To do this we must run gdb on
-    # the unstripped executable, list 'main' (as to have a default
-    # source file), use get_debug_format (which does 'info source')
-    # and then see if the debug info is stabs. If so, we bail out.  We
-    # cannot do this any other way because get_debug_format finds out
-    # the debug format using gdb itself, and in case of stabs we get
-    # an error loading the program if it is already stripped.  An
-    # alternative would be to find out the debug info from the flags
-    # passed to dejagnu when the test is run.
-
-    gdb_exit
-    gdb_start
-    gdb_load ${dest}
-    gdb_test "list main" "" ""
-    get_debug_format
-    if { [test_debug_format "stabs"] } then {
-	# The separate debug info feature doesn't work well in
-	# binutils with stabs.  It produces a corrupted debug info
-	# only file, and gdb chokes on it.  It is almost impossible to
-	# capture the failing message out of gdb, because it happens
-	# inside gdb_load. At that point any error message is
-	# intercepted by dejagnu itself, and, because of the error
-	# threshold, any faulty test result is changed into an
-	# UNRESOLVED.  (see dejagnu/lib/framework.exp)
-	unsupported "no separate debug info handling with stabs"
-	return -1
-    } elseif { [test_debug_format "unknown"] } then {
-	# gdb doesn't know what the debug format is. We are out of luck here. 
-	unsupported "unknown debugging format"
-	return -1
-    }
-    gdb_exit
 
     set debug_file [separate_debug_filename $dest]
     set strip_to_file_program [transform strip]

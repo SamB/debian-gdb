@@ -1,6 +1,6 @@
 /* Support for printing Ada types for GDB, the GNU debugger.
    Copyright (C) 1986, 1988, 1989, 1991, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004, 2007 Free Software Foundation, Inc.
+   2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -366,6 +366,9 @@ print_array_type (struct type *type, struct ui_file *stream, int show,
   int bitsize;
   int n_indices;
 
+  if (ada_is_packed_array_type (type))
+    type = ada_coerce_to_simple_array_type (type);
+
   bitsize = 0;
   fprintf_filtered (stream, "array (");
 
@@ -374,8 +377,6 @@ print_array_type (struct type *type, struct ui_file *stream, int show,
     fprintf_filtered (stream, "...");
   else
     {
-      if (ada_is_packed_array_type (type))
-	type = ada_coerce_to_simple_array_type (type);
       if (type == NULL)
         {
           fprintf_filtered (stream, _("<undecipherable array type>"));
@@ -753,7 +754,7 @@ ada_print_type (struct type *type0, char *varstring, struct ui_file *stream,
 		int show, int level)
 {
   struct type *type = ada_check_typedef (ada_get_base_type (type0));
-  char *type_name = decoded_type_name (type);
+  char *type_name = decoded_type_name (type0);
   int is_var_decl = (varstring != NULL && varstring[0] != '\0');
 
   if (type == NULL)
@@ -782,7 +783,17 @@ ada_print_type (struct type *type0, char *varstring, struct ui_file *stream,
   if (ada_is_aligner_type (type))
     ada_print_type (ada_aligned_type (type), "", stream, show, level);
   else if (ada_is_packed_array_type (type))
-    print_array_type (type, stream, show, level);
+    {
+      if (TYPE_CODE (type) == TYPE_CODE_PTR)
+        {
+          fprintf_filtered (stream, "access ");
+          print_array_type (TYPE_TARGET_TYPE (type), stream, show, level);
+        }
+      else
+        {
+          print_array_type (type, stream, show, level);
+        }
+    }
   else
     switch (TYPE_CODE (type))
       {

@@ -1,7 +1,7 @@
 /* Handle SVR4 shared libraries for GDB, the GNU Debugger.
 
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000,
-   2001, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2001, 2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -41,13 +41,10 @@
 #include "bfd-target.h"
 #include "elf-bfd.h"
 #include "exec.h"
+#include "auxv.h"
 
 static struct link_map_offsets *svr4_fetch_link_map_offsets (void);
 static int svr4_have_link_map_offsets (void);
-
-/* This hook is set to a function that provides native link map
-   offsets if the code in solib-legacy.c is linked in.  */
-struct link_map_offsets *(*legacy_svr4_fetch_link_map_offsets_hook) (void);
 
 /* Link map info to include in an allocated so_list entry */
 
@@ -551,6 +548,17 @@ solib_svr4_r_map (void)
 				    builtin_type_void_data_ptr);
 }
 
+/* Find r_brk from the inferior's debug base.  */
+
+static CORE_ADDR
+solib_svr4_r_brk (void)
+{
+  struct link_map_offsets *lmo = svr4_fetch_link_map_offsets ();
+
+  return read_memory_typed_address (debug_base + lmo->r_brk_offset,
+				    builtin_type_void_data_ptr);
+}
+
 /* Find the link map for the dynamic linker (if it is not in the
    normal list of loaded shared objects).  */
 
@@ -609,7 +617,9 @@ open_symbol_file_object (void *from_ttyp)
     if (!query ("Attempt to reload symbols from process? "))
       return 0;
 
-  if ((debug_base = locate_base ()) == 0)
+  /* Always locate the debug struct, in case it has moved.  */
+  debug_base = 0;
+  if (locate_base () == 0)
     return 0;	/* failed somehow... */
 
   /* First link map member should be the executable.  */
@@ -704,17 +714,14 @@ svr4_current_sos (void)
   struct so_list **link_ptr = &head;
   CORE_ADDR ldsomap = 0;
 
-  /* Make sure we've looked up the inferior's dynamic linker's base
-     structure.  */
-  if (! debug_base)
-    {
-      debug_base = locate_base ();
+  /* Always locate the debug struct, in case it has moved.  */
+  debug_base = 0;
+  locate_base ();
 
-      /* If we can't find the dynamic linker's base structure, this
-	 must not be a dynamically linked executable.  Hmm.  */
-      if (! debug_base)
-	return svr4_default_sos ();
-    }
+  /* If we can't find the dynamic linker's base structure, this
+     must not be a dynamically linked executable.  Hmm.  */
+  if (! debug_base)
+    return svr4_default_sos ();
 
   /* Walk the inferior's link map list, and build our list of
      `struct so_list' nodes.  */
@@ -803,7 +810,7 @@ svr4_fetch_objfile_link_map (struct objfile *objfile)
 {
   CORE_ADDR lm;
 
-  if ((debug_base = locate_base ()) == 0)
+  if (locate_base () == 0)
     return 0;   /* failed somehow... */
 
   /* Position ourselves on the first link map.  */
@@ -968,6 +975,7 @@ enable_break (void)
   struct minimal_symbol *msymbol;
   char **bkpt_namep;
   asection *interp_sect;
+  CORE_ADDR sym_addr;
 
   /* First, remove all the solib event breakpoints.  Their addresses
      may have changed since the last time we ran the program.  */
@@ -975,6 +983,59 @@ enable_break (void)
 
   interp_text_sect_low = interp_text_sect_high = 0;
   interp_plt_sect_low = interp_plt_sect_high = 0;
+
+  /* If we already have a shared library list in the target, and
+     r_debug contains r_brk, set the breakpoint there - this should
+     mean r_brk has already been relocated.  Assume the dynamic linker
+     is the object containing r_brk.  */
+
+  solib_add (NULL, 0, &current_target, auto_solib_add);
+  sym_addr = 0;
+  if (debug_base && solib_svr4_r_map () != 0)
+    sym_addr = solib_svr4_r_brk ();
+
+  if (sym_addr != 0)
+    {
+      struct obj_section *os;
+
+      sym_addr = gdbarch_addr_bits_remove
+	(current_gdbarch, gdbarch_convert_from_func_ptr_addr (current_gdbarch,
+							      sym_addr,
+							      &current_target));
+
+      os = find_pc_section (sym_addr);
+      if (os != NULL)
+	{
+	  /* Record the relocated start and end address of the dynamic linker
+	     text and plt section for svr4_in_dynsym_resolve_code.  */
+	  bfd *tmp_bfd;
+	  CORE_ADDR load_addr;
+
+	  tmp_bfd = os->objfile->obfd;
+	  load_addr = ANOFFSET (os->objfile->section_offsets,
+				os->objfile->sect_index_text);
+
+	  interp_sect = bfd_get_section_by_name (tmp_bfd, ".text");
+	  if (interp_sect)
+	    {
+	      interp_text_sect_low =
+		bfd_section_vma (tmp_bfd, interp_sect) + load_addr;
+	      interp_text_sect_high =
+		interp_text_sect_low + bfd_section_size (tmp_bfd, interp_sect);
+	    }
+	  interp_sect = bfd_get_section_by_name (tmp_bfd, ".plt");
+	  if (interp_sect)
+	    {
+	      interp_plt_sect_low =
+		bfd_section_vma (tmp_bfd, interp_sect) + load_addr;
+	      interp_plt_sect_high =
+		interp_plt_sect_low + bfd_section_size (tmp_bfd, interp_sect);
+	    }
+
+	  create_solib_event_breakpoint (sym_addr);
+	  return 1;
+	}
+    }
 
   /* Find the .interp section; if not found, warn the user and drop
      into the old breakpoint at symbol code.  */
@@ -991,10 +1052,10 @@ enable_break (void)
       struct target_ops *tmp_bfd_target;
       int tmp_fd = -1;
       char *tmp_pathname = NULL;
-      CORE_ADDR sym_addr = 0;
 
       /* Read the contents of the .interp section into a local buffer;
          the contents specify the dynamic linker this program uses.  */
+      sym_addr = 0;
       interp_sect_size = bfd_section_size (exec_bfd, interp_sect);
       buf = alloca (interp_sect_size);
       bfd_get_section_contents (exec_bfd, interp_sect,
@@ -1008,11 +1069,6 @@ enable_break (void)
          to find any magic formula to find it for Solaris (appears to
          be trivial on GNU/Linux).  Therefore, we have to try an alternate
          mechanism to find the dynamic linker's base address.  */
-
-      /* TODO drow/2006-09-12: This is somewhat fragile, because it
-	 relies on read_pc.  On both Solaris and GNU/Linux we can use
-	 the AT_BASE auxilliary entry, which GDB now knows how to
-	 access, to find the base address.  */
 
       tmp_fd = solib_open (buf, &tmp_pathname);
       if (tmp_fd >= 0)
@@ -1036,7 +1092,6 @@ enable_break (void)
 
       /* On a running target, we can get the dynamic linker's base
          address from the shared library table.  */
-      solib_add (NULL, 0, &current_target, auto_solib_add);
       so = master_so_list ();
       while (so)
 	{
@@ -1050,9 +1105,19 @@ enable_break (void)
 	  so = so->next;
 	}
 
+      /* If we were not able to find the base address of the loader
+         from our so_list, then try using the AT_BASE auxilliary entry.  */
+      if (!load_addr_found)
+        if (target_auxv_search (&current_target, AT_BASE, &load_addr) > 0)
+          load_addr_found = 1;
+
       /* Otherwise we find the dynamic linker's base address by examining
 	 the current pc (which should point at the entry point for the
-	 dynamic linker) and subtracting the offset of the entry point.  */
+	 dynamic linker) and subtracting the offset of the entry point.
+
+         This is more fragile than the previous approaches, but is a good
+         fallback method because it has actually been working well in
+         most cases.  */
       if (!load_addr_found)
 	load_addr = (read_pc ()
 		     - exec_entry_point (tmp_bfd, tmp_bfd_target));
@@ -1362,7 +1427,7 @@ svr4_solib_create_inferior_hook (void)
   do
     {
       target_resume (pid_to_ptid (-1), 0, stop_signal);
-      wait_for_inferior ();
+      wait_for_inferior (0);
     }
   while (stop_signal != TARGET_SIGNAL_TRAP);
   stop_soon = NO_STOP_QUIETLY;
@@ -1442,12 +1507,12 @@ solib_svr4_init (struct obstack *obstack)
   struct solib_svr4_ops *ops;
 
   ops = OBSTACK_ZALLOC (obstack, struct solib_svr4_ops);
-  ops->fetch_link_map_offsets = legacy_svr4_fetch_link_map_offsets_hook;
+  ops->fetch_link_map_offsets = NULL;
   return ops;
 }
 
 /* Set the architecture-specific `struct link_map_offsets' fetcher for
-   GDBARCH to FLMO.  */
+   GDBARCH to FLMO.  Also, install SVR4 solib_ops into GDBARCH.  */
 
 void
 set_solib_svr4_fetch_link_map_offsets (struct gdbarch *gdbarch,
@@ -1456,6 +1521,8 @@ set_solib_svr4_fetch_link_map_offsets (struct gdbarch *gdbarch,
   struct solib_svr4_ops *ops = gdbarch_data (gdbarch, solib_svr4_data);
 
   ops->fetch_link_map_offsets = flmo;
+
+  set_solib_ops (gdbarch, &svr4_so_ops);
 }
 
 /* Fetch a link_map_offsets structure using the architecture-specific
@@ -1500,6 +1567,7 @@ svr4_ilp32_fetch_link_map_offsets (void)
       lmo.r_version_offset = 0;
       lmo.r_version_size = 4;
       lmo.r_map_offset = 4;
+      lmo.r_brk_offset = 8;
       lmo.r_ldsomap_offset = 20;
 
       /* Everything we need is in the first 20 bytes.  */
@@ -1530,6 +1598,7 @@ svr4_lp64_fetch_link_map_offsets (void)
       lmo.r_version_offset = 0;
       lmo.r_version_size = 4;
       lmo.r_map_offset = 8;
+      lmo.r_brk_offset = 16;
       lmo.r_ldsomap_offset = 40;
 
       /* Everything we need is in the first 40 bytes.  */
@@ -1565,6 +1634,25 @@ elf_lookup_lib_symbol (const struct objfile *objfile,
 		(objfile, name, linkage_name, domain, symtab);
 }
 
+static int
+svr4_same (struct so_list *gdb, struct so_list *inferior)
+{
+  if (! strcmp (gdb->so_original_name, inferior->so_original_name))
+    return 1;
+
+  /* On Solaris, when starting inferior we think that dynamic linker is
+     /usr/lib/ld.so.1, but later on, the table of loaded shared libraries 
+     contains /lib/ld.so.1.  Sometimes one file is a link to another, but 
+     sometimes they have identical content, but are not linked to each
+     other.  We don't restrict this check for Solaris, but the chances
+     of running into this situation elsewhere are very low.  */
+  if (strcmp (gdb->so_original_name, "/usr/lib/ld.so.1") == 0
+      && strcmp (inferior->so_original_name, "/lib/ld.so.1") == 0)
+    return 1;
+
+  return 0;
+}
+
 extern initialize_file_ftype _initialize_svr4_solib; /* -Wmissing-prototypes */
 
 void
@@ -1581,7 +1669,5 @@ _initialize_svr4_solib (void)
   svr4_so_ops.open_symbol_file_object = open_symbol_file_object;
   svr4_so_ops.in_dynsym_resolve_code = svr4_in_dynsym_resolve_code;
   svr4_so_ops.lookup_lib_global_symbol = elf_lookup_lib_symbol;
-
-  /* FIXME: Don't do this here.  *_gdbarch_init() should set so_ops. */
-  current_target_so_ops = &svr4_so_ops;
+  svr4_so_ops.same = svr4_same;
 }

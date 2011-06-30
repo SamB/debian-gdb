@@ -1,6 +1,6 @@
 /* Target-dependent code for Morpho mt processor, for GDB.
 
-   Copyright (C) 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -140,7 +140,7 @@ enum mt_gdb_regnums
 /* Return name of register number specified by REGNUM.  */
 
 static const char *
-mt_register_name (int regnum)
+mt_register_name (struct gdbarch *gdbarch, int regnum)
 {
   static const char *const register_names[] = {
     /* CPU regs.  */
@@ -311,7 +311,7 @@ mt_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
   if (group == all_reggroup)
     return (regnum >= 0
 	    && regnum < MT_NUM_REGS + MT_NUM_PSEUDO_REGS
-	    && mt_register_name (regnum)[0] != '\0');
+	    && mt_register_name (gdbarch, regnum)[0] != '\0');
 
   if (group == general_reggroup)
     return (regnum >= MT_R0_REGNUM && regnum <= MT_R15_REGNUM);
@@ -398,7 +398,7 @@ mt_return_value (struct gdbarch *gdbarch, struct type *type,
    call.  */
 
 static CORE_ADDR
-mt_skip_prologue (CORE_ADDR pc)
+mt_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   CORE_ADDR func_addr = 0, func_end = 0;
   char *func_name;
@@ -451,13 +451,14 @@ mt_skip_prologue (CORE_ADDR pc)
    The BP for ms2 is defined as 0x69000000 (illegal)  */
 
 static const gdb_byte *
-mt_breakpoint_from_pc (CORE_ADDR *bp_addr, int *bp_size)
+mt_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *bp_addr,
+		       int *bp_size)
 {
   static gdb_byte ms1_breakpoint[] = { 0x68, 0, 0, 0 };
   static gdb_byte ms2_breakpoint[] = { 0x69, 0, 0, 0 };
 
   *bp_size = 4;
-  if (gdbarch_bfd_arch_info (current_gdbarch)->mach == bfd_mach_ms2)
+  if (gdbarch_bfd_arch_info (gdbarch)->mach == bfd_mach_ms2)
     return ms2_breakpoint;
   
   return ms1_breakpoint;
@@ -619,8 +620,8 @@ mt_frame_align (struct gdbarch *gdbarch, CORE_ADDR sp)
 
 static void
 mt_registers_info (struct gdbarch *gdbarch,
-		    struct ui_file *file,
-		    struct frame_info *frame, int regnum, int all)
+		   struct ui_file *file,
+		   struct frame_info *frame, int regnum, int all)
 {
   if (regnum == -1)
     {
@@ -660,9 +661,9 @@ mt_registers_info (struct gdbarch *gdbarch,
 	  frame_register_read (frame, regnum, buff);
 
 	  fputs_filtered (gdbarch_register_name
-			  (current_gdbarch, regnum), file);
+			  (gdbarch, regnum), file);
 	  print_spaces_filtered (15 - strlen (gdbarch_register_name
-					        (current_gdbarch, regnum)),
+					        (gdbarch, regnum)),
 				 file);
 	  fputs_filtered ("0x", file);
 
@@ -684,10 +685,10 @@ mt_registers_info (struct gdbarch *gdbarch,
 	  frame_register_read (frame, MT_COPRO_REGNUM, buf);
 	  /* And print.  */
 	  regnum = MT_COPRO_PSEUDOREG_REGNUM;
-	  fputs_filtered (gdbarch_register_name (current_gdbarch, regnum),
+	  fputs_filtered (gdbarch_register_name (gdbarch, regnum),
 			  file);
 	  print_spaces_filtered (15 - strlen (gdbarch_register_name
-					        (current_gdbarch, regnum)),
+					        (gdbarch, regnum)),
 				 file);
 	  val_print (register_type (gdbarch, regnum), buf,
 		     0, 0, file, 0, 1, 0, Val_no_prettyprint);
@@ -717,10 +718,10 @@ mt_registers_info (struct gdbarch *gdbarch,
 
 	  /* And print.  */
 	  regnum = MT_MAC_PSEUDOREG_REGNUM;
-	  fputs_filtered (gdbarch_register_name (current_gdbarch, regnum),
+	  fputs_filtered (gdbarch_register_name (gdbarch, regnum),
 			  file);
 	  print_spaces_filtered (15 - strlen (gdbarch_register_name
-					      (current_gdbarch, regnum)),
+					      (gdbarch, regnum)),
 				 file);
 	  fputs_filtered ("0x", file);
 	  print_longest (file, 'x', 0, newmac);
@@ -895,8 +896,8 @@ mt_frame_unwind_cache (struct frame_info *next_frame,
   /* Grab the frame-relative values of SP and FP, needed below. 
      The frame_saved_register function will find them on the
      stack or in the registers as appropriate.  */
-  frame_unwind_unsigned_register (next_frame, MT_SP_REGNUM, &sp);
-  frame_unwind_unsigned_register (next_frame, MT_FP_REGNUM, &fp);
+  sp = frame_unwind_register_unsigned (next_frame, MT_SP_REGNUM);
+  fp = frame_unwind_register_unsigned (next_frame, MT_FP_REGNUM);
 
   start_addr = frame_func_unwind (next_frame, NORMAL_FRAME);
 
@@ -1012,7 +1013,7 @@ mt_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   ULONGEST pc;
 
-  frame_unwind_unsigned_register (next_frame, MT_PC_REGNUM, &pc);
+  pc = frame_unwind_register_unsigned (next_frame, MT_PC_REGNUM);
   return pc;
 }
 
@@ -1021,7 +1022,7 @@ mt_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   ULONGEST sp;
 
-  frame_unwind_unsigned_register (next_frame, MT_SP_REGNUM, &sp);
+  sp = frame_unwind_register_unsigned (next_frame, MT_SP_REGNUM);
   return sp;
 }
 
