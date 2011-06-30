@@ -559,7 +559,7 @@ c1f7c41d3e596256ab5f5f933a66293f  etc/configdev.fig
 f865b04aef031ff484d566d4bef863b7  etc/texi2pod.pl
 8463bc5509db00792972ec6d4773003d  gdb/CONTRIBUTE
 edcd90d61eb8065d3f52ffc47035779d  gdb/COPYING
-c0e133944e3da6307b5cd133f8f250b5  gdb/ChangeLog
+d6b6de4e10bf31b7db28387509d28059  gdb/ChangeLog
 42b9f7c51223e595f66c2210064be682  gdb/ChangeLog-1990
 8f5a03c189727d347a330548f3ea9c98  gdb/ChangeLog-1991
 51d2fa6ce8618d5c87150c7c576f1f6d  gdb/ChangeLog-1992
@@ -580,7 +580,7 @@ c9c1edcda22a4b1c2e12b1f0a563017b  gdb/ChangeLog-2004
 f361f7483c04ea9fb837ed2a3723d68c  gdb/MAINTAINERS
 bac6d5a239220a9934c5e2279c0b3218  gdb/Makefile.in
 0f70f7f7514d2fd7b853bc0c24760803  gdb/NEWS
-734c250018505b621e64b445f2092bbe  gdb/PROBLEMS
+1b6cdb9a598aa7a78cdbd816a2ba9d56  gdb/PROBLEMS
 0c9dfa01861b62329d203613c70705bc  gdb/README
 30488196d6abac08134b01e15bf6392d  gdb/abug-rom.c
 67a53203bdfae8bc5d33305876411b2b  gdb/acinclude.m4
@@ -850,7 +850,7 @@ cb96fd8deaa95d92f094d7caa0ec5088  gdb/inf-ttrace.h
 8e35eaa46024aba5d7a0a30c9aa9094b  gdb/inflow.c
 7b30edc0e2fb847883683e4d02bfb7fb  gdb/inflow.h
 29a9279133c471c9256250cf9abdf1c3  gdb/infptrace.c
-2e5b326c70a04bf1df07eef2e3c03573  gdb/infrun.c
+b6fd0517b7848f9757533a461f94a870  gdb/infrun.c
 ad29ab6ef8b59d1521580d49bf3aa0ed  gdb/inftarg.c
 610ae19fbaba512635cea36d6184bc55  gdb/interps.c
 9741480abd4eb20a784e1706af6c9327  gdb/interps.h
@@ -914,7 +914,7 @@ d13c2e1237075c6a1e50ecbf41fc3685  gdb/mdebugread.h
 7e138385e60178d473e37064ce9d46f2  gdb/mem-break.c
 fe6c5dcb0321b92c9500db044b0fd8b7  gdb/memattr.c
 97b5d17bb49f8143cbb4ba90546b625c  gdb/memattr.h
-e4948f0ccba916af40be145ac352e4a0  gdb/mingw-hdep.c
+06c84f6e7107db64d1aa9ce98156fd10  gdb/mingw-hdep.c
 f59c012fa6b5a7b119d3c5a9b32e7876  gdb/minsyms.c
 09e0546c7c46798df6973bf99662a734  gdb/mips-irix-tdep.c
 b5596eaa2eea745c03a4129d66f7109d  gdb/mips-linux-nat.c
@@ -1145,7 +1145,7 @@ a0fd02d9e19185eb067418ad02159f48  gdb/vax-tdep.h
 9b6d8d27b980966cbc8f4b1c615a1732  gdb/vaxnbsd-tdep.c
 ebe6fb29b15a70c5a0d8aca9d5ee7946  gdb/vaxobsd-tdep.c
 160d48242e3e82de553d345226df86c6  gdb/version.h
-362970337d9676dea7fcfaa2761485ef  gdb/version.in
+370e3d60f592b3bb4f6f22111b14184f  gdb/version.in
 5503bb3473cd9823604fdee65e66fd53  gdb/win32-nat.c
 5953fd807ec5a8137eb0bc4fb6d08b87  gdb/win32-termcap.c
 407d5edf27b00de88cdba7b527bb8dc5  gdb/wince-stub.c
@@ -1423,12 +1423,12 @@ e284fd51fab723cfc3aee98e176bb3d1  gdb/doc/gdbint.texinfo
 8108dd8f906f2654fecc74958cf383db  gdb/doc/psrc.sed
 37ab43eca135f477b8fcb7467e62c91d  gdb/doc/refcard.tex
 f83b83d3e3bbaff5dd95d2398b9ebae4  gdb/doc/stabs.texinfo
-b355a7482d605fab36b5fa6d33ba69e1  gdb/doc/gdb.info
-ca56a524bdfca741fc6b1b4af7cb3407  gdb/doc/GDBvn.texi
-7f5429b44a487cec0934265e1eac2463  gdb/doc/gdb.info-1
-d265d2171248d5148bc496790c367ff9  gdb/doc/gdb.info-2
-836e460a5ae442339a5d283194f8ebf8  gdb/doc/gdb.info-3
-e59159f1a4af0736b043b010e969568b  gdb/doc/gdb.info-4
+aa9c21a692304bb39935928d21202e04  gdb/doc/gdb.info
+d5ad26aa56547c4dd7a73b97976ad6f1  gdb/doc/GDBvn.texi
+3e940dabf207480749b68c647dfab8f3  gdb/doc/gdb.info-1
+b979e2b96eec0038b2738eaa68a1d45f  gdb/doc/gdb.info-2
+2d87fe39b247dce4cfb91e460bc83bde  gdb/doc/gdb.info-3
+dfbbfdd72ccfd3c66aae04db6042c837  gdb/doc/gdb.info-4
 b2fa8531d254c8c4e12ff0be46614714  gdb/doc/gdbint.info
 bbe163bda7e31e3b44c9c4e89fa1bc75  gdb/doc/gdbint.info-1
 105bd317876bc43e12f1c62326ff6fca  gdb/doc/gdbint.info-2
@@ -1521,7 +1521,7 @@ c20fd87765652ad7ba50f43a0ec95088  gdb/osf-share/cma_util.h
 7cd3745f37bbbfcd24086735939ead52  gdb/osf-share/HP800/cma_thread_io.h
 36cb16e3cf86ddd4609d275a6a3052f5  gdb/osf-share/RIOS/cma_thread_io.h
 1851bff0653201a488dcae18dde7efad  gdb/po/gdbtext
-2096555a427086e541879ded78af7f1e  gdb/po/gdb.pot
+b7e4b81f4f0b0ceb1981db9d6f760829  gdb/po/gdb.pot
 9ed735c435a35313ad491c309fd32cf6  gdb/regformats/reg-arm.dat
 f548472e3d5eb277710a2e79e6ec84a1  gdb/regformats/reg-cris.dat
 d36d59c17f75a762e053889f55c97454  gdb/regformats/reg-crisv32.dat

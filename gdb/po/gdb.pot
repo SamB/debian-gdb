@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2006-06-02 22:35+0000\n"
+"POT-Creation-Date: 2006-06-21 05:16+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -3738,7 +3738,7 @@ msgstr ""
 #. Should never come here as hookc would be 0.
 #: cli/cli-script.c:1215 complaints.c:301 exceptions.c:153 exceptions.c:170
 #: exceptions.c:196 exceptions.c:256 hppa-tdep.c:3129 hppa-tdep.c:3142
-#: infcall.c:504 infcmd.c:1177 infrun.c:1287 language.c:881 language.c:907
+#: infcall.c:504 infcmd.c:1177 infrun.c:1288 language.c:881 language.c:907
 #: mi/mi-out.c:322 mi/mi-out.c:340 mips-tdep.c:273 mips-tdep.c:334
 #: mips-tdep.c:697 mips-tdep.c:1194 mips-tdep.c:3383 mips-tdep.c:4286
 #: mn10300-tdep.c:89 ppc-sysv-tdep.c:145 reggroups.c:218 remote.c:3528
@@ -8391,65 +8391,65 @@ msgstr ""
 msgid "Target '%s' cannot support this command."
 msgstr ""
 
-#: infrun.c:2965
+#: infrun.c:2998
 msgid "print_stop_reason: unrecognized enum value"
 msgstr ""
 
-#: infrun.c:3000 linux-fork.c:382
+#: infrun.c:3033 linux-fork.c:382
 #, possible-c-format
 msgid "[Switching to %s]\n"
 msgstr ""
 
-#: infrun.c:3021
+#: infrun.c:3054
 msgid ""
 "Cannot remove breakpoints because program is no longer writable.\n"
 "It might be running in another process.\n"
 "Further execution is probably impossible.\n"
 msgstr ""
 
-#: infrun.c:3112
+#: infrun.c:3145
 msgid "Unknown value."
 msgstr ""
 
-#: infrun.c:3212
+#: infrun.c:3245
 msgid "Signal        Stop\tPrint\tPass to program\tDescription\n"
 msgstr ""
 
-#: infrun.c:3249
+#: infrun.c:3282
 msgid "signal to handle"
 msgstr ""
 
 #. Not a number and not a recognized flag word => complain.
-#: infrun.c:3356
+#: infrun.c:3389
 #, possible-c-format
 msgid "Unrecognized or ambiguous flag word: \"%s\"."
 msgstr ""
 
-#: infrun.c:3378
+#: infrun.c:3411
 msgid "Not confirmed, unchanged.\n"
 msgstr ""
 
-#: infrun.c:3474
+#: infrun.c:3507
 msgid "Invalid signal handling flag.\n"
 msgstr ""
 
-#: infrun.c:3520
+#: infrun.c:3553
 msgid ""
 "\n"
 "Use the \"handle\" command to change these tables.\n"
 msgstr ""
 
-#: infrun.c:3615
+#: infrun.c:3648
 msgid "Unable to restore previously selected frame."
 msgstr ""
 
-#: infrun.c:3857 infrun.c:3879
+#: infrun.c:3890 infrun.c:3912
 msgid ""
 "What debugger does when program gets various signals.\n"
 "Specify a signal as argument to print info on that signal only."
 msgstr ""
 
-#: infrun.c:3862
+#: infrun.c:3895
 msgid ""
 "Specify how to handle a signal.\n"
 "Args are signals and actions to apply to those signals.\n"
@@ -8467,7 +8467,7 @@ msgid ""
 "Pass and Stop may be combined."
 msgstr ""
 
-#: infrun.c:3882
+#: infrun.c:3915
 msgid ""
 "Specify how to handle a signal.\n"
 "Args are signals and actions to apply to those signals.\n"
@@ -8486,49 +8486,49 @@ msgid ""
 "Pass and Stop may be combined."
 msgstr ""
 
-#: infrun.c:3902
+#: infrun.c:3935
 msgid ""
 "There is no `stop' command, but you can set a hook on `stop'.\n"
 "This allows you to set a list of commands to be run each time execution\n"
 "of the program stops."
 msgstr ""
 
-#: infrun.c:3907
+#: infrun.c:3940
 msgid "Set inferior debugging."
 msgstr ""
 
-#: infrun.c:3908
+#: infrun.c:3941
 msgid "Show inferior debugging."
 msgstr ""
 
-#: infrun.c:3909
+#: infrun.c:3942
 msgid "When non-zero, inferior specific debugging is enabled."
 msgstr ""
 
-#: infrun.c:3963
+#: infrun.c:3996
 msgid "Set stopping for shared library events."
 msgstr ""
 
-#: infrun.c:3964
+#: infrun.c:3997
 msgid "Show stopping for shared library events."
 msgstr ""
 
-#: infrun.c:3965
+#: infrun.c:3998
 msgid ""
 "If nonzero, gdb will give control to the user when the dynamic linker\n"
 "notifies gdb of shared library events.  The most common event of interest\n"
 "to the user would be loading/unloading of a new library."
 msgstr ""
 
-#: infrun.c:3975
+#: infrun.c:4008
 msgid "Set debugger response to a program call of fork or vfork."
 msgstr ""
 
-#: infrun.c:3976
+#: infrun.c:4009
 msgid "Show debugger response to a program call of fork or vfork."
 msgstr ""
 
-#: infrun.c:3977
+#: infrun.c:4010
 msgid ""
 "A fork or vfork creates a new process.  follow-fork-mode can be:\n"
 "  parent  - the original process is debugged after a fork\n"
@@ -8537,15 +8537,15 @@ msgid ""
 "By default, the debugger will follow the parent process."
 msgstr ""
 
-#: infrun.c:3988
+#: infrun.c:4021
 msgid "Set mode for locking scheduler during execution."
 msgstr ""
 
-#: infrun.c:3989
+#: infrun.c:4022
 msgid "Show mode for locking scheduler during execution."
 msgstr ""
 
-#: infrun.c:3990
+#: infrun.c:4023
 msgid ""
 "off  == no locking (threads may preempt at any time)\n"
 "on   == full locking (no thread except the current thread may run)\n"
@@ -8554,15 +8554,15 @@ msgid ""
 "\tOther threads may run while stepping over a function call ('next')."
 msgstr ""
 
-#: infrun.c:4000
+#: infrun.c:4033
 msgid "Set mode of the step operation."
 msgstr ""
 
-#: infrun.c:4001
+#: infrun.c:4034
 msgid "Show mode of the step operation."
 msgstr ""
 
-#: infrun.c:4002
+#: infrun.c:4035
 msgid ""
 "When set, doing a step over a function without debug line information\n"
 "will stop at the first instruction of that function. Otherwise, the\n"
