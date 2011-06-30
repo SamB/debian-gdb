@@ -1,7 +1,7 @@
 /* Target-struct-independent code to start (run) and stop an inferior
    process.
 
-   Copyright 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free
    Software Foundation, Inc.
 
@@ -19,8 +19,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor,
+   Boston, MA 02110-1301, USA.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -1100,6 +1100,12 @@ get_last_target_status (ptid_t *ptidp, struct target_waitstatus *status)
 {
   *ptidp = target_last_wait_ptid;
   *status = target_last_waitstatus;
+}
+
+void
+nullify_last_target_wait_ptid (void)
+{
+  target_last_wait_ptid = minus_one_ptid;
 }
 
 /* Switch thread contexts, maintaining "infrun state". */
@@ -3037,6 +3043,12 @@ Further execution is probably impossible.\n"));
     goto done;
 
   target_terminal_ours ();
+
+  /* Set the current source location.  This will also happen if we
+     display the frame below, but the current SAL will be incorrect
+     during a user hook-stop function.  */
+  if (target_has_stack && !stop_stack_dummy)
+    set_current_sal_from_frame (get_current_frame (), 1);
 
   /* Look up the hook_stop and run it (CLI internally handles problem
      of stop_command's pre-hook not existing).  */
