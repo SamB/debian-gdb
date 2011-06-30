@@ -1,5 +1,6 @@
 /* Remote target glue for the Intel 960 MON960 ROM monitor.
-   Copyright 1995, 1996 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 1997, 1998, 1999, 2000
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -34,32 +35,25 @@
 
 static struct target_ops mon960_ops;
 
-static void mon960_open PARAMS ((char *args, int from_tty));
+static void mon960_open (char *args, int from_tty);
 
 #ifdef USE_GENERIC_LOAD
 
 static void
-mon960_load_gen (filename, from_tty)
-     char *filename;
-     int from_tty;
+mon960_load_gen (char *filename, int from_tty)
 {
-  extern int inferior_pid;
-
   generic_load (filename, from_tty);
   /* Finally, make the PC point at the start address */
   if (exec_bfd)
     write_pc (bfd_get_start_address (exec_bfd));
 
-  inferior_pid = 0;		/* No process now */
+  inferior_ptid = null_ptid;		/* No process now */
 }
 
 #else
 
 static void
-mon960_load (desc, file, hashmark)
-     serial_t desc;
-     char *file;
-     int hashmark;
+mon960_load (struct serial *desc, char *file, int hashmark)
 {
   bfd *abfd;
   asection *s;
@@ -217,9 +211,7 @@ init_mon960_cmds (void)
 };
 
 static void
-mon960_open (args, from_tty)
-     char *args;
-     int from_tty;
+mon960_open (char *args, int from_tty)
 {
   char buf[64];
 
@@ -242,7 +234,7 @@ mon960_open (args, from_tty)
 }
 
 void
-_initialize_mon960 ()
+_initialize_mon960 (void)
 {
   memcpy (mon960_regnames, full_regnames, sizeof (full_regnames));
 

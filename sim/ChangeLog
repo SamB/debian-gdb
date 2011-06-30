@@ -1,3 +1,71 @@
+2002-03-06  Stephane Carrez  <Stephane.Carrez@worldnet.fr>
+
+	* MAINTAINERS: Record self as maintainer of m68hc11 simulator.
+
+2002-03-01  Frank Ch. Eigler  <fche@redhat.com>
+
+	* MAINTAINERS: Record self as a co-maintainer of just common/.
+
+2002-02-07  Nick Clifton  <nickc@cambridge.redhat.com>
+
+	* MAINTAINERS: Point to GDB files describing overall maintaince
+	and check-in procedures.
+
+2002-01-10  Nick Clifton  <nickc@cambridge.redhat.com>
+
+	* MAINTAINERS: Add myself for ARM portions.
+
+2001-10-19  Andrew Cagney  <ac131313@redhat.com>
+
+	* configure.in: When Linux or NetBSD, enable PowerPC simulator.
+	* configure: Re-generate.
+
+2001-02-16  Ben Elliston  <bje@redhat.com>
+
+	* MAINTAINERS: Add myself for common portions.
+
+2001-01-15  Chris Demetriou  <cgd@broadcom.com>
+
+	* MAINTAINERS: Added self and Andrew for the mips sim.
+
+2000-10-25  Geoff Keating  <geoffk@cygnus.com>
+
+	* MAINTAINERS: Added self and Andrew for the ppc sim.
+
+Thu Jul 27 21:26:26 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	From Stephane Carrez <Stephane.Carrez@worldnet.fr>:
+	* m68hc11: New directory.
+	* configure.in: Add.
+	* configure: Regenerate.
+
+Tue Jul  4 13:43:54 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* tic80: New directory.
+	* configure.in: Add configury.
+	* configure: Regenerate.
+
+2000-04-20  Nick Clifton  <nickc@cygnus.com>
+
+	* configure.in (extra_subdirs): Add testsuite to strongarm
+	directories. 
+	* configure: Regenerate.
+
+Sat Mar  4 16:48:54 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* MAINTAINERS: New file.  Blank.
+
+1999-11-18  Ben Elliston  <bje@cygnus.com>
+
+	* configure.in: Require autoconf 2.13 and remove obsolete
+	invocation of AC_C_CROSS.
+	* configure: Regenerate.
+
+1999-09-29  Doug Evans  <devans@casey.cygnus.com>
+
+	* configure.in: Configure the testsuite directory for thumb.
+	* configure: Regenerate.
+
 1999-07-16  Ben Elliston  <bje@cygnus.com>
 
 	* configure.in: Configure the testsuite directory for arm.
@@ -39,8 +107,8 @@ Fri Sep 25 10:12:19 1998  Christopher Faylor <cgf@cygnus.com>
 
 Thu May 28 14:59:46 1998 Jillian Ye <jillian@cygnus.com>
 
-        * Makefile.in: Take RUNTEST out of FLAGS_TO_PASS so that make
- 	check can be invoked recursively.
+	* Makefile.in: Take RUNTEST out of FLAGS_TO_PASS so that make
+	check can be invoked recursively.
 
 Wed Apr 29 12:38:53 1998  Mark Alexander  <marka@cygnus.com>
 
@@ -409,7 +477,7 @@ Mon Sep 13 12:47:15 1993  K. Richard Pixley  (rich@sendai.cygnus.com)
 	* Makefile.in (all-z8k, install-z8k, clean-z8k, all-h8300,
 	  install-h8300, clean-h8300, all-h8500, install-h8500,
 	  clean-h8500, all-sh, install-sh, clean-sh): do not echo
-	  recursion lines. 
+	  recursion lines.
 
 Wed Jun 30 14:12:05 1993  david d `zoo' zuhn  (zoo at poseidon.cygnus.com)
 

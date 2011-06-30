@@ -1,4 +1,4 @@
-/* Copyright (C) 1991 Free Software Foundation, Inc.
+/* Copyright 1991, 1993, 1994, 1995 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,8 +20,6 @@
 /* This is for the iris. */
 
 #define HAVE_TERMIO
-
-#define HOST_BYTE_ORDER BIG_ENDIAN
 
 /* Override register locations in upage for SGI machines */
 #undef REGISTER_U_ADDR

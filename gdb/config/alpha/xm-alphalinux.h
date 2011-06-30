@@ -1,5 +1,6 @@
-/* Host definitions for GDB running on an Alpha under Linux
-   Copyright (C) 1996 Free Software Foundation, Inc.
+/* Host definitions for GDB running on an Alpha under GNU/Linux.
+
+   Copyright 1996, 2001, 2002 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,13 +19,8 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-#if !defined (HOST_BYTE_ORDER)
-#define HOST_BYTE_ORDER LITTLE_ENDIAN
-#endif
-
 /* The alpha has no siginterrupt routine.  */
 #define NO_SIGINTERRUPT
 
 #define HAVE_TERMIOS
-#define HAVE_SIGSETMASK	1
 #define USG

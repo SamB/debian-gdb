@@ -1,5 +1,5 @@
 /* Native-dependent definitions for NetBSD.
-   Copyright 1994, 1996 Free Software Foundation, Inc.
+   Copyright 1994, 1996, 1999 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,13 +18,6 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-/* This is the amount to subtract from u.u_ar0
-   to get the offset in the core file of the register values.  */
-
-#include <machine/vmparam.h>
-
-#define KERNEL_U_ADDR USRSTACK
-
 #define PTRACE_ARG3_TYPE char*
 
 #define FETCH_INFERIOR_REGISTERS
@@ -32,6 +25,11 @@
 #define ATTACH_DETACH
 
 #include "solib.h"		/* Support for shared libraries. */
+#if defined (SVR4_SHARED_LIBS)
+#include "elf/common.h"		/* Additional ELF shared library info. */
+#endif
+
+#if !defined (SVR4_SHARED_LIBS)
 
 /* make structure definitions match up with those expected in solib.c */
 #define link_object	sod
@@ -85,3 +83,5 @@
 #define ldd		d_debug
 #define ld_un		d_un
 #define ld_2		d_sdt
+
+#endif

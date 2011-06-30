@@ -1,5 +1,5 @@
 /* Replay a remote debug session logfile for GDB.
-   Copyright (C) 1996 Free Software Foundation, Inc.
+   Copyright 1996, 1998, 1999, 2000 Free Software Foundation, Inc.
    Written by Fred Fish (fnf@cygnus.com) from pieces of gdbserver.
 
    This file is part of GDB.
@@ -19,6 +19,7 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
+#include "config.h"
 #include <stdio.h>
 #include <sys/file.h>
 #include <netinet/in.h>
@@ -28,6 +29,7 @@
 #include <signal.h>
 #include <ctype.h>
 #include <fcntl.h>
+#include <errno.h>
 
 /* Sort of a hack... */
 #define EOL (EOF - 1)
@@ -39,13 +41,14 @@ static int remote_desc;
    Then return to command level.  */
 
 void
-perror_with_name (string)
-     char *string;
+perror_with_name (char *string)
 {
+#ifndef STDC_HEADERS
   extern int sys_nerr;
   extern char *sys_errlist[];
   extern int errno;
-  char *err;
+#endif
+  const char *err;
   char *combined;
 
   err = (errno < sys_nerr) ? sys_errlist[errno] : "unknown error";
@@ -59,11 +62,7 @@ perror_with_name (string)
 }
 
 static void
-sync_error (fp, desc, expect, got)
-     FILE *fp;
-     char *desc;
-     int expect;
-     int got;
+sync_error (FILE *fp, char *desc, int expect, int got)
 {
   fprintf (stderr, "\n%s\n", desc);
   fprintf (stderr, "At logfile offset %ld, expected '0x%x' got '0x%x'\n",
@@ -73,7 +72,7 @@ sync_error (fp, desc, expect, got)
 }
 
 void
-remote_close ()
+remote_close (void)
 {
   close (remote_desc);
 }
@@ -82,8 +81,7 @@ remote_close ()
    NAME is the filename used for communication.  */
 
 void
-remote_open (name)
-     char *name;
+remote_open (char *name)
 {
   extern char *strchr ();
 
@@ -99,7 +97,6 @@ remote_open (name)
       int port;
       struct sockaddr_in sockaddr;
       int tmp;
-      struct protoent *protoent;
       int tmp_desc;
 
       port_str = strchr (name, ':');
@@ -128,10 +125,6 @@ remote_open (name)
       if (remote_desc == -1)
 	perror_with_name ("Accept failed");
 
-      protoent = getprotobyname ("tcp");
-      if (!protoent)
-	perror_with_name ("getprotobyname");
-
       /* Enable TCP keep alive process. */
       tmp = 1;
       setsockopt (tmp_desc, SOL_SOCKET, SO_KEEPALIVE, (char *) &tmp, sizeof (tmp));
@@ -139,7 +132,7 @@ remote_open (name)
       /* Tell TCP not to delay small packets.  This greatly speeds up
          interactive response. */
       tmp = 1;
-      setsockopt (remote_desc, protoent->p_proto, TCP_NODELAY,
+      setsockopt (remote_desc, IPPROTO_TCP, TCP_NODELAY,
 		  (char *) &tmp, sizeof (tmp));
 
       close (tmp_desc);		/* No longer need this */
@@ -155,8 +148,7 @@ remote_open (name)
 }
 
 static int
-tohex (ch)
-     int ch;
+tohex (int ch)
 {
   if (ch >= '0' && ch <= '9')
     {
@@ -176,8 +168,7 @@ tohex (ch)
 }
 
 static int
-logchar (fp)
-     FILE *fp;
+logchar (FILE *fp)
 {
   int ch;
   int ch2;
@@ -240,8 +231,7 @@ logchar (fp)
    blank) up until a \n is read from fp (which is not matched) */
 
 void
-expect (fp)
-     FILE *fp;
+expect (FILE *fp)
 {
   int fromlog;
   unsigned char fromgdb;
@@ -272,8 +262,7 @@ expect (fp)
    \n is read from fp (which is discarded and not sent to gdb). */
 
 void
-play (fp)
-     FILE *fp;
+play (FILE *fp)
 {
   int fromlog;
   char ch;
@@ -291,9 +280,7 @@ play (fp)
 }
 
 int
-main (argc, argv)
-     int argc;
-     char *argv[];
+main (int argc, char *argv[])
 {
   FILE *fp;
   int ch;

@@ -280,6 +280,17 @@ arm-*-*)
 	    esac
 	  done
 	fi
+	if [ x"$enable_nofmult" = xno ]
+	then
+	  old_multidirs="${multidirs}"
+	  multidirs=""
+	  for x in ${old_multidirs}; do
+	    case "$x" in
+	      *nofmult* ) : ;;
+	      *) multidirs="${multidirs} ${x}" ;;
+	    esac
+	  done
+	fi
 	;;
 m68*-*-*)
 	if [ x$enable_softfloat = xno ]
@@ -464,6 +475,30 @@ powerpc*-*-* | rs6000*-*-*)
 	  done
 	fi
 	;;
+sparc*-*-*)
+	case " $multidirs " in
+	*" m64 "*)
+	  # We will not be able to create libraries with -m64 if
+	  # we cannot even link a trivial program.  It usually
+	  # indicates the 64bit libraries are missing.
+	  if echo 'main() {}' > conftest.c &&
+	     ${CC-gcc} -m64 conftest.c -o conftest; then
+	    :
+	  else
+	    echo Could not link program with -m64, disabling it.
+	    old_multidirs="${multidirs}"
+	    multidirs=""
+	    for x in ${old_multidirs}; do
+	      case "$x" in
+	      *m64* ) : ;;
+	      *) multidirs="${multidirs} ${x}" ;;
+	      esac
+	    done
+	  fi
+	  rm -f conftest.c conftest
+	  ;;
+	esac
+	;;
 esac
 
 # Remove extraneous blanks from multidirs.
@@ -494,6 +529,8 @@ multi-do:
 		flags=`echo $$i | sed -e 's/^[^;]*;//' -e 's/@/ -/g'`; \
 		if (cd ../$${dir}/$${lib}; $(MAKE) $(FLAGS_TO_PASS) \
 				CFLAGS="$(CFLAGS) $${flags}" \
+				prefix="$(prefix)" \
+				exec_prefix="$(exec_prefix)" \
 				CXXFLAGS="$(CXXFLAGS) $${flags}" \
 				LIBCFLAGS="$(LIBCFLAGS) $${flags}" \
 				LIBCXXFLAGS="$(LIBCXXFLAGS) $${flags}" \
@@ -705,7 +742,7 @@ if [ -n "${multidirs}" ] && [ -z "${ml_norecursion}" ]; then
     cd ${ml_dir}/${ml_libdir}
 
     if [ -f ${ml_newsrcdir}/configure ]; then
-      ml_recprog=${ml_newsrcdir}/configure
+      ml_recprog="${ml_newsrcdir}/configure --cache-file=../config.cache"
     fi
 
     # find compiler flag corresponding to ${ml_dir}
@@ -716,7 +753,73 @@ if [ -n "${multidirs}" ] && [ -z "${ml_norecursion}" ]; then
         break
       fi
     done
-    ml_config_env='CC="${CC} $flags"'
+    ml_config_env='CC="${CC_}$flags" CXX="${CXX_}$flags"'
+
+    if [ "${with_target_subdir}" = "." ]; then
+	CC_=$CC' '
+	CXX_=$CXX' '
+    else
+	# Create a regular expression that matches any string as long
+	# as ML_POPDIR.
+	popdir_rx=`echo ${ML_POPDIR} | sed 's,.,.,g'`
+	CC_=
+	for arg in ${CC}; do
+	  case $arg in
+	  -[BIL]"${ML_POPDIR}"/*)
+	    CC_="${CC_}"`echo "X${arg}" | sed -n "s/X\\(-[BIL]${popdir_rx}\\).*/\\1/p"`/${ml_dir}`echo "X${arg}" | sed -n "s/X-[BIL]${popdir_rx}\\(.*\\)/\1/p"`' ' ;;
+	  "${ML_POPDIR}"/*)
+	    CC_="${CC_}"`echo "X${arg}" | sed -n "s/X\\(${popdir_rx}\\).*/\\1/p"`/${ml_dir}`echo "X${arg}" | sed -n "s/X${popdir_rx}\\(.*\\)/\\1/p"`' ' ;;
+	  *)
+	    CC_="${CC_}${arg} " ;;
+	  esac
+	done
+
+	CXX_=
+	for arg in ${CXX}; do
+	  case $arg in
+	  -[BIL]"${ML_POPDIR}"/*)
+	    CXX_="${CXX_}"`echo "X${arg}" | sed -n "s/X\\(-[BIL]${popdir_rx}\\).*/\\1/p"`/${ml_dir}`echo "X${arg}" | sed -n "s/X-[BIL]${popdir_rx}\\(.*\\)/\\1/p"`' ' ;;
+	  "${ML_POPDIR}"/*)
+	    CXX_="${CXX_}"`echo "X${arg}" | sed -n "s/X\\(${popdir_rx}\\).*/\\1/p"`/${ml_dir}`echo "X${arg}" | sed -n "s/X${popdir_rx}\\(.*\\)/\\1/p"`' ' ;;
+	  *)
+	    CXX_="${CXX_}${arg} " ;;
+	  esac
+	done
+
+	if test "x${LD_LIBRARY_PATH+set}" = xset; then
+	  LD_LIBRARY_PATH_=
+	  for arg in `echo "$LD_LIBRARY_PATH" | tr ':' ' '`; do
+	    case "$arg" in
+	    "${ML_POPDIR}"/*)
+	      arg=`echo "X${arg}" | sed -n "s/X\\(${popdir_rx}\\).*/\\1/p"`/${ml_dir}`echo "X${arg}" | sed -n "s/X${popdir_rx}\\(.*\\)/\\1/p"`
+	      ;;
+	    esac
+	    if test "x$LD_LIBRARY_PATH_" != x; then
+	      LD_LIBRARY_PATH_=$LD_LIBRARY_PATH_:$arg
+	    else
+	      LD_LIBRARY_PATH_=$arg
+	    fi
+          done
+	  ml_config_env="$ml_config_env LD_LIBRARY_PATH=$LD_LIBRARY_PATH_"
+	fi
+
+	if test "x${SHLIB_PATH+set}" = xset; then
+	  SHLIB_PATH_=
+	  for arg in `echo "$SHLIB_PATH" | tr ':' ' '`; do
+	    case "$arg" in
+	    "${ML_POPDIR}"/*)
+	      arg=`echo "X${arg}" | sed -n "s/X\\(${popdir_rx}\\).*/\\1/p"`/${ml_dir}`echo "X${arg}" | sed -n "s/X${popdir_rx}\\(.*\\)/\\1/p"`
+	      ;;
+	    esac
+	    if test "x$SHLIB_PATH_" != x; then
+	      SHLIB_PATH_=$SHLIB_PATH_:$arg
+	    else
+	      SHLIB_PATH_=$arg
+	    fi
+          done
+	  ml_config_env="$ml_config_env SHLIB_PATH=$SHLIB_PATH_"
+	fi
+    fi
 
     if eval ${ml_config_env} ${ml_config_shell} ${ml_recprog} \
 	--with-multisubdir=${ml_dir} --with-multisrctop=${multisrctop} \

@@ -54,7 +54,7 @@ struct alpha_opcode
    in the order in which the disassembler should consider
    instructions.  */
 extern const struct alpha_opcode alpha_opcodes[];
-extern const int alpha_num_opcodes;
+extern const unsigned alpha_num_opcodes;
 
 /* Values defined for the flags field of a struct alpha_opcode.  */
 
@@ -81,16 +81,16 @@ extern const int alpha_num_opcodes;
 struct alpha_operand
 {
   /* The number of bits in the operand.  */
-  int bits;
+  unsigned int bits : 5;
 
   /* How far the operand is left shifted in the instruction.  */
-  int shift;
+  unsigned int shift : 5;
 
   /* The default relocation type for this operand.  */
-  int default_reloc;
+  signed int default_reloc : 16;
 
   /* One bit syntax flags.  */
-  unsigned flags;
+  unsigned int flags : 16;
 
   /* Insertion function.  This is used by the assembler.  To insert an
      operand value into an instruction, check this field.
@@ -135,7 +135,7 @@ struct alpha_operand
    the operands field of the alpha_opcodes table.  */
 
 extern const struct alpha_operand alpha_operands[];
-extern const int alpha_num_operands;
+extern const unsigned alpha_num_operands;
 
 /* Values defined for the flags field of a struct alpha_operand.  */
 

@@ -1,5 +1,6 @@
 /* Low level interface to I386 running mach 3.0.
-   Copyright (C) 1992 Free Software Foundation, Inc.
+   Copyright 1992, 1993, 1994, 1996, 2000, 2001
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,6 +22,7 @@
 #include "defs.h"
 #include "inferior.h"
 #include "floatformat.h"
+#include "regcache.h"
 
 #include <stdio.h>
 
@@ -101,8 +103,7 @@ static int reg_offset[] =
  */
 
 void
-fetch_inferior_registers (regno)
-     int regno;
+fetch_inferior_registers (int regno)
 {
   kern_return_t ret;
   thread_state_data_t state;
@@ -147,8 +148,7 @@ fetch_inferior_registers (regno)
  * On mach3 all registers are always saved in one call.
  */
 void
-store_inferior_registers (regno)
-     int regno;
+store_inferior_registers (int regno)
 {
   kern_return_t ret;
   thread_state_data_t state;
@@ -221,9 +221,7 @@ store_inferior_registers (regno)
  */
 
 CORE_ADDR
-register_addr (regno, blockend)
-     int regno;
-     CORE_ADDR blockend;
+register_addr (int regno, CORE_ADDR blockend)
 {
   CORE_ADDR addr;
 
@@ -261,9 +259,7 @@ struct env387
  * Should move it to i387-tdep.c but you need to export struct env387
  */
 private
-print_387_status (status, ep)
-     unsigned short status;
-     struct env387 *ep;
+print_387_status (unsigned short status, struct env387 *ep)
 {
   int i;
   int bothstatus;
@@ -358,8 +354,7 @@ typedef struct fpstate
 /* Mach 3 specific routines.
  */
 private boolean_t
-get_i387_state (fstate)
-     struct fpstate *fstate;
+get_i387_state (struct fpstate *fstate)
 {
   kern_return_t ret;
   thread_state_data_t state;
@@ -396,8 +391,7 @@ get_i387_state (fstate)
 }
 
 private boolean_t
-get_i387_core_state (fstate)
-     struct fpstate *fstate;
+get_i387_core_state (struct fpstate *fstate)
 {
   /* Not implemented yet. Core files do not contain float state. */
   return FALSE;
@@ -407,7 +401,7 @@ get_i387_core_state (fstate)
  * This is called by "info float" command
  */
 void
-i386_mach3_float_info ()
+i386_mach3_float_info (void)
 {
   char buf[sizeof (struct fpstate) + 2 * sizeof (int)];
   boolean_t valid = FALSE;

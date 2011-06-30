@@ -2,7 +2,8 @@
    The code was originally written by Johan Holmberg TT/SJ Ericsson Telecom
    AB and later modified by Johan Henriksson TT/SJ. It was adapted to GDB 4.0
    by Jan Norden TX/DK.
-   Copyright 1986, 1987, 1989, 1991, 1992, 1993 Free Software Foundation, Inc.
+   Copyright 1986, 1987, 1989, 1991, 1992, 1993, 1996, 2000
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -56,5 +57,4 @@
    we extract the pc (JB_PC) that we will land at.  The pc is copied into ADDR.
    This routine returns true on success */
 
-#define GET_LONGJMP_TARGET(ADDR) get_longjmp_target(ADDR)
-extern int get_longjmp_target PARAMS ((CORE_ADDR *));
+#define GET_LONGJMP_TARGET(ADDR) m68k_get_longjmp_target(ADDR)

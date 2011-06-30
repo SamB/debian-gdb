@@ -45,8 +45,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "bfd.h"
 #include "callback.h"
 #include "remote-sim.h"
-
-#include "../libiberty/alloca-conf.h"
+#include "ansidecl.h"
 
 static void usage PARAMS ((void));
 extern int optind;
@@ -55,9 +54,6 @@ extern char *optarg;
 extern host_callback default_callback;
 
 static char *myname;
-
-/* NOTE: sim_size() and sim_trace() are going away */
-extern int sim_trace PARAMS ((SIM_DESC sd));
 
 extern int getopt ();
 
@@ -69,7 +65,7 @@ int (*ui_loop_hook) PARAMS ((int signo));
 static SIM_DESC sd;
 
 static RETSIGTYPE
-cntrl_c (int sig)
+cntrl_c (int sig ATTRIBUTE_UNUSED)
 {
   if (! sim_stop (sd))
     {
@@ -88,6 +84,9 @@ main (ac, av)
   int i;
   int verbose = 0;
   int trace = 0;
+#ifdef SIM_HAVE_ENVIRONMENT
+  int operating_p = 0;
+#endif
   char *name;
   static char *no_args[4];
   char **sim_argv = &no_args[0];
@@ -116,9 +115,9 @@ main (ac, av)
      do all argv processing.  */
 
 #ifdef SIM_H8300 /* FIXME: quick hack */
-  while ((i = getopt (ac, av, "a:c:m:p:s:htv")) != EOF) 
+  while ((i = getopt (ac, av, "a:c:m:op:s:htv")) != EOF) 
 #else
-  while ((i = getopt (ac, av, "a:c:m:p:s:tv")) != EOF) 
+  while ((i = getopt (ac, av, "a:c:m:op:s:tv")) != EOF) 
 #endif
     switch (i)
       {
@@ -146,6 +145,13 @@ main (ac, av)
 	/* FIXME: Rename to sim_set_mem_size.  */
 	sim_size (atoi (optarg));
 	break;
+#ifdef SIM_HAVE_ENVIRONMENT
+      case 'o':
+	/* Operating enironment where any signals are delivered to the
+           target. */
+	operating_p = 1;
+	break;
+#endif SIM_HAVE_ENVIRONMENT
 #ifdef SIM_HAVE_PROFILE
       case 'p':
 	sim_set_profile (atoi (optarg));
@@ -156,8 +162,6 @@ main (ac, av)
 #endif
       case 't':
 	trace = 1;
-	/* FIXME: need to allow specification of what to trace.  */
-	/* sim_set_trace (1); */
 	break;
       case 'v':
 	/* Things that are printed with -v are the kinds of things that
@@ -230,26 +234,45 @@ main (ac, av)
   if (sim_create_inferior (sd, abfd, prog_args, NULL) == SIM_RC_FAIL)
     exit (1);
 
-  prev_sigint = signal (SIGINT, cntrl_c);
+#ifdef SIM_HAVE_ENVIRONMENT
+  /* NOTE: An old simulator supporting the operating environment MUST
+     provide sim_set_trace() and not sim_trace(). That way
+     sim_stop_reason() can be used to determine any stop reason. */
+  if (trace)
+    sim_set_trace ();
+  sigrc = 0;
+  do
+    {
+      prev_sigint = signal (SIGINT, cntrl_c);
+      sim_resume (sd, 0, sigrc);
+      signal (SIGINT, prev_sigint);
+      sim_stop_reason (sd, &reason, &sigrc);
+    }
+  while (operating_p && reason == sim_stopped && sigrc != SIGINT);
+#else
   if (trace)
     {
       int done = 0;
+      prev_sigint = signal (SIGINT, cntrl_c);
       while (!done)
 	{
 	  done = sim_trace (sd);
 	}
+      signal (SIGINT, prev_sigint);
+      sim_stop_reason (sd, &reason, &sigrc);
     }
   else
     {
-      sim_resume (sd, 0, 0);
+      prev_sigint = signal (SIGINT, cntrl_c);
+      sigrc = 0;
+      sim_resume (sd, 0, sigrc);
+      signal (SIGINT, prev_sigint);
+      sim_stop_reason (sd, &reason, &sigrc);
     }
-  signal (SIGINT, prev_sigint);
+#endif
 
   if (verbose)
     sim_info (sd, 0);
-
-  sim_stop_reason (sd, &reason, &sigrc);
-
   sim_close (sd, 0);
 
   /* If reason is sim_exited, then sigrc holds the exit code which we want
@@ -295,9 +318,12 @@ usage ()
   fprintf (stderr, "-c size         Set simulator cache size to `size'.\n");
 #endif
 #ifdef SIM_H8300
-  fprintf (stderr, "-h              Executable is for h8/300h or h8/300s.\n");
+  fprintf (stderr, "-h              Executable is for H8/300H or H8/S.\n");
 #endif
   fprintf (stderr, "-m size         Set memory size of simulator, in bytes.\n");
+#ifdef SIM_HAVE_ENVIRONMENT
+  fprintf (stderr, "-o              Select operating (kernel) environment.\n");
+#endif
 #ifdef SIM_HAVE_PROFILE
   fprintf (stderr, "-p freq         Set profiling frequency.\n");
   fprintf (stderr, "-s size         Set profiling size.\n");

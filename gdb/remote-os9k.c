@@ -1,5 +1,7 @@
 /* Remote debugging interface for boot monitors, for GDB.
-   Copyright 1990, 1991, 1992, 1993 Free Software Foundation, Inc.
+
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999,
+   2000, 2001, 2002 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -40,8 +42,6 @@
 #include "defs.h"
 #include "gdbcore.h"
 #include "target.h"
-#include "wait.h"
-#include <signal.h>
 #include "gdb_string.h"
 #include <sys/types.h>
 #include "command.h"
@@ -52,6 +52,7 @@
 #include "symfile.h"
 #include "objfiles.h"
 #include "gdb-stabs.h"
+#include "regcache.h"
 
 struct cmd_list_element *showlist;
 extern struct target_ops rombug_ops;	/* Forward declaration */
@@ -80,7 +81,7 @@ static int tty_xoff = 0;
 static int timeout = 10;
 static int is_trace_mode = 0;
 /* Descriptor for I/O to remote machine.  Initialize it to NULL */
-static serial_t monitor_desc = NULL;
+static struct serial *monitor_desc = NULL;
 
 static CORE_ADDR bufaddr = 0;
 static int buflen = 0;
@@ -99,18 +100,17 @@ printf_monitor (char *pattern,...)
   vsprintf (buf, pattern, args);
   va_end (args);
 
-  if (SERIAL_WRITE (monitor_desc, buf, strlen (buf)))
-    fprintf (stderr, "SERIAL_WRITE failed: %s\n", safe_strerror (errno));
+  if (serial_write (monitor_desc, buf, strlen (buf)))
+    fprintf (stderr, "serial_write failed: %s\n", safe_strerror (errno));
 }
 
 /* Read a character from the remote system, doing all the fancy timeout stuff */
 static int
-readchar (timeout)
-     int timeout;
+readchar (int timeout)
 {
   int c;
 
-  c = SERIAL_READCHAR (monitor_desc, timeout);
+  c = serial_readchar (monitor_desc, timeout);
 
   if (sr_get_debug ())
     putchar (c & 0x7f);
@@ -136,9 +136,7 @@ readchar (timeout)
    non-zero, then discard non-matching input, else print it out.
    Let the user break out immediately.  */
 static void
-expect (string, discard)
-     char *string;
-     int discard;
+expect (char *string, int discard)
 {
   char *p = string;
   int c;
@@ -146,7 +144,7 @@ expect (string, discard)
   if (sr_get_debug ())
     printf ("Expecting \"%s\"\n", string);
 
-  immediate_quit = 1;
+  immediate_quit++;
   while (1)
     {
       c = readchar (timeout);
@@ -156,7 +154,7 @@ expect (string, discard)
 	{
 	  if (*p == '\0')
 	    {
-	      immediate_quit = 0;
+	      immediate_quit--;
 	      if (sr_get_debug ())
 		printf ("\nMatched\n");
 	      return;
@@ -190,8 +188,7 @@ expect (string, discard)
    necessary to prevent getting into states from which we can't
    recover.  */
 static void
-expect_prompt (discard)
-     int discard;
+expect_prompt (int discard)
 {
   if (monitor_log)
     /* This is a convenient place to do this.  The idea is to do it often
@@ -211,8 +208,7 @@ expect_prompt (discard)
 /* Get a hex digit from the remote system & return its value.
    If ignore_space is nonzero, ignore spaces (not newline, tab, etc).  */
 static int
-get_hex_digit (ignore_space)
-     int ignore_space;
+get_hex_digit (int ignore_space)
 {
   int ch;
   while (1)
@@ -237,8 +233,7 @@ get_hex_digit (ignore_space)
 /* Get a byte from monitor and put it in *BYT.  Accept any number
    leading spaces.  */
 static void
-get_hex_byte (byt)
-     char *byt;
+get_hex_byte (char *byt)
 {
   int val;
 
@@ -250,9 +245,7 @@ get_hex_byte (byt)
 /* Get N 32-bit words from remote, each preceded by a space,
    and put them in registers starting at REGNO.  */
 static void
-get_hex_regs (n, regno)
-     int n;
-     int regno;
+get_hex_regs (int n, int regno)
 {
   long val;
   int i;
@@ -266,7 +259,7 @@ get_hex_regs (n, regno)
       for (j = 0; j < 4; j++)
 	{
 	  get_hex_byte (&b);
-	  if (TARGET_BYTE_ORDER == BIG_ENDIAN)
+	  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
 	    val = (val << 8) + b;
 	  else
 	    val = val + (b << (j * 8));
@@ -278,10 +271,7 @@ get_hex_regs (n, regno)
 /* This is called not only when we first attach, but also when the
    user types "run" after having attached.  */
 static void
-rombug_create_inferior (execfile, args, env)
-     char *execfile;
-     char *args;
-     char **env;
+rombug_create_inferior (char *execfile, char *args, char **env)
 {
   int entry_pt;
 
@@ -310,9 +300,7 @@ rombug_create_inferior (execfile, args, env)
 static char dev_name[100];
 
 static void
-rombug_open (args, from_tty)
-     char *args;
-     int from_tty;
+rombug_open (char *args, int from_tty)
 {
   if (args == NULL)
     error ("Use `target RomBug DEVICE-NAME' to use a serial port, or \n\
@@ -324,17 +312,17 @@ rombug_open (args, from_tty)
     unpush_target (&rombug_ops);
 
   strcpy (dev_name, args);
-  monitor_desc = SERIAL_OPEN (dev_name);
+  monitor_desc = serial_open (dev_name);
   if (monitor_desc == NULL)
     perror_with_name (dev_name);
 
   /* if baud rate is set by 'set remotebaud' */
-  if (SERIAL_SETBAUDRATE (monitor_desc, sr_get_baud_rate ()))
+  if (serial_setbaudrate (monitor_desc, sr_get_baud_rate ()))
     {
-      SERIAL_CLOSE (monitor_desc);
+      serial_close (monitor_desc);
       perror_with_name ("RomBug");
     }
-  SERIAL_RAW (monitor_desc);
+  serial_raw (monitor_desc);
   if (tty_xon || tty_xoff)
     {
       struct hardware_ttystate
@@ -343,12 +331,12 @@ rombug_open (args, from_tty)
 	}
        *tty_s;
 
-      tty_s = (struct hardware_ttystate *) SERIAL_GET_TTY_STATE (monitor_desc);
+      tty_s = (struct hardware_ttystate *) serial_get_tty_state (monitor_desc);
       if (tty_xon)
 	tty_s->t.c_iflag |= IXON;
       if (tty_xoff)
 	tty_s->t.c_iflag |= IXOFF;
-      SERIAL_SET_TTY_STATE (monitor_desc, (serial_ttystate) tty_s);
+      serial_set_tty_state (monitor_desc, (serial_ttystate) tty_s);
     }
 
   rombug_is_open = 1;
@@ -380,12 +368,11 @@ rombug_open (args, from_tty)
  */
 
 static void
-rombug_close (quitting)
-     int quitting;
+rombug_close (int quitting)
 {
   if (rombug_is_open)
     {
-      SERIAL_CLOSE (monitor_desc);
+      serial_close (monitor_desc);
       monitor_desc = NULL;
       rombug_is_open = 0;
     }
@@ -401,9 +388,7 @@ rombug_close (quitting)
 }
 
 int
-rombug_link (mod_name, text_reloc)
-     char *mod_name;
-     CORE_ADDR *text_reloc;
+rombug_link (char *mod_name, CORE_ADDR *text_reloc)
 {
   int i, j;
   unsigned long val;
@@ -431,8 +416,7 @@ rombug_link (mod_name, text_reloc)
    Use this when you want to detach and do something else
    with your gdb.  */
 static void
-rombug_detach (from_tty)
-     int from_tty;
+rombug_detach (int from_tty)
 {
   if (attach_flag)
     {
@@ -448,9 +432,7 @@ rombug_detach (from_tty)
  * Tell the remote machine to resume.
  */
 static void
-rombug_resume (pid, step, sig)
-     int pid, step;
-     enum target_signal sig;
+rombug_resume (ptid_t ptid, int step, enum target_signal sig)
 {
   if (monitor_log)
     fprintf (log_file, "\nIn Resume (step=%d, sig=%d)\n", step, sig);
@@ -479,10 +461,8 @@ rombug_resume (pid, step, sig)
  * storing status in status just as `wait' would.
  */
 
-static int
-rombug_wait (pid, status)
-     int pid;
-     struct target_waitstatus *status;
+static ptid *
+rombug_wait (ptid_t ptid, struct target_waitstatus *status)
 {
   int old_timeout = timeout;
   struct section_offsets *offs;
@@ -514,13 +494,13 @@ rombug_wait (pid, status)
 	new_symfile_objfile (obj_sec->objfile, 1, 0);
       offs = (struct section_offsets *) alloca (SIZEOF_SECTION_OFFSETS);
       memcpy (offs, symfile_objfile->section_offsets, SIZEOF_SECTION_OFFSETS);
-      ANOFFSET (offs, SECT_OFF_DATA) = addr;
-      ANOFFSET (offs, SECT_OFF_BSS) = addr;
+      offs->offsets[SECT_OFF_DATA (symfile_objfile)]  = addr;
+      offs->offsets[SECT_OFF_BSS (symfile_objfile)]  = addr;
 
       objfile_relocate (symfile_objfile, offs);
     }
 
-  return 0;
+  return inferior_ptid;
 }
 
 /* Return the name of register number regno in the form input and output by
@@ -528,8 +508,7 @@ rombug_wait (pid, status)
    monitor wants.  Lets take advantage of that just as long as possible! */
 
 static char *
-get_reg_name (regno)
-     int regno;
+get_reg_name (int regno)
 {
   static char buf[50];
   char *p;
@@ -554,7 +533,7 @@ get_reg_name (regno)
 /* read the remote registers into the block regs.  */
 
 static void
-rombug_fetch_registers ()
+rombug_fetch_registers (void)
 {
   int regno, j, i;
   long val;
@@ -580,7 +559,7 @@ rombug_fetch_registers ()
 	  for (j = 0; j < 2; j++)
 	    {
 	      get_hex_byte (&b);
-	      if (TARGET_BYTE_ORDER == BIG_ENDIAN)
+	      if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
 		val = (val << 8) + b;
 	      else
 		val = val + (b << (j * 8));
@@ -615,8 +594,7 @@ rombug_fetch_registers ()
 /* Fetch register REGNO, or all registers if REGNO is -1.
    Returns errno value.  */
 static void
-rombug_fetch_register (regno)
-     int regno;
+rombug_fetch_register (int regno)
 {
   int val, j;
   unsigned char b;
@@ -645,7 +623,7 @@ rombug_fetch_register (regno)
 	  for (j = 0; j < 2; j++)
 	    {
 	      get_hex_byte (&b);
-	      if (TARGET_BYTE_ORDER == BIG_ENDIAN)
+	      if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
 		val = (val << 8) + b;
 	      else
 		val = val + (b << (j * 8));
@@ -683,7 +661,7 @@ rombug_fetch_register (regno)
 /* Store the remote registers from the contents of the block REGS.  */
 
 static void
-rombug_store_registers ()
+rombug_store_registers (void)
 {
   int regno;
 
@@ -696,8 +674,7 @@ rombug_store_registers ()
 /* Store register REGNO, or all if REGNO == 0.
    return errno value.  */
 static void
-rombug_store_register (regno)
-     int regno;
+rombug_store_register (int regno)
 {
   char *name;
 
@@ -728,13 +705,13 @@ rombug_store_register (regno)
    debugged.  */
 
 static void
-rombug_prepare_to_store ()
+rombug_prepare_to_store (void)
 {
   /* Do nothing, since we can store individual regs */
 }
 
 static void
-rombug_files_info ()
+rombug_files_info (void)
 {
   printf ("\tAttached to %s at %d baud.\n",
 	  dev_name, sr_get_baud_rate ());
@@ -743,10 +720,7 @@ rombug_files_info ()
 /* Copy LEN bytes of data from debugger memory at MYADDR
    to inferior's memory at MEMADDR.  Returns length moved.  */
 static int
-rombug_write_inferior_memory (memaddr, myaddr, len)
-     CORE_ADDR memaddr;
-     unsigned char *myaddr;
-     int len;
+rombug_write_inferior_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len)
 {
   int i;
   char buf[10];
@@ -776,10 +750,7 @@ rombug_write_inferior_memory (memaddr, myaddr, len)
 /* Read LEN bytes from inferior memory at MEMADDR.  Put the result
    at debugger address MYADDR.  Returns length moved.  */
 static int
-rombug_read_inferior_memory (memaddr, myaddr, len)
-     CORE_ADDR memaddr;
-     char *myaddr;
-     int len;
+rombug_read_inferior_memory (CORE_ADDR memaddr, char *myaddr, int len)
 {
   int i, j;
 
@@ -848,14 +819,16 @@ rombug_read_inferior_memory (memaddr, myaddr, len)
   return len;
 }
 
-/* FIXME-someday!  merge these two.  */
+/* Transfer LEN bytes between GDB address MYADDR and target address
+   MEMADDR.  If WRITE is non-zero, transfer them to the target,
+   otherwise transfer them from the target.  TARGET is unused.
+
+   Returns the number of bytes transferred. */
+
 static int
-rombug_xfer_inferior_memory (memaddr, myaddr, len, write, target)
-     CORE_ADDR memaddr;
-     char *myaddr;
-     int len;
-     int write;
-     struct target_ops *target;	/* ignored */
+rombug_xfer_inferior_memory (CORE_ADDR memaddr, char *myaddr, int len,
+			     int write, struct mem_attrib *attrib,
+			     struct target_ops *target)
 {
   if (write)
     return rombug_write_inferior_memory (memaddr, myaddr, len);
@@ -864,9 +837,7 @@ rombug_xfer_inferior_memory (memaddr, myaddr, len, write, target)
 }
 
 static void
-rombug_kill (args, from_tty)
-     char *args;
-     int from_tty;
+rombug_kill (char *args, int from_tty)
 {
   return;			/* ignore attempts to kill target system */
 }
@@ -877,7 +848,7 @@ rombug_kill (args, from_tty)
    instructions.  */
 
 static void
-rombug_mourn_inferior ()
+rombug_mourn_inferior (void)
 {
   remove_breakpoints ();
   generic_mourn_inferior ();	/* Do all the proper things now */
@@ -889,9 +860,7 @@ static CORE_ADDR breakaddr[MAX_MONITOR_BREAKPOINTS] =
 {0};
 
 static int
-rombug_insert_breakpoint (addr, shadow)
-     CORE_ADDR addr;
-     char *shadow;
+rombug_insert_breakpoint (CORE_ADDR addr, char *shadow)
 {
   int i;
   CORE_ADDR bp_addr = addr;
@@ -922,9 +891,7 @@ rombug_insert_breakpoint (addr, shadow)
  * _remove_breakpoint -- Tell the monitor to remove a breakpoint
  */
 static int
-rombug_remove_breakpoint (addr, shadow)
-     CORE_ADDR addr;
-     char *shadow;
+rombug_remove_breakpoint (CORE_ADDR addr, char *shadow)
 {
   int i;
 
@@ -950,8 +917,7 @@ rombug_remove_breakpoint (addr, shadow)
 
 #define DOWNLOAD_LINE_SIZE 100
 static void
-rombug_load (arg)
-     char *arg;
+rombug_load (char *arg)
 {
 /* this part comment out for os9* */
 #if 0
@@ -981,9 +947,9 @@ rombug_load (arg)
 	  fflush (stdout);
 	}
 
-      if (SERIAL_WRITE (monitor_desc, buf, bytes_read))
+      if (serial_write (monitor_desc, buf, bytes_read))
 	{
-	  fprintf (stderr, "SERIAL_WRITE failed: (while downloading) %s\n", safe_strerror (errno));
+	  fprintf (stderr, "serial_write failed: (while downloading) %s\n", safe_strerror (errno));
 	  break;
 	}
       i = 0;
@@ -1013,9 +979,7 @@ rombug_load (arg)
    is seen. */
 
 static void
-rombug_command (args, fromtty)
-     char *args;
-     int fromtty;
+rombug_command (char *args, int fromtty)
 {
   if (monitor_desc == NULL)
     error ("monitor target not open.");
@@ -1037,16 +1001,14 @@ rombug_command (args, fromtty)
 static struct ttystate ttystate;
 
 static void
-cleanup_tty ()
+cleanup_tty (void)
 {
   printf ("\r\n[Exiting connect mode]\r\n");
-  /*SERIAL_RESTORE(0, &ttystate); */
+  /*serial_restore(0, &ttystate); */
 }
 
 static void
-connect_command (args, fromtty)
-     char *args;
-     int fromtty;
+connect_command (char *args, int fromtty)
 {
   fd_set readfds;
   int numfds;
@@ -1074,7 +1036,7 @@ connect_command (args, fromtty)
       do
 	{
 	  FD_SET (0, &readfds);
-	  FD_SET (DEPRECATED_SERIAL_FD (monitor_desc), &readfds);
+	  FD_SET (deprecated_serial_fd (monitor_desc), &readfds);
 	  numfds = select (sizeof (readfds) * 8, &readfds, 0, 0, 0);
 	}
       while (numfds == 0);
@@ -1109,7 +1071,7 @@ connect_command (args, fromtty)
 	    }
 	}
 
-      if (FD_ISSET (DEPRECATED_SERIAL_FD (monitor_desc), &readfds))
+      if (FD_ISSET (deprecated_serial_fd (monitor_desc), &readfds))
 	{
 	  while (1)
 	    {
@@ -1207,7 +1169,6 @@ Specify the serial device it is connected to (e.g. /dev/ttya).",
   rombug_ops.to_thread_alive = 0;
   rombug_ops.to_stop = 0;	/* to_stop */
   rombug_ops.to_pid_to_exec_file = NULL;
-  rombug_ops.to_core_file_to_sym_file = NULL;
   rombug_ops.to_stratum = process_stratum;
   rombug_ops.DONT_USE = 0;	/* next */
   rombug_ops.to_has_all_memory = 1;
@@ -1221,7 +1182,7 @@ Specify the serial device it is connected to (e.g. /dev/ttya).",
 }
 
 void
-_initialize_remote_os9k ()
+_initialize_remote_os9k (void)
 {
   init_rombug_ops ();
   add_target (&rombug_ops);

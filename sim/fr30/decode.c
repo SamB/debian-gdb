@@ -2,9 +2,9 @@
 
 THIS FILE IS MACHINE GENERATED WITH CGEN.
 
-Copyright (C) 1996, 1997, 1998, 1999 Free Software Foundation, Inc.
+Copyright 1996, 1997, 1998, 1999, 2000, 2001 Free Software Foundation, Inc.
 
-This file is part of the GNU Simulators.
+This file is part of the GNU simulators.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
    teensy bit of cpu in the decoder.  Moving it to malloc space is trivial
    but won't be done until necessary (we don't currently support the runtime
    addition of instructions nor an SMP machine with different cpus).  */
-static IDESC fr30bf_insn_data[FR30BF_INSN_MAX];
+static IDESC fr30bf_insn_data[FR30BF_INSN_XCHB + 1];
 
 /* Commas between elements are contained in the macros.
    Some of these are conditionally compiled out.  */
@@ -102,11 +102,11 @@ static const struct insn_sem fr30bf_insn_sem[] =
   { FR30_INSN_LDI20, FR30BF_INSN_LDI20, FR30BF_SFMT_LDI20 },
   { FR30_INSN_LDI32, FR30BF_INSN_LDI32, FR30BF_SFMT_LDI32 },
   { FR30_INSN_LD, FR30BF_INSN_LD, FR30BF_SFMT_LD },
-  { FR30_INSN_LDUH, FR30BF_INSN_LDUH, FR30BF_SFMT_LD },
-  { FR30_INSN_LDUB, FR30BF_INSN_LDUB, FR30BF_SFMT_LD },
+  { FR30_INSN_LDUH, FR30BF_INSN_LDUH, FR30BF_SFMT_LDUH },
+  { FR30_INSN_LDUB, FR30BF_INSN_LDUB, FR30BF_SFMT_LDUB },
   { FR30_INSN_LDR13, FR30BF_INSN_LDR13, FR30BF_SFMT_LDR13 },
-  { FR30_INSN_LDR13UH, FR30BF_INSN_LDR13UH, FR30BF_SFMT_LDR13 },
-  { FR30_INSN_LDR13UB, FR30BF_INSN_LDR13UB, FR30BF_SFMT_LDR13 },
+  { FR30_INSN_LDR13UH, FR30BF_INSN_LDR13UH, FR30BF_SFMT_LDR13UH },
+  { FR30_INSN_LDR13UB, FR30BF_INSN_LDR13UB, FR30BF_SFMT_LDR13UB },
   { FR30_INSN_LDR14, FR30BF_INSN_LDR14, FR30BF_SFMT_LDR14 },
   { FR30_INSN_LDR14UH, FR30BF_INSN_LDR14UH, FR30BF_SFMT_LDR14UH },
   { FR30_INSN_LDR14UB, FR30BF_INSN_LDR14UB, FR30BF_SFMT_LDR14UB },
@@ -115,11 +115,11 @@ static const struct insn_sem fr30bf_insn_sem[] =
   { FR30_INSN_LDR15DR, FR30BF_INSN_LDR15DR, FR30BF_SFMT_LDR15DR },
   { FR30_INSN_LDR15PS, FR30BF_INSN_LDR15PS, FR30BF_SFMT_LDR15PS },
   { FR30_INSN_ST, FR30BF_INSN_ST, FR30BF_SFMT_ST },
-  { FR30_INSN_STH, FR30BF_INSN_STH, FR30BF_SFMT_ST },
-  { FR30_INSN_STB, FR30BF_INSN_STB, FR30BF_SFMT_ST },
+  { FR30_INSN_STH, FR30BF_INSN_STH, FR30BF_SFMT_STH },
+  { FR30_INSN_STB, FR30BF_INSN_STB, FR30BF_SFMT_STB },
   { FR30_INSN_STR13, FR30BF_INSN_STR13, FR30BF_SFMT_STR13 },
-  { FR30_INSN_STR13H, FR30BF_INSN_STR13H, FR30BF_SFMT_STR13 },
-  { FR30_INSN_STR13B, FR30BF_INSN_STR13B, FR30BF_SFMT_STR13 },
+  { FR30_INSN_STR13H, FR30BF_INSN_STR13H, FR30BF_SFMT_STR13H },
+  { FR30_INSN_STR13B, FR30BF_INSN_STR13B, FR30BF_SFMT_STR13B },
   { FR30_INSN_STR14, FR30BF_INSN_STR14, FR30BF_SFMT_STR14 },
   { FR30_INSN_STR14H, FR30BF_INSN_STR14H, FR30BF_SFMT_STR14H },
   { FR30_INSN_STR14B, FR30BF_INSN_STR14B, FR30BF_SFMT_STR14B },
@@ -252,7 +252,7 @@ fr30bf_init_idesc_table (SIM_CPU *cpu)
 {
   IDESC *id,*tabend;
   const struct insn_sem *t,*tend;
-  int tabsize = FR30BF_INSN_MAX;
+  int tabsize = sizeof (fr30bf_insn_data) / sizeof (IDESC);
   IDESC *table = fr30bf_insn_data;
 
   memset (table, 0, tabsize * sizeof (IDESC));
@@ -290,60 +290,60 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
       unsigned int val = (((insn >> 8) & (255 << 0)));
       switch (val)
       {
-      case 0 : itype = FR30BF_INSN_LDR13; goto extract_sfmt_ldr13;
-      case 1 : itype = FR30BF_INSN_LDR13UH; goto extract_sfmt_ldr13;
-      case 2 : itype = FR30BF_INSN_LDR13UB; goto extract_sfmt_ldr13;
-      case 3 : itype = FR30BF_INSN_LDR15; goto extract_sfmt_ldr15;
-      case 4 : itype = FR30BF_INSN_LD; goto extract_sfmt_ld;
-      case 5 : itype = FR30BF_INSN_LDUH; goto extract_sfmt_ld;
-      case 6 : itype = FR30BF_INSN_LDUB; goto extract_sfmt_ld;
+      case 0 : itype = FR30BF_INSN_LDR13;goto extract_sfmt_ldr13;
+      case 1 : itype = FR30BF_INSN_LDR13UH;goto extract_sfmt_ldr13uh;
+      case 2 : itype = FR30BF_INSN_LDR13UB;goto extract_sfmt_ldr13ub;
+      case 3 : itype = FR30BF_INSN_LDR15;goto extract_sfmt_ldr15;
+      case 4 : itype = FR30BF_INSN_LD;goto extract_sfmt_ld;
+      case 5 : itype = FR30BF_INSN_LDUH;goto extract_sfmt_lduh;
+      case 6 : itype = FR30BF_INSN_LDUB;goto extract_sfmt_ldub;
       case 7 :
         {
-          unsigned int val = (((insn >> 4) & (15 << 0)));
+          unsigned int val = (((insn >> 6) & (1 << 1)) | ((insn >> 4) & (1 << 0)));
           switch (val)
           {
-          case 0 : itype = FR30BF_INSN_LDR15GR; goto extract_sfmt_ldr15gr;
-          case 1 : itype = FR30BF_INSN_MOV2PS; goto extract_sfmt_mov2ps;
-          case 8 : itype = FR30BF_INSN_LDR15DR; goto extract_sfmt_ldr15dr;
-          case 9 : itype = FR30BF_INSN_LDR15PS; goto extract_sfmt_ldr15ps;
+          case 0 : itype = FR30BF_INSN_LDR15GR;goto extract_sfmt_ldr15gr;
+          case 1 : itype = FR30BF_INSN_MOV2PS;goto extract_sfmt_mov2ps;
+          case 2 : itype = FR30BF_INSN_LDR15DR;goto extract_sfmt_ldr15dr;
+          case 3 : itype = FR30BF_INSN_LDR15PS;goto extract_sfmt_ldr15ps;
           default : itype = FR30BF_INSN_X_INVALID; goto extract_sfmt_empty;
           }
         }
-      case 8 : itype = FR30BF_INSN_DMOV2R13; goto extract_sfmt_dmov2r13;
-      case 9 : itype = FR30BF_INSN_DMOV2R13H; goto extract_sfmt_dmov2r13h;
-      case 10 : itype = FR30BF_INSN_DMOV2R13B; goto extract_sfmt_dmov2r13b;
-      case 11 : itype = FR30BF_INSN_DMOV2R15PD; goto extract_sfmt_dmov2r15pd;
-      case 12 : itype = FR30BF_INSN_DMOV2R13PI; goto extract_sfmt_dmov2r13pi;
-      case 13 : itype = FR30BF_INSN_DMOV2R13PIH; goto extract_sfmt_dmov2r13pih;
-      case 14 : itype = FR30BF_INSN_DMOV2R13PIB; goto extract_sfmt_dmov2r13pib;
-      case 15 : itype = FR30BF_INSN_ENTER; goto extract_sfmt_enter;
-      case 16 : itype = FR30BF_INSN_STR13; goto extract_sfmt_str13;
-      case 17 : itype = FR30BF_INSN_STR13H; goto extract_sfmt_str13;
-      case 18 : itype = FR30BF_INSN_STR13B; goto extract_sfmt_str13;
-      case 19 : itype = FR30BF_INSN_STR15; goto extract_sfmt_str15;
-      case 20 : itype = FR30BF_INSN_ST; goto extract_sfmt_st;
-      case 21 : itype = FR30BF_INSN_STH; goto extract_sfmt_st;
-      case 22 : itype = FR30BF_INSN_STB; goto extract_sfmt_st;
+      case 8 : itype = FR30BF_INSN_DMOV2R13;goto extract_sfmt_dmov2r13;
+      case 9 : itype = FR30BF_INSN_DMOV2R13H;goto extract_sfmt_dmov2r13h;
+      case 10 : itype = FR30BF_INSN_DMOV2R13B;goto extract_sfmt_dmov2r13b;
+      case 11 : itype = FR30BF_INSN_DMOV2R15PD;goto extract_sfmt_dmov2r15pd;
+      case 12 : itype = FR30BF_INSN_DMOV2R13PI;goto extract_sfmt_dmov2r13pi;
+      case 13 : itype = FR30BF_INSN_DMOV2R13PIH;goto extract_sfmt_dmov2r13pih;
+      case 14 : itype = FR30BF_INSN_DMOV2R13PIB;goto extract_sfmt_dmov2r13pib;
+      case 15 : itype = FR30BF_INSN_ENTER;goto extract_sfmt_enter;
+      case 16 : itype = FR30BF_INSN_STR13;goto extract_sfmt_str13;
+      case 17 : itype = FR30BF_INSN_STR13H;goto extract_sfmt_str13h;
+      case 18 : itype = FR30BF_INSN_STR13B;goto extract_sfmt_str13b;
+      case 19 : itype = FR30BF_INSN_STR15;goto extract_sfmt_str15;
+      case 20 : itype = FR30BF_INSN_ST;goto extract_sfmt_st;
+      case 21 : itype = FR30BF_INSN_STH;goto extract_sfmt_sth;
+      case 22 : itype = FR30BF_INSN_STB;goto extract_sfmt_stb;
       case 23 :
         {
-          unsigned int val = (((insn >> 4) & (15 << 0)));
+          unsigned int val = (((insn >> 6) & (1 << 1)) | ((insn >> 4) & (1 << 0)));
           switch (val)
           {
-          case 0 : itype = FR30BF_INSN_STR15GR; goto extract_sfmt_str15gr;
-          case 1 : itype = FR30BF_INSN_MOVPS; goto extract_sfmt_movps;
-          case 8 : itype = FR30BF_INSN_STR15DR; goto extract_sfmt_str15dr;
-          case 9 : itype = FR30BF_INSN_STR15PS; goto extract_sfmt_str15ps;
+          case 0 : itype = FR30BF_INSN_STR15GR;goto extract_sfmt_str15gr;
+          case 1 : itype = FR30BF_INSN_MOVPS;goto extract_sfmt_movps;
+          case 2 : itype = FR30BF_INSN_STR15DR;goto extract_sfmt_str15dr;
+          case 3 : itype = FR30BF_INSN_STR15PS;goto extract_sfmt_str15ps;
           default : itype = FR30BF_INSN_X_INVALID; goto extract_sfmt_empty;
           }
         }
-      case 24 : itype = FR30BF_INSN_DMOVR13; goto extract_sfmt_dmovr13;
-      case 25 : itype = FR30BF_INSN_DMOVR13H; goto extract_sfmt_dmovr13h;
-      case 26 : itype = FR30BF_INSN_DMOVR13B; goto extract_sfmt_dmovr13b;
-      case 27 : itype = FR30BF_INSN_DMOVR15PI; goto extract_sfmt_dmovr15pi;
-      case 28 : itype = FR30BF_INSN_DMOVR13PI; goto extract_sfmt_dmovr13pi;
-      case 29 : itype = FR30BF_INSN_DMOVR13PIH; goto extract_sfmt_dmovr13pih;
-      case 30 : itype = FR30BF_INSN_DMOVR13PIB; goto extract_sfmt_dmovr13pib;
-      case 31 : itype = FR30BF_INSN_INT; goto extract_sfmt_int;
+      case 24 : itype = FR30BF_INSN_DMOVR13;goto extract_sfmt_dmovr13;
+      case 25 : itype = FR30BF_INSN_DMOVR13H;goto extract_sfmt_dmovr13h;
+      case 26 : itype = FR30BF_INSN_DMOVR13B;goto extract_sfmt_dmovr13b;
+      case 27 : itype = FR30BF_INSN_DMOVR15PI;goto extract_sfmt_dmovr15pi;
+      case 28 : itype = FR30BF_INSN_DMOVR13PI;goto extract_sfmt_dmovr13pi;
+      case 29 : itype = FR30BF_INSN_DMOVR13PIH;goto extract_sfmt_dmovr13pih;
+      case 30 : itype = FR30BF_INSN_DMOVR13PIB;goto extract_sfmt_dmovr13pib;
+      case 31 : itype = FR30BF_INSN_INT;goto extract_sfmt_int;
       case 32 : /* fall through */
       case 33 : /* fall through */
       case 34 : /* fall through */
@@ -359,7 +359,7 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
       case 44 : /* fall through */
       case 45 : /* fall through */
       case 46 : /* fall through */
-      case 47 : itype = FR30BF_INSN_LDR14; goto extract_sfmt_ldr14;
+      case 47 : itype = FR30BF_INSN_LDR14;goto extract_sfmt_ldr14;
       case 48 : /* fall through */
       case 49 : /* fall through */
       case 50 : /* fall through */
@@ -375,7 +375,7 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
       case 60 : /* fall through */
       case 61 : /* fall through */
       case 62 : /* fall through */
-      case 63 : itype = FR30BF_INSN_STR14; goto extract_sfmt_str14;
+      case 63 : itype = FR30BF_INSN_STR14;goto extract_sfmt_str14;
       case 64 : /* fall through */
       case 65 : /* fall through */
       case 66 : /* fall through */
@@ -391,7 +391,7 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
       case 76 : /* fall through */
       case 77 : /* fall through */
       case 78 : /* fall through */
-      case 79 : itype = FR30BF_INSN_LDR14UH; goto extract_sfmt_ldr14uh;
+      case 79 : itype = FR30BF_INSN_LDR14UH;goto extract_sfmt_ldr14uh;
       case 80 : /* fall through */
       case 81 : /* fall through */
       case 82 : /* fall through */
@@ -407,7 +407,7 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
       case 92 : /* fall through */
       case 93 : /* fall through */
       case 94 : /* fall through */
-      case 95 : itype = FR30BF_INSN_STR14H; goto extract_sfmt_str14h;
+      case 95 : itype = FR30BF_INSN_STR14H;goto extract_sfmt_str14h;
       case 96 : /* fall through */
       case 97 : /* fall through */
       case 98 : /* fall through */
@@ -423,7 +423,7 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
       case 108 : /* fall through */
       case 109 : /* fall through */
       case 110 : /* fall through */
-      case 111 : itype = FR30BF_INSN_LDR14UB; goto extract_sfmt_ldr14ub;
+      case 111 : itype = FR30BF_INSN_LDR14UB;goto extract_sfmt_ldr14ub;
       case 112 : /* fall through */
       case 113 : /* fall through */
       case 114 : /* fall through */
@@ -439,109 +439,109 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
       case 124 : /* fall through */
       case 125 : /* fall through */
       case 126 : /* fall through */
-      case 127 : itype = FR30BF_INSN_STR14B; goto extract_sfmt_str14b;
-      case 128 : itype = FR30BF_INSN_BANDL; goto extract_sfmt_bandl;
-      case 129 : itype = FR30BF_INSN_BANDH; goto extract_sfmt_bandl;
-      case 130 : itype = FR30BF_INSN_AND; goto extract_sfmt_and;
-      case 131 : itype = FR30BF_INSN_ANDCCR; goto extract_sfmt_andccr;
-      case 132 : itype = FR30BF_INSN_ANDM; goto extract_sfmt_andm;
-      case 133 : itype = FR30BF_INSN_ANDH; goto extract_sfmt_andh;
-      case 134 : itype = FR30BF_INSN_ANDB; goto extract_sfmt_andb;
-      case 135 : itype = FR30BF_INSN_STILM; goto extract_sfmt_stilm;
-      case 136 : itype = FR30BF_INSN_BTSTL; goto extract_sfmt_btstl;
-      case 137 : itype = FR30BF_INSN_BTSTH; goto extract_sfmt_btstl;
-      case 138 : itype = FR30BF_INSN_XCHB; goto extract_sfmt_xchb;
-      case 139 : itype = FR30BF_INSN_MOV; goto extract_sfmt_mov;
-      case 140 : itype = FR30BF_INSN_LDM0; goto extract_sfmt_ldm0;
-      case 141 : itype = FR30BF_INSN_LDM1; goto extract_sfmt_ldm1;
-      case 142 : itype = FR30BF_INSN_STM0; goto extract_sfmt_stm0;
-      case 143 : itype = FR30BF_INSN_STM1; goto extract_sfmt_stm1;
-      case 144 : itype = FR30BF_INSN_BORL; goto extract_sfmt_bandl;
-      case 145 : itype = FR30BF_INSN_BORH; goto extract_sfmt_bandl;
-      case 146 : itype = FR30BF_INSN_OR; goto extract_sfmt_and;
-      case 147 : itype = FR30BF_INSN_ORCCR; goto extract_sfmt_andccr;
-      case 148 : itype = FR30BF_INSN_ORM; goto extract_sfmt_andm;
-      case 149 : itype = FR30BF_INSN_ORH; goto extract_sfmt_andh;
-      case 150 : itype = FR30BF_INSN_ORB; goto extract_sfmt_andb;
+      case 127 : itype = FR30BF_INSN_STR14B;goto extract_sfmt_str14b;
+      case 128 : itype = FR30BF_INSN_BANDL;goto extract_sfmt_bandl;
+      case 129 : itype = FR30BF_INSN_BANDH;goto extract_sfmt_bandl;
+      case 130 : itype = FR30BF_INSN_AND;goto extract_sfmt_and;
+      case 131 : itype = FR30BF_INSN_ANDCCR;goto extract_sfmt_andccr;
+      case 132 : itype = FR30BF_INSN_ANDM;goto extract_sfmt_andm;
+      case 133 : itype = FR30BF_INSN_ANDH;goto extract_sfmt_andh;
+      case 134 : itype = FR30BF_INSN_ANDB;goto extract_sfmt_andb;
+      case 135 : itype = FR30BF_INSN_STILM;goto extract_sfmt_stilm;
+      case 136 : itype = FR30BF_INSN_BTSTL;goto extract_sfmt_btstl;
+      case 137 : itype = FR30BF_INSN_BTSTH;goto extract_sfmt_btstl;
+      case 138 : itype = FR30BF_INSN_XCHB;goto extract_sfmt_xchb;
+      case 139 : itype = FR30BF_INSN_MOV;goto extract_sfmt_mov;
+      case 140 : itype = FR30BF_INSN_LDM0;goto extract_sfmt_ldm0;
+      case 141 : itype = FR30BF_INSN_LDM1;goto extract_sfmt_ldm1;
+      case 142 : itype = FR30BF_INSN_STM0;goto extract_sfmt_stm0;
+      case 143 : itype = FR30BF_INSN_STM1;goto extract_sfmt_stm1;
+      case 144 : itype = FR30BF_INSN_BORL;goto extract_sfmt_bandl;
+      case 145 : itype = FR30BF_INSN_BORH;goto extract_sfmt_bandl;
+      case 146 : itype = FR30BF_INSN_OR;goto extract_sfmt_and;
+      case 147 : itype = FR30BF_INSN_ORCCR;goto extract_sfmt_andccr;
+      case 148 : itype = FR30BF_INSN_ORM;goto extract_sfmt_andm;
+      case 149 : itype = FR30BF_INSN_ORH;goto extract_sfmt_andh;
+      case 150 : itype = FR30BF_INSN_ORB;goto extract_sfmt_andb;
       case 151 :
         {
           unsigned int val = (((insn >> 4) & (15 << 0)));
           switch (val)
           {
-          case 0 : itype = FR30BF_INSN_JMP; goto extract_sfmt_jmp;
-          case 1 : itype = FR30BF_INSN_CALLR; goto extract_sfmt_callr;
-          case 2 : itype = FR30BF_INSN_RET; goto extract_sfmt_ret;
-          case 3 : itype = FR30BF_INSN_RETI; goto extract_sfmt_reti;
-          case 4 : itype = FR30BF_INSN_DIV0S; goto extract_sfmt_div0s;
-          case 5 : itype = FR30BF_INSN_DIV0U; goto extract_sfmt_div0u;
-          case 6 : itype = FR30BF_INSN_DIV1; goto extract_sfmt_div1;
-          case 7 : itype = FR30BF_INSN_DIV2; goto extract_sfmt_div2;
-          case 8 : itype = FR30BF_INSN_EXTSB; goto extract_sfmt_extsb;
-          case 9 : itype = FR30BF_INSN_EXTUB; goto extract_sfmt_extub;
-          case 10 : itype = FR30BF_INSN_EXTSH; goto extract_sfmt_extsh;
-          case 11 : itype = FR30BF_INSN_EXTUH; goto extract_sfmt_extuh;
+          case 0 : itype = FR30BF_INSN_JMP;goto extract_sfmt_jmp;
+          case 1 : itype = FR30BF_INSN_CALLR;goto extract_sfmt_callr;
+          case 2 : itype = FR30BF_INSN_RET;goto extract_sfmt_ret;
+          case 3 : itype = FR30BF_INSN_RETI;goto extract_sfmt_reti;
+          case 4 : itype = FR30BF_INSN_DIV0S;goto extract_sfmt_div0s;
+          case 5 : itype = FR30BF_INSN_DIV0U;goto extract_sfmt_div0u;
+          case 6 : itype = FR30BF_INSN_DIV1;goto extract_sfmt_div1;
+          case 7 : itype = FR30BF_INSN_DIV2;goto extract_sfmt_div2;
+          case 8 : itype = FR30BF_INSN_EXTSB;goto extract_sfmt_extsb;
+          case 9 : itype = FR30BF_INSN_EXTUB;goto extract_sfmt_extub;
+          case 10 : itype = FR30BF_INSN_EXTSH;goto extract_sfmt_extsh;
+          case 11 : itype = FR30BF_INSN_EXTUH;goto extract_sfmt_extuh;
           default : itype = FR30BF_INSN_X_INVALID; goto extract_sfmt_empty;
           }
         }
-      case 152 : itype = FR30BF_INSN_BEORL; goto extract_sfmt_bandl;
-      case 153 : itype = FR30BF_INSN_BEORH; goto extract_sfmt_bandl;
-      case 154 : itype = FR30BF_INSN_EOR; goto extract_sfmt_and;
-      case 155 : itype = FR30BF_INSN_LDI20; goto extract_sfmt_ldi20;
-      case 156 : itype = FR30BF_INSN_EORM; goto extract_sfmt_andm;
-      case 157 : itype = FR30BF_INSN_EORH; goto extract_sfmt_andh;
-      case 158 : itype = FR30BF_INSN_EORB; goto extract_sfmt_andb;
+      case 152 : itype = FR30BF_INSN_BEORL;goto extract_sfmt_bandl;
+      case 153 : itype = FR30BF_INSN_BEORH;goto extract_sfmt_bandl;
+      case 154 : itype = FR30BF_INSN_EOR;goto extract_sfmt_and;
+      case 155 : itype = FR30BF_INSN_LDI20;goto extract_sfmt_ldi20;
+      case 156 : itype = FR30BF_INSN_EORM;goto extract_sfmt_andm;
+      case 157 : itype = FR30BF_INSN_EORH;goto extract_sfmt_andh;
+      case 158 : itype = FR30BF_INSN_EORB;goto extract_sfmt_andb;
       case 159 :
         {
           unsigned int val = (((insn >> 4) & (15 << 0)));
           switch (val)
           {
-          case 0 : itype = FR30BF_INSN_JMPD; goto extract_sfmt_jmp;
-          case 1 : itype = FR30BF_INSN_CALLRD; goto extract_sfmt_callr;
-          case 2 : itype = FR30BF_INSN_RET_D; goto extract_sfmt_ret;
-          case 3 : itype = FR30BF_INSN_INTE; goto extract_sfmt_inte;
-          case 6 : itype = FR30BF_INSN_DIV3; goto extract_sfmt_div3;
-          case 7 : itype = FR30BF_INSN_DIV4S; goto extract_sfmt_div4s;
-          case 8 : itype = FR30BF_INSN_LDI32; goto extract_sfmt_ldi32;
-          case 9 : itype = FR30BF_INSN_LEAVE; goto extract_sfmt_leave;
-          case 10 : itype = FR30BF_INSN_NOP; goto extract_sfmt_bnod;
-          case 12 : itype = FR30BF_INSN_COPOP; goto extract_sfmt_copop;
-          case 13 : itype = FR30BF_INSN_COPLD; goto extract_sfmt_copop;
-          case 14 : itype = FR30BF_INSN_COPST; goto extract_sfmt_copop;
-          case 15 : itype = FR30BF_INSN_COPSV; goto extract_sfmt_copop;
+          case 0 : itype = FR30BF_INSN_JMPD;goto extract_sfmt_jmp;
+          case 1 : itype = FR30BF_INSN_CALLRD;goto extract_sfmt_callr;
+          case 2 : itype = FR30BF_INSN_RET_D;goto extract_sfmt_ret;
+          case 3 : itype = FR30BF_INSN_INTE;goto extract_sfmt_inte;
+          case 6 : itype = FR30BF_INSN_DIV3;goto extract_sfmt_div3;
+          case 7 : itype = FR30BF_INSN_DIV4S;goto extract_sfmt_div4s;
+          case 8 : itype = FR30BF_INSN_LDI32;goto extract_sfmt_ldi32;
+          case 9 : itype = FR30BF_INSN_LEAVE;goto extract_sfmt_leave;
+          case 10 : itype = FR30BF_INSN_NOP;goto extract_sfmt_bnod;
+          case 12 : itype = FR30BF_INSN_COPOP;goto extract_sfmt_copop;
+          case 13 : itype = FR30BF_INSN_COPLD;goto extract_sfmt_copop;
+          case 14 : itype = FR30BF_INSN_COPST;goto extract_sfmt_copop;
+          case 15 : itype = FR30BF_INSN_COPSV;goto extract_sfmt_copop;
           default : itype = FR30BF_INSN_X_INVALID; goto extract_sfmt_empty;
           }
         }
-      case 160 : itype = FR30BF_INSN_ADDNI; goto extract_sfmt_addni;
-      case 161 : itype = FR30BF_INSN_ADDN2; goto extract_sfmt_addn2;
-      case 162 : itype = FR30BF_INSN_ADDN; goto extract_sfmt_addn;
-      case 163 : itype = FR30BF_INSN_ADDSP; goto extract_sfmt_addsp;
-      case 164 : itype = FR30BF_INSN_ADDI; goto extract_sfmt_addi;
-      case 165 : itype = FR30BF_INSN_ADD2; goto extract_sfmt_add2;
-      case 166 : itype = FR30BF_INSN_ADD; goto extract_sfmt_add;
-      case 167 : itype = FR30BF_INSN_ADDC; goto extract_sfmt_addc;
-      case 168 : itype = FR30BF_INSN_CMPI; goto extract_sfmt_cmpi;
-      case 169 : itype = FR30BF_INSN_CMP2; goto extract_sfmt_cmp2;
-      case 170 : itype = FR30BF_INSN_CMP; goto extract_sfmt_cmp;
-      case 171 : itype = FR30BF_INSN_MULU; goto extract_sfmt_mulu;
-      case 172 : itype = FR30BF_INSN_SUB; goto extract_sfmt_add;
-      case 173 : itype = FR30BF_INSN_SUBC; goto extract_sfmt_addc;
-      case 174 : itype = FR30BF_INSN_SUBN; goto extract_sfmt_addn;
-      case 175 : itype = FR30BF_INSN_MUL; goto extract_sfmt_mul;
-      case 176 : itype = FR30BF_INSN_LSRI; goto extract_sfmt_lsli;
-      case 177 : itype = FR30BF_INSN_LSR2; goto extract_sfmt_lsli;
-      case 178 : itype = FR30BF_INSN_LSR; goto extract_sfmt_lsl;
-      case 179 : itype = FR30BF_INSN_MOV2DR; goto extract_sfmt_mov2dr;
-      case 180 : itype = FR30BF_INSN_LSLI; goto extract_sfmt_lsli;
-      case 181 : itype = FR30BF_INSN_LSL2; goto extract_sfmt_lsli;
-      case 182 : itype = FR30BF_INSN_LSL; goto extract_sfmt_lsl;
-      case 183 : itype = FR30BF_INSN_MOVDR; goto extract_sfmt_movdr;
-      case 184 : itype = FR30BF_INSN_ASRI; goto extract_sfmt_lsli;
-      case 185 : itype = FR30BF_INSN_ASR2; goto extract_sfmt_lsli;
-      case 186 : itype = FR30BF_INSN_ASR; goto extract_sfmt_lsl;
-      case 187 : itype = FR30BF_INSN_MULUH; goto extract_sfmt_mulh;
-      case 188 : itype = FR30BF_INSN_LDRES; goto extract_sfmt_ldres;
-      case 189 : itype = FR30BF_INSN_STRES; goto extract_sfmt_ldres;
-      case 191 : itype = FR30BF_INSN_MULH; goto extract_sfmt_mulh;
+      case 160 : itype = FR30BF_INSN_ADDNI;goto extract_sfmt_addni;
+      case 161 : itype = FR30BF_INSN_ADDN2;goto extract_sfmt_addn2;
+      case 162 : itype = FR30BF_INSN_ADDN;goto extract_sfmt_addn;
+      case 163 : itype = FR30BF_INSN_ADDSP;goto extract_sfmt_addsp;
+      case 164 : itype = FR30BF_INSN_ADDI;goto extract_sfmt_addi;
+      case 165 : itype = FR30BF_INSN_ADD2;goto extract_sfmt_add2;
+      case 166 : itype = FR30BF_INSN_ADD;goto extract_sfmt_add;
+      case 167 : itype = FR30BF_INSN_ADDC;goto extract_sfmt_addc;
+      case 168 : itype = FR30BF_INSN_CMPI;goto extract_sfmt_cmpi;
+      case 169 : itype = FR30BF_INSN_CMP2;goto extract_sfmt_cmp2;
+      case 170 : itype = FR30BF_INSN_CMP;goto extract_sfmt_cmp;
+      case 171 : itype = FR30BF_INSN_MULU;goto extract_sfmt_mulu;
+      case 172 : itype = FR30BF_INSN_SUB;goto extract_sfmt_add;
+      case 173 : itype = FR30BF_INSN_SUBC;goto extract_sfmt_addc;
+      case 174 : itype = FR30BF_INSN_SUBN;goto extract_sfmt_addn;
+      case 175 : itype = FR30BF_INSN_MUL;goto extract_sfmt_mul;
+      case 176 : itype = FR30BF_INSN_LSRI;goto extract_sfmt_lsli;
+      case 177 : itype = FR30BF_INSN_LSR2;goto extract_sfmt_lsli;
+      case 178 : itype = FR30BF_INSN_LSR;goto extract_sfmt_lsl;
+      case 179 : itype = FR30BF_INSN_MOV2DR;goto extract_sfmt_mov2dr;
+      case 180 : itype = FR30BF_INSN_LSLI;goto extract_sfmt_lsli;
+      case 181 : itype = FR30BF_INSN_LSL2;goto extract_sfmt_lsli;
+      case 182 : itype = FR30BF_INSN_LSL;goto extract_sfmt_lsl;
+      case 183 : itype = FR30BF_INSN_MOVDR;goto extract_sfmt_movdr;
+      case 184 : itype = FR30BF_INSN_ASRI;goto extract_sfmt_lsli;
+      case 185 : itype = FR30BF_INSN_ASR2;goto extract_sfmt_lsli;
+      case 186 : itype = FR30BF_INSN_ASR;goto extract_sfmt_lsl;
+      case 187 : itype = FR30BF_INSN_MULUH;goto extract_sfmt_mulh;
+      case 188 : itype = FR30BF_INSN_LDRES;goto extract_sfmt_ldres;
+      case 189 : itype = FR30BF_INSN_STRES;goto extract_sfmt_ldres;
+      case 191 : itype = FR30BF_INSN_MULH;goto extract_sfmt_mulh;
       case 192 : /* fall through */
       case 193 : /* fall through */
       case 194 : /* fall through */
@@ -557,7 +557,7 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
       case 204 : /* fall through */
       case 205 : /* fall through */
       case 206 : /* fall through */
-      case 207 : itype = FR30BF_INSN_LDI8; goto extract_sfmt_ldi8;
+      case 207 : itype = FR30BF_INSN_LDI8;goto extract_sfmt_ldi8;
       case 208 : /* fall through */
       case 209 : /* fall through */
       case 210 : /* fall through */
@@ -565,7 +565,7 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
       case 212 : /* fall through */
       case 213 : /* fall through */
       case 214 : /* fall through */
-      case 215 : itype = FR30BF_INSN_CALL; goto extract_sfmt_call;
+      case 215 : itype = FR30BF_INSN_CALL;goto extract_sfmt_call;
       case 216 : /* fall through */
       case 217 : /* fall through */
       case 218 : /* fall through */
@@ -573,39 +573,39 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
       case 220 : /* fall through */
       case 221 : /* fall through */
       case 222 : /* fall through */
-      case 223 : itype = FR30BF_INSN_CALLD; goto extract_sfmt_call;
-      case 224 : itype = FR30BF_INSN_BRA; goto extract_sfmt_brad;
-      case 225 : itype = FR30BF_INSN_BNO; goto extract_sfmt_bnod;
-      case 226 : itype = FR30BF_INSN_BEQ; goto extract_sfmt_beqd;
-      case 227 : itype = FR30BF_INSN_BNE; goto extract_sfmt_beqd;
-      case 228 : itype = FR30BF_INSN_BC; goto extract_sfmt_bcd;
-      case 229 : itype = FR30BF_INSN_BNC; goto extract_sfmt_bcd;
-      case 230 : itype = FR30BF_INSN_BN; goto extract_sfmt_bnd;
-      case 231 : itype = FR30BF_INSN_BP; goto extract_sfmt_bnd;
-      case 232 : itype = FR30BF_INSN_BV; goto extract_sfmt_bvd;
-      case 233 : itype = FR30BF_INSN_BNV; goto extract_sfmt_bvd;
-      case 234 : itype = FR30BF_INSN_BLT; goto extract_sfmt_bltd;
-      case 235 : itype = FR30BF_INSN_BGE; goto extract_sfmt_bltd;
-      case 236 : itype = FR30BF_INSN_BLE; goto extract_sfmt_bled;
-      case 237 : itype = FR30BF_INSN_BGT; goto extract_sfmt_bled;
-      case 238 : itype = FR30BF_INSN_BLS; goto extract_sfmt_blsd;
-      case 239 : itype = FR30BF_INSN_BHI; goto extract_sfmt_blsd;
-      case 240 : itype = FR30BF_INSN_BRAD; goto extract_sfmt_brad;
-      case 241 : itype = FR30BF_INSN_BNOD; goto extract_sfmt_bnod;
-      case 242 : itype = FR30BF_INSN_BEQD; goto extract_sfmt_beqd;
-      case 243 : itype = FR30BF_INSN_BNED; goto extract_sfmt_beqd;
-      case 244 : itype = FR30BF_INSN_BCD; goto extract_sfmt_bcd;
-      case 245 : itype = FR30BF_INSN_BNCD; goto extract_sfmt_bcd;
-      case 246 : itype = FR30BF_INSN_BND; goto extract_sfmt_bnd;
-      case 247 : itype = FR30BF_INSN_BPD; goto extract_sfmt_bnd;
-      case 248 : itype = FR30BF_INSN_BVD; goto extract_sfmt_bvd;
-      case 249 : itype = FR30BF_INSN_BNVD; goto extract_sfmt_bvd;
-      case 250 : itype = FR30BF_INSN_BLTD; goto extract_sfmt_bltd;
-      case 251 : itype = FR30BF_INSN_BGED; goto extract_sfmt_bltd;
-      case 252 : itype = FR30BF_INSN_BLED; goto extract_sfmt_bled;
-      case 253 : itype = FR30BF_INSN_BGTD; goto extract_sfmt_bled;
-      case 254 : itype = FR30BF_INSN_BLSD; goto extract_sfmt_blsd;
-      case 255 : itype = FR30BF_INSN_BHID; goto extract_sfmt_blsd;
+      case 223 : itype = FR30BF_INSN_CALLD;goto extract_sfmt_call;
+      case 224 : itype = FR30BF_INSN_BRA;goto extract_sfmt_brad;
+      case 225 : itype = FR30BF_INSN_BNO;goto extract_sfmt_bnod;
+      case 226 : itype = FR30BF_INSN_BEQ;goto extract_sfmt_beqd;
+      case 227 : itype = FR30BF_INSN_BNE;goto extract_sfmt_beqd;
+      case 228 : itype = FR30BF_INSN_BC;goto extract_sfmt_bcd;
+      case 229 : itype = FR30BF_INSN_BNC;goto extract_sfmt_bcd;
+      case 230 : itype = FR30BF_INSN_BN;goto extract_sfmt_bnd;
+      case 231 : itype = FR30BF_INSN_BP;goto extract_sfmt_bnd;
+      case 232 : itype = FR30BF_INSN_BV;goto extract_sfmt_bvd;
+      case 233 : itype = FR30BF_INSN_BNV;goto extract_sfmt_bvd;
+      case 234 : itype = FR30BF_INSN_BLT;goto extract_sfmt_bltd;
+      case 235 : itype = FR30BF_INSN_BGE;goto extract_sfmt_bltd;
+      case 236 : itype = FR30BF_INSN_BLE;goto extract_sfmt_bled;
+      case 237 : itype = FR30BF_INSN_BGT;goto extract_sfmt_bled;
+      case 238 : itype = FR30BF_INSN_BLS;goto extract_sfmt_blsd;
+      case 239 : itype = FR30BF_INSN_BHI;goto extract_sfmt_blsd;
+      case 240 : itype = FR30BF_INSN_BRAD;goto extract_sfmt_brad;
+      case 241 : itype = FR30BF_INSN_BNOD;goto extract_sfmt_bnod;
+      case 242 : itype = FR30BF_INSN_BEQD;goto extract_sfmt_beqd;
+      case 243 : itype = FR30BF_INSN_BNED;goto extract_sfmt_beqd;
+      case 244 : itype = FR30BF_INSN_BCD;goto extract_sfmt_bcd;
+      case 245 : itype = FR30BF_INSN_BNCD;goto extract_sfmt_bcd;
+      case 246 : itype = FR30BF_INSN_BND;goto extract_sfmt_bnd;
+      case 247 : itype = FR30BF_INSN_BPD;goto extract_sfmt_bnd;
+      case 248 : itype = FR30BF_INSN_BVD;goto extract_sfmt_bvd;
+      case 249 : itype = FR30BF_INSN_BNVD;goto extract_sfmt_bvd;
+      case 250 : itype = FR30BF_INSN_BLTD;goto extract_sfmt_bltd;
+      case 251 : itype = FR30BF_INSN_BGED;goto extract_sfmt_bltd;
+      case 252 : itype = FR30BF_INSN_BLED;goto extract_sfmt_bled;
+      case 253 : itype = FR30BF_INSN_BGTD;goto extract_sfmt_bled;
+      case 254 : itype = FR30BF_INSN_BLSD;goto extract_sfmt_blsd;
+      case 255 : itype = FR30BF_INSN_BHID;goto extract_sfmt_blsd;
       default : itype = FR30BF_INSN_X_INVALID; goto extract_sfmt_empty;
       }
     }
@@ -616,7 +616,6 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
  extract_sfmt_empty:
   {
     const IDESC *idesc = &fr30bf_insn_data[itype];
-    CGEN_INSN_INT insn = base_insn;
 #define FLD(f) abuf->fields.fmt_empty.f
 
 
@@ -639,9 +638,11 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_add", "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_add", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -668,9 +669,10 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (f_u4) = f_u4;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addi", "f_u4 0x%x", 'x', f_u4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addi", "f_Ri 0x%x", 'x', f_Ri, "f_u4 0x%x", 'x', f_u4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -696,9 +698,10 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (f_m4) = f_m4;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_add2", "f_m4 0x%x", 'x', f_m4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_add2", "f_Ri 0x%x", 'x', f_Ri, "f_m4 0x%x", 'x', f_m4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -724,9 +727,11 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addc", "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addc", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -753,9 +758,11 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addn", "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addn", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -782,9 +789,10 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (f_u4) = f_u4;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addni", "f_u4 0x%x", 'x', f_u4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addni", "f_Ri 0x%x", 'x', f_Ri, "f_u4 0x%x", 'x', f_u4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -810,9 +818,10 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (f_m4) = f_m4;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addn2", "f_m4 0x%x", 'x', f_m4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addn2", "f_Ri 0x%x", 'x', f_Ri, "f_m4 0x%x", 'x', f_m4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -838,9 +847,11 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_cmp", "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_cmp", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -866,9 +877,10 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (f_u4) = f_u4;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_cmpi", "f_u4 0x%x", 'x', f_u4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_cmpi", "f_Ri 0x%x", 'x', f_Ri, "f_u4 0x%x", 'x', f_u4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -893,9 +905,10 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (f_m4) = f_m4;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_cmp2", "f_m4 0x%x", 'x', f_m4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_cmp2", "f_Ri 0x%x", 'x', f_Ri, "f_m4 0x%x", 'x', f_m4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -920,9 +933,11 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_and", "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_and", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -949,9 +964,11 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_andm", "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_andm", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -977,9 +994,11 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_andh", "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_andh", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1005,9 +1024,11 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_andb", "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_andb", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1033,9 +1054,10 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (f_u4) = f_u4;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bandl", "f_u4 0x%x", 'x', f_u4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bandl", "f_Ri 0x%x", 'x', f_Ri, "f_u4 0x%x", 'x', f_u4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1060,9 +1082,10 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (f_u4) = f_u4;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_btstl", "f_u4 0x%x", 'x', f_u4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_btstl", "f_Ri 0x%x", 'x', f_Ri, "f_u4 0x%x", 'x', f_u4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1087,9 +1110,11 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mul", "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mul", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1115,9 +1140,11 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mulu", "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mulu", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1143,9 +1170,11 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mulh", "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mulh", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1169,8 +1198,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_div0s", "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_div0s", "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1186,7 +1216,6 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
  extract_sfmt_div0u:
   {
     const IDESC *idesc = &fr30bf_insn_data[itype];
-    CGEN_INSN_INT insn = base_insn;
 #define FLD(f) abuf->fields.fmt_empty.f
 
 
@@ -1207,8 +1236,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_div1", "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_div1", "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1231,8 +1261,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_div2", "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_div2", "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1248,7 +1279,6 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
  extract_sfmt_div3:
   {
     const IDESC *idesc = &fr30bf_insn_data[itype];
-    CGEN_INSN_INT insn = base_insn;
 #define FLD(f) abuf->fields.fmt_empty.f
 
 
@@ -1262,7 +1292,6 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
  extract_sfmt_div4s:
   {
     const IDESC *idesc = &fr30bf_insn_data[itype];
-    CGEN_INSN_INT insn = base_insn;
 #define FLD(f) abuf->fields.fmt_empty.f
 
 
@@ -1285,9 +1314,11 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lsl", "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lsl", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1314,9 +1345,10 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (f_u4) = f_u4;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lsli", "f_u4 0x%x", 'x', f_u4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lsli", "f_Ri 0x%x", 'x', f_Ri, "f_u4 0x%x", 'x', f_u4, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1343,8 +1375,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_i8) = f_i8;
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldi8", "f_i8 0x%x", 'x', f_i8, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldi8", "f_i8 0x%x", 'x', f_i8, "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1379,8 +1412,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_i20) = f_i20;
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldi20", "f_i20 0x%x", 'x', f_i20, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldi20", "f_i20 0x%x", 'x', f_i20, "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1411,8 +1445,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_i32) = f_i32;
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldi32", "f_i32 0x%x", 'x', f_i32, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldi32", "f_i32 0x%x", 'x', f_i32, "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1437,9 +1472,71 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Rj) = f_Rj;
+  FLD (f_Ri) = f_Ri;
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ld", "Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ld", "f_Rj 0x%x", 'x', f_Rj, "f_Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_Rj) = f_Rj;
+      FLD (out_Ri) = f_Ri;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_lduh:
+  {
+    const IDESC *idesc = &fr30bf_insn_data[itype];
+    CGEN_INSN_INT insn = base_insn;
+#define FLD(f) abuf->fields.sfmt_ldr13.f
+    UINT f_Rj;
+    UINT f_Ri;
+
+    f_Rj = EXTRACT_MSB0_UINT (insn, 16, 8, 4);
+    f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_Rj) = f_Rj;
+  FLD (f_Ri) = f_Ri;
+  FLD (i_Rj) = & CPU (h_gr)[f_Rj];
+  FLD (i_Ri) = & CPU (h_gr)[f_Ri];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lduh", "f_Rj 0x%x", 'x', f_Rj, "f_Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_Rj) = f_Rj;
+      FLD (out_Ri) = f_Ri;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_ldub:
+  {
+    const IDESC *idesc = &fr30bf_insn_data[itype];
+    CGEN_INSN_INT insn = base_insn;
+#define FLD(f) abuf->fields.sfmt_ldr13.f
+    UINT f_Rj;
+    UINT f_Ri;
+
+    f_Rj = EXTRACT_MSB0_UINT (insn, 16, 8, 4);
+    f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_Rj) = f_Rj;
+  FLD (f_Ri) = f_Ri;
+  FLD (i_Rj) = & CPU (h_gr)[f_Rj];
+  FLD (i_Ri) = & CPU (h_gr)[f_Ri];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldub", "f_Rj 0x%x", 'x', f_Rj, "f_Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1465,16 +1562,80 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Rj) = f_Rj;
+  FLD (f_Ri) = f_Ri;
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldr13", "Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldr13", "f_Rj 0x%x", 'x', f_Rj, "f_Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
       FLD (in_Rj) = f_Rj;
-      FLD (in_h_gr_13) = 13;
+      FLD (in_h_gr_SI_13) = 13;
+      FLD (out_Ri) = f_Ri;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_ldr13uh:
+  {
+    const IDESC *idesc = &fr30bf_insn_data[itype];
+    CGEN_INSN_INT insn = base_insn;
+#define FLD(f) abuf->fields.sfmt_ldr13.f
+    UINT f_Rj;
+    UINT f_Ri;
+
+    f_Rj = EXTRACT_MSB0_UINT (insn, 16, 8, 4);
+    f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_Rj) = f_Rj;
+  FLD (f_Ri) = f_Ri;
+  FLD (i_Rj) = & CPU (h_gr)[f_Rj];
+  FLD (i_Ri) = & CPU (h_gr)[f_Ri];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldr13uh", "f_Rj 0x%x", 'x', f_Rj, "f_Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_Rj) = f_Rj;
+      FLD (in_h_gr_SI_13) = 13;
+      FLD (out_Ri) = f_Ri;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_ldr13ub:
+  {
+    const IDESC *idesc = &fr30bf_insn_data[itype];
+    CGEN_INSN_INT insn = base_insn;
+#define FLD(f) abuf->fields.sfmt_ldr13.f
+    UINT f_Rj;
+    UINT f_Ri;
+
+    f_Rj = EXTRACT_MSB0_UINT (insn, 16, 8, 4);
+    f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_Rj) = f_Rj;
+  FLD (f_Ri) = f_Ri;
+  FLD (i_Rj) = & CPU (h_gr)[f_Rj];
+  FLD (i_Ri) = & CPU (h_gr)[f_Ri];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldr13ub", "f_Rj 0x%x", 'x', f_Rj, "f_Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_Rj) = f_Rj;
+      FLD (in_h_gr_SI_13) = 13;
       FLD (out_Ri) = f_Ri;
     }
 #endif
@@ -1495,14 +1656,15 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_disp10) = f_disp10;
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldr14", "f_disp10 0x%x", 'x', f_disp10, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldr14", "f_disp10 0x%x", 'x', f_disp10, "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_14) = 14;
+      FLD (in_h_gr_SI_14) = 14;
       FLD (out_Ri) = f_Ri;
     }
 #endif
@@ -1523,14 +1685,15 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_disp9) = f_disp9;
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldr14uh", "f_disp9 0x%x", 'x', f_disp9, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldr14uh", "f_disp9 0x%x", 'x', f_disp9, "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_14) = 14;
+      FLD (in_h_gr_SI_14) = 14;
       FLD (out_Ri) = f_Ri;
     }
 #endif
@@ -1551,14 +1714,15 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_disp8) = f_disp8;
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldr14ub", "f_disp8 0x%x", 'x', f_disp8, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldr14ub", "f_disp8 0x%x", 'x', f_disp8, "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_14) = 14;
+      FLD (in_h_gr_SI_14) = 14;
       FLD (out_Ri) = f_Ri;
     }
 #endif
@@ -1579,14 +1743,15 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_udisp6) = f_udisp6;
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldr15", "f_udisp6 0x%x", 'x', f_udisp6, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldr15", "f_udisp6 0x%x", 'x', f_udisp6, "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_15) = 15;
+      FLD (in_h_gr_SI_15) = 15;
       FLD (out_Ri) = f_Ri;
     }
 #endif
@@ -1612,9 +1777,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_15) = 15;
+      FLD (in_h_gr_SI_15) = 15;
       FLD (out_Ri) = f_Ri;
-      FLD (out_h_gr_15) = 15;
+      FLD (out_h_gr_SI_15) = 15;
     }
 #endif
 #undef FLD
@@ -1638,8 +1803,8 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_15) = 15;
-      FLD (out_h_gr_15) = 15;
+      FLD (in_h_gr_SI_15) = 15;
+      FLD (out_h_gr_SI_15) = 15;
     }
 #endif
 #undef FLD
@@ -1649,7 +1814,6 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
  extract_sfmt_ldr15ps:
   {
     const IDESC *idesc = &fr30bf_insn_data[itype];
-    CGEN_INSN_INT insn = base_insn;
 #define FLD(f) abuf->fields.sfmt_addsp.f
 
 
@@ -1660,8 +1824,8 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_15) = 15;
-      FLD (out_h_gr_15) = 15;
+      FLD (in_h_gr_SI_15) = 15;
+      FLD (out_h_gr_SI_15) = 15;
     }
 #endif
 #undef FLD
@@ -1680,9 +1844,71 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_st", "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_st", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_Ri) = f_Ri;
+      FLD (in_Rj) = f_Rj;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_sth:
+  {
+    const IDESC *idesc = &fr30bf_insn_data[itype];
+    CGEN_INSN_INT insn = base_insn;
+#define FLD(f) abuf->fields.sfmt_str13.f
+    UINT f_Rj;
+    UINT f_Ri;
+
+    f_Rj = EXTRACT_MSB0_UINT (insn, 16, 8, 4);
+    f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
+  FLD (i_Ri) = & CPU (h_gr)[f_Ri];
+  FLD (i_Rj) = & CPU (h_gr)[f_Rj];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sth", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_Ri) = f_Ri;
+      FLD (in_Rj) = f_Rj;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_stb:
+  {
+    const IDESC *idesc = &fr30bf_insn_data[itype];
+    CGEN_INSN_INT insn = base_insn;
+#define FLD(f) abuf->fields.sfmt_str13.f
+    UINT f_Rj;
+    UINT f_Ri;
+
+    f_Rj = EXTRACT_MSB0_UINT (insn, 16, 8, 4);
+    f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
+  FLD (i_Ri) = & CPU (h_gr)[f_Ri];
+  FLD (i_Rj) = & CPU (h_gr)[f_Rj];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_stb", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1708,9 +1934,11 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_str13", "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_str13", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1718,7 +1946,69 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     {
       FLD (in_Ri) = f_Ri;
       FLD (in_Rj) = f_Rj;
-      FLD (in_h_gr_13) = 13;
+      FLD (in_h_gr_SI_13) = 13;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_str13h:
+  {
+    const IDESC *idesc = &fr30bf_insn_data[itype];
+    CGEN_INSN_INT insn = base_insn;
+#define FLD(f) abuf->fields.sfmt_str13.f
+    UINT f_Rj;
+    UINT f_Ri;
+
+    f_Rj = EXTRACT_MSB0_UINT (insn, 16, 8, 4);
+    f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
+  FLD (i_Ri) = & CPU (h_gr)[f_Ri];
+  FLD (i_Rj) = & CPU (h_gr)[f_Rj];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_str13h", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_Ri) = f_Ri;
+      FLD (in_Rj) = f_Rj;
+      FLD (in_h_gr_SI_13) = 13;
+    }
+#endif
+#undef FLD
+    return idesc;
+  }
+
+ extract_sfmt_str13b:
+  {
+    const IDESC *idesc = &fr30bf_insn_data[itype];
+    CGEN_INSN_INT insn = base_insn;
+#define FLD(f) abuf->fields.sfmt_str13.f
+    UINT f_Rj;
+    UINT f_Ri;
+
+    f_Rj = EXTRACT_MSB0_UINT (insn, 16, 8, 4);
+    f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
+
+  /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
+  FLD (i_Ri) = & CPU (h_gr)[f_Ri];
+  FLD (i_Rj) = & CPU (h_gr)[f_Rj];
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_str13b", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+
+#if WITH_PROFILE_MODEL_P
+  /* Record the fields for profiling.  */
+  if (PROFILE_MODEL_P (current_cpu))
+    {
+      FLD (in_Ri) = f_Ri;
+      FLD (in_Rj) = f_Rj;
+      FLD (in_h_gr_SI_13) = 13;
     }
 #endif
 #undef FLD
@@ -1737,16 +2027,17 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (f_disp10) = f_disp10;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_str14", "f_disp10 0x%x", 'x', f_disp10, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_str14", "f_Ri 0x%x", 'x', f_Ri, "f_disp10 0x%x", 'x', f_disp10, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
       FLD (in_Ri) = f_Ri;
-      FLD (in_h_gr_14) = 14;
+      FLD (in_h_gr_SI_14) = 14;
     }
 #endif
 #undef FLD
@@ -1765,16 +2056,17 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (f_disp9) = f_disp9;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_str14h", "f_disp9 0x%x", 'x', f_disp9, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_str14h", "f_Ri 0x%x", 'x', f_Ri, "f_disp9 0x%x", 'x', f_disp9, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
       FLD (in_Ri) = f_Ri;
-      FLD (in_h_gr_14) = 14;
+      FLD (in_h_gr_SI_14) = 14;
     }
 #endif
 #undef FLD
@@ -1793,16 +2085,17 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (f_disp8) = f_disp8;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_str14b", "f_disp8 0x%x", 'x', f_disp8, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_str14b", "f_Ri 0x%x", 'x', f_Ri, "f_disp8 0x%x", 'x', f_disp8, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
       FLD (in_Ri) = f_Ri;
-      FLD (in_h_gr_14) = 14;
+      FLD (in_h_gr_SI_14) = 14;
     }
 #endif
 #undef FLD
@@ -1821,16 +2114,17 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (f_udisp6) = f_udisp6;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_str15", "f_udisp6 0x%x", 'x', f_udisp6, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_str15", "f_Ri 0x%x", 'x', f_Ri, "f_udisp6 0x%x", 'x', f_udisp6, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
       FLD (in_Ri) = f_Ri;
-      FLD (in_h_gr_15) = 15;
+      FLD (in_h_gr_SI_15) = 15;
     }
 #endif
 #undef FLD
@@ -1847,16 +2141,17 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_str15gr", "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_str15gr", "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
       FLD (in_Ri) = f_Ri;
-      FLD (in_h_gr_15) = 15;
-      FLD (out_h_gr_15) = 15;
+      FLD (in_h_gr_SI_15) = 15;
+      FLD (out_h_gr_SI_15) = 15;
     }
 #endif
 #undef FLD
@@ -1880,8 +2175,8 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_15) = 15;
-      FLD (out_h_gr_15) = 15;
+      FLD (in_h_gr_SI_15) = 15;
+      FLD (out_h_gr_SI_15) = 15;
     }
 #endif
 #undef FLD
@@ -1891,7 +2186,6 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
  extract_sfmt_str15ps:
   {
     const IDESC *idesc = &fr30bf_insn_data[itype];
-    CGEN_INSN_INT insn = base_insn;
 #define FLD(f) abuf->fields.sfmt_addsp.f
 
 
@@ -1902,8 +2196,8 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_15) = 15;
-      FLD (out_h_gr_15) = 15;
+      FLD (in_h_gr_SI_15) = 15;
+      FLD (out_h_gr_SI_15) = 15;
     }
 #endif
 #undef FLD
@@ -1922,9 +2216,11 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Rj) = f_Rj;
+  FLD (f_Ri) = f_Ri;
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mov", "Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mov", "f_Rj 0x%x", 'x', f_Rj, "f_Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1951,8 +2247,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_Rs1) = f_Rs1;
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movdr", "f_Rs1 0x%x", 'x', f_Rs1, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movdr", "f_Rs1 0x%x", 'x', f_Rs1, "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1975,8 +2272,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movps", "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_movps", "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2001,9 +2299,10 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (f_Rs1) = f_Rs1;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mov2dr", "f_Rs1 0x%x", 'x', f_Rs1, "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mov2dr", "f_Ri 0x%x", 'x', f_Ri, "f_Rs1 0x%x", 'x', f_Rs1, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2026,8 +2325,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mov2ps", "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mov2ps", "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2050,8 +2350,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_jmp", "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_jmp", "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2074,8 +2375,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_callr", "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_callr", "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2114,7 +2416,6 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
  extract_sfmt_ret:
   {
     const IDESC *idesc = &fr30bf_insn_data[itype];
-    CGEN_INSN_INT insn = base_insn;
 #define FLD(f) abuf->fields.fmt_empty.f
 
 
@@ -2157,7 +2458,6 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
  extract_sfmt_inte:
   {
     const IDESC *idesc = &fr30bf_insn_data[itype];
-    CGEN_INSN_INT insn = base_insn;
 #define FLD(f) abuf->fields.fmt_empty.f
 
 
@@ -2177,7 +2477,6 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
  extract_sfmt_reti:
   {
     const IDESC *idesc = &fr30bf_insn_data[itype];
-    CGEN_INSN_INT insn = base_insn;
 #define FLD(f) abuf->fields.fmt_empty.f
 
 
@@ -2220,7 +2519,6 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
  extract_sfmt_bnod:
   {
     const IDESC *idesc = &fr30bf_insn_data[itype];
-    CGEN_INSN_INT insn = base_insn;
 #define FLD(f) abuf->fields.fmt_empty.f
 
 
@@ -2409,7 +2707,7 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_13) = 13;
+      FLD (in_h_gr_SI_13) = 13;
     }
 #endif
 #undef FLD
@@ -2433,7 +2731,7 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_13) = 13;
+      FLD (in_h_gr_SI_13) = 13;
     }
 #endif
 #undef FLD
@@ -2457,7 +2755,7 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_13) = 13;
+      FLD (in_h_gr_SI_13) = 13;
     }
 #endif
 #undef FLD
@@ -2481,8 +2779,8 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_13) = 13;
-      FLD (out_h_gr_13) = 13;
+      FLD (in_h_gr_SI_13) = 13;
+      FLD (out_h_gr_SI_13) = 13;
     }
 #endif
 #undef FLD
@@ -2506,8 +2804,8 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_13) = 13;
-      FLD (out_h_gr_13) = 13;
+      FLD (in_h_gr_SI_13) = 13;
+      FLD (out_h_gr_SI_13) = 13;
     }
 #endif
 #undef FLD
@@ -2531,8 +2829,8 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_13) = 13;
-      FLD (out_h_gr_13) = 13;
+      FLD (in_h_gr_SI_13) = 13;
+      FLD (out_h_gr_SI_13) = 13;
     }
 #endif
 #undef FLD
@@ -2556,8 +2854,8 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_15) = 15;
-      FLD (out_h_gr_15) = 15;
+      FLD (in_h_gr_SI_15) = 15;
+      FLD (out_h_gr_SI_15) = 15;
     }
 #endif
 #undef FLD
@@ -2581,7 +2879,7 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (out_h_gr_13) = 13;
+      FLD (out_h_gr_SI_13) = 13;
     }
 #endif
 #undef FLD
@@ -2605,7 +2903,7 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (out_h_gr_13) = 13;
+      FLD (out_h_gr_SI_13) = 13;
     }
 #endif
 #undef FLD
@@ -2629,7 +2927,7 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (out_h_gr_13) = 13;
+      FLD (out_h_gr_SI_13) = 13;
     }
 #endif
 #undef FLD
@@ -2653,8 +2951,8 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_13) = 13;
-      FLD (out_h_gr_13) = 13;
+      FLD (in_h_gr_SI_13) = 13;
+      FLD (out_h_gr_SI_13) = 13;
     }
 #endif
 #undef FLD
@@ -2678,8 +2976,8 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_13) = 13;
-      FLD (out_h_gr_13) = 13;
+      FLD (in_h_gr_SI_13) = 13;
+      FLD (out_h_gr_SI_13) = 13;
     }
 #endif
 #undef FLD
@@ -2703,8 +3001,8 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_13) = 13;
-      FLD (out_h_gr_13) = 13;
+      FLD (in_h_gr_SI_13) = 13;
+      FLD (out_h_gr_SI_13) = 13;
     }
 #endif
 #undef FLD
@@ -2728,8 +3026,8 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_15) = 15;
-      FLD (out_h_gr_15) = 15;
+      FLD (in_h_gr_SI_15) = 15;
+      FLD (out_h_gr_SI_15) = 15;
     }
 #endif
 #undef FLD
@@ -2746,8 +3044,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldres", "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldres", "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2764,7 +3063,6 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
  extract_sfmt_copop:
   {
     const IDESC *idesc = &fr30bf_insn_data[itype];
-    CGEN_INSN_INT insn = base_insn;
 #define FLD(f) abuf->fields.fmt_empty.f
     /* Contents of trailing part of insn.  */
     UINT word_1;
@@ -2829,8 +3127,8 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_15) = 15;
-      FLD (out_h_gr_15) = 15;
+      FLD (in_h_gr_SI_15) = 15;
+      FLD (out_h_gr_SI_15) = 15;
     }
 #endif
 #undef FLD
@@ -2847,8 +3145,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_extsb", "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_extsb", "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2872,8 +3171,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_extub", "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_extub", "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2897,8 +3197,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_extsh", "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_extsh", "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2922,8 +3223,9 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_extuh", "Ri 0x%x", 'x', f_Ri, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_extuh", "f_Ri 0x%x", 'x', f_Ri, "Ri 0x%x", 'x', f_Ri, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -2954,16 +3256,16 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_15) = 15;
-      FLD (out_h_gr_0) = 0;
-      FLD (out_h_gr_1) = 1;
-      FLD (out_h_gr_15) = 15;
-      FLD (out_h_gr_2) = 2;
-      FLD (out_h_gr_3) = 3;
-      FLD (out_h_gr_4) = 4;
-      FLD (out_h_gr_5) = 5;
-      FLD (out_h_gr_6) = 6;
-      FLD (out_h_gr_7) = 7;
+      FLD (in_h_gr_SI_15) = 15;
+      FLD (out_h_gr_SI_0) = 0;
+      FLD (out_h_gr_SI_1) = 1;
+      FLD (out_h_gr_SI_15) = 15;
+      FLD (out_h_gr_SI_2) = 2;
+      FLD (out_h_gr_SI_3) = 3;
+      FLD (out_h_gr_SI_4) = 4;
+      FLD (out_h_gr_SI_5) = 5;
+      FLD (out_h_gr_SI_6) = 6;
+      FLD (out_h_gr_SI_7) = 7;
     }
 #endif
 #undef FLD
@@ -2987,15 +3289,15 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_15) = 15;
-      FLD (out_h_gr_10) = 10;
-      FLD (out_h_gr_11) = 11;
-      FLD (out_h_gr_12) = 12;
-      FLD (out_h_gr_13) = 13;
-      FLD (out_h_gr_14) = 14;
-      FLD (out_h_gr_15) = 15;
-      FLD (out_h_gr_8) = 8;
-      FLD (out_h_gr_9) = 9;
+      FLD (in_h_gr_SI_15) = 15;
+      FLD (out_h_gr_SI_10) = 10;
+      FLD (out_h_gr_SI_11) = 11;
+      FLD (out_h_gr_SI_12) = 12;
+      FLD (out_h_gr_SI_13) = 13;
+      FLD (out_h_gr_SI_14) = 14;
+      FLD (out_h_gr_SI_15) = 15;
+      FLD (out_h_gr_SI_8) = 8;
+      FLD (out_h_gr_SI_9) = 9;
     }
 #endif
 #undef FLD
@@ -3019,16 +3321,16 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_0) = 0;
-      FLD (in_h_gr_1) = 1;
-      FLD (in_h_gr_15) = 15;
-      FLD (in_h_gr_2) = 2;
-      FLD (in_h_gr_3) = 3;
-      FLD (in_h_gr_4) = 4;
-      FLD (in_h_gr_5) = 5;
-      FLD (in_h_gr_6) = 6;
-      FLD (in_h_gr_7) = 7;
-      FLD (out_h_gr_15) = 15;
+      FLD (in_h_gr_SI_0) = 0;
+      FLD (in_h_gr_SI_1) = 1;
+      FLD (in_h_gr_SI_15) = 15;
+      FLD (in_h_gr_SI_2) = 2;
+      FLD (in_h_gr_SI_3) = 3;
+      FLD (in_h_gr_SI_4) = 4;
+      FLD (in_h_gr_SI_5) = 5;
+      FLD (in_h_gr_SI_6) = 6;
+      FLD (in_h_gr_SI_7) = 7;
+      FLD (out_h_gr_SI_15) = 15;
     }
 #endif
 #undef FLD
@@ -3052,15 +3354,15 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_10) = 10;
-      FLD (in_h_gr_11) = 11;
-      FLD (in_h_gr_12) = 12;
-      FLD (in_h_gr_13) = 13;
-      FLD (in_h_gr_14) = 14;
-      FLD (in_h_gr_15) = 15;
-      FLD (in_h_gr_8) = 8;
-      FLD (in_h_gr_9) = 9;
-      FLD (out_h_gr_15) = 15;
+      FLD (in_h_gr_SI_10) = 10;
+      FLD (in_h_gr_SI_11) = 11;
+      FLD (in_h_gr_SI_12) = 12;
+      FLD (in_h_gr_SI_13) = 13;
+      FLD (in_h_gr_SI_14) = 14;
+      FLD (in_h_gr_SI_15) = 15;
+      FLD (in_h_gr_SI_8) = 8;
+      FLD (in_h_gr_SI_9) = 9;
+      FLD (out_h_gr_SI_15) = 15;
     }
 #endif
 #undef FLD
@@ -3084,10 +3386,10 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_14) = 14;
-      FLD (in_h_gr_15) = 15;
-      FLD (out_h_gr_14) = 14;
-      FLD (out_h_gr_15) = 15;
+      FLD (in_h_gr_SI_14) = 14;
+      FLD (in_h_gr_SI_15) = 15;
+      FLD (out_h_gr_SI_14) = 14;
+      FLD (out_h_gr_SI_15) = 15;
     }
 #endif
 #undef FLD
@@ -3097,7 +3399,6 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
  extract_sfmt_leave:
   {
     const IDESC *idesc = &fr30bf_insn_data[itype];
-    CGEN_INSN_INT insn = base_insn;
 #define FLD(f) abuf->fields.sfmt_enter.f
 
 
@@ -3108,10 +3409,10 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for profiling.  */
   if (PROFILE_MODEL_P (current_cpu))
     {
-      FLD (in_h_gr_14) = 14;
-      FLD (in_h_gr_15) = 15;
-      FLD (out_h_gr_14) = 14;
-      FLD (out_h_gr_15) = 15;
+      FLD (in_h_gr_SI_14) = 14;
+      FLD (in_h_gr_SI_15) = 15;
+      FLD (out_h_gr_SI_14) = 14;
+      FLD (out_h_gr_SI_15) = 15;
     }
 #endif
 #undef FLD
@@ -3130,9 +3431,11 @@ fr30bf_decode (SIM_CPU *current_cpu, IADDR pc,
     f_Ri = EXTRACT_MSB0_UINT (insn, 16, 12, 4);
 
   /* Record the fields for the semantic handler.  */
+  FLD (f_Ri) = f_Ri;
+  FLD (f_Rj) = f_Rj;
   FLD (i_Ri) = & CPU (h_gr)[f_Ri];
   FLD (i_Rj) = & CPU (h_gr)[f_Rj];
-  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_xchb", "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_xchb", "f_Ri 0x%x", 'x', f_Ri, "f_Rj 0x%x", 'x', f_Rj, "Ri 0x%x", 'x', f_Ri, "Rj 0x%x", 'x', f_Rj, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */

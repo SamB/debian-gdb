@@ -1,5 +1,6 @@
 /* Build symbol tables in GDB's internal format.
-   Copyright 1986-1993, 1996-1999 Free Software Foundation, Inc.
+   Copyright 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1995, 1996,
+   1997, 1998, 1999, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -230,6 +231,8 @@ EXTERN int type_vector_length;
    realloc'd down to the size actually used, when completed.  */
 
 #define	INITIAL_TYPE_VECTOR_LENGTH	160
+
+extern void add_free_pendings (struct pending *list);
 
 extern void add_symbol_to_list (struct symbol *symbol,
 				struct pending **listhead);

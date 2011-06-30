@@ -41,6 +41,7 @@ SIM_OBJS = \
 	$(SIM_@sim_gen@_OBJ) \
 	$(SIM_NEW_COMMON_OBJS) \
 	$(MIPS_EXTRA_OBJS) \
+	cp1.o \
 	interp.o \
 	sim-main.o \
 	sim-hload.o \
@@ -68,6 +69,7 @@ SIM_RUN_OBJS = nrun.o
 ## COMMON_POST_CONFIG_FRAG
 
 interp.o: $(srcdir)/interp.c config.h sim-main.h itable.h
+cp1.o: $(srcdir)/cp1.c config.h sim-main.h
 
 
 ../igen/igen:
@@ -289,5 +291,5 @@ clean-extra:
 	rm -f $(BUILT_SRC_FROM_IGEN)
 	rm -f $(BUILT_SRC_FROM_M16)
 	rm -f tmp-*
-	rm -f m16* m32* itable*
+	rm -f m16*.o m32*.o itable*.o
 

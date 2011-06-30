@@ -1,5 +1,6 @@
 /* Parameters for hosting on a Hewlett-Packard 9000/300, running bsd.
-   Copyright 1986, 1987, 1989, 1991, 1992, 1993  Free Software Foundation, Inc.
+   Copyright 1986, 1987, 1989, 1991, 1992, 1993, 1995, 1996, 2000, 2001
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,14 +25,10 @@
  * Problems to hpbsd-bugs@cs.utah.edu
  */
 
-#define	HOST_BYTE_ORDER	BIG_ENDIAN
-
 #include <sys/param.h>		/* For INT_MIN */
 
 /* Kernel is a bit tenacious about sharing text segments, disallowing bpts.  */
 #define	ONE_PROCESS_WRITETEXT
-
-extern char *strdup PARAMS ((const char *));
 
 /* Interface definitions for kernel debugger KDB.  */
 

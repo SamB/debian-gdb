@@ -1,5 +1,5 @@
 /* Remote debugging interface to dBUG ROM monitor for GDB, the GNU debugger.
-   Copyright 1996, 1999 Free Software Foundation, Inc.
+   Copyright 1996, 1998, 1999, 2000, 2001 Free Software Foundation, Inc.
 
    Written by Stan Shebs of Cygnus Support.
 
@@ -30,15 +30,12 @@
 #include "target.h"
 #include "monitor.h"
 #include "serial.h"
+#include "regcache.h"
 
-static void dbug_open PARAMS ((char *args, int from_tty));
+static void dbug_open (char *args, int from_tty);
 
 static void
-dbug_supply_register (regname, regnamelen, val, vallen)
-     char *regname;
-     int regnamelen;
-     char *val;
-     int vallen;
+dbug_supply_register (char *regname, int regnamelen, char *val, int vallen)
 {
   int regno;
 
@@ -143,15 +140,13 @@ init_dbug_cmds (void)
 }				/* init_debug_ops */
 
 static void
-dbug_open (args, from_tty)
-     char *args;
-     int from_tty;
+dbug_open (char *args, int from_tty)
 {
   monitor_open (args, &dbug_cmds, from_tty);
 }
 
 void
-_initialize_dbug_rom ()
+_initialize_dbug_rom (void)
 {
   init_dbug_cmds ();
   init_monitor_ops (&dbug_ops);

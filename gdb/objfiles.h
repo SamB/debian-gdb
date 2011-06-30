@@ -1,5 +1,6 @@
 /* Definitions for symbol file management in GDB.
-   Copyright (C) 1992, 1993, 1994, 1995 Free Software Foundation, Inc.
+   Copyright 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -197,8 +198,11 @@ struct objstats
 
 #define OBJSTAT(objfile, expr) (objfile -> stats.expr)
 #define OBJSTATS struct objstats stats
-extern void print_objfile_statistics PARAMS ((void));
-extern void print_symbol_bcache_statistics PARAMS ((void));
+extern void print_objfile_statistics (void);
+extern void print_symbol_bcache_statistics (void);
+
+/* Number of entries in the minimal symbol hash table.  */
+#define MINIMAL_SYMBOL_HASH_SIZE 2039
 
 /* Master structure for keeping track of each file from which
    gdb reads symbols.  There are several ways these get allocated: 1.
@@ -231,22 +235,6 @@ struct objfile
     /* The object file's name.  Malloc'd; free it if you free this struct.  */
 
     char *name;
-
-    /* TRUE if this objfile was created because the user explicitly caused
-       it (e.g., used the add-symbol-file command).
-     */
-    int user_loaded;
-
-    /* TRUE if this objfile was explicitly created to represent a solib.
-
-       (If FALSE, the objfile may actually be a solib.  This can happen if
-       the user created the objfile by using the add-symbol-file command.
-       GDB doesn't in that situation actually check whether the file is a
-       solib.  Rather, the target's implementation of the solib interface
-       is responsible for setting this flag when noticing solibs used by
-       an inferior.)
-     */
-    int is_solib;
 
     /* Some flag bits for this objfile. */
 
@@ -307,6 +295,15 @@ struct objfile
 
     struct minimal_symbol *msymbols;
     int minimal_symbol_count;
+
+    /* This is a hash table used to index the minimal symbols by name.  */
+
+    struct minimal_symbol *msymbol_hash[MINIMAL_SYMBOL_HASH_SIZE];
+
+    /* This hash table is used to index the minimal symbols by their
+       demangled names.  */
+
+    struct minimal_symbol *msymbol_demangled_hash[MINIMAL_SYMBOL_HASH_SIZE];
 
     /* For object file formats which don't specify fundamental types, gdb
        can create such types.  For now, it maintains a vector of pointers
@@ -376,8 +373,20 @@ struct objfile
     struct section_offsets *section_offsets;
     int num_sections;
 
+    /* Indexes in the section_offsets array. These are initialized by the
+       *_symfile_offsets() family of functions (som_symfile_offsets,
+       xcoff_symfile_offsets, default_symfile_offsets). In theory they
+       should correspond to the section indexes used by bfd for the
+       current objfile. The exception to this for the time being is the
+       SOM version. */
+
+    int sect_index_text;
+    int sect_index_data;
+    int sect_index_bss;
+    int sect_index_rodata;
+
     /* These pointers are used to locate the section table, which
-       among other thigs, is used to map pc addresses into sections.
+       among other things, is used to map pc addresses into sections.
        SECTIONS points to the first entry in the table, and
        SECTIONS_END points to the first location past the last entry
        in the table.  Currently the table is stored on the
@@ -430,10 +439,28 @@ struct objfile
 
 #define OBJF_REORDERED	(1 << 2)	/* Functions are reordered */
 
-/* Distinguish between an objfile for a shared library and a
-   "vanilla" objfile. */
+/* Distinguish between an objfile for a shared library and a "vanilla"
+   objfile. (If not set, the objfile may still actually be a solib.
+   This can happen if the user created the objfile by using the
+   add-symbol-file command.  GDB doesn't in that situation actually
+   check whether the file is a solib.  Rather, the target's
+   implementation of the solib interface is responsible for setting
+   this flag when noticing solibs used by an inferior.)  */
 
 #define OBJF_SHARED     (1 << 3)	/* From a shared library */
+
+/* User requested that this objfile be read in it's entirety. */
+
+#define OBJF_READNOW	(1 << 4)	/* Immediate full read */
+
+/* This objfile was created because the user explicitly caused it
+   (e.g., used the add-symbol-file command).  This bit offers a way
+   for run_command to remove old objfile entries which are no longer
+   valid (i.e., are associated with an old inferior), but to preserve
+   ones that the user explicitly loaded via the add-symbol-file
+   command. */
+
+#define OBJF_USERLOADED	(1 << 5)	/* User loaded */
 
 /* The object file that the main symbol table was loaded from (e.g. the
    argument to the "symbol-file" or "file" command).  */
@@ -467,56 +494,45 @@ extern struct objfile *object_files;
 
 /* Declarations for functions defined in objfiles.c */
 
-extern struct objfile *
-  allocate_objfile PARAMS ((bfd *, int, int, int));
+extern struct objfile *allocate_objfile (bfd *, int);
 
-extern int
-build_objfile_section_table PARAMS ((struct objfile *));
+extern int build_objfile_section_table (struct objfile *);
 
-extern void objfile_to_front PARAMS ((struct objfile *));
+extern void objfile_to_front (struct objfile *);
 
-extern void
-unlink_objfile PARAMS ((struct objfile *));
+extern void unlink_objfile (struct objfile *);
 
-extern void
-free_objfile PARAMS ((struct objfile *));
+extern void free_objfile (struct objfile *);
 
-extern void
-free_all_objfiles PARAMS ((void));
+extern struct cleanup *make_cleanup_free_objfile (struct objfile *);
 
-extern void
-objfile_relocate PARAMS ((struct objfile *, struct section_offsets *));
+extern void free_all_objfiles (void);
 
-extern int
-have_partial_symbols PARAMS ((void));
+extern void objfile_relocate (struct objfile *, struct section_offsets *);
 
-extern int
-have_full_symbols PARAMS ((void));
+extern int have_partial_symbols (void);
+
+extern int have_full_symbols (void);
 
 /* This operation deletes all objfile entries that represent solibs that
    weren't explicitly loaded by the user, via e.g., the add-symbol-file
    command.
  */
-extern void
-objfile_purge_solibs PARAMS ((void));
+extern void objfile_purge_solibs (void);
 
 /* Functions for dealing with the minimal symbol table, really a misc
    address<->symbol mapping for things we don't have debug symbols for.  */
 
-extern int
-have_minimal_symbols PARAMS ((void));
+extern int have_minimal_symbols (void);
 
-extern struct obj_section *
-  find_pc_section PARAMS ((CORE_ADDR pc));
+extern struct obj_section *find_pc_section (CORE_ADDR pc);
 
-extern struct obj_section *
-  find_pc_sect_section PARAMS ((CORE_ADDR pc, asection * section));
+extern struct obj_section *find_pc_sect_section (CORE_ADDR pc,
+						 asection * section);
 
-extern int
-in_plt_section PARAMS ((CORE_ADDR, char *));
+extern int in_plt_section (CORE_ADDR, char *);
 
-extern int
-is_in_import_list PARAMS ((char *, struct objfile *));
+extern int is_in_import_list (char *, struct objfile *);
 
 /* Traverse all object files.  ALL_OBJFILES_SAFE works even if you delete
    the objfile during the traversal.  */
@@ -569,5 +585,25 @@ is_in_import_list PARAMS ((char *, struct objfile *));
 #define ALL_OBJSECTIONS(objfile, osect)		\
   ALL_OBJFILES (objfile)			\
     ALL_OBJFILE_OSECTIONS (objfile, osect)
+
+#define SECT_OFF_DATA(objfile) \
+     ((objfile->sect_index_data == -1) \
+      ? (internal_error (__FILE__, __LINE__, "sect_index_data not initialized"), -1) \
+      : objfile->sect_index_data)
+
+#define SECT_OFF_RODATA(objfile) \
+     ((objfile->sect_index_rodata == -1) \
+      ? (internal_error (__FILE__, __LINE__, "sect_index_rodata not initialized"), -1) \
+      : objfile->sect_index_rodata)
+
+#define SECT_OFF_TEXT(objfile) \
+     ((objfile->sect_index_text == -1) \
+      ? (internal_error (__FILE__, __LINE__, "sect_index_text not initialized"), -1) \
+      : objfile->sect_index_text)
+
+/* Sometimes the .bss section is missing from the objfile, so we don't
+   want to die here. Let the users of SECT_OFF_BSS deal with an
+   uninitialized section index. */
+#define SECT_OFF_BSS(objfile) (objfile)->sect_index_bss
 
 #endif /* !defined (OBJFILES_H) */

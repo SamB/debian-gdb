@@ -1,5 +1,6 @@
 /* Print VAX instructions for GDB, the GNU debugger.
-   Copyright 1986, 1989, 1991, 1992, 1996 Free Software Foundation, Inc.
+   Copyright 1986, 1989, 1991, 1992, 1995, 1996, 1998, 1999, 2000
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,6 +22,27 @@
 #include "defs.h"
 #include "symtab.h"
 #include "opcode/vax.h"
+#include "gdbcore.h"
+#include "frame.h"
+#include "value.h"
+
+/* Return 1 if P points to an invalid floating point value.
+   LEN is the length in bytes -- not relevant on the Vax.  */
+
+/* FIXME: cagney/2002-01-19: The macro below was originally defined in
+   tm-vax.h and used in values.c.  Two problems.  Firstly this is a
+   very non-portable and secondly it is wrong.  The VAX should be
+   using floatformat and associated methods to identify and handle
+   invalid floating-point values.  Adding to the poor target's woes
+   there is no floatformat_vax_{f,d} and no TARGET_FLOAT_FORMAT
+   et.al..  */
+
+/* FIXME: cagney/2002-01-19: It turns out that the only thing that
+   uses this macro is the vax disassembler code (so how old is this
+   target?).  This target should instead be using the opcodes
+   disassembler.  That allowing the macro to be eliminated.  */
+
+#define INVALID_FLOAT(p, len) ((*(short *) p & 0xff80) == 0x8000)
 
 /* Vax instructions are never longer than this.  */
 #define MAXLEN 62
@@ -34,8 +56,7 @@ static unsigned char *print_insn_arg ();
    to reach some "real" code.  */
 
 CORE_ADDR
-vax_skip_prologue (pc)
-     CORE_ADDR pc;
+vax_skip_prologue (CORE_ADDR pc)
 {
   register int op = (unsigned char) read_memory_integer (pc, 1);
   if (op == 0x11)
@@ -64,8 +85,7 @@ vax_skip_prologue (pc)
    Can return -1, meaning no way to tell.  */
 
 int
-vax_frame_num_args (fi)
-     struct frame_info *fi;
+vax_frame_num_args (struct frame_info *fi)
 {
   return (0xff & read_memory_integer (FRAME_ARGS_ADDRESS (fi), 1));
 }
@@ -77,14 +97,12 @@ vax_frame_num_args (fi)
    Returns length of the instruction, in bytes.  */
 
 static int
-vax_print_insn (memaddr, info)
-     CORE_ADDR memaddr;
-     disassemble_info *info;
+vax_print_insn (CORE_ADDR memaddr, disassemble_info *info)
 {
   unsigned char buffer[MAXLEN];
   register int i;
   register unsigned char *p;
-  register char *d;
+  const char *d;
 
   int status = (*info->read_memory_func) (memaddr, buffer, MAXLEN, info);
   if (status != 0)
@@ -126,11 +144,8 @@ vax_print_insn (memaddr, info)
 }
 
 static unsigned char *
-print_insn_arg (d, p, addr, info)
-     char *d;
-     register char *p;
-     CORE_ADDR addr;
-     disassemble_info *info;
+print_insn_arg (char *d, register char *p, CORE_ADDR addr,
+		disassemble_info *info)
 {
   register int regnum = *p & 0xf;
   float floatlitbuf;
@@ -300,7 +315,7 @@ print_insn_arg (d, p, addr, info)
 }
 
 void
-_initialize_vax_tdep ()
+_initialize_vax_tdep (void)
 {
   tm_print_insn = vax_print_insn;
 }

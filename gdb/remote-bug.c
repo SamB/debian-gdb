@@ -1,7 +1,9 @@
 /* Remote debugging interface for Motorola's MVME187BUG monitor, an embedded
    monitor for the m88k.
 
-   Copyright 1992, 1993 Free Software Foundation, Inc.
+   Copyright 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001,
+   2002 Free Software Foundation, Inc.
+
    Contributed by Cygnus Support.  Written by K. Richard Pixley.
 
    This file is part of GDB.
@@ -23,12 +25,10 @@
 
 #include "defs.h"
 #include "inferior.h"
-#include "wait.h"
-
 #include "gdb_string.h"
+#include "regcache.h"
 #include <ctype.h>
 #include <fcntl.h>
-#include <signal.h>
 #include <setjmp.h>
 #include <errno.h>
 
@@ -36,10 +36,8 @@
 #include "gdbcore.h"
 #include "gdbcmd.h"
 
+#include "serial.h"
 #include "remote-utils.h"
-
-
-extern int sleep ();
 
 /* External data declarations */
 extern int stop_soon_quietly;	/* for wait_for_inferior */
@@ -48,15 +46,13 @@ extern int stop_soon_quietly;	/* for wait_for_inferior */
 extern struct target_ops bug_ops;	/* Forward declaration */
 
 /* Forward function declarations */
-static int bug_clear_breakpoints PARAMS ((void));
+static int bug_clear_breakpoints (void);
 
-static int bug_read_memory PARAMS ((CORE_ADDR memaddr,
-				    unsigned char *myaddr,
-				    int len));
+static int bug_read_memory (CORE_ADDR memaddr,
+			    unsigned char *myaddr, int len);
 
-static int bug_write_memory PARAMS ((CORE_ADDR memaddr,
-				     unsigned char *myaddr,
-				     int len));
+static int bug_write_memory (CORE_ADDR memaddr,
+			     unsigned char *myaddr, int len);
 
 /* This variable is somewhat arbitrary.  It's here so that it can be
    set from within a running gdb.  */
@@ -113,9 +109,7 @@ static int need_artificial_trap = 0;
  */
 
 static void
-bug_load (args, fromtty)
-     char *args;
-     int fromtty;
+bug_load (char *args, int fromtty)
 {
   bfd *abfd;
   asection *s;
@@ -123,8 +117,7 @@ bug_load (args, fromtty)
 
   sr_check_open ();
 
-  dcache_flush (gr_get_dcache ());
-  inferior_pid = 0;
+  inferior_ptid = null_ptid;
   abfd = bfd_openr (args, 0);
   if (!abfd)
     {
@@ -148,7 +141,7 @@ bug_load (args, fromtty)
 
 	  char *buffer = xmalloc (srec_frame);
 
-	  printf_filtered ("%s\t: 0x%4x .. 0x%4x  ", s->name, s->vma, s->vma + s->_raw_size);
+	  printf_filtered ("%s\t: 0x%4lx .. 0x%4lx  ", s->name, s->vma, s->vma + s->_raw_size);
 	  gdb_flush (gdb_stdout);
 	  for (i = 0; i < s->_raw_size; i += srec_frame)
 	    {
@@ -161,7 +154,7 @@ bug_load (args, fromtty)
 	      gdb_flush (gdb_stdout);
 	    }
 	  printf_filtered ("\n");
-	  free (buffer);
+	  xfree (buffer);
 	}
       s = s->next;
     }
@@ -172,8 +165,7 @@ bug_load (args, fromtty)
 
 #if 0
 static char *
-get_word (p)
-     char **p;
+get_word (char **p)
 {
   char *s = *p;
   char *word;
@@ -203,12 +195,9 @@ get_word (p)
 
 static struct gr_settings bug_settings =
 {
-  NULL,				/* dcache */
   "Bug>",			/* prompt */
   &bug_ops,			/* ops */
   bug_clear_breakpoints,	/* clear_all_breakpoints */
-  bug_read_memory,		/* readfunc */
-  bug_write_memory,		/* writefunc */
   gr_generic_checkin,		/* checkin */
 };
 
@@ -219,9 +208,7 @@ static char *cpu_check_strings[] =
 };
 
 static void
-bug_open (args, from_tty)
-     char *args;
-     int from_tty;
+bug_open (char *args, int from_tty)
 {
   if (args == NULL)
     args = "";
@@ -240,19 +227,15 @@ bug_open (args, from_tty)
       target_is_m88110 = 1;
       break;
     default:
-      abort ();
+      internal_error (__FILE__, __LINE__, "failed internal consistency check");
     }
 }
 
 /* Tell the remote machine to resume.  */
 
 void
-bug_resume (pid, step, sig)
-     int pid, step;
-     enum target_signal sig;
+bug_resume (ptid_t ptid, int step, enum target_signal sig)
 {
-  dcache_flush (gr_get_dcache ());
-
   if (step)
     {
       sr_write_cr ("t");
@@ -280,10 +263,8 @@ static char *wait_strings[] =
   NULL,
 };
 
-int
-bug_wait (pid, status)
-     int pid;
-     struct target_waitstatus *status;
+ptid_t
+bug_wait (ptid_t ptid, struct target_waitstatus *status)
 {
   int old_timeout = sr_get_timeout ();
   int old_immediate_quit = immediate_quit;
@@ -346,7 +327,7 @@ bug_wait (pid, status)
 
   sr_set_timeout (old_timeout);
   immediate_quit = old_immediate_quit;
-  return 0;
+  return inferior_ptid;
 }
 
 /* Return the name of register number REGNO
@@ -354,8 +335,7 @@ bug_wait (pid, status)
 
    Returns a pointer to a static buffer containing the answer.  */
 static char *
-get_reg_name (regno)
-     int regno;
+get_reg_name (int regno)
 {
   static char *rn[] =
   {
@@ -388,8 +368,7 @@ get_reg_name (regno)
    success, -1 on failure.  */
 
 static int
-bug_scan (s)
-     char *s;
+bug_scan (char *s)
 {
   int c;
 
@@ -409,8 +388,7 @@ bug_scan (s)
 #endif /* never */
 
 static int
-bug_srec_write_cr (s)
-     char *s;
+bug_srec_write_cr (char *s)
 {
   char *p = s;
 
@@ -421,7 +399,7 @@ bug_srec_write_cr (s)
 	  printf ("%c", *p);
 
 	do
-	  SERIAL_WRITE (sr_get_desc (), p, 1);
+	  serial_write (sr_get_desc (), p, 1);
 	while (sr_pollchar () != *p);
       }
   else
@@ -436,8 +414,7 @@ bug_srec_write_cr (s)
 /* Store register REGNO, or all if REGNO == -1. */
 
 static void
-bug_fetch_register (regno)
-     int regno;
+bug_fetch_register (int regno)
 {
   sr_check_open ();
 
@@ -515,8 +492,7 @@ bug_fetch_register (regno)
 /* Store register REGNO, or all if REGNO == -1. */
 
 static void
-bug_store_register (regno)
-     int regno;
+bug_store_register (int regno)
 {
   char buffer[1024];
   sr_check_open ();
@@ -537,9 +513,9 @@ bug_store_register (regno)
       if (target_is_m88110 && regno == SFIP_REGNUM)
 	return;
       else if (regno < XFP_REGNUM)
-	sprintf (buffer, "rs %s %08x",
+	sprintf (buffer, "rs %s %08lx",
 		 regname,
-		 read_register (regno));
+		 (long) read_register (regno));
       else
 	{
 	  unsigned char *fpreg_buf =
@@ -569,87 +545,31 @@ bug_store_register (regno)
   return;
 }
 
+/* Transfer LEN bytes between GDB address MYADDR and target address
+   MEMADDR.  If WRITE is non-zero, transfer them to the target,
+   otherwise transfer them from the target.  TARGET is unused.
+
+   Returns the number of bytes transferred. */
+
 int
-bug_xfer_memory (memaddr, myaddr, len, write, target)
-     CORE_ADDR memaddr;
-     char *myaddr;
-     int len;
-     int write;
-     struct target_ops *target;	/* ignored */
+bug_xfer_memory (CORE_ADDR memaddr, char *myaddr, int len, int write,
+		 struct mem_attrib *attrib, struct target_ops *target)
 {
-  register int i;
+  int res;
 
-  /* Round starting address down to longword boundary.  */
-  register CORE_ADDR addr;
-
-  /* Round ending address up; get number of longwords that makes.  */
-  register int count;
-
-  /* Allocate buffer of that many longwords.  */
-  register int *buffer;
-
-  addr = memaddr & -sizeof (int);
-  count = (((memaddr + len) - addr) + sizeof (int) - 1) / sizeof (int);
-
-  buffer = (int *) alloca (count * sizeof (int));
+  if (len <= 0)
+    return 0;
 
   if (write)
-    {
-      /* Fill start and end extra bytes of buffer with existing memory data.  */
-
-      if (addr != memaddr || len < (int) sizeof (int))
-	{
-	  /* Need part of initial word -- fetch it.  */
-	  buffer[0] = gr_fetch_word (addr);
-	}
-
-      if (count > 1)		/* FIXME, avoid if even boundary */
-	{
-	  buffer[count - 1]
-	    = gr_fetch_word (addr + (count - 1) * sizeof (int));
-	}
-
-      /* Copy data to be written over corresponding part of buffer */
-
-      memcpy ((char *) buffer + (memaddr & (sizeof (int) - 1)), myaddr, len);
-
-      /* Write the entire buffer.  */
-
-      for (i = 0; i < count; i++, addr += sizeof (int))
-	{
-	  errno = 0;
-	  gr_store_word (addr, buffer[i]);
-	  if (errno)
-	    {
-
-	      return 0;
-	    }
-
-	}
-    }
+    res = bug_write_memory (memaddr, myaddr, len);
   else
-    {
-      /* Read all the longwords */
-      for (i = 0; i < count; i++, addr += sizeof (int))
-	{
-	  errno = 0;
-	  buffer[i] = gr_fetch_word (addr);
-	  if (errno)
-	    {
-	      return 0;
-	    }
-	  QUIT;
-	}
+    res = bug_read_memory (memaddr, myaddr, len);
 
-      /* Copy appropriate bytes out of the buffer.  */
-      memcpy (myaddr, (char *) buffer + (memaddr & (sizeof (int) - 1)), len);
-    }
-
-  return len;
+  return res;
 }
 
 static void
-start_load ()
+start_load (void)
 {
   char *command;
 
@@ -683,10 +603,7 @@ static char *srecord_strings[] =
 };
 
 static int
-bug_write_memory (memaddr, myaddr, len)
-     CORE_ADDR memaddr;
-     unsigned char *myaddr;
-     int len;
+bug_write_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len)
 {
   int done;
   int checksum;
@@ -731,7 +648,7 @@ bug_write_memory (memaddr, myaddr, len)
 	    thisgo = srec_bytes;
 
 	  address = memaddr + done;
-	  sprintf (buf, "S3%02X%08X", thisgo + 4 + 1, address);
+	  sprintf (buf, "S3%02X%08lX", thisgo + 4 + 1, (long) address);
 	  buf += 12;
 
 	  checksum += (thisgo + 4 + 1
@@ -810,10 +727,7 @@ bug_write_memory (memaddr, myaddr, len)
 /* Read LEN bytes from inferior memory at MEMADDR.  Put the result
    at debugger address MYADDR.  Returns errno value.  */
 static int
-bug_read_memory (memaddr, myaddr, len)
-     CORE_ADDR memaddr;
-     unsigned char *myaddr;
-     int len;
+bug_read_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len)
 {
   char request[100];
   char *buffer;
@@ -824,7 +738,7 @@ bug_read_memory (memaddr, myaddr, len)
   unsigned int inaddr;
   unsigned int checksum;
 
-  sprintf (request, "du 0 %x:&%d", memaddr, len);
+  sprintf (request, "du 0 %lx:&%d", (long) memaddr, len);
   sr_write_cr (request);
 
   p = buffer = alloca (len);
@@ -910,10 +824,14 @@ done:
 
 #define MAX_BREAKS	16
 static int num_brkpts = 0;
+
+/* Insert a breakpoint at ADDR.  SAVE is normally the address of the
+   pattern buffer where the instruction that the breakpoint overwrites
+   is saved.  It is unused here since the bug is responsible for
+   saving/restoring the original instruction. */
+
 static int
-bug_insert_breakpoint (addr, save)
-     CORE_ADDR addr;
-     char *save;		/* Throw away, let bug save instructions */
+bug_insert_breakpoint (CORE_ADDR addr, char *save)
 {
   sr_check_open ();
 
@@ -922,7 +840,7 @@ bug_insert_breakpoint (addr, save)
       char buffer[100];
 
       num_brkpts++;
-      sprintf (buffer, "br %x", addr);
+      sprintf (buffer, "br %lx", (long) addr);
       sr_write_cr (buffer);
       gr_expect_prompt ();
       return (0);
@@ -935,17 +853,20 @@ bug_insert_breakpoint (addr, save)
     }
 
 }
+
+/* Remove a breakpoint at ADDR.  SAVE is normally the previously
+   saved pattern, but is unused here since the bug is responsible
+   for saving/restoring instructions. */
+
 static int
-bug_remove_breakpoint (addr, save)
-     CORE_ADDR addr;
-     char *save;		/* Throw away, let bug save instructions */
+bug_remove_breakpoint (CORE_ADDR addr, char *save)
 {
   if (num_brkpts > 0)
     {
       char buffer[100];
 
       num_brkpts--;
-      sprintf (buffer, "nobr %x", addr);
+      sprintf (buffer, "nobr %lx", (long) addr);
       sr_write_cr (buffer);
       gr_expect_prompt ();
 
@@ -955,7 +876,7 @@ bug_remove_breakpoint (addr, save)
 
 /* Clear the bugs notion of what the break points are */
 static int
-bug_clear_breakpoints ()
+bug_clear_breakpoints (void)
 {
 
   if (sr_is_open ())
@@ -1026,7 +947,6 @@ init_bug_ops (void)
   bug_ops.to_thread_alive = 0;
   bug_ops.to_stop = 0;
   bug_ops.to_pid_to_exec_file = NULL;
-  bug_ops.to_core_file_to_sym_file = NULL;
   bug_ops.to_stratum = process_stratum;
   bug_ops.DONT_USE = 0;
   bug_ops.to_has_all_memory = 1;
@@ -1040,7 +960,7 @@ init_bug_ops (void)
 }				/* init_bug_ops */
 
 void
-_initialize_remote_bug ()
+_initialize_remote_bug (void)
 {
   init_bug_ops ();
   add_target (&bug_ops);

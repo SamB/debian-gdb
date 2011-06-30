@@ -1,5 +1,5 @@
 /* Simulator tracing/debugging support.
-   Copyright (C) 1997, 1998 Free Software Foundation, Inc.
+   Copyright (C) 1997, 1998, 2001 Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
 This file is part of GDB, the GNU debugger.
@@ -63,6 +63,9 @@ enum {
   /* Trace fpu operations.  */
   TRACE_FPU_IDX,
 
+  /* Trace vpu operations.  */
+  TRACE_VPU_IDX,
+
   /* Trace branching.  */
   TRACE_BRANCH_IDX,
 
@@ -85,8 +88,7 @@ enum {
 ((1 << TRACE_INSN_IDX) \
  | (1 << TRACE_LINENUM_IDX) \
  | (1 << TRACE_MEMORY_IDX) \
- | (1 << TRACE_MODEL_IDX) \
- | (1 << TRACE_EVENTS_IDX))
+ | (1 << TRACE_MODEL_IDX))
 
 /* Masks so WITH_TRACE can have symbolic values.
    The case choice here is on purpose.  The lowercase parts are args to
@@ -101,6 +103,7 @@ enum {
 #define TRACE_core     (1 << TRACE_CORE_IDX)
 #define TRACE_events   (1 << TRACE_EVENTS_IDX)
 #define TRACE_fpu      (1 << TRACE_FPU_IDX)
+#define TRACE_vpu      (1 << TRACE_VPU_IDX)
 #define TRACE_branch   (1 << TRACE_BRANCH_IDX)
 #define TRACE_debug    (1 << TRACE_DEBUG_IDX)
 
@@ -115,6 +118,7 @@ enum {
 #define WITH_TRACE_CORE_P	(WITH_TRACE & TRACE_core)
 #define WITH_TRACE_EVENTS_P	(WITH_TRACE & TRACE_events)
 #define WITH_TRACE_FPU_P	(WITH_TRACE & TRACE_fpu)
+#define WITH_TRACE_VPU_P	(WITH_TRACE & TRACE_vpu)
 #define WITH_TRACE_BRANCH_P	(WITH_TRACE & TRACE_branch)
 #define WITH_TRACE_DEBUG_P	(WITH_TRACE & TRACE_debug)
 
@@ -211,12 +215,11 @@ typedef struct _trace_data {
 #define TRACE_CORE_P(cpu)	TRACE_P (cpu, TRACE_CORE_IDX)
 #define TRACE_EVENTS_P(cpu)	TRACE_P (cpu, TRACE_EVENTS_IDX)
 #define TRACE_FPU_P(cpu)	TRACE_P (cpu, TRACE_FPU_IDX)
+#define TRACE_VPU_P(cpu)	TRACE_P (cpu, TRACE_VPU_IDX)
 #define TRACE_BRANCH_P(cpu)	TRACE_P (cpu, TRACE_BRANCH_IDX)
 #define TRACE_DEBUG_P(cpu)	TRACE_P (cpu, TRACE_DEBUG_IDX)
 
-/* Traceing functions.
-
- */
+/* Tracing functions.  */
 
 /* Prime the trace buffers ready for any trace output.
    Must be called prior to any other trace operation */
@@ -384,7 +387,7 @@ extern void trace_result_word1_string1 PARAMS ((SIM_DESC sd,
 /* Other trace_result{_<type><nr-results>} */
 
 
-/* Macro's for tracing ALU instructions */
+/* Macros for tracing ALU instructions */
 
 #define TRACE_ALU_INPUT0() \
 do { \
@@ -442,8 +445,21 @@ do { \
     trace_result_word4 (SD, CPU, TRACE_ALU_IDX, (R0), (R1), (R2), (R3)); \
 } while (0)
 
+/* Macros for tracing inputs to comparative branch instructions. */
 
-/* Macro's for tracing FPU instructions */
+#define TRACE_BRANCH_INPUT1(V0) \
+do { \
+  if (TRACE_BRANCH_P (CPU)) \
+    trace_input_word1 (SD, CPU, TRACE_BRANCH_IDX, (V0)); \
+} while (0)
+
+#define TRACE_BRANCH_INPUT2(V0,V1) \
+do { \
+  if (TRACE_BRANCH_P (CPU)) \
+    trace_input_word2 (SD, CPU, TRACE_BRANCH_IDX, (V0), (V1)); \
+} while (0)
+
+/* Macros for tracing FPU instructions */
 
 #define TRACE_FP_INPUT0() \
 do { \

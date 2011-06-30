@@ -1,3 +1,159 @@
+2001-08-01  John R. Moore  <jmoore@redhat.com>
+
+	* interp.c (sim_create_inferior): Removed a hack that stated
+	it was setting r0/r1 with argc/argv.
+
+2001-04-15  J.T. Conklin  <jtc@redback.com>
+
+	* Makefile.in (simops.o): Add simops.h to dependency list.
+
+Tue May 23 21:39:23 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* configure: Regenerated to track ../common/aclocal.m4 changes.
+
+Tue Apr 18 16:26:41 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* interp.c (sim_resume): Deliver SIGILL.
+	(lookup_hash): Do not print SIGILL message.
+
+Tue Feb 22 18:24:56 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* Makefile.in (SIM_EXTRA_CFLAGS): Define SIM_HAVE_ENVIRONMENT.
+	* interp.c (sim_set_trace): Replace sim_trace.  Enable tracing.
+
+Tue Feb  8 17:41:12 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* d10v_sim.h (SIG_D10V_BUS): Define.
+
+	* simops.c (address_exception): Delete function.
+	(OP_30000000, OP_6401, OP_6001, OP_6000, OP_32010000, OP_31000000,
+ 	OP_6601, OP_6201, OP_6200, OP_33010000, OP_34000000, OP_6800,
+ 	OP_6C1F, OP_6801, OP_6C01, OP_36010000, OP_35000000, OP_6A00,
+ 	OP_6E1F, OP_6A01, OP_6E01, OP_37010000): Replace call to
+ 	address_exception with code that sets SIG_D10V_BUS.
+
+	* interp.c (sim_resume): When SIGBUS or SIGSEGV, deliver a bus
+ 	error to the simulator before resuming execution.
+	(sim_trace): Check stop reason and use that to determine sim_trace
+ 	return value.
+	(sim_stop_reason): For SIG_D10V_BUS return a SIGBUS / SIGSEGV
+ 	sigrc.
+
+Tue Jan 18 16:07:42 MST 2000	Diego Novillo <dnovillo@cygnus.com>
+
+	* interp.c (sim_create_inferior): Change internal initial value for
+	DMAP2 to 0x2000.
+
+Mon Jan  3 02:06:07 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* interp.c (lookup_hash): Stop the update of the PC when there was
+ 	an illegal instruction exception.
+
+Mon Jan  3 00:14:33 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* simops.c (address_exception): New function.
+	(OP_30000000, OP_6401, OP_6001, OP_6000, OP_32010000, OP_31000000,
+ 	OP_6601, OP_6201, OP_6200, OP_33010000, OP_34000000, OP_6800,
+ 	OP_6C1F, OP_6801, OP_6C01, OP_36010000, OP_35000000, OP_6A00,
+ 	OP_6E1F, OP_6A01, OP_6E01, OP_37010000): For "ld", "ld2w", "st"
+ 	and "st2w" check that the address is aligned.
+
+1999-12-30  Chandra Chavva   <cchavva@cygnus.com>
+	
+	* d10v_sim.h (INC_ADDR): Added code to assign
+	proper address for loads with predec operations.
+
+1999-11-25  Nick Clifton  <nickc@cygnus.com>
+
+	* simops.c (OP_4E0F): New function: Simulate new bit pattern for
+	cpfg instruction.
+
+Fri Oct 29 18:34:28 1999  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* simops.c (move_to_cr): Don't allow user to set PSW.DM in either
+ 	DPSW and BPSW.
+
+Thu Oct 28 01:26:18 1999  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* simops.c (OP_5F20): Use SET_HW_PSW when updating PSW.
+	(PSW_HW_MASK): Declare.
+
+	* d10v_sim.h (move_to_cr): Add ``psw_hw_p'' parameter.
+	(SET_CREG, SET_PSW_BIT): Update.
+	(SET_HW_CREG, SET_HW_PSW): Define.
+
+Sun Oct 24 21:38:04 1999  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* interp.c (sim_d10v_translate_dmap_addr): Fix extraction of IOSP
+ 	for DMAP3.
+
+Sun Oct 24 16:04:16 1999  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* interp.c (sim_d10v_translate_addr): New function.
+	(xfer_mem): Rewrite.  Use sim_d10v_translate_addr.
+	(map_memory): Make INLINE.
+
+Sun Oct 24 13:45:19 1999  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* interp.c (sim_d10v_translate_dmap_addr): New function.
+	(dmem_addr): Rewrite. Use sim_d10v_translate_dmap_addr.  Change
+ 	offset parameter to type uint16.
+	* d10v_sim.h (dmem_addr): Update declaration.
+
+Sun Oct 24 13:07:31 1999  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* interp.c (imap_register, set_imap_register, dmap_register,
+ 	set_imap_register): Use map_memory.
+	(DMAP): Update.
+	(sim_create_inferior): Initialize all DMAP registers.  NOTE that
+ 	DMAP2, in internal memory mode, is set to 0x0000 and NOT
+ 	0x2000. This is consistent with the older d10v boards.
+
+Sun Oct 24 11:22:12 1999  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* interp.c (sim_d10v_translate_imap_addr): New function.
+	(imem_addr): Rewrite.  Use sim_d10v_translate_imap_addr.
+	(last_from, last_to): Declare.
+
+Sun Oct 24 01:21:56 1999  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* d10v_sim.h (struct d10v_memory): Define.  Support very long
+ 	memories.
+	(struct _state): Replace imem, dmem and umem by mem.
+	(IMAP_BLOCK_SIZE, DMAP_BLOCK_SIZE, SEGMENT_SIZE, IMEM_SEGMENTS,
+ 	DMEM_SEGMENTS, UMEM_SEGMENTS): Define.
+
+	* interp.c (map_memory): New function.
+	(sim_size, xfer_memory, imem_addr, dmem_addr): Update.
+	(UMEM_SEGMENTS): Moveed to "d10v_sim.h".
+	(IMEM_SIZEDMEM_SIZE): Delete.
+
+Sat Oct 23 20:06:58 1999  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* interp.c: Include "sim-d10v.h".
+ 	(imap_register, set_imap_register, dmap_register,
+ 	set_dmap_register, spi_register, spu_register, set_spi_register,
+ 	set_spu_register): New functions.
+	(sim_create_inferior): Update.
+	(sim_fetch_register, sim_store_register): Rewrite.  Use enums
+ 	defined in sim-d10v.h.
+
+	* d10v_sim.h (DEBUG_MEMORY): Define.
+	(IMAP0, IMAP1, DMAP, SET_IMAP0, SET_IMAP1, SET_DMAP): Delete.
+	
+Sat Oct 23 18:41:18 1999  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* interp.c (sim_open): Allow a debug value to be passed to the -t
+ 	option.
+	(lookup_hash): Don't exit on an illegal instruction.
+	(do_long, do_2_short, do_parallel): Check for failed instruction
+ 	lookup.
+
+Mon Oct 18 18:03:24 MDT 1999	Diego Novillo <dnovillo@cygnus.com>
+
+	* simops.c (OP_3220): Fix trace output for illegal accumulator
+ 	message.
+
 1999-09-14  Nick Clifton  <nickc@cygnus.com>
 
 	* simops.c: Disable setting of DM bit in PSW.

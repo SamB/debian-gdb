@@ -1,5 +1,5 @@
 /* Definitions for expressions designed to be executed on the agent
-   Copyright 1998 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,6 +20,8 @@
 
 #ifndef AGENTEXPR_H
 #define AGENTEXPR_H
+
+#include "doublest.h"		/* For DOUBLEST.  */
 
 /* It's sometimes useful to be able to debug programs that you can't
    really stop for more than a fraction of a second.  To this end, the
@@ -139,25 +141,26 @@ enum agent_op
 /* Functions for building expressions.  */
 
 /* Allocate a new, empty agent expression.  */
-extern struct agent_expr *new_agent_expr PARAMS ((CORE_ADDR));
+extern struct agent_expr *new_agent_expr (CORE_ADDR);
 
 /* Free a agent expression.  */
-extern void free_agent_expr PARAMS ((struct agent_expr *));
+extern void free_agent_expr (struct agent_expr *);
+extern struct cleanup *make_cleanup_free_agent_expr (struct agent_expr *);
 
 /* Append a simple operator OP to EXPR.  */
-extern void ax_simple PARAMS ((struct agent_expr * EXPR, enum agent_op OP));
+extern void ax_simple (struct agent_expr *EXPR, enum agent_op OP);
 
 /* Append the floating-point prefix, for the next bytecode.  */
 #define ax_float(EXPR) (ax_simple ((EXPR), aop_float))
 
 /* Append a sign-extension instruction to EXPR, to extend an N-bit value.  */
-extern void ax_ext PARAMS ((struct agent_expr * EXPR, int N));
+extern void ax_ext (struct agent_expr *EXPR, int N);
 
 /* Append a zero-extension instruction to EXPR, to extend an N-bit value.  */
-extern void ax_zero_ext PARAMS ((struct agent_expr * EXPR, int N));
+extern void ax_zero_ext (struct agent_expr *EXPR, int N);
 
 /* Append a trace_quick instruction to EXPR, to record N bytes.  */
-extern void ax_trace_quick PARAMS ((struct agent_expr * EXPR, int N));
+extern void ax_trace_quick (struct agent_expr *EXPR, int N);
 
 /* Append a goto op to EXPR.  OP is the actual op (must be aop_goto or
    aop_if_goto).  We assume we don't know the target offset yet,
@@ -165,28 +168,28 @@ extern void ax_trace_quick PARAMS ((struct agent_expr * EXPR, int N));
    for the target, and return the offset in EXPR of that space, so we
    can backpatch it once we do know the target offset.  Use ax_label
    to do the backpatching.  */
-extern int ax_goto PARAMS ((struct agent_expr * EXPR, enum agent_op OP));
+extern int ax_goto (struct agent_expr *EXPR, enum agent_op OP);
 
 /* Suppose a given call to ax_goto returns some value PATCH.  When you
    know the offset TARGET that goto should jump to, call
    ax_label (EXPR, PATCH, TARGET)
    to patch TARGET into the ax_goto instruction.  */
-extern void ax_label PARAMS ((struct agent_expr * EXPR, int patch, int target));
+extern void ax_label (struct agent_expr *EXPR, int patch, int target);
 
 /* Assemble code to push a constant on the stack.  */
-extern void ax_const_l PARAMS ((struct agent_expr * EXPR, LONGEST l));
-extern void ax_const_d PARAMS ((struct agent_expr * EXPR, LONGEST d));
+extern void ax_const_l (struct agent_expr *EXPR, LONGEST l);
+extern void ax_const_d (struct agent_expr *EXPR, LONGEST d);
 
 /* Assemble code to push the value of register number REG on the
    stack.  */
-extern void ax_reg PARAMS ((struct agent_expr * EXPR, int REG));
+extern void ax_reg (struct agent_expr *EXPR, int REG);
 
 
 /* Functions for printing out expressions, and otherwise debugging
    things.  */
 
 /* Disassemble the expression EXPR, writing to F.  */
-extern void ax_print PARAMS ((GDB_FILE * f, struct agent_expr * EXPR));
+extern void ax_print (struct ui_file *f, struct agent_expr * EXPR);
 
 /* An entry in the opcode map.  */
 struct aop_map
@@ -284,7 +287,6 @@ struct agent_reqs
 
 /* Given an agent expression AX, fill in an agent_reqs structure REQS
    describing it.  */
-extern void ax_reqs PARAMS ((struct agent_expr * ax,
-			     struct agent_reqs * reqs));
+extern void ax_reqs (struct agent_expr *ax, struct agent_reqs *reqs);
 
 #endif /* AGENTEXPR_H */

@@ -1,5 +1,6 @@
 /* Target machine description for Motorola Delta 88 box, for GDB.
-   Copyright 1986, 1987, 1988, 1989, 1990, 1991 Free Software Foundation, Inc.
+   Copyright 1986, 1987, 1988, 1989, 1990, 1991, 1993, 1994, 1998, 1999
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,7 +25,7 @@
 #include "tm-sysv4.h"
 
 /* If we don't define this, backtraces go on forever.  */
-#define FRAME_CHAIN_VALID(fp,fi) alternate_frame_chain_valid (fp, fi)
+#define FRAME_CHAIN_VALID(fp,fi) func_frame_chain_valid (fp, fi)
 
 #define IN_SIGTRAMP(pc, name) ((name) && (STREQ ("signalhandler", (name)) \
                                           || STREQ("sigacthandler", (name))))

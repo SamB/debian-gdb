@@ -2,9 +2,9 @@
 
 THIS FILE IS MACHINE GENERATED WITH CGEN.
 
-Copyright (C) 1996, 1997, 1998, 1999 Free Software Foundation, Inc.
+Copyright 1996, 1997, 1998, 1999, 2000, 2001 Free Software Foundation, Inc.
 
-This file is part of the GNU Simulators.
+This file is part of the GNU simulators.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -42,6 +42,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #endif
 
 extern const MACH m32r_mach;
+extern const MACH m32rx_mach;
 
 #ifndef WANT_CPU
 /* The ARGBUF struct.  */

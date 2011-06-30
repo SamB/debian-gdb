@@ -1,5 +1,5 @@
 /* Host-dependent definitions for any CPU running NetBSD.
-   Copyright 1993, 1994, 1996 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1995, 1996, 1999 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,16 +18,9 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-/* We have to include these files now, so that GDB will not make
-   competing definitions in defs.h.  */
-#include <limits.h>
-
-#include <machine/endian.h>
-#if BYTE_ORDER == BIG_ENDIAN
-#define HOST_BYTE_ORDER BIG_ENDIAN
-#else
-#define HOST_BYTE_ORDER LITTLE_ENDIAN
-#endif
+/* Include this to get things like NGROUPS which <limits.h> doesn't
+   define on some systems. */
+#include <sys/param.h>
 
 /* NetBSD has termios facilities. */
 #define HAVE_TERMIOS

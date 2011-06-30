@@ -1,6 +1,6 @@
 /* Parameters for execution on any Hewlett-Packard PA-RISC machine.
-   Copyright 1986, 1987, 1989, 1990, 1991, 1992, 1993, 1995
-   Free Software Foundation, Inc. 
+   Copyright 1986, 1987, 1989, 1990, 1991, 1992, 1993, 1995, 1999, 2000
+   Free Software Foundation, Inc.
 
    Contributed by the Center for Software Science at the
    University of Utah (pa-gdb-bugs@cs.utah.edu).
@@ -140,7 +140,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
    of variables on the stack.  Ugh.  jimb: why? */
 #define HPREAD_ADJUST_STACK_ADDRESS(ADDR) hpread_adjust_stack_address(ADDR)
 
-extern int hpread_adjust_stack_address PARAMS ((CORE_ADDR));
+extern int hpread_adjust_stack_address (CORE_ADDR);
 
 
 /* jimb: omitted dynamic linking stuff here */

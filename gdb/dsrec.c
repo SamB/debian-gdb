@@ -1,5 +1,6 @@
 /* S-record download support for GDB, the GNU debugger.
-   Copyright 1995, 1996, 1997 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 1997, 1999, 2000, 2001
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,36 +24,30 @@
 #include "srec.h"
 #include <time.h>
 
-int (*ui_load_progress_hook) PARAMS ((char *, unsigned long));
-extern void report_transfer_performance PARAMS ((unsigned long, time_t, time_t));
+extern void report_transfer_performance (unsigned long, time_t, time_t);
 
 extern int remote_debug;
 
-static int make_srec PARAMS ((char *srec, CORE_ADDR targ_addr, bfd * abfd,
-			      asection * sect, int sectoff, int *maxrecsize,
-			      int flags));
+static int make_srec (char *srec, CORE_ADDR targ_addr, bfd * abfd,
+		      asection * sect, int sectoff, int *maxrecsize,
+		      int flags);
 
 /* Download an executable by converting it to S records.  DESC is a
-   serial_t to send the data to.  FILE is the name of the file to be
-   loaded.  LOAD_OFFSET is the offset into memory to load data into.
-   It is usually specified by the user and is useful with the a.out
-   file format.  MAXRECSIZE is the length in chars of the largest
-   S-record the host can accomodate.  This is measured from the
-   starting `S' to the last char of the checksum.  FLAGS is various
-   random flags, and HASHMARK is non-zero to cause a `#' to be
+   `struct serial *' to send the data to.  FILE is the name of the
+   file to be loaded.  LOAD_OFFSET is the offset into memory to load
+   data into.  It is usually specified by the user and is useful with
+   the a.out file format.  MAXRECSIZE is the length in chars of the
+   largest S-record the host can accomodate.  This is measured from
+   the starting `S' to the last char of the checksum.  FLAGS is
+   various random flags, and HASHMARK is non-zero to cause a `#' to be
    printed out for each record loaded.  WAITACK, if non-NULL, is a
-   function that waits for an acknowledgement after each S-record,
-   and returns non-zero if the ack is read correctly.  */
+   function that waits for an acknowledgement after each S-record, and
+   returns non-zero if the ack is read correctly.  */
 
 void
-load_srec (desc, file, load_offset, maxrecsize, flags, hashmark, waitack)
-     serial_t desc;
-     const char *file;
-     bfd_vma load_offset;
-     int maxrecsize;
-     int flags;
-     int hashmark;
-     int (*waitack) PARAMS ((void));
+load_srec (struct serial *desc, const char *file, bfd_vma load_offset,
+	   int maxrecsize,
+	   int flags, int hashmark, int (*waitack) (void))
 {
   bfd *abfd;
   asection *s;
@@ -89,7 +84,7 @@ load_srec (desc, file, load_offset, maxrecsize, flags, hashmark, waitack)
       srec[reclen] = '\0';
       puts_debug ("sent -->", srec, "<--");
     }
-  SERIAL_WRITE (desc, srec, reclen);
+  serial_write (desc, srec, reclen);
 
   for (s = abfd->sections; s; s = s->next)
     if (s->flags & SEC_LOAD)
@@ -126,7 +121,7 @@ load_srec (desc, file, load_offset, maxrecsize, flags, hashmark, waitack)
 	       acknowledgement is sent back.  */
 	    do
 	      {
-		SERIAL_WRITE (desc, srec, reclen);
+		serial_write (desc, srec, reclen);
 		if (ui_load_progress_hook)
 		  if (ui_load_progress_hook (section_name, (unsigned long) i))
 		    error ("Canceled the download");
@@ -162,14 +157,14 @@ load_srec (desc, file, load_offset, maxrecsize, flags, hashmark, waitack)
       puts_debug ("sent -->", srec, "<--");
     }
 
-  SERIAL_WRITE (desc, srec, reclen);
+  serial_write (desc, srec, reclen);
 
   /* Some monitors need these to wake up properly.  (Which ones? -sts)  */
-  SERIAL_WRITE (desc, "\r\r", 2);
+  serial_write (desc, "\r\r", 2);
   if (remote_debug)
     puts_debug ("sent -->", "\r\r", "<---");
 
-  SERIAL_FLUSH_INPUT (desc);
+  serial_flush_input (desc);
 
   report_transfer_performance (data_count, start_time, end_time);
 }
@@ -219,14 +214,8 @@ load_srec (desc, file, load_offset, maxrecsize, flags, hashmark, waitack)
  */
 
 static int
-make_srec (srec, targ_addr, abfd, sect, sectoff, maxrecsize, flags)
-     char *srec;
-     CORE_ADDR targ_addr;
-     bfd *abfd;
-     asection *sect;
-     int sectoff;
-     int *maxrecsize;
-     int flags;
+make_srec (char *srec, CORE_ADDR targ_addr, bfd *abfd, asection *sect,
+	   int sectoff, int *maxrecsize, int flags)
 {
   unsigned char checksum;
   int tmp;
@@ -254,6 +243,7 @@ make_srec (srec, targ_addr, abfd, sect, sectoff, maxrecsize, flags)
     {
       tmp = flags >> SREC_TERM_SHIFT;	/* Term record */
       code_table = term_code_table;
+      binbuf = NULL;
     }
 
   if ((tmp & SREC_2_BYTE_ADDR) && (targ_addr <= 0xffff))
@@ -263,8 +253,9 @@ make_srec (srec, targ_addr, abfd, sect, sectoff, maxrecsize, flags)
   else if (tmp & SREC_4_BYTE_ADDR)
     addr_size = 4;
   else
-    internal_error ("make_srec:  Bad address (0x%x), or bad flags (0x%x).",
-		    targ_addr, flags);
+    internal_error (__FILE__, __LINE__,
+		    "make_srec:  Bad address (0x%s), or bad flags (0x%x).",
+		    paddr (targ_addr), flags);
 
   /* Now that we know the address size, we can figure out how much
      data this record can hold.  */

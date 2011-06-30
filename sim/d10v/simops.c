@@ -56,10 +56,13 @@ enum {
 	      | PSW_F0_BIT
 	      | PSW_F1_BIT
 	      | PSW_C_BIT),
+  /* The following bits in the PSW _can't_ be set by instructions such
+     as mvtc. */
+  PSW_HW_MASK = (PSW_MASK | PSW_DM_BIT)
 };
 
 reg_t
-move_to_cr (int cr, reg_t mask, reg_t val)
+move_to_cr (int cr, reg_t mask, reg_t val, int psw_hw_p)
 {
   /* A MASK bit is set when the corresponding bit in the CR should
      be left alone */
@@ -67,13 +70,18 @@ move_to_cr (int cr, reg_t mask, reg_t val)
   switch (cr)
     {
     case PSW_CR:
-      val &= PSW_MASK;
+      if (psw_hw_p)
+	val &= PSW_HW_MASK;
+      else
+	val &= PSW_MASK;
       if ((mask & PSW_SM_BIT) == 0)
 	{
-	  int new_sm = (val & PSW_SM_BIT) != 0;
-	  SET_HELD_SP (PSW_SM, GPR (SP_IDX)); /* save old SP */
-	  if (PSW_SM != new_sm)
-	    SET_GPR (SP_IDX, HELD_SP (new_sm)); /* restore new SP */
+	  int new_psw_sm = (val & PSW_SM_BIT) != 0;
+	  /* save old SP */
+	  SET_HELD_SP (PSW_SM, GPR (SP_IDX));
+	  if (PSW_SM != new_psw_sm)
+	    /* restore new SP */
+	    SET_GPR (SP_IDX, HELD_SP (new_psw_sm));
 	}
       if ((mask & (PSW_ST_BIT | PSW_FX_BIT)) == 0)
 	{
@@ -91,7 +99,11 @@ move_to_cr (int cr, reg_t mask, reg_t val)
       break;
     case BPSW_CR:
     case DPSW_CR:
-      val &= PSW_MASK;
+      /* Just like PSW, mask things like DM out. */
+      if (psw_hw_p)
+	val &= PSW_HW_MASK;
+      else
+	val &= PSW_MASK;
       break;
     case MOD_S_CR:
     case MOD_E_CR:
@@ -1075,6 +1087,28 @@ OP_4E09 ()
   trace_output_flag ();
 }
 
+/* cpfg */
+void
+OP_4E0F ()
+{
+  uint8 val;
+  
+  trace_input ("cpfg", OP_FLAG_OUTPUT, OP_FLAG, OP_VOID);
+  
+  if (OP[1] == 0)
+    val = PSW_F0;
+  else if (OP[1] == 1)
+    val = PSW_F1;
+  else
+    val = PSW_C;
+  if (OP[0] == 0)
+    SET_PSW_F0 (val);
+  else
+    SET_PSW_F1 (val);
+
+  trace_output_flag ();
+}
+
 /* dbt */
 void
 OP_5F20 ()
@@ -1096,7 +1130,7 @@ OP_5F20 ()
       trace_input ("dbt", OP_VOID, OP_VOID, OP_VOID);
       SET_DPC (PC + 1);
       SET_DPSW (PSW);
-      SET_PSW (PSW & (PSW_F0_BIT | PSW_F1_BIT | PSW_C_BIT));
+      SET_HW_PSW (PSW_DM_BIT | (PSW & (PSW_F0_BIT | PSW_F1_BIT | PSW_C_BIT)));
       JMP (DBT_VECTOR_START);
       trace_output_void ();
     }
@@ -1279,8 +1313,16 @@ void
 OP_30000000 ()
 {
   uint16 tmp;
+  uint16 addr = OP[1] + GPR (OP[2]);
   trace_input ("ld", OP_REG_OUTPUT, OP_MEMREF2, OP_VOID);
-  tmp = RW (OP[1] + GPR (OP[2]));
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  tmp = RW (addr);
   SET_GPR (OP[0], tmp);
   trace_output_16 (tmp);
 }
@@ -1290,8 +1332,16 @@ void
 OP_6401 ()
 {
   uint16 tmp;
+  uint16 addr = GPR (OP[1]);
   trace_input ("ld", OP_REG_OUTPUT, OP_POSTDEC, OP_VOID);
-  tmp = RW (GPR (OP[1]));
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  tmp = RW (addr);
   SET_GPR (OP[0], tmp);
   if (OP[0] != OP[1])
     INC_ADDR (OP[1], -2);
@@ -1303,8 +1353,16 @@ void
 OP_6001 ()
 {
   uint16 tmp;
+  uint16 addr = GPR (OP[1]);
   trace_input ("ld", OP_REG_OUTPUT, OP_POSTINC, OP_VOID);
-  tmp = RW (GPR (OP[1]));
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  tmp = RW (addr);
   SET_GPR (OP[0], tmp);
   if (OP[0] != OP[1])
     INC_ADDR (OP[1], 2);
@@ -1316,8 +1374,16 @@ void
 OP_6000 ()
 {
   uint16 tmp;
+  uint16 addr = GPR (OP[1]);
   trace_input ("ld", OP_REG_OUTPUT, OP_MEMREF, OP_VOID);
-  tmp = RW (GPR (OP[1]));
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  tmp = RW (addr);
   SET_GPR (OP[0], tmp);
   trace_output_16 (tmp);
 }
@@ -1327,9 +1393,16 @@ void
 OP_32010000 ()
 {
   uint16 tmp;
-  
+  uint16 addr = OP[1];
   trace_input ("ld", OP_REG_OUTPUT, OP_MEMREF3, OP_VOID);
-  tmp = RW (OP[1]);
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  tmp = RW (addr);
   SET_GPR (OP[0], tmp);
   trace_output_16 (tmp);
 }
@@ -1339,9 +1412,16 @@ void
 OP_31000000 ()
 {
   int32 tmp;
-  uint16 addr = GPR (OP[2]);
+  uint16 addr = OP[1] + GPR (OP[2]);
   trace_input ("ld2w", OP_REG_OUTPUT, OP_MEMREF2, OP_VOID);
-  tmp = RLW (OP[1] + addr);
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  tmp = RLW (addr);
   SET_GPR32 (OP[0], tmp);
   trace_output_32 (tmp);
 }
@@ -1353,6 +1433,13 @@ OP_6601 ()
   uint16 addr = GPR (OP[1]);
   int32 tmp;
   trace_input ("ld2w", OP_REG_OUTPUT, OP_POSTDEC, OP_VOID);
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
   tmp = RLW (addr);
   SET_GPR32 (OP[0], tmp);
   if (OP[0] != OP[1] && ((OP[0] + 1) != OP[1]))
@@ -1367,6 +1454,13 @@ OP_6201 ()
   int32 tmp;
   uint16 addr = GPR (OP[1]);
   trace_input ("ld2w", OP_REG_OUTPUT, OP_POSTINC, OP_VOID);
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
   tmp = RLW (addr);
   SET_GPR32 (OP[0], tmp);
   if (OP[0] != OP[1] && ((OP[0] + 1) != OP[1]))
@@ -1381,7 +1475,14 @@ OP_6200 ()
   uint16 addr = GPR (OP[1]);
   int32 tmp;
   trace_input ("ld2w", OP_REG_OUTPUT, OP_MEMREF, OP_VOID);
-  tmp = RLW (addr + 0);
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  tmp = RLW (addr);
   SET_GPR32 (OP[0], tmp);
   trace_output_32 (tmp);
 }
@@ -1391,9 +1492,16 @@ void
 OP_33010000 ()
 {
   int32 tmp;
-  
+  uint16 addr = OP[1];
   trace_input ("ld2w", OP_REG_OUTPUT, OP_MEMREF3, OP_VOID);
-  tmp = RLW (OP[1]);
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  tmp = RLW (addr);
   SET_GPR32 (OP[0], tmp);
   trace_output_32 (tmp);
 }
@@ -2360,7 +2468,7 @@ OP_3220 ()
 
   trace_input ("slae", OP_ACCUM, OP_REG, OP_VOID);
 
-  reg = SEXT16( GPR (OP[1]));
+  reg = SEXT16 (GPR (OP[1]));
 
   if (reg >= 17 || reg <= -17)
     {
@@ -2373,7 +2481,7 @@ OP_3220 ()
 
   if (PSW_ST && (tmp < SEXT40 (MIN32) || tmp > SEXT40 (MAX32)))
     {
-      (*d10v_callback->printf_filtered) (d10v_callback, "ERROR: value to shift 0x%x out of range.\n", tmp);
+      (*d10v_callback->printf_filtered) (d10v_callback, "ERROR: accumulator value 0x%.2x%.8lx out of range\n", ((int)(tmp >> 32) & 0xff), ((unsigned long) tmp) & 0xffffffff);
       State.exception = SIGILL;
       return;
     }
@@ -2629,8 +2737,16 @@ OP_4609 ()
 void
 OP_34000000 ()
 {
+  uint16 addr = OP[1] + GPR (OP[2]);
   trace_input ("st", OP_REG, OP_MEMREF2, OP_VOID);
-  SW (OP[1] + GPR (OP[2]), GPR (OP[0]));
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  SW (addr, GPR (OP[0]));
   trace_output_void ();
 }
 
@@ -2638,12 +2754,21 @@ OP_34000000 ()
 void
 OP_6800 ()
 {
+  uint16 addr = GPR (OP[1]);
   trace_input ("st", OP_REG, OP_MEMREF, OP_VOID);
-  SW (GPR (OP[1]), GPR (OP[0]));
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  SW (addr, GPR (OP[0]));
   trace_output_void ();
 }
 
 /* st */
+/* st Rsrc1,@-SP */
 void
 OP_6C1F ()
 {
@@ -2655,6 +2780,13 @@ OP_6C1F ()
       State.exception = SIGILL;
       return;
     }
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
   SW (addr, GPR (OP[0]));
   SET_GPR (OP[1], addr);
   trace_output_void ();
@@ -2664,8 +2796,16 @@ OP_6C1F ()
 void
 OP_6801 ()
 {
+  uint16 addr = GPR (OP[1]);
   trace_input ("st", OP_REG, OP_POSTINC, OP_VOID);
-  SW (GPR (OP[1]), GPR (OP[0]));
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  SW (addr, GPR (OP[0]));
   INC_ADDR (OP[1], 2);
   trace_output_void ();
 }
@@ -2674,6 +2814,7 @@ OP_6801 ()
 void
 OP_6C01 ()
 {
+  uint16 addr = GPR (OP[1]);
   trace_input ("st", OP_REG, OP_POSTDEC, OP_VOID);
   if ( OP[1] == 15 )
     {
@@ -2681,7 +2822,14 @@ OP_6C01 ()
       State.exception = SIGILL;
       return;
     }
-  SW (GPR (OP[1]), GPR (OP[0]));
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  SW (addr, GPR (OP[0]));
   INC_ADDR (OP[1], -2);
   trace_output_void ();
 }
@@ -2690,8 +2838,16 @@ OP_6C01 ()
 void
 OP_36010000 ()
 {
+  uint16 addr = OP[1];
   trace_input ("st", OP_REG, OP_MEMREF3, OP_VOID);
-  SW (OP[1], GPR (OP[0]));
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  SW (addr, GPR (OP[0]));
   trace_output_void ();
 }
 
@@ -2699,9 +2855,17 @@ OP_36010000 ()
 void
 OP_35000000 ()
 {
+  uint16 addr = GPR (OP[2])+ OP[1];
   trace_input ("st2w", OP_DREG, OP_MEMREF2, OP_VOID);
-  SW (GPR (OP[2])+ OP[1] + 0, GPR (OP[0] + 0));
-  SW (GPR (OP[2])+ OP[1] + 2, GPR (OP[0] + 1));
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  SW (addr + 0, GPR (OP[0] + 0));
+  SW (addr + 2, GPR (OP[0] + 1));
   trace_output_void ();
 }
 
@@ -2709,9 +2873,17 @@ OP_35000000 ()
 void
 OP_6A00 ()
 {
+  uint16 addr = GPR (OP[1]);
   trace_input ("st2w", OP_DREG, OP_MEMREF, OP_VOID);
-  SW (GPR (OP[1]) + 0, GPR (OP[0] + 0));
-  SW (GPR (OP[1]) + 2, GPR (OP[0] + 1));
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  SW (addr + 0, GPR (OP[0] + 0));
+  SW (addr + 2, GPR (OP[0] + 1));
   trace_output_void ();
 }
 
@@ -2727,6 +2899,13 @@ OP_6E1F ()
       State.exception = SIGILL;
       return;
     }
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
   SW (addr + 0, GPR (OP[0] + 0));
   SW (addr + 2, GPR (OP[0] + 1));
   SET_GPR (OP[1], addr);
@@ -2737,9 +2916,17 @@ OP_6E1F ()
 void
 OP_6A01 ()
 {
+  uint16 addr = GPR (OP[1]);
   trace_input ("st2w", OP_DREG, OP_POSTINC, OP_VOID);
-  SW (GPR (OP[1]) + 0, GPR (OP[0] + 0));
-  SW (GPR (OP[1]) + 2, GPR (OP[0] + 1));
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  SW (addr + 0, GPR (OP[0] + 0));
+  SW (addr + 2, GPR (OP[0] + 1));
   INC_ADDR (OP[1], 4);
   trace_output_void ();
 }
@@ -2748,6 +2935,7 @@ OP_6A01 ()
 void
 OP_6E01 ()
 {
+  uint16 addr = GPR (OP[1]);
   trace_input ("st2w", OP_DREG, OP_POSTDEC, OP_VOID);
   if ( OP[1] == 15 )
     {
@@ -2755,8 +2943,15 @@ OP_6E01 ()
       State.exception = SIGILL;
       return;
     }
-  SW (GPR (OP[1]) + 0, GPR (OP[0] + 0));
-  SW (GPR (OP[1]) + 2, GPR (OP[0] + 1));
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  SW (addr + 0, GPR (OP[0] + 0));
+  SW (addr + 2, GPR (OP[0] + 1));
   INC_ADDR (OP[1], -4);
   trace_output_void ();
 }
@@ -2765,9 +2960,17 @@ OP_6E01 ()
 void
 OP_37010000 ()
 {
+  uint16 addr = OP[1];
   trace_input ("st2w", OP_DREG, OP_MEMREF3, OP_VOID);
-  SW (OP [1] + 0, GPR (OP[0] + 0));
-  SW (OP [1] + 2, GPR (OP[0] + 1));
+  if ((addr & 1))
+    {
+      State.exception = SIG_D10V_BUS;
+      State.pc_changed = 1; /* Don't increment the PC. */
+      trace_output_void ();
+      return;
+    }
+  SW (addr + 0, GPR (OP[0] + 0));
+  SW (addr + 2, GPR (OP[0] + 1));
   trace_output_void ();
 }
 

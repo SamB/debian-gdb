@@ -1,5 +1,6 @@
 /* Remote debugging interface for EST-300 ICE, for GDB
-   Copyright 1995 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 1997, 1998, 1999, 2000, 2001
+   Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
    Written by Steve Chamberlain for Cygnus Support.
@@ -27,15 +28,12 @@
 #include "target.h"
 #include "monitor.h"
 #include "serial.h"
+#include "regcache.h"
 
-static void est_open PARAMS ((char *args, int from_tty));
+static void est_open (char *args, int from_tty);
 
 static void
-est_supply_register (regname, regnamelen, val, vallen)
-     char *regname;
-     int regnamelen;
-     char *val;
-     int vallen;
+est_supply_register (char *regname, int regnamelen, char *val, int vallen)
 {
   int regno;
 
@@ -150,15 +148,13 @@ init_est_cmds (void)
 }				/* init_est_cmds */
 
 static void
-est_open (args, from_tty)
-     char *args;
-     int from_tty;
+est_open (char *args, int from_tty)
 {
   monitor_open (args, &est_cmds, from_tty);
 }
 
 void
-_initialize_est ()
+_initialize_est (void)
 {
   init_est_cmds ();
   init_monitor_ops (&est_ops);

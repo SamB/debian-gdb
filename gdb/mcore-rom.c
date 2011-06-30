@@ -1,6 +1,6 @@
 /* Remote debugging interface to Motorola picobug monitor for gdb,
    the GNU debugger.
-   Copyright 1999 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,6 +24,8 @@
 #include "target.h"
 #include "monitor.h"
 #include "gdb_string.h"
+#include "regcache.h"
+#include "serial.h"
 
 /* Functions used only in this file. */
 
@@ -83,7 +85,7 @@ ss0-ss4 bad0beef 00000000 00000000 00000000 00000000      vbr 30005c00
 
 
 int
-picobug_dumpregs ()
+picobug_dumpregs (void)
 {
   char buf[1024];
   int resp_len;
@@ -189,7 +191,7 @@ init_picobug_cmds (void)
 }
 
 void
-_initialize_picobug_rom ()
+_initialize_picobug_rom (void)
 {
   int i;
 

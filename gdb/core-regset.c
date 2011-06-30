@@ -1,5 +1,6 @@
 /* Machine independent GDB support for core files on systems using "regsets".
-   Copyright 1993-1998 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1995, 1996, 1998, 1999, 2000
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -48,9 +49,12 @@
 #include "command.h"
 #include "gdbcore.h"
 
-static void fetch_core_registers PARAMS ((char *, unsigned, int, CORE_ADDR));
+/* Prototypes for supply_gregset etc. */
+#include "gregset.h"
 
-void _initialize_core_regset PARAMS ((void));
+static void fetch_core_registers (char *, unsigned, int, CORE_ADDR);
+
+void _initialize_core_regset (void);
 
 /*
 
@@ -69,24 +73,19 @@ void _initialize_core_regset PARAMS ((void));
    Read the values of either the general register set (WHICH equals 0)
    or the floating point register set (WHICH equals 2) from the core
    file data (pointed to by CORE_REG_SECT), and update gdb's idea of
-   their current values.  The CORE_REG_SIZE parameter is ignored.
+   their current values.  The CORE_REG_SIZE parameter is compared to
+   the size of the gregset or fpgregset structures (as appropriate) to
+   validate the size of the structure from the core file.  The
+   REG_ADDR parameter is ignored.
 
-   NOTES
-
-   Use the indicated sizes to validate the gregset and fpregset
-   structures.
  */
 
 static void
-fetch_core_registers (core_reg_sect, core_reg_size, which, reg_addr)
-     char *core_reg_sect;
-     unsigned core_reg_size;
-     int which;
-     CORE_ADDR reg_addr;	/* Unused in this version */
+fetch_core_registers (char *core_reg_sect, unsigned core_reg_size, int which,
+		      CORE_ADDR reg_addr)
 {
-#if defined (HAVE_GREGSET_T) && defined (HAVE_FPREGSET_T)
-  gregset_t gregset;
-  fpregset_t fpregset;
+  gdb_gregset_t gregset;
+  gdb_fpregset_t fpregset;
 
   if (which == 0)
     {
@@ -109,12 +108,10 @@ fetch_core_registers (core_reg_sect, core_reg_size, which, reg_addr)
       else
 	{
 	  memcpy ((char *) &fpregset, core_reg_sect, sizeof (fpregset));
-#if defined (FP0_REGNUM)
-	  supply_fpregset (&fpregset);
-#endif
+	  if (FP0_REGNUM >= 0)
+	    supply_fpregset (&fpregset);
 	}
     }
-#endif /* defined(HAVE_GREGSET_T) && defined (HAVE_FPREGSET_T) */
 }
 
 
@@ -123,13 +120,15 @@ fetch_core_registers (core_reg_sect, core_reg_size, which, reg_addr)
 
 static struct core_fns regset_core_fns =
 {
-  bfd_target_elf_flavour,
-  fetch_core_registers,
-  NULL
+  bfd_target_elf_flavour,		/* core_flavour */
+  default_check_format,			/* check_format */
+  default_core_sniffer,			/* core_sniffer */
+  fetch_core_registers,			/* core_read_registers */
+  NULL					/* next */
 };
 
 void
-_initialize_core_regset ()
+_initialize_core_regset (void)
 {
   add_core_fns (&regset_core_fns);
 }

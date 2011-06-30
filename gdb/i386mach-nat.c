@@ -1,5 +1,6 @@
 /* Native dependent code for Mach 386's for GDB, the GNU debugger.
-   Copyright (C) 1986, 1987, 1989, 1991, 1992 Free Software Foundation, Inc.
+   Copyright 1986, 1987, 1989, 1991, 1992, 1993, 1995, 1996, 1999, 2000,
+   2001 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,6 +23,7 @@
 #include "frame.h"
 #include "inferior.h"
 #include "gdbcore.h"
+#include "regcache.h"
 
 #include <sys/param.h>
 #include <sys/dir.h>
@@ -37,20 +39,19 @@
 #include "gdb_stat.h"
 #include <sys/core.h>
 
-static void fetch_core_registers PARAMS ((char *, unsigned, int, CORE_ADDR));
+static void fetch_core_registers (char *, unsigned, int, CORE_ADDR);
 
 void
-fetch_inferior_registers (regno)
-     int regno;			/* Original value discarded */
+fetch_inferior_registers (int regno)
 {
   struct regs inferior_registers;
   struct fp_state inferior_fp_registers;
 
   registers_fetched ();
 
-  ptrace (PTRACE_GETREGS, inferior_pid,
+  ptrace (PTRACE_GETREGS, PIDGET (inferior_ptid),
 	  (PTRACE_ARG3_TYPE) & inferior_registers);
-  ptrace (PTRACE_GETFPREGS, inferior_pid,
+  ptrace (PTRACE_GETFPREGS, PIDGET (inferior_ptid),
 	  (PTRACE_ARG3_TYPE) & inferior_fp_registers);
 
   memcpy (registers, &inferior_registers, sizeof inferior_registers);
@@ -68,8 +69,7 @@ fetch_inferior_registers (regno)
    Otherwise, REGNO specifies which register (so we can save time).  */
 
 void
-store_inferior_registers (regno)
-     int regno;
+store_inferior_registers (int regno)
 {
   struct regs inferior_registers;
   struct fp_state inferior_fp_registers;
@@ -88,36 +88,46 @@ store_inferior_registers (regno)
        instruction that moves eax into ebp gets single-stepped.  */
     {
       int stack = inferior_registers.r_reg[SP_REGNUM];
-      int stuff = ptrace (PTRACE_PEEKDATA, inferior_pid,
+      int stuff = ptrace (PTRACE_PEEKDATA, PIDGET (inferior_ptid),
 			  (PTRACE_ARG3_TYPE) stack);
       int reg = inferior_registers.r_reg[EAX];
       inferior_registers.r_reg[EAX] =
 	inferior_registers.r_reg[FP_REGNUM];
-      ptrace (PTRACE_SETREGS, inferior_pid,
+      ptrace (PTRACE_SETREGS, PIDGET (inferior_ptid),
 	      (PTRACE_ARG3_TYPE) & inferior_registers);
-      ptrace (PTRACE_POKEDATA, inferior_pid, (PTRACE_ARG3_TYPE) stack, 0xc589);
-      ptrace (PTRACE_SINGLESTEP, inferior_pid, (PTRACE_ARG3_TYPE) stack, 0);
+      ptrace (PTRACE_POKEDATA, PIDGET (inferior_ptid),
+              (PTRACE_ARG3_TYPE) stack, 0xc589);
+      ptrace (PTRACE_SINGLESTEP, PIDGET (inferior_ptid),
+              (PTRACE_ARG3_TYPE) stack, 0);
       wait (0);
-      ptrace (PTRACE_POKEDATA, inferior_pid, (PTRACE_ARG3_TYPE) stack, stuff);
+      ptrace (PTRACE_POKEDATA, PIDGET (inferior_ptid),
+              (PTRACE_ARG3_TYPE) stack, stuff);
       inferior_registers.r_reg[EAX] = reg;
     }
 #endif
-  ptrace (PTRACE_SETREGS, inferior_pid,
+  ptrace (PTRACE_SETREGS, PIDGET (inferior_ptid),
 	  (PTRACE_ARG3_TYPE) & inferior_registers);
-  ptrace (PTRACE_SETFPREGS, inferior_pid,
+  ptrace (PTRACE_SETFPREGS, PIDGET (inferior_ptid),
 	  (PTRACE_ARG3_TYPE) & inferior_fp_registers);
 }
 
 
 
-/* Work with core files, for GDB. */
+/* Provide registers to GDB from a core file.
+
+   CORE_REG_SECT points to an array of bytes, which were obtained from
+   a core file which BFD thinks might contain register contents. 
+   CORE_REG_SIZE is its size.
+
+   WHICH says which register set corelow suspects this is:
+     0 --- the general-purpose register set
+     2 --- the floating-point register set
+
+   REG_ADDR isn't used.  */
 
 static void
-fetch_core_registers (core_reg_sect, core_reg_size, which, reg_addr)
-     char *core_reg_sect;
-     unsigned core_reg_size;
-     int which;
-     CORE_ADDR reg_addr;	/* Unused in this version */
+fetch_core_registers (char *core_reg_sect, unsigned core_reg_size,
+		      int which, CORE_ADDR reg_addr)
 {
   int val;
 
@@ -129,11 +139,9 @@ fetch_core_registers (core_reg_sect, core_reg_size, which, reg_addr)
       break;
 
     case 2:
-#ifdef FP0_REGNUM
       memcpy (&registers[REGISTER_BYTE (FP0_REGNUM)],
 	      core_reg_sect,
 	      core_reg_size);	/* FIXME, probably bogus */
-#endif
 #ifdef FPC_REGNUM
       memcpy (&registers[REGISTER_BYTE (FPC_REGNUM)],
 	      &corestr.c_fpu.f_fpstatus.f_ctrl,
@@ -150,13 +158,15 @@ fetch_core_registers (core_reg_sect, core_reg_size, which, reg_addr)
 
 static struct core_fns i386mach_core_fns =
 {
-  bfd_target_unknown_flavour,
-  fetch_core_registers,
-  NULL
+  bfd_target_unknown_flavour,		/* core_flavour */
+  default_check_format,			/* check_format */
+  default_core_sniffer,			/* core_sniffer */
+  fetch_core_registers,			/* core_read_registers */
+  NULL					/* next */
 };
 
 void
-_initialize_core_i386mach ()
+_initialize_core_i386mach (void)
 {
   add_core_fns (&i386mach_core_fns);
 }

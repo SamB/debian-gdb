@@ -1,5 +1,5 @@
 /* Low level interface to HP800 running mach 4.0.
-   Copyright (C) 1995 Free Software Foundation, Inc.
+   Copyright 1995, 2000, 2001 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,6 +21,7 @@
 #include "defs.h"
 #include "inferior.h"
 #include "floatformat.h"
+#include "regcache.h"
 
 #include <stdio.h>
 
@@ -37,8 +38,7 @@
  */
 
 void
-fetch_inferior_registers (regno)
-     int regno;
+fetch_inferior_registers (int regno)
 {
   kern_return_t ret;
   thread_state_data_t state;
@@ -76,8 +76,7 @@ fetch_inferior_registers (regno)
  * On mach3 all registers are always saved in one call.
  */
 void
-store_inferior_registers (regno)
-     int regno;
+store_inferior_registers (int regno)
 {
   kern_return_t ret;
   thread_state_data_t state;

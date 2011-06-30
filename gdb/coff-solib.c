@@ -1,5 +1,5 @@
 /* Handle COFF SVR3 shared libraries for GDB, the GNU Debugger.
-   Copyright 1993 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1998, 1999, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,6 +25,8 @@
 #include "bfd.h"
 #include "gdbcore.h"
 #include "symtab.h"
+#include "symfile.h"
+#include "objfiles.h"
 
 /*
 
@@ -41,19 +43,19 @@
    SYNOPSIS
 
    void coff_solib_add (char *arg_string, int from_tty,
-   struct target_ops *target)
+   struct target_ops *target, int readsyms)
 
    DESCRIPTION
 
  */
 
 void
-coff_solib_add (arg_string, from_tty, target)
-     char *arg_string;
-     int from_tty;
-     struct target_ops *target;
+coff_solib_add (char *arg_string, int from_tty, struct target_ops *target, int readsyms)
 {
   asection *libsect;
+
+  if (!readsyms)
+    return;
 
   libsect = bfd_get_section_by_name (exec_bfd, ".lib");
 
@@ -92,12 +94,9 @@ coff_solib_add (arg_string, from_tty, target)
 	  filename = (char *) ent + nameoffset * 4;
 
 	  objfile = symbol_file_add (filename, from_tty,
-				     0,		/* addr */
+				     NULL,	/* no offsets */
 				     0,		/* not mainline */
-				     0,		/* not mapped */
-				     0,		/* Not readnow */
-				     0,		/* Not user loaded */
-				     1);	/* Is a solib */
+				     OBJF_SHARED);	/* flags */
 
 	  libsize -= len * 4;
 	  lib += len * 4;
@@ -129,7 +128,7 @@ coff_solib_add (arg_string, from_tty, target)
  */
 
 void
-coff_solib_create_inferior_hook ()
+coff_solib_create_inferior_hook (void)
 {
-  coff_solib_add ((char *) 0, 0, (struct target_ops *) 0);
+  coff_solib_add ((char *) 0, 0, (struct target_ops *) 0, auto_solib_add);
 }

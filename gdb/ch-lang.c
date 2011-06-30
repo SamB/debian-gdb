@@ -1,5 +1,6 @@
 /* Chill language support routines for GDB, the GNU debugger.
-   Copyright 1992, 1995, 1996 Free Software Foundation, Inc.
+   Copyright 1992, 1993, 1994, 1995, 1996, 2000, 2001, 2002
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -26,37 +27,33 @@
 #include "parser-defs.h"
 #include "language.h"
 #include "ch-lang.h"
+#include "valprint.h"
 
-extern void _initialize_chill_language PARAMS ((void));
+extern void _initialize_chill_language (void);
 
-static value_ptr
-  evaluate_subexp_chill PARAMS ((struct type *, struct expression *, int *, enum noside));
+static struct value *evaluate_subexp_chill (struct type *, struct expression *,
+					    int *, enum noside);
 
-static value_ptr
-  value_chill_max_min PARAMS ((enum exp_opcode, value_ptr));
+static struct value *value_chill_max_min (enum exp_opcode, struct value *);
 
-static value_ptr
-  value_chill_card PARAMS ((value_ptr));
+static struct value *value_chill_card (struct value *);
 
-static value_ptr
-  value_chill_length PARAMS ((value_ptr));
+static struct value *value_chill_length (struct value *);
 
-static struct type *
-  chill_create_fundamental_type PARAMS ((struct objfile *, int));
+static struct type *chill_create_fundamental_type (struct objfile *, int);
 
-static void
-chill_printstr PARAMS ((GDB_FILE * stream, char *string, unsigned int length, int width, int force_ellipses));
+static void chill_printstr (struct ui_file * stream, char *string,
+			    unsigned int length, int width,
+			    int force_ellipses);
 
-static void
-chill_printchar PARAMS ((int, GDB_FILE *));
+static void chill_printchar (int, struct ui_file *);
 
 /* For now, Chill uses a simple mangling algorithm whereby you simply
    discard everything after the occurance of two successive CPLUS_MARKER
    characters to derive the demangled form. */
 
 char *
-chill_demangle (mangled)
-     const char *mangled;
+chill_demangle (const char *mangled)
 {
   const char *joiner = NULL;
   char *demangled;
@@ -83,9 +80,7 @@ chill_demangle (mangled)
 }
 
 static void
-chill_printchar (c, stream)
-     register int c;
-     GDB_FILE *stream;
+chill_printchar (register int c, struct ui_file *stream)
 {
   c &= 0xFF;			/* Avoid sign bit follies */
 
@@ -114,12 +109,8 @@ chill_printchar (c, stream)
  */
 
 static void
-chill_printstr (stream, string, length, width, force_ellipses)
-     GDB_FILE *stream;
-     char *string;
-     unsigned int length;
-     int width;
-     int force_ellipses;
+chill_printstr (struct ui_file *stream, char *string, unsigned int length,
+		int width, int force_ellipses)
 {
   register unsigned int i;
   unsigned int things_printed = 0;
@@ -127,8 +118,6 @@ chill_printstr (stream, string, length, width, force_ellipses)
   int in_control_form = 0;
   int need_slashslash = 0;
   unsigned int c;
-  extern int repeat_count_threshold;
-  extern int print_max;
 
   if (length == 0)
     {
@@ -232,9 +221,7 @@ chill_printstr (stream, string, length, width, force_ellipses)
 }
 
 static struct type *
-chill_create_fundamental_type (objfile, typeid)
-     struct objfile *objfile;
-     int typeid;
+chill_create_fundamental_type (struct objfile *objfile, int typeid)
 {
   register struct type *type = NULL;
 
@@ -335,7 +322,7 @@ struct type *builtin_type_chill_long;
 struct type *builtin_type_chill_ulong;
 struct type *builtin_type_chill_real;
 
-struct type **CONST_PTR (chill_builtin_types[]) =
+struct type **const (chill_builtin_types[]) =
 {
   &builtin_type_chill_bool,
     &builtin_type_chill_char,
@@ -350,10 +337,8 @@ struct type **CONST_PTR (chill_builtin_types[]) =
    *RESULT_TYPE is the appropriate type for the result. */
 
 LONGEST
-type_lower_upper (op, type, result_type)
-     enum exp_opcode op;	/* Either UNOP_LOWER or UNOP_UPPER */
-     struct type *type;
-     struct type **result_type;
+type_lower_upper (enum exp_opcode op,	/* Either UNOP_LOWER or UNOP_UPPER */
+		  struct type *type, struct type **result_type)
 {
   LONGEST low, high;
   *result_type = type;
@@ -403,9 +388,8 @@ type_lower_upper (op, type, result_type)
   error ("unknown mode for LOWER/UPPER builtin");
 }
 
-static value_ptr
-value_chill_length (val)
-     value_ptr val;
+static struct value *
+value_chill_length (struct value *val)
 {
   LONGEST tmp;
   struct type *type = VALUE_TYPE (val);
@@ -432,9 +416,8 @@ value_chill_length (val)
   return value_from_longest (builtin_type_int, tmp);
 }
 
-static value_ptr
-value_chill_card (val)
-     value_ptr val;
+static struct value *
+value_chill_card (struct value *val)
 {
   LONGEST tmp = 0;
   struct type *type = VALUE_TYPE (val);
@@ -457,10 +440,8 @@ value_chill_card (val)
   return value_from_longest (builtin_type_int, tmp);
 }
 
-static value_ptr
-value_chill_max_min (op, val)
-     enum exp_opcode op;
-     value_ptr val;
+static struct value *
+value_chill_max_min (enum exp_opcode op, struct value *val)
 {
   LONGEST tmp = 0;
   struct type *type = VALUE_TYPE (val);
@@ -512,18 +493,16 @@ value_chill_max_min (op, val)
 			     tmp);
 }
 
-static value_ptr
-evaluate_subexp_chill (expect_type, exp, pos, noside)
-     struct type *expect_type;
-     register struct expression *exp;
-     register int *pos;
-     enum noside noside;
+static struct value *
+evaluate_subexp_chill (struct type *expect_type,
+		       register struct expression *exp, register int *pos,
+		       enum noside noside)
 {
   int pc = *pos;
   struct type *type;
   int tem, nargs;
-  value_ptr arg1;
-  value_ptr *argvec;
+  struct value *arg1;
+  struct value **argvec;
   enum exp_opcode op = exp->elts[*pos].opcode;
   switch (op)
     {
@@ -538,7 +517,8 @@ evaluate_subexp_chill (expect_type, exp, pos, noside)
       if (nargs == 1 && TYPE_CODE (type) == TYPE_CODE_INT)
 	{
 	  /* Looks like string repetition. */
-	  value_ptr string = evaluate_subexp_with_coercion (exp, pos, noside);
+	  struct value *string = evaluate_subexp_with_coercion (exp, pos,
+								noside);
 	  return value_concat (arg1, string);
 	}
 
@@ -556,7 +536,8 @@ evaluate_subexp_chill (expect_type, exp, pos, noside)
 
 	  /* Allocate arg vector, including space for the function to be
 	     called in argvec[0] and a terminating NULL */
-	  argvec = (value_ptr *) alloca (sizeof (value_ptr) * (nargs + 2));
+	  argvec = (struct value **) alloca (sizeof (struct value *)
+					     * (nargs + 2));
 	  argvec[0] = arg1;
 	  tem = 1;
 	  for (; tem <= nargs && tem <= TYPE_NFIELDS (type); tem++)
@@ -576,7 +557,8 @@ evaluate_subexp_chill (expect_type, exp, pos, noside)
 
       while (nargs-- > 0)
 	{
-	  value_ptr index = evaluate_subexp_with_coercion (exp, pos, noside);
+	  struct value *index = evaluate_subexp_with_coercion (exp, pos,
+							       noside);
 	  arg1 = value_subscript (arg1, index);
 	}
       return (arg1);
@@ -629,6 +611,7 @@ const struct language_defn chill_language_defn =
   chill_builtin_types,
   range_check_on,
   type_check_on,
+  case_sensitive_on,
   chill_parse,			/* parser */
   chill_error,			/* parser error function */
   evaluate_subexp_chill,
@@ -653,7 +636,7 @@ const struct language_defn chill_language_defn =
 /* Initialization for Chill */
 
 void
-_initialize_chill_language ()
+_initialize_chill_language (void)
 {
   builtin_type_chill_bool =
     init_type (TYPE_CODE_BOOL, TARGET_CHAR_BIT / TARGET_CHAR_BIT,

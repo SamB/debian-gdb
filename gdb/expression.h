@@ -1,5 +1,5 @@
 /* Definitions for expressions stored in reversed prefix form, for GDB.
-   Copyright 1986, 1989, 1992, 1994 Free Software Foundation, Inc.
+   Copyright 1986, 1989, 1992, 1994, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,6 +23,7 @@
 
 
 #include "symtab.h"		/* Needed for "struct block" type. */
+#include "doublest.h"		/* Needed for DOUBLEST.  */
 
 
 /* Definitions for saved C expressions.  */
@@ -78,7 +79,6 @@ enum exp_opcode
 
     BINOP_MIN,			/* <? */
     BINOP_MAX,			/* >? */
-    BINOP_SCOPE,		/* :: */
 
     /* STRUCTOP_MEMBER is used for pointer-to-member constructs.
        X . * Y translates into X STRUCTOP_MEMBER Y.  */
@@ -334,9 +334,9 @@ struct expression
 
 /* From parse.c */
 
-extern struct expression *parse_expression PARAMS ((char *));
+extern struct expression *parse_expression (char *);
 
-extern struct expression *parse_exp_1 PARAMS ((char **, struct block *, int));
+extern struct expression *parse_exp_1 (char **, struct block *, int);
 
 /* The innermost context required by the stack and register variables
    we've encountered so far.  To use this, set it to NULL, then call
@@ -363,19 +363,19 @@ enum noside
   };
 
 extern struct value *evaluate_subexp_standard
-  PARAMS ((struct type *, struct expression *, int *, enum noside));
+  (struct type *, struct expression *, int *, enum noside);
 
 /* From expprint.c */
 
-extern void print_expression PARAMS ((struct expression *, GDB_FILE *));
+extern void print_expression (struct expression *, struct ui_file *);
 
-extern char *op_string PARAMS ((enum exp_opcode));
+extern char *op_string (enum exp_opcode);
 
-extern void dump_prefix_expression PARAMS ((struct expression *,
-					    GDB_FILE *,
-					    char *));
-extern void dump_postfix_expression PARAMS ((struct expression *,
-					     GDB_FILE *,
-					     char *));
+extern void dump_prefix_expression (struct expression *,
+				    struct ui_file *,
+				    char *);
+extern void dump_postfix_expression (struct expression *,
+				     struct ui_file *,
+				     char *);
 
 #endif /* !defined (EXPRESSION_H) */

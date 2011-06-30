@@ -1,5 +1,5 @@
 /* Native definitions for alpha running OSF/1-2.x, using procfs.
-   Copyright (C) 1995 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -45,7 +45,7 @@
 /* Return sizeof user struct to callers in less machine dependent routines */
 
 #define KERNEL_U_SIZE kernel_u_size()
-extern int kernel_u_size PARAMS ((void));
+extern int kernel_u_size (void);
 
 /* poll() doesn't seem to work properly for /proc in this version of the OS.
    If we only specify POLLPRI, things hang.  It seems to get better when we set

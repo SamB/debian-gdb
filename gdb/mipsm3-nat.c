@@ -1,5 +1,5 @@
 /* Definitions to make GDB run on a mips box under Mach 3.0
-   Copyright (C) 1992 Free Software Foundation, Inc.
+   Copyright 1992, 1993, 1998, 2000, 2001 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -26,6 +26,7 @@
 
 #include "defs.h"
 #include "inferior.h"
+#include "regcache.h"
 
 #include <stdio.h>
 
@@ -141,8 +142,7 @@ static int reg_offset[] =
 
 /* Fech thread's registers. if regno == -1, fetch all regs */
 void
-fetch_inferior_registers (regno)
-     int regno;
+fetch_inferior_registers (int regno)
 {
   kern_return_t ret;
 
@@ -296,8 +296,7 @@ fetch_inferior_registers (regno)
  */
 
 void
-store_inferior_registers (regno)
-     register int regno;
+store_inferior_registers (register int regno)
 {
   thread_state_data_t state;
   kern_return_t ret;

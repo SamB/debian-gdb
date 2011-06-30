@@ -1,5 +1,6 @@
 /* Target machine description for SGI Iris under Irix, for GDB.
-   Copyright 1990, 1991, 1992, 1993, 1995 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1995, 1999
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -31,7 +32,6 @@
 #undef MIPS_REGISTER_NAMES
 #undef FP0_REGNUM
 #undef PC_REGNUM
-#undef PS_REGNUM
 #undef HI_REGNUM
 #undef LO_REGNUM
 #undef CAUSE_REGNUM

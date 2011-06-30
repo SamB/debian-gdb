@@ -1,5 +1,5 @@
 /* d10v.h -- Header file for D10V opcode table
-   Copyright 1996, 1997, 1998 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001 Free Software Foundation, Inc.
    Written by Martin Hunt (hunt@cygnus.com), Cygnus Support
 
 This file is part of GDB, GAS, and the GNU binutils.
@@ -78,6 +78,7 @@ struct d10v_opcode
 #define WF0     128	/* modifies f0 */
 #define WCAR    256	/* write Carry */
 #define BRANCH  512	/* branch, no link */
+#define ALONE  1024	/* short but pack with a NOP if on asm line alone */
 
   /* the opcode */
   long opcode;
@@ -180,6 +181,14 @@ extern const struct d10v_operand d10v_operands[];
 /* needed for rac/rachi */
 #define RESTRICTED_NUM3	(0x80000)
 
+/* Pre-decrement is only supported for SP.  */
+#define OPERAND_SP      (0x100000)
+
+/* Post-decrement is not supported for SP.  Like OPERAND_EVEN, and
+   unlike OPERAND_SP, this flag doesn't prevent the instruction from
+   matching, it only fails validation later on.  */
+#define OPERAND_NOSP    (0x200000)
+
 /* Structure to hold information about predefined registers.  */
 struct pd_reg
 {
@@ -189,7 +198,7 @@ struct pd_reg
 };
 
 extern const struct pd_reg d10v_predefined_registers[];
-int d10v_reg_name_cnt();
+int d10v_reg_name_cnt PARAMS ((void));
 
 /* an expressionS only has one register type, so we fake it */
 /* by setting high bits to indicate type */

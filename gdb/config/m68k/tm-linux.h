@@ -1,5 +1,7 @@
-/* Definitions to target GDB to Linux on m680x0
-   Copyright (C) 1996,1998 Free Software Foundation, Inc.
+/* Definitions to target GDB to GNU/Linux on m680x0.
+
+   Copyright 1996, 1998, 1999, 2000, 2002 Free Software Foundation,
+   Inc.
 
    This file is part of GDB.
 
@@ -17,6 +19,8 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
+
+#include "regcache.h"
 
 /* Number of traps that happen between exec'ing the shell to run an
    inferior, and when we finally get to the inferior code.  This is 2
@@ -72,7 +76,7 @@
     }									\
 }
 
-#include "tm-sysv4.h"
+#include "tm-linux.h"
 #include "m68k/tm-m68k.h"
 
 /* Extract from an array REGBUF containing the (raw) register state
@@ -93,18 +97,11 @@
    we extract the pc (JB_PC) that we will land at.  The pc is copied into ADDR.
    This routine returns true on success */
 
-#define GET_LONGJMP_TARGET(ADDR) get_longjmp_target(ADDR)
-
-/* Offset to saved PC in sigcontext, from <asm/sigcontext.h>.  */
-#define SIGCONTEXT_PC_OFFSET 26
+#define GET_LONGJMP_TARGET(ADDR) m68k_get_longjmp_target(ADDR)
 
 #undef FRAME_SAVED_PC
-#define FRAME_SAVED_PC(FRAME) \
-  (((FRAME)->signal_handler_caller \
-    ? sigtramp_saved_pc (FRAME) \
-    : read_memory_integer ((FRAME)->frame + 4, 4)))
+#define FRAME_SAVED_PC(frame) m68k_linux_frame_saved_pc (frame)
+extern CORE_ADDR m68k_linux_frame_saved_pc (struct frame_info *);
 
-extern CORE_ADDR sigtramp_saved_pc PARAMS ((struct frame_info *));
-
-#define IN_SIGTRAMP(pc,name) in_sigtramp (pc)
-extern int in_sigtramp PARAMS ((CORE_ADDR pc));
+#define IN_SIGTRAMP(pc,name) m68k_linux_in_sigtramp (pc)
+extern int m68k_linux_in_sigtramp (CORE_ADDR pc);

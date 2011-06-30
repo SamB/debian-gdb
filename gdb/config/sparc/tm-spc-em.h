@@ -1,5 +1,5 @@
 /* Target machine definitions for GDB for an embedded SPARC.
-   Copyright 1989, 1992, 1993 Free Software Foundation, Inc.
+   Copyright 1989, 1992, 1993, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -41,7 +41,6 @@
    extract the pc (JB_PC) that we will land at.  The pc is copied into ADDR.
    This routine returns true on success */
 
-extern int
-get_longjmp_target PARAMS ((CORE_ADDR *));
+extern int get_longjmp_target (CORE_ADDR *);
 
 #define GET_LONGJMP_TARGET(ADDR) get_longjmp_target(ADDR)

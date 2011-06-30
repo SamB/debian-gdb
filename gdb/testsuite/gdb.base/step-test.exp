@@ -1,4 +1,4 @@
-# Copyright (C) 1997, 1998, 1999 Free Software Foundation, Inc.
+# Copyright 1997, 1998, 1999, 2000, 2002 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -75,8 +75,10 @@ gdb_test "step" ".*${decimal}.*myglob.*"   "step into"
 # instruction, which is attributed to the line containing the function
 # call?
 
-# On PA64 we end up at a different instruction than PA32
-if { [istarget "hppa2.0w-hp-hpux*"] } {
+# On PA64, we end up at a different instruction than PA32.
+# On IA-64, we also end up on callee instead of on the next line due
+# to the restoration of the global pointer (which is a caller-save).
+if { [istarget "hppa2.0w-hp-hpux*"] || [istarget "ia64-*-*"]} {
     send_gdb "finish\n"
     gdb_expect {
         -re ".*${decimal}.*a.*5.*= a.*3.*$gdb_prompt $" { pass "step out 1" }
@@ -142,10 +144,17 @@ test_i "stepi to next line" "stepi" \
 test_i "stepi into function" "stepi" \
        ".*${decimal}.*callee.*STEPI" \
        ".*callee \\(\\) at .*step-test\\.c" 
+
+# Continue to step until we reach the function's body.  This makes it
+# more likely that we've actually completed the prologue, so "finish"
+# will work.
+test_i "stepi into function's first source line" "stepi" \
+	".*${decimal}.*int callee" \
+	".*${decimal}.*myglob.*; return 0;"
+
 # Have to be careful here, if the finish does not work, 
 # then we may run to the end of the program, which
 # will cause erroneous failures in the rest of the tests
-
 send_gdb "finish\n"
 gdb_expect {
   -re ".*(Program received|Program exited).*$gdb_prompt $" {
@@ -164,8 +173,10 @@ gdb_expect {
     pass "stepi: finish call"
   }
   -re ".*${decimal}.*callee.*STEPI.*$gdb_prompt $" {
-    # On PA64 we end up at a different instruction than PA32
-    if { [istarget "hppa2.0w-hp-hpux*"] } {
+    # On PA64, we end up at a different instruction than PA32.
+    # On IA-64, we end up on callee instead of on the following line due
+    # to the restoration of the global pointer.
+    if { [istarget "hppa2.0w-hp-hpux*"] || [istarget "ia64-*-*"] } {
         pass "stepi: finish call 2"
     } else {
 	fail "stepi: finish call 2"
@@ -178,7 +189,7 @@ gdb_expect {
     return
   }
   timeout {
-    fail "stepi: finish call"
+    fail "stepi: finish call (timeout)"
     return
   }
 }
@@ -194,13 +205,30 @@ test_i "nexti over function" "nexti" \
 # right behavior for GDB or not, but we'll catch it here, so folks
 # won't forget about it.
 
-send_gdb "break [gdb_get_line_number "step-test.exp: large struct by value"]\n"
+gdb_test \
+  "break [gdb_get_line_number "step-test.exp: large struct by value"]" \
+  ".*Breakpoint.* at .*" \
+  "set breakpoint at call to large_struct_by_value"
 gdb_test "continue" \
          ".*Breakpoint ${decimal},.*large_struct_by_value.*" \
 	 "run to pass large struct"
-gdb_test "step" \
-         ".*step-test.exp: arrive here 1.*" \
-         "large struct by value"
+send_gdb "step\n"
+gdb_expect {
+    -re ".*step-test.exp: arrive here 1.*$gdb_prompt $" {
+	pass "large struct by value"
+    }
+    -re ".*(memcpy|bcopy).*$gdb_prompt $" {
+	send_gdb "finish\n" ; gdb_expect -re "$gdb_prompt $"
+	send_gdb "step\n"
+	exp_continue
+    }
+    -re ".*$gdb_prompt $" {
+	fail "large struct by value"
+    }
+    timeout {
+	fail "large struct by value (timeout)"
+    }
+}
 
 gdb_continue_to_end "step-test.exp"
 

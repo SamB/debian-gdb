@@ -1,5 +1,6 @@
 /* Native-dependent code for BSD Unix running on i386's, for GDB.
-   Copyright 1988, 1989, 1991, 1992, 1994, 1996 Free Software Foundation, Inc.
+   Copyright 1988, 1989, 1991, 1992, 1994, 1995, 1996, 1998, 1999, 2000,
+   2001 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -26,26 +27,28 @@
 #include <machine/reg.h>
 #include <machine/frame.h>
 #include "inferior.h"
+#include "gdbcore.h" /* for registers_fetched() */
+#include "regcache.h"
 
 void
-fetch_inferior_registers (regno)
-     int regno;
+fetch_inferior_registers (int regno)
 {
   struct reg inferior_registers;
 
-  ptrace (PT_GETREGS, inferior_pid, (PTRACE_ARG3_TYPE) & inferior_registers, 0);
+  ptrace (PT_GETREGS, PIDGET (inferior_ptid),
+          (PTRACE_ARG3_TYPE) & inferior_registers, 0);
   memcpy (&registers[REGISTER_BYTE (0)], &inferior_registers, 4 * NUM_REGS);
   registers_fetched ();
 }
 
 void
-store_inferior_registers (regno)
-     int regno;
+store_inferior_registers (int regno)
 {
   struct reg inferior_registers;
 
   memcpy (&inferior_registers, &registers[REGISTER_BYTE (0)], 4 * NUM_REGS);
-  ptrace (PT_SETREGS, inferior_pid, (PTRACE_ARG3_TYPE) & inferior_registers, 0);
+  ptrace (PT_SETREGS, PIDGET (inferior_ptid),
+          (PTRACE_ARG3_TYPE) & inferior_registers, 0);
 }
 
 struct md_core
@@ -55,11 +58,8 @@ struct md_core
 };
 
 void
-fetch_core_registers (core_reg_sect, core_reg_size, which, ignore)
-     char *core_reg_sect;
-     unsigned core_reg_size;
-     int which;
-     CORE_ADDR ignore;
+fetch_core_registers (char *core_reg_sect, unsigned core_reg_size, int which,
+		      CORE_ADDR ignore)
 {
   struct md_core *core_reg = (struct md_core *) core_reg_sect;
 
@@ -107,9 +107,7 @@ static int sregmap[] =
    place where ES is stored.  */
 
 int
-i386_register_u_addr (blockend, regnum)
-     int blockend;
-     int regnum;
+i386_register_u_addr (int blockend, int regnum)
 {
   /* The following condition is a kludge to get at the proper register map
      depending upon the state of pcb_flag.
@@ -173,9 +171,7 @@ struct env387
   };
 
 static void
-print_387_status (status, ep)
-     unsigned short status;
-     struct env387 *ep;
+print_387_status (unsigned short status, struct env387 *ep)
 {
   int i;
   int bothstatus;
@@ -238,7 +234,7 @@ print_387_status (status, ep)
     }
 }
 
-i386_float_info ()
+i386_float_info (void)
 {
   struct user u;		/* just for address computations */
   int i;
@@ -251,10 +247,9 @@ i386_float_info ()
   unsigned int rounded_size;
   /*extern int corechan; */
   int skip;
-  extern int inferior_pid;
 
   uaddr = (char *) &U_FPSTATE (u) - (char *) &u;
-  if (inferior_pid)
+  if (! ptid_equal (inferior_ptid, null_ptid))
     {
       int *ip;
 
@@ -266,7 +261,8 @@ i386_float_info ()
       ip = (int *) buf;
       for (i = 0; i < rounded_size; i++)
 	{
-	  *ip++ = ptrace (PT_READ_U, inferior_pid, (caddr_t) rounded_addr, 0);
+	  *ip++ = ptrace (PT_READ_U, PIDGET (inferior_ptid),
+	                  (caddr_t) rounded_addr, 0);
 	  rounded_addr += sizeof (int);
 	}
     }
@@ -287,7 +283,7 @@ i386_float_info ()
 }
 
 int
-kernel_u_size ()
+kernel_u_size (void)
 {
   return (sizeof (struct user));
 }

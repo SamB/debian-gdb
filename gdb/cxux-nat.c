@@ -1,5 +1,6 @@
 /* Native support for Motorola 88k running Harris CX/UX.
-   Copyright 1988, 1990, 1991, 1992, 1993, 1994 Free Software Foundation, Inc.
+   Copyright 1988, 1990, 1991, 1992, 1993, 1994, 1995, 1998, 1999, 2000,
+   2001 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -33,6 +34,7 @@
 #include "symfile.h"
 #include "objfiles.h"
 #include "symtab.h"
+#include "regcache.h"
 
 #ifndef USER			/* added to support BCS ptrace_user */
 #define USER ptrace_user
@@ -66,8 +68,7 @@ extern jmp_buf stack_jmp;
 extern int errno;
 
 void
-fetch_inferior_registers (regno)
-     int regno;			/* Original value discarded */
+fetch_inferior_registers (int regno)
 {
   register unsigned int regaddr;
   char buf[MAX_REGISTER_RAW_SIZE];
@@ -79,7 +80,7 @@ fetch_inferior_registers (regno)
   offset = (char *) &u.pt_r0 - (char *) &u;
   regaddr = offset;		/* byte offset to r0; */
 
-/*  offset = ptrace (3, inferior_pid, (PTRACE_ARG3_TYPE) offset, 0) - KERNEL_U_ADDR; */
+/*  offset = ptrace (3, PIDGET (inferior_ptid), (PTRACE_ARG3_TYPE) offset, 0) - KERNEL_U_ADDR; */
   for (regno = 0; regno < PC_REGNUM; regno++)
     {
       /*regaddr = register_addr (regno, offset); */
@@ -87,29 +88,29 @@ fetch_inferior_registers (regno)
 
       for (i = 0; i < REGISTER_RAW_SIZE (regno); i += sizeof (int))
 	{
-	  *(int *) &buf[i] = ptrace (3, inferior_pid,
+	  *(int *) &buf[i] = ptrace (3, PIDGET (inferior_ptid),
 				     (PTRACE_ARG3_TYPE) regaddr, 0);
 	  regaddr += sizeof (int);
 	}
       supply_register (regno, buf);
     }
   /* now load up registers 32-37; special pc registers */
-  *(int *) &buf[0] = ptrace (3, inferior_pid,
+  *(int *) &buf[0] = ptrace (3, PIDGET (inferior_ptid),
 			     (PTRACE_ARG3_TYPE) PSR_OFFSET, 0);
   supply_register (PSR_REGNUM, buf);
-  *(int *) &buf[0] = ptrace (3, inferior_pid,
+  *(int *) &buf[0] = ptrace (3, PIDGET (inferior_ptid),
 			     (PTRACE_ARG3_TYPE) FPSR_OFFSET, 0);
   supply_register (FPSR_REGNUM, buf);
-  *(int *) &buf[0] = ptrace (3, inferior_pid,
+  *(int *) &buf[0] = ptrace (3, PIDGET (inferior_ptid),
 			     (PTRACE_ARG3_TYPE) FPCR_OFFSET, 0);
   supply_register (FPCR_REGNUM, buf);
-  *(int *) &buf[0] = ptrace (3, inferior_pid,
+  *(int *) &buf[0] = ptrace (3, PIDGET (inferior_ptid),
 			     (PTRACE_ARG3_TYPE) SXIP_OFFSET, 0);
   supply_register (SXIP_REGNUM, buf);
-  *(int *) &buf[0] = ptrace (3, inferior_pid,
+  *(int *) &buf[0] = ptrace (3, PIDGET (inferior_ptid),
 			     (PTRACE_ARG3_TYPE) SNIP_OFFSET, 0);
   supply_register (SNIP_REGNUM, buf);
-  *(int *) &buf[0] = ptrace (3, inferior_pid,
+  *(int *) &buf[0] = ptrace (3, PIDGET (inferior_ptid),
 			     (PTRACE_ARG3_TYPE) SFIP_OFFSET, 0);
   supply_register (SFIP_REGNUM, buf);
 
@@ -121,13 +122,13 @@ fetch_inferior_registers (regno)
 	{
 	  X_REGISTER_RAW_TYPE xval;
 
-	  *(int *) &xval.w1 = ptrace (3, inferior_pid,
+	  *(int *) &xval.w1 = ptrace (3, PIDGET (inferior_ptid),
 				      (PTRACE_ARG3_TYPE) regaddr, 0);
-	  *(int *) &xval.w2 = ptrace (3, inferior_pid,
+	  *(int *) &xval.w2 = ptrace (3, PIDGET (inferior_ptid),
 				      (PTRACE_ARG3_TYPE) (regaddr + 4), 0);
-	  *(int *) &xval.w3 = ptrace (3, inferior_pid,
+	  *(int *) &xval.w3 = ptrace (3, PIDGET (inferior_ptid),
 				      (PTRACE_ARG3_TYPE) (regaddr + 8), 0);
-	  *(int *) &xval.w4 = ptrace (3, inferior_pid,
+	  *(int *) &xval.w4 = ptrace (3, PIDGET (inferior_ptid),
 				      (PTRACE_ARG3_TYPE) (regaddr + 12), 0);
 	  supply_register (regno, (void *) &xval);
 	}
@@ -139,8 +140,7 @@ fetch_inferior_registers (regno)
    Otherwise, REGNO specifies which register (so we can save time).  */
 
 void
-store_inferior_registers (regno)
-     int regno;
+store_inferior_registers (int regno)
 {
   register unsigned int regaddr;
   char buf[80];
@@ -161,7 +161,7 @@ store_inferior_registers (regno)
 	{
 	  regaddr = offset + regno * sizeof (int);
 	  errno = 0;
-	  ptrace (6, inferior_pid,
+	  ptrace (6, PIDGET (inferior_ptid),
 		  (PTRACE_ARG3_TYPE) regaddr, read_register (regno));
 	  if (errno != 0)
 	    {
@@ -170,22 +170,22 @@ store_inferior_registers (regno)
 	    }
 	}
       else if (regno == PSR_REGNUM)
-	ptrace (6, inferior_pid,
+	ptrace (6, PIDGET (inferior_ptid),
 		(PTRACE_ARG3_TYPE) PSR_OFFSET, read_register (regno));
       else if (regno == FPSR_REGNUM)
-	ptrace (6, inferior_pid,
+	ptrace (6, PIDGET (inferior_ptid),
 		(PTRACE_ARG3_TYPE) FPSR_OFFSET, read_register (regno));
       else if (regno == FPCR_REGNUM)
-	ptrace (6, inferior_pid,
+	ptrace (6, PIDGET (inferior_ptid),
 		(PTRACE_ARG3_TYPE) FPCR_OFFSET, read_register (regno));
       else if (regno == SXIP_REGNUM)
-	ptrace (6, inferior_pid,
+	ptrace (6, PIDGET (inferior_ptid),
 		(PTRACE_ARG3_TYPE) SXIP_OFFSET, read_register (regno));
       else if (regno == SNIP_REGNUM)
-	ptrace (6, inferior_pid,
+	ptrace (6, PIDGET (inferior_ptid),
 		(PTRACE_ARG3_TYPE) SNIP_OFFSET, read_register (regno));
       else if (regno == SFIP_REGNUM)
-	ptrace (6, inferior_pid,
+	ptrace (6, PIDGET (inferior_ptid),
 		(PTRACE_ARG3_TYPE) SFIP_OFFSET, read_register (regno));
       else if (target_is_m88110 && regno < NUM_REGS)
 	{
@@ -194,10 +194,10 @@ store_inferior_registers (regno)
 	  read_register_bytes (REGISTER_BYTE (regno), (char *) &xval,
 			       sizeof (X_REGISTER_RAW_TYPE));
 	  regaddr = XREGADDR (regno);
-	  ptrace (6, inferior_pid, (PTRACE_ARG3_TYPE) regaddr, xval.w1);
-	  ptrace (6, inferior_pid, (PTRACE_ARG3_TYPE) regaddr + 4, xval.w2);
-	  ptrace (6, inferior_pid, (PTRACE_ARG3_TYPE) regaddr + 8, xval.w3);
-	  ptrace (6, inferior_pid, (PTRACE_ARG3_TYPE) regaddr + 12, xval.w4);
+	  ptrace (6, PIDGET (inferior_ptid), (PTRACE_ARG3_TYPE) regaddr, xval.w1);
+	  ptrace (6, PIDGET (inferior_ptid), (PTRACE_ARG3_TYPE) regaddr + 4, xval.w2);
+	  ptrace (6, PIDGET (inferior_ptid), (PTRACE_ARG3_TYPE) regaddr + 8, xval.w3);
+	  ptrace (6, PIDGET (inferior_ptid), (PTRACE_ARG3_TYPE) regaddr + 12, xval.w4);
 	}
       else
 	printf_unfiltered ("Bad register number for store_inferior routine\n");
@@ -209,7 +209,7 @@ store_inferior_registers (regno)
 	  /*      regaddr = register_addr (regno, offset); */
 	  errno = 0;
 	  regaddr = offset + regno * sizeof (int);
-	  ptrace (6, inferior_pid,
+	  ptrace (6, PIDGET (inferior_ptid),
 		  (PTRACE_ARG3_TYPE) regaddr, read_register (regno));
 	  if (errno != 0)
 	    {
@@ -217,17 +217,17 @@ store_inferior_registers (regno)
 	      perror_with_name (buf);
 	    }
 	}
-      ptrace (6, inferior_pid,
+      ptrace (6, PIDGET (inferior_ptid),
 	      (PTRACE_ARG3_TYPE) PSR_OFFSET, read_register (regno));
-      ptrace (6, inferior_pid,
+      ptrace (6, PIDGET (inferior_ptid),
 	      (PTRACE_ARG3_TYPE) FPSR_OFFSET, read_register (regno));
-      ptrace (6, inferior_pid,
+      ptrace (6, PIDGET (inferior_ptid),
 	      (PTRACE_ARG3_TYPE) FPCR_OFFSET, read_register (regno));
-      ptrace (6, inferior_pid,
+      ptrace (6, PIDGET (inferior_ptid),
 	      (PTRACE_ARG3_TYPE) SXIP_OFFSET, read_register (SXIP_REGNUM));
-      ptrace (6, inferior_pid,
+      ptrace (6, PIDGET (inferior_ptid),
 	      (PTRACE_ARG3_TYPE) SNIP_OFFSET, read_register (SNIP_REGNUM));
-      ptrace (6, inferior_pid,
+      ptrace (6, PIDGET (inferior_ptid),
 	      (PTRACE_ARG3_TYPE) SFIP_OFFSET, read_register (SFIP_REGNUM));
       if (target_is_m88110)
 	{
@@ -238,10 +238,10 @@ store_inferior_registers (regno)
 	      read_register_bytes (REGISTER_BYTE (regno), (char *) &xval,
 				   sizeof (X_REGISTER_RAW_TYPE));
 	      regaddr = XREGADDR (regno);
-	      ptrace (6, inferior_pid, (PTRACE_ARG3_TYPE) regaddr, xval.w1);
-	      ptrace (6, inferior_pid, (PTRACE_ARG3_TYPE) (regaddr + 4), xval.w2);
-	      ptrace (6, inferior_pid, (PTRACE_ARG3_TYPE) (regaddr + 8), xval.w3);
-	      ptrace (6, inferior_pid, (PTRACE_ARG3_TYPE) (regaddr + 12), xval.w4);
+	      ptrace (6, PIDGET (inferior_ptid), (PTRACE_ARG3_TYPE) regaddr, xval.w1);
+	      ptrace (6, PIDGET (inferior_ptid), (PTRACE_ARG3_TYPE) (regaddr + 4), xval.w2);
+	      ptrace (6, PIDGET (inferior_ptid), (PTRACE_ARG3_TYPE) (regaddr + 8), xval.w3);
+	      ptrace (6, PIDGET (inferior_ptid), (PTRACE_ARG3_TYPE) (regaddr + 12), xval.w4);
 	    }
 	}
     }
@@ -249,8 +249,7 @@ store_inferior_registers (regno)
 
 /* blockend is the address of the end of the user structure */
 
-m88k_register_u_addr (blockend, regnum)
-     int blockend, regnum;
+m88k_register_u_addr (int blockend, int regnum)
 {
   struct USER u;
   int ustart = blockend - sizeof (struct USER);
@@ -281,13 +280,15 @@ m88k_register_u_addr (blockend, regnum)
 
 #include <sys/procfs.h>
 
+/* Prototypes for supply_gregset etc. */
+#include "gregset.h"
+
 /*  Given a pointer to a general register set in /proc format (gregset_t *),
    unpack the register contents and supply them as gdb's idea of the current
    register values. */
 
 void
-supply_gregset (gregsetp)
-     gregset_t *gregsetp;
+supply_gregset (gregset_t *gregsetp)
 {
   register int regi;
   register greg_t *regp = (greg_t *) gregsetp;
@@ -304,9 +305,7 @@ supply_gregset (gregsetp)
 }
 
 void
-fill_gregset (gregsetp, regno)
-     gregset_t *gregsetp;
-     int regno;
+fill_gregset (gregset_t *gregsetp, int regno)
 {
   int regi;
   register greg_t *regp = (greg_t *) gregsetp;
@@ -354,7 +353,7 @@ struct link_map
 #endif
 
 void
-add_shared_symbol_files ()
+add_shared_symbol_files (void)
 {
   void *desc;
   struct link_map *ld_map, *lm, lms;
@@ -362,13 +361,13 @@ add_shared_symbol_files ()
   struct objfile *objfile;
   char *path_name;
 
-  if (!inferior_pid)
+  if (ptid_equal (inferior_ptid, null_ptid))
     {
       warning ("The program has not yet been started.");
       return;
     }
 
-  objfile = symbol_file_add (LIBC_FILE, 0, 0, 0, 0, 1, 0, 0);
+  objfile = symbol_file_add (LIBC_FILE, 0, NULL, 0, OBJF_READNOW);
   minsym = lookup_minimal_symbol (LINKS_MAP_POINTER, objfile);
 
   ld_map = (struct link_map *)
@@ -384,8 +383,12 @@ add_shared_symbol_files ()
 	  if (target_read_string ((CORE_ADDR) lms.l_name, &path_name,
 				  PATH_MAX, &local_errno))
 	    {
-	      symbol_file_add (path_name, 1, lms.l_addr, 0, 0, 0, 0, 0);
-	      free (path_name);
+	      struct section_addr_info section_addrs;
+	      memset (&section_addrs, 0, sizeof (section_addrs));
+	      section_addrs.other[0].addr = lms.l_addr;
+              section_addrs.other[0].name = ".text";
+	      symbol_file_add (path_name, 1, &section_addrs, 0, 0);
+	      xfree (path_name);
 	    }
 	}
       /* traverse links in reverse order so that we get the
@@ -403,8 +406,7 @@ add_shared_symbol_files ()
 #include <sys/regset.h>
 
 unsigned int
-m88k_harris_core_register_addr (regno, reg_ptr)
-     int regno, reg_ptr;
+m88k_harris_core_register_addr (int regno, int reg_ptr)
 {
   unsigned int word_offset;
 
@@ -440,7 +442,7 @@ m88k_harris_core_register_addr (regno, reg_ptr)
 #endif /* _ES_MP */
 
 void
-_initialize_m88k_nat ()
+_initialize_m88k_nat (void)
 {
 #ifdef _ES_MP
   /* Enable 88110 support, as we don't support the 88100 under ES/MP.  */
@@ -458,8 +460,7 @@ _initialize_m88k_nat ()
    register values. */
 
 void
-supply_gregset (gregsetp)
-     gregset_t *gregsetp;
+supply_gregset (gregset_t *gregsetp)
 {
   register int regi;
   register greg_t *regp = (greg_t *) gregsetp;
@@ -481,8 +482,7 @@ supply_gregset (gregsetp)
    idea of the current floating point register values.  */
 
 void
-supply_fpregset (fpregsetp)
-     fpregset_t *fpregsetp;
+supply_fpregset (fpregset_t *fpregsetp)
 {
   register int regi;
   char *from;

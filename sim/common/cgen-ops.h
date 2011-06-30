@@ -1,5 +1,5 @@
 /* Semantics ops support for CGEN-based simulators.
-   Copyright (C) 1996, 1997, 1998, 1999 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2002 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions.
 
 This file is part of the GNU Simulators.
@@ -23,6 +23,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #ifndef CGEN_SEM_OPS_H
 #define CGEN_SEM_OPS_H
 
+#include <assert.h>
+
 #if defined (__GNUC__) && ! defined (SEMOPS_DEFINE_INLINE)
 #define SEMOPS_DEFINE_INLINE
 #define SEMOPS_INLINE extern inline
@@ -39,6 +41,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define ANDIF(x, y) ((x) && (y))
 #define ORIF(x, y) ((x) || (y))
 
+#define SUBBI(x, y) ((x) - (y))
 #define ANDBI(x, y) ((x) & (y))
 #define ORBI(x, y) ((x) | (y))
 #define XORBI(x, y) ((x) ^ (y))
@@ -74,6 +77,7 @@ extern QI ROLQI (QI, int);
 #define NEGQI(x) (- (x))
 #define NOTQI(x) (! (QI) (x))
 #define INVQI(x) (~ (x))
+#define ABSQI(x) ((x) < 0 ? -(x) : (x))
 #define EQQI(x, y) ((QI) (x) == (QI) (y))
 #define NEQI(x, y) ((QI) (x) != (QI) (y))
 #define LTQI(x, y) ((QI) (x) < (QI) (y))
@@ -103,6 +107,7 @@ extern HI ROLHI (HI, int);
 #define NEGHI(x) (- (x))
 #define NOTHI(x) (! (HI) (x))
 #define INVHI(x) (~ (x))
+#define ABSHI(x) ((x) < 0 ? -(x) : (x))
 #define EQHI(x, y) ((HI) (x) == (HI) (y))
 #define NEHI(x, y) ((HI) (x) != (HI) (y))
 #define LTHI(x, y) ((HI) (x) < (HI) (y))
@@ -132,6 +137,7 @@ extern SI ROLSI (SI, int);
 #define NEGSI(x) (- (x))
 #define NOTSI(x) (! (SI) (x))
 #define INVSI(x) (~ (x))
+#define ABSSI(x) ((x) < 0 ? -(x) : (x))
 #define EQSI(x, y) ((SI) (x) == (SI) (y))
 #define NESI(x, y) ((SI) (x) != (SI) (y))
 #define LTSI(x, y) ((SI) (x) < (SI) (y))
@@ -191,6 +197,7 @@ extern DI ROLDI (DI, int);
 #define NEGDI(x) (- (x))
 #define NOTDI(x) (! (DI) (x))
 #define INVDI(x) (~ (x))
+#define ABSDI(x) ((x) < 0 ? -(x) : (x))
 #define EQDI(x, y) ((DI) (x) == (DI) (y))
 #define NEDI(x, y) ((DI) (x) != (DI) (y))
 #define LTDI(x, y) ((DI) (x) < (DI) (y))
@@ -218,7 +225,9 @@ extern DI EXTQIDI (QI);
 #else
 #define EXTQIDI(x) ((DI) (QI) (x))
 #endif
+#define EXTHIHI(x) ((HI) (HI) (x))
 #define EXTHISI(x) ((SI) (HI) (x))
+#define EXTSISI(x) ((SI) (SI) (x))
 #if defined (DI_FN_SUPPORT)
 extern DI EXTHIDI (HI);
 #else
@@ -246,6 +255,8 @@ extern DI ZEXTQIDI (QI);
 #define ZEXTQIDI(x) ((DI) (UQI) (x))
 #endif
 #define ZEXTHISI(x) ((SI) (UHI) (x))
+#define ZEXTHIHI(x) ((HI) (UHI) (x))
+#define ZEXTSISI(x) ((SI) (USI) (x))
 #if defined (DI_FN_SUPPORT)
 extern DI ZEXTHIDI (HI);
 #else
@@ -263,6 +274,7 @@ extern DI ZEXTSIDI (SI);
 #define TRUNCSIBI(x) ((BI) (SI) (x))
 #define TRUNCSIQI(x) ((QI) (SI) (x))
 #define TRUNCSIHI(x) ((HI) (SI) (x))
+#define TRUNCSISI(x) ((SI) (SI) (x))
 #if defined (DI_FN_SUPPORT)
 extern BI TRUNCDIBI (DI);
 #else
@@ -299,12 +311,72 @@ SUBWORDSISF (SI in)
   return x.out;
 }
 
+SEMOPS_INLINE DF
+SUBWORDDIDF (DI in)
+{
+  union { DI in; DF out; } x;
+  x.in = in;
+  return x.out;
+}
+
+SEMOPS_INLINE QI
+SUBWORDSIQI (SI in, int byte)
+{
+  assert (byte >= 0 && byte <= 3);
+  return (UQI) (in >> (8 * (3 - byte))) & 0xFF;
+}
+
+SEMOPS_INLINE UQI
+SUBWORDSIUQI (SI in, int byte)
+{
+  assert (byte >= 0 && byte <= 3);
+  return (UQI) (in >> (8 * (3 - byte))) & 0xFF;
+}
+
+SEMOPS_INLINE QI
+SUBWORDDIQI (DI in, int byte)
+{
+  assert (byte >= 0 && byte <= 7);
+  return (UQI) (in >> (8 * (7 - byte))) & 0xFF;
+}
+
+SEMOPS_INLINE HI
+SUBWORDDIHI (DI in, int word)
+{
+  assert (word >= 0 && word <= 3);
+  return (UHI) (in >> (16 * (3 - word))) & 0xFFFF;
+}
+
+SEMOPS_INLINE HI
+SUBWORDSIHI (SI in, int word)
+{
+  if (word == 0)
+    return (USI) in >> 16;
+  else
+    return in;
+}
+
 SEMOPS_INLINE SI
 SUBWORDSFSI (SF in)
 {
   union { SF in; SI out; } x;
   x.in = in;
   return x.out;
+}
+
+SEMOPS_INLINE DI
+SUBWORDDFDI (DF in)
+{
+  union { DF in; DI out; } x;
+  x.in = in;
+  return x.out;
+}
+
+SEMOPS_INLINE UQI
+SUBWORDDIUQI (DI in, int byte)
+{
+  assert (byte >= 0 && byte <= 7);
+  return (UQI) (in >> (8 * (7 - byte)));
 }
 
 SEMOPS_INLINE SI
@@ -388,12 +460,21 @@ JOINSITF (SI x0, SI x1, SI x2, SI x3)
 
 #else
 
-SF SUBWORDSISF (SI);
+QI SUBWORDSIQI (SI);
+HI SUBWORDSIHI (HI);
 SI SUBWORDSFSI (SF);
+SF SUBWORDSISF (SI);
+DI SUBWORDDFDI (DF);
+DF SUBWORDDIDF (DI);
+QI SUBWORDDIQI (DI, int);
+HI SUBWORDDIHI (DI, int);
 SI SUBWORDDISI (DI, int);
 SI SUBWORDDFSI (DF, int);
 SI SUBWORDXFSI (XF, int);
 SI SUBWORDTFSI (TF, int);
+
+UQI SUBWORDSIUQI (SI);
+UQI SUBWORDDIUQI (DI);
 
 DI JOINSIDI (SI, SI);
 DF JOINSIDF (SI, SI);
@@ -453,6 +534,100 @@ SUBOFSI (SI a, SI b, BI c)
   return res;
 }
 
+SEMOPS_INLINE HI
+ADDCHI (HI a, HI b, BI c)
+{
+  HI res = ADDHI (a, ADDHI (b, c));
+  return res;
+}
+
+SEMOPS_INLINE BI
+ADDCFHI (HI a, HI b, BI c)
+{
+  HI tmp = ADDHI (a, ADDHI (b, c));
+  BI res = ((UHI) tmp < (UHI) a) || (c && tmp == a);
+  return res;
+}
+
+SEMOPS_INLINE BI
+ADDOFHI (HI a, HI b, BI c)
+{
+  HI tmp = ADDHI (a, ADDHI (b, c));
+  BI res = (((a < 0) == (b < 0))
+	    && ((a < 0) != (tmp < 0)));
+  return res;
+}
+
+SEMOPS_INLINE HI
+SUBCHI (HI a, HI b, BI c)
+{
+  HI res = SUBHI (a, ADDHI (b, c));
+  return res;
+}
+
+SEMOPS_INLINE BI
+SUBCFHI (HI a, HI b, BI c)
+{
+  BI res = ((UHI) a < (UHI) b) || (c && a == b);
+  return res;
+}
+
+SEMOPS_INLINE BI
+SUBOFHI (HI a, HI b, BI c)
+{
+  HI tmp = SUBHI (a, ADDHI (b, c));
+  BI res = (((a < 0) != (b < 0))
+	    && ((a < 0) != (tmp < 0)));
+  return res;
+}
+
+SEMOPS_INLINE QI
+ADDCQI (QI a, QI b, BI c)
+{
+  QI res = ADDQI (a, ADDQI (b, c));
+  return res;
+}
+
+SEMOPS_INLINE BI
+ADDCFQI (QI a, QI b, BI c)
+{
+  QI tmp = ADDQI (a, ADDQI (b, c));
+  BI res = ((UQI) tmp < (UQI) a) || (c && tmp == a);
+  return res;
+}
+
+SEMOPS_INLINE BI
+ADDOFQI (QI a, QI b, BI c)
+{
+  QI tmp = ADDQI (a, ADDQI (b, c));
+  BI res = (((a < 0) == (b < 0))
+	    && ((a < 0) != (tmp < 0)));
+  return res;
+}
+
+SEMOPS_INLINE QI
+SUBCQI (QI a, QI b, BI c)
+{
+  QI res = SUBQI (a, ADDQI (b, c));
+  return res;
+}
+
+SEMOPS_INLINE BI
+SUBCFQI (QI a, QI b, BI c)
+{
+  BI res = ((UQI) a < (UQI) b) || (c && a == b);
+  return res;
+}
+
+SEMOPS_INLINE BI
+SUBOFQI (QI a, QI b, BI c)
+{
+  QI tmp = SUBQI (a, ADDQI (b, c));
+  BI res = (((a < 0) != (b < 0))
+	    && ((a < 0) != (tmp < 0)));
+  return res;
+}
+
 #else
 
 SI ADDCSI (SI, SI, BI);
@@ -461,6 +636,18 @@ UBI ADDOFSI (SI, SI, BI);
 SI SUBCSI (SI, SI, BI);
 UBI SUBCFSI (SI, SI, BI);
 UBI SUBOFSI (SI, SI, BI);
+HI ADDCHI (HI, HI, BI);
+UBI ADDCFHI (HI, HI, BI);
+UBI ADDOFHI (HI, HI, BI);
+HI SUBCHI (HI, HI, BI);
+UBI SUBCFHI (HI, HI, BI);
+UBI SUBOFHI (HI, HI, BI);
+QI ADDCQI (QI, QI, BI);
+UBI ADDCFQI (QI, QI, BI);
+UBI ADDOFQI (QI, QI, BI);
+QI SUBCQI (QI, QI, BI);
+UBI SUBCFQI (QI, QI, BI);
+UBI SUBOFQI (QI, QI, BI);
 
 #endif
 

@@ -199,7 +199,7 @@ AC_ARG_ENABLE(sim-profile,
 esac
 if test x"$silent" != x"yes" && test x"$sim_profile" != x""; then
   echo "Setting sim profile = $sim_profile" 6>&1
-fi],[sim_profile=""])dnl
+fi],[sim_profile="-DPROFILE=1 -DWITH_PROFILE=-1"])dnl
 AC_SUBST(sim_profile)
 
 
@@ -529,7 +529,7 @@ AC_ARG_ENABLE(sim-scache,
 [case "${enableval}" in
   yes)	sim_scache="-DWITH_SCACHE=${default_sim_scache}";;
   no)	sim_scache="-DWITH_SCACHE=0" ;;
-  [[0-9]]*) sim_cache=${enableval};;
+  [[0-9]]*) sim_scache="-DWITH_SCACHE=${enableval}";;
   *)	AC_MSG_ERROR("Bad value $enableval passed to --enable-sim-scache");
 	sim_scache="";;
 esac
@@ -1196,7 +1196,7 @@ AC_DEFUN(SIM_AC_OPTION_CGEN_MAINT,
 [
 cgen_maint=no
 dnl Default is to use one in build tree.
-cgen=../../cgen/cgen
+cgen=guile
 cgendir='$(srcdir)/../../cgen'
 dnl Having --enable-maintainer-mode take arguments is another way to go.
 dnl ??? One can argue --with is more appropriate if one wants to specify
@@ -1213,7 +1213,7 @@ AC_ARG_ENABLE(cgen-maint,
 	# Having a `share' directory might be more appropriate for the .scm,
 	# .cpu, etc. files.
 	cgendir=${cgen_maint}/lib/cgen
-	cgen=${cgendir}/bin/cgen
+	cgen=guile
 	;;
 esac])dnl
 dnl AM_CONDITIONAL(CGEN_MAINT, test x${cgen_maint} != xno)

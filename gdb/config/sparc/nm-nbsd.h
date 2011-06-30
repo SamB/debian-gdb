@@ -1,5 +1,5 @@
 /* Native-dependent definitions for Sparc running NetBSD, for GDB.
-   Copyright (C) 1986, 1987, 1989, 1992, 1995, 1996
+   Copyright 1986, 1987, 1989, 1992, 1994, 1996, 1999, 2000
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -22,11 +22,11 @@
 #ifndef NM_NBSD_H
 #define NM_NBSD_H
 
+#include "regcache.h"
+
 /* Get generic NetBSD native definitions. */
 
-#include "nm-nbsd.h"
-
-#define FETCH_INFERIOR_REGISTERS
+#include "config/nm-nbsd.h"
 
 /* Before storing, we need to read all the registers.  */
 
@@ -54,5 +54,8 @@
 #define PTRACE_GETFPREGS PT_GETFPREGS
 #define PTRACE_SETREGS	 PT_SETREGS
 #define PTRACE_SETFPREGS PT_SETFPREGS
+
+#define GDB_GREGSET_T	struct reg
+#define GDB_FPREGSET_T	struct fpreg
 
 #endif /* NM_NBSD_H */

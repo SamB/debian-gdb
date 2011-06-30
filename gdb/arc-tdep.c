@@ -1,5 +1,5 @@
 /* ARC target-dependent stuff.
-   Copyright (C) 1995, 1997 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 1999, 2000, 2001 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -26,6 +26,7 @@
 #include "floatformat.h"
 #include "symtab.h"
 #include "gdbcmd.h"
+#include "regcache.h"
 
 /* Local functions */
 
@@ -44,13 +45,11 @@ struct
   }
 arc_cpu_type_table[] =
 {
-  {
-    "base", bfd_mach_arc_base
-  }
-  ,
-  {
-    NULL, 0
-  }
+  { "arc5", bfd_mach_arc_5 },
+  { "arc6", bfd_mach_arc_6 },
+  { "arc7", bfd_mach_arc_7 },
+  { "arc8", bfd_mach_arc_8 },
+  {  NULL,  0 }
 };
 
 /* Used by simulator.  */
@@ -90,13 +89,14 @@ int debug_pipeline_p;
    | ((d) & 511))
 
 /* Codestream stuff.  */
-static void codestream_read PARAMS ((unsigned int *, int));
-static void codestream_seek PARAMS ((CORE_ADDR));
-static unsigned int codestream_fill PARAMS ((int));
+static void codestream_read (unsigned int *, int);
+static void codestream_seek (CORE_ADDR);
+static unsigned int codestream_fill (int);
 
 #define CODESTREAM_BUFSIZ 16
 static CORE_ADDR codestream_next_addr;
 static CORE_ADDR codestream_addr;
+/* FIXME assumes sizeof (int) == 32? */
 static unsigned int codestream_buf[CODESTREAM_BUFSIZ];
 static int codestream_off;
 static int codestream_cnt;
@@ -113,8 +113,7 @@ static int codestream_cnt;
    : codestream_buf[codestream_off++])
 
 static unsigned int
-codestream_fill (peek_flag)
-     int peek_flag;
+codestream_fill (int peek_flag)
 {
   codestream_addr = codestream_next_addr;
   codestream_next_addr += CODESTREAM_BUFSIZ * sizeof (codestream_buf[0]);
@@ -124,16 +123,15 @@ codestream_fill (peek_flag)
 	       CODESTREAM_BUFSIZ * sizeof (codestream_buf[0]));
   /* FIXME: check return code?  */
 
-  /* Handle byte order differences.  */
-  if (HOST_BYTE_ORDER != TARGET_BYTE_ORDER)
-    {
-      register unsigned int i, j, n = sizeof (codestream_buf[0]);
-      register char tmp, *p;
-      for (i = 0, p = (char *) codestream_buf; i < CODESTREAM_BUFSIZ;
-	   ++i, p += n)
-	for (j = 0; j < n / 2; ++j)
-	  tmp = p[j], p[j] = p[n - 1 - j], p[n - 1 - j] = tmp;
-    }
+
+  /* Handle byte order differences -> convert to host byte ordering.  */
+  {
+    int i;
+    for (i = 0; i < CODESTREAM_BUFSIZ; i++)
+      codestream_buf[i] =
+	extract_unsigned_integer (&codestream_buf[i],
+				  sizeof (codestream_buf[i]));
+  }
 
   if (peek_flag)
     return codestream_peek ();
@@ -142,8 +140,7 @@ codestream_fill (peek_flag)
 }
 
 static void
-codestream_seek (place)
-     CORE_ADDR place;
+codestream_seek (CORE_ADDR place)
 {
   codestream_next_addr = place / CODESTREAM_BUFSIZ;
   codestream_next_addr *= CODESTREAM_BUFSIZ;
@@ -156,9 +153,7 @@ codestream_seek (place)
 /* This function is currently unused but leave in for now.  */
 
 static void
-codestream_read (buf, count)
-     unsigned int *buf;
-     int count;
+codestream_read (unsigned int *buf, int count)
 {
   unsigned int *p;
   int i;
@@ -170,8 +165,7 @@ codestream_read (buf, count)
 /* Set up prologue scanning and return the first insn.  */
 
 static unsigned int
-setup_prologue_scan (pc)
-     CORE_ADDR pc;
+setup_prologue_scan (CORE_ADDR pc)
 {
   unsigned int insn;
 
@@ -189,8 +183,7 @@ setup_prologue_scan (pc)
  */
 
 static long
-arc_get_frame_setup (pc)
-     CORE_ADDR pc;
+arc_get_frame_setup (CORE_ADDR pc)
 {
   unsigned int insn;
   /* Size of frame or -1 if unrecognizable prologue.  */
@@ -277,9 +270,7 @@ arc_get_frame_setup (pc)
    This allows a quicker answer.  */
 
 CORE_ADDR
-arc_skip_prologue (pc, frameless_p)
-     CORE_ADDR pc;
-     int frameless_p;
+arc_skip_prologue (CORE_ADDR pc, int frameless_p)
 {
   unsigned int insn;
   int i, frame_size;
@@ -310,8 +301,7 @@ arc_skip_prologue (pc, frameless_p)
    This is taken from frameless_look_for_prologue.  */
 
 CORE_ADDR
-arc_frame_saved_pc (frame)
-     struct frame_info *frame;
+arc_frame_saved_pc (struct frame_info *frame)
 {
   CORE_ADDR func_start;
   unsigned int insn;
@@ -357,9 +347,7 @@ arc_frame_saved_pc (frame)
  */
 
 void
-frame_find_saved_regs (fip, fsrp)
-     struct frame_info *fip;
-     struct frame_saved_regs *fsrp;
+frame_find_saved_regs (struct frame_info *fip, struct frame_saved_regs *fsrp)
 {
   long locals;
   unsigned int insn;
@@ -472,9 +460,7 @@ insn_type;
 /* ??? Need to verify all cases are properly handled.  */
 
 static insn_type
-get_insn_type (insn, pc, target)
-     unsigned long insn;
-     CORE_ADDR pc, *target;
+get_insn_type (unsigned long insn, CORE_ADDR pc, CORE_ADDR *target)
 {
   unsigned long limm;
 
@@ -535,9 +521,8 @@ get_insn_type (insn, pc, target)
    set up a simulated single-step, we undo our damage.  */
 
 void
-arc_software_single_step (ignore, insert_breakpoints_p)
-     enum target_signal ignore;	/* sig but we don't need it */
-     int insert_breakpoints_p;
+arc_software_single_step (enum target_signal ignore,	/* sig but we don't need it */
+			  int insert_breakpoints_p)
 {
   static CORE_ADDR next_pc, target;
   static int brktrg_p;
@@ -586,15 +571,16 @@ arc_software_single_step (ignore, insert_breakpoints_p)
     }
 }
 
-#ifdef GET_LONGJMP_TARGET
+/* Because of Multi-arch, GET_LONGJMP_TARGET is always defined.  So test
+   for a definition of JB_PC.  */
+#ifdef JB_PC
 /* Figure out where the longjmp will land.  Slurp the args out of the stack.
    We expect the first arg to be a pointer to the jmp_buf structure from which
    we extract the pc (JB_PC) that we will land at.  The pc is copied into PC.
    This routine returns true on success. */
 
 int
-get_longjmp_target (pc)
-     CORE_ADDR *pc;
+get_longjmp_target (CORE_ADDR *pc)
 {
   char buf[TARGET_PTR_BIT / TARGET_CHAR_BIT];
   CORE_ADDR sp, jb_addr;
@@ -621,9 +607,7 @@ get_longjmp_target (pc)
 /* Disassemble one instruction.  */
 
 static int
-arc_print_insn (vma, info)
-     bfd_vma vma;
-     disassemble_info *info;
+arc_print_insn (bfd_vma vma, disassemble_info *info)
 {
   static int current_mach;
   static int current_endian;
@@ -635,8 +619,7 @@ arc_print_insn (vma, info)
     {
       current_mach = arc_bfd_mach_type;
       current_endian = TARGET_BYTE_ORDER;
-      current_disasm = arc_get_disassembler (current_mach,
-					     current_endian == BIG_ENDIAN);
+      current_disasm = arc_get_disassembler (NULL);
     }
 
   return (*current_disasm) (vma, info);
@@ -656,7 +639,7 @@ arc_set_cpu_type_command (char *args, int from_tty)
 	printf_unfiltered ("%s\n", arc_cpu_type_table[i].name);
 
       /* Restore the value.  */
-      tmp_arc_cpu_type = strsave (arc_cpu_type);
+      tmp_arc_cpu_type = xstrdup (arc_cpu_type);
 
       return;
     }
@@ -665,14 +648,12 @@ arc_set_cpu_type_command (char *args, int from_tty)
     {
       error ("Unknown cpu type `%s'.", tmp_arc_cpu_type);
       /* Restore its value.  */
-      tmp_arc_cpu_type = strsave (arc_cpu_type);
+      tmp_arc_cpu_type = xstrdup (arc_cpu_type);
     }
 }
 
 static void
-arc_show_cpu_type_command (args, from_tty)
-     char *args;
-     int from_tty;
+arc_show_cpu_type_command (char *args, int from_tty)
 {
 }
 
@@ -680,8 +661,7 @@ arc_show_cpu_type_command (args, from_tty)
    Result is a boolean indicating success.  */
 
 static int
-arc_set_cpu_type (str)
-     char *str;
+arc_set_cpu_type (char *str)
 {
   int i, j;
 
@@ -702,7 +682,7 @@ arc_set_cpu_type (str)
 }
 
 void
-_initialize_arc_tdep ()
+_initialize_arc_tdep (void)
 {
   struct cmd_list_element *c;
 
@@ -714,13 +694,13 @@ change the cpu being debugged.  It also gives one access to\n\
 cpu-type-specific registers and recognize cpu-type-specific instructions.\
 ",
 		   &setlist);
-  c->function.cfunc = arc_set_cpu_type_command;
+  set_cmd_cfunc (c, arc_set_cpu_type_command);
   c = add_show_from_set (c, &showlist);
-  c->function.cfunc = arc_show_cpu_type_command;
+  set_cmd_cfunc (c, arc_show_cpu_type_command);
 
-  /* We have to use strsave here because the `set' command frees it before
-     setting a new value.  */
-  tmp_arc_cpu_type = strsave (DEFAULT_ARC_CPU_TYPE);
+  /* We have to use xstrdup() here because the `set' command frees it
+     before setting a new value.  */
+  tmp_arc_cpu_type = xstrdup (DEFAULT_ARC_CPU_TYPE);
   arc_set_cpu_type (tmp_arc_cpu_type);
 
   c = add_set_cmd ("displaypipeline", class_support, var_zinteger,

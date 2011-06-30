@@ -1,5 +1,6 @@
 /* Target-dependent code for Mitsubishi D30V, for GDB.
-   Copyright (C) 1996, 1997 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -33,16 +34,17 @@
 #include "dis-asm.h"
 #include "symfile.h"
 #include "objfiles.h"
+#include "regcache.h"
 
 #include "language.h" /* For local_hex_string() */
 
-void d30v_frame_find_saved_regs PARAMS ((struct frame_info * fi,
-					 struct frame_saved_regs * fsr));
-void d30v_frame_find_saved_regs_offsets PARAMS ((struct frame_info * fi,
-					    struct frame_saved_regs * fsr));
-static void d30v_pop_dummy_frame PARAMS ((struct frame_info * fi));
-static void d30v_print_flags PARAMS ((void));
-static void print_flags_command PARAMS ((char *, int));
+void d30v_frame_find_saved_regs (struct frame_info *fi,
+				 struct frame_saved_regs *fsr);
+void d30v_frame_find_saved_regs_offsets (struct frame_info *fi,
+					 struct frame_saved_regs *fsr);
+static void d30v_pop_dummy_frame (struct frame_info *fi);
+static void d30v_print_flags (void);
+static void print_flags_command (char *, int);
 
 /* the following defines assume:
    fp is r61, lr is r62, sp is r63, and ?? is r22
@@ -97,9 +99,7 @@ static void print_flags_command PARAMS ((char *, int));
 
 
 int
-d30v_frame_chain_valid (chain, fi)
-     CORE_ADDR chain;
-     struct frame_info *fi;	/* not used here */
+d30v_frame_chain_valid (CORE_ADDR chain, struct frame_info *fi)
 {
 #if 0
   return ((chain) != 0 && (fi) != 0 && (fi)->return_pc != 0);
@@ -112,7 +112,7 @@ d30v_frame_chain_valid (chain, fi)
    registers.  */
 
 void
-d30v_pop_frame ()
+d30v_pop_frame (void)
 {
   struct frame_info *frame = get_current_frame ();
   CORE_ADDR fp;
@@ -159,8 +159,7 @@ d30v_pop_frame ()
 }
 
 static int
-check_prologue (op)
-     unsigned long op;
+check_prologue (unsigned long op)
 {
   /* add sp,sp,imm -- observed */
   if ((op & OP_MASK_ALL_BUT_IMM) == OP_ADD_SP_IMM)
@@ -234,8 +233,7 @@ check_prologue (op)
 }
 
 CORE_ADDR
-d30v_skip_prologue (pc)
-     CORE_ADDR pc;
+d30v_skip_prologue (CORE_ADDR pc)
 {
   unsigned long op[2];
   unsigned long opl, opr;	/* left / right sub operations */
@@ -320,8 +318,7 @@ static int end_of_stack;
  */
 
 CORE_ADDR
-d30v_frame_chain (frame)
-     struct frame_info *frame;
+d30v_frame_chain (struct frame_info *frame)
 {
   struct frame_saved_regs fsr;
 
@@ -351,10 +348,8 @@ static int next_addr, uses_frame;
 static int frame_size;
 
 static int
-prologue_find_regs (op, fsr, addr)
-     unsigned long op;
-     struct frame_saved_regs *fsr;
-     CORE_ADDR addr;
+prologue_find_regs (unsigned long op, struct frame_saved_regs *fsr,
+		    CORE_ADDR addr)
 {
   int n;
   int offset;
@@ -503,9 +498,7 @@ prologue_find_regs (op, fsr, addr)
    ways in the stack frame.  sp is even more special: the address we
    return for it IS the sp for the next frame. */
 void
-d30v_frame_find_saved_regs (fi, fsr)
-     struct frame_info *fi;
-     struct frame_saved_regs *fsr;
+d30v_frame_find_saved_regs (struct frame_info *fi, struct frame_saved_regs *fsr)
 {
   CORE_ADDR fp, pc;
   unsigned long opl, opr;
@@ -556,9 +549,8 @@ d30v_frame_find_saved_regs (fi, fsr)
 }
 
 void
-d30v_frame_find_saved_regs_offsets (fi, fsr)
-     struct frame_info *fi;
-     struct frame_saved_regs *fsr;
+d30v_frame_find_saved_regs_offsets (struct frame_info *fi,
+				    struct frame_saved_regs *fsr)
 {
   CORE_ADDR fp, pc;
   unsigned long opl, opr;
@@ -677,9 +669,7 @@ d30v_frame_find_saved_regs_offsets (fi, fsr)
 }
 
 void
-d30v_init_extra_frame_info (fromleaf, fi)
-     int fromleaf;
-     struct frame_info *fi;
+d30v_init_extra_frame_info (int fromleaf, struct frame_info *fi)
 {
   struct frame_saved_regs dummy;
 
@@ -709,9 +699,7 @@ d30v_init_extra_frame_info (fromleaf, fi)
 }
 
 void
-d30v_init_frame_pc (fromleaf, prev)
-     int fromleaf;
-     struct frame_info *prev;
+d30v_init_frame_pc (int fromleaf, struct frame_info *prev)
 {
   /* default value, put here so we can breakpoint on it and
      see if the default value is really the right thing to use */
@@ -719,12 +707,10 @@ d30v_init_frame_pc (fromleaf, prev)
 	      prev->next ? FRAME_SAVED_PC (prev->next) : read_pc ());
 }
 
-static void d30v_print_register PARAMS ((int regnum, int tabular));
+static void d30v_print_register (int regnum, int tabular);
 
 static void
-d30v_print_register (regnum, tabular)
-     int regnum;
-     int tabular;
+d30v_print_register (int regnum, int tabular)
 {
   if (regnum < A0_REGNUM)
     {
@@ -754,7 +740,7 @@ d30v_print_register (regnum, tabular)
 }
 
 static void
-d30v_print_flags ()
+d30v_print_flags (void)
 {
   long psw = read_register (PSW_REGNUM);
   printf_filtered ("flags #1");
@@ -778,17 +764,13 @@ d30v_print_flags ()
 }
 
 static void
-print_flags_command (args, from_tty)
-     char *args;
-     int from_tty;
+print_flags_command (char *args, int from_tty)
 {
   d30v_print_flags ();
 }
 
 void
-d30v_do_registers_info (regnum, fpregs)
-     int regnum;
-     int fpregs;
+d30v_do_registers_info (int regnum, int fpregs)
 {
   long long num1, num2;
   long psw;
@@ -886,14 +868,9 @@ d30v_do_registers_info (regnum, fpregs)
 }
 
 CORE_ADDR
-d30v_fix_call_dummy (dummyname, start_sp, fun, nargs, args, type, gcc_p)
-     char *dummyname;
-     CORE_ADDR start_sp;
-     CORE_ADDR fun;
-     int nargs;
-     value_ptr *args;
-     struct type *type;
-     int gcc_p;
+d30v_fix_call_dummy (char *dummyname, CORE_ADDR start_sp, CORE_ADDR fun,
+		     int nargs, struct value **args,
+		     struct type *type, int gcc_p)
 {
   int regnum;
   CORE_ADDR sp;
@@ -916,8 +893,7 @@ d30v_fix_call_dummy (dummyname, start_sp, fun, nargs, args, type, gcc_p)
 }
 
 static void
-d30v_pop_dummy_frame (fi)
-     struct frame_info *fi;
+d30v_pop_dummy_frame (struct frame_info *fi)
 {
   CORE_ADDR sp = fi->dummy;
   int regnum;
@@ -932,12 +908,8 @@ d30v_pop_dummy_frame (fi)
 
 
 CORE_ADDR
-d30v_push_arguments (nargs, args, sp, struct_return, struct_addr)
-     int nargs;
-     value_ptr *args;
-     CORE_ADDR sp;
-     int struct_return;
-     CORE_ADDR struct_addr;
+d30v_push_arguments (int nargs, struct value **args, CORE_ADDR sp,
+		     int struct_return, CORE_ADDR struct_addr)
 {
   int i, len, index = 0, regnum = 2;
   char buffer[4], *contents;
@@ -948,7 +920,7 @@ d30v_push_arguments (nargs, args, sp, struct_return, struct_addr)
   /* Pass 1. Put all large args on stack */
   for (i = 0; i < nargs; i++)
     {
-      value_ptr arg = args[i];
+      struct value *arg = args[i];
       struct type *arg_type = check_typedef (VALUE_TYPE (arg));
       len = TYPE_LENGTH (arg_type);
       contents = VALUE_CONTENTS (arg);
@@ -966,7 +938,7 @@ d30v_push_arguments (nargs, args, sp, struct_return, struct_addr)
 
   for (i = 0; i < nargs; i++)
     {
-      value_ptr arg = args[i];
+      struct value *arg = args[i];
       struct type *arg_type = check_typedef (VALUE_TYPE (arg));
       len = TYPE_LENGTH (arg_type);
       contents = VALUE_CONTENTS (arg);
@@ -1035,7 +1007,7 @@ d30v_push_arguments (nargs, args, sp, struct_return, struct_addr)
 /* restored. */
 
 CORE_ADDR
-d30v_call_dummy_address ()
+d30v_call_dummy_address (void)
 {
   CORE_ADDR entry;
   struct minimal_symbol *sym;
@@ -1057,10 +1029,8 @@ d30v_call_dummy_address ()
    extract and copy its value into `valbuf'.  */
 
 void
-d30v_extract_return_value (valtype, regbuf, valbuf)
-     struct type *valtype;
-     char regbuf[REGISTER_BYTES];
-     char *valbuf;
+d30v_extract_return_value (struct type *valtype, char regbuf[REGISTER_BYTES],
+			   char *valbuf)
 {
   memcpy (valbuf, regbuf + REGISTER_BYTE (2), TYPE_LENGTH (valtype));
 }
@@ -1091,15 +1061,15 @@ d30v_extract_return_value (valtype, regbuf, valbuf)
 
 #define TRACE_BUFFER_BASE (0xf40000)
 
-static void trace_command PARAMS ((char *, int));
+static void trace_command (char *, int);
 
-static void untrace_command PARAMS ((char *, int));
+static void untrace_command (char *, int);
 
-static void trace_info PARAMS ((char *, int));
+static void trace_info (char *, int);
 
-static void tdisassemble_command PARAMS ((char *, int));
+static void tdisassemble_command (char *, int);
 
-static void display_trace PARAMS ((int, int));
+static void display_trace (int, int);
 
 /* True when instruction traces are being collected.  */
 
@@ -1126,9 +1096,7 @@ struct trace_buffer
 trace_data;
 
 static void
-trace_command (args, from_tty)
-     char *args;
-     int from_tty;
+trace_command (char *args, int from_tty)
 {
   /* Clear the host-side trace buffer, allocating space if needed.  */
   trace_data.size = 0;
@@ -1143,9 +1111,7 @@ trace_command (args, from_tty)
 }
 
 static void
-untrace_command (args, from_tty)
-     char *args;
-     int from_tty;
+untrace_command (char *args, int from_tty)
 {
   tracing = 0;
 
@@ -1153,9 +1119,7 @@ untrace_command (args, from_tty)
 }
 
 static void
-trace_info (args, from_tty)
-     char *args;
-     int from_tty;
+trace_info (char *args, int from_tty)
 {
   int i;
 
@@ -1181,23 +1145,22 @@ trace_info (args, from_tty)
    on STREAM.  Returns length of the instruction, in bytes.  */
 
 static int
-print_insn (memaddr, stream)
-     CORE_ADDR memaddr;
-     GDB_FILE *stream;
+print_insn (CORE_ADDR memaddr, struct ui_file *stream)
 {
   /* If there's no disassembler, something is very wrong.  */
   if (tm_print_insn == NULL)
-    abort ();
+    internal_error (__FILE__, __LINE__,
+		    "print_insn: no disassembler");
 
-  if (TARGET_BYTE_ORDER == BIG_ENDIAN)
+  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
     tm_print_insn_info.endian = BFD_ENDIAN_BIG;
   else
     tm_print_insn_info.endian = BFD_ENDIAN_LITTLE;
-  return (*tm_print_insn) (memaddr, &tm_print_insn_info);
+  return TARGET_PRINT_INSN (memaddr, &tm_print_insn_info);
 }
 
 void
-d30v_eva_prepare_to_trace ()
+d30v_eva_prepare_to_trace (void)
 {
   if (!tracing)
     return;
@@ -1209,7 +1172,7 @@ d30v_eva_prepare_to_trace ()
    more useful for display.  */
 
 void
-d30v_eva_get_trace_data ()
+d30v_eva_get_trace_data (void)
 {
   int count, i, j, oldsize;
   int trace_addr, trace_seg, trace_cnt, next_cnt;
@@ -1262,16 +1225,14 @@ d30v_eva_get_trace_data ()
   oldsize = trace_data.size;
   trace_data.size += count;
 
-  free (tmpspace);
+  xfree (tmpspace);
 
   if (trace_display)
     display_trace (oldsize, trace_data.size);
 }
 
 static void
-tdisassemble_command (arg, from_tty)
-     char *arg;
-     int from_tty;
+tdisassemble_command (char *arg, int from_tty)
 {
   int i, count;
   CORE_ADDR low, high;
@@ -1308,8 +1269,7 @@ tdisassemble_command (arg, from_tty)
 }
 
 static void
-display_trace (low, high)
-     int low, high;
+display_trace (int low, int high)
 {
   int i, count, trace_show_source, first, suppress;
   CORE_ADDR next_address;
@@ -1365,11 +1325,11 @@ display_trace (low, high)
     }
 }
 
-extern void (*target_resume_hook) PARAMS ((void));
-extern void (*target_wait_loop_hook) PARAMS ((void));
+extern void (*target_resume_hook) (void);
+extern void (*target_wait_loop_hook) (void);
 
 void
-_initialize_d30v_tdep ()
+_initialize_d30v_tdep (void)
 {
   tm_print_insn = print_insn_d30v;
 

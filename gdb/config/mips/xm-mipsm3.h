@@ -1,5 +1,5 @@
 /* Definitions to make GDB run on a mips box under 4.3bsd.
-   Copyright (C) 1986, 1987, 1989 Free Software Foundation, Inc.
+   Copyright 1986, 1987, 1989, 1993 Free Software Foundation, Inc.
    Contributed by Per Bothner(bothner@cs.wisc.edu) at U.Wisconsin
    and by Alessandro Forin(af@cs.cmu.edu) at CMU
 
@@ -19,10 +19,6 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
-
-#if !defined (HOST_BYTE_ORDER)
-#define HOST_BYTE_ORDER LITTLE_ENDIAN
-#endif
 
 #define KERNEL_U_ADDR 0		/* Not needed. */
 

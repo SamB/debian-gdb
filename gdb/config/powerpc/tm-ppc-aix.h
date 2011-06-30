@@ -1,5 +1,5 @@
 /* Macro definitions for Power PC running AIX.
-   Copyright 1995 Free Software Foundation, Inc.
+   Copyright 1995, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,7 +23,5 @@
 
 /* Use generic RS6000 definitions. */
 #include "rs6000/tm-rs6000.h"
-
-#define GDB_TARGET_POWERPC
 
 #endif /* TM_PPC_AIX_H */

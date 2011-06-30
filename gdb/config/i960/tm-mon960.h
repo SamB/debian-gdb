@@ -1,5 +1,5 @@
 /* Parameters for Intel 960 running MON960 monitor, for GDB, the GNU debugger.
-   Copyright (C) 1990-1991 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1996, 1999, 2000 Free Software Foundation, Inc.
    Contributed by Intel Corporation and Cygnus Support.
 
    This file is part of GDB.
@@ -55,7 +55,7 @@ struct frame_info;
    since it differs between Nindy, Mon960 and VxWorks, the currently supported
    target types.  */
 
-extern int mon960_frame_chain_valid PARAMS ((CORE_ADDR, struct frame_info *));
+extern int mon960_frame_chain_valid (CORE_ADDR, struct frame_info *);
 #define	FRAME_CHAIN_VALID(chain, thisframe) mon960_frame_chain_valid (chain, thisframe)
 
 /* Sequence of bytes for breakpoint instruction */

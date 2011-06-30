@@ -1,5 +1,5 @@
 /* Target machine description for MIPS running SVR4, for GDB.
-   Copyright 1994, 1995 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1998, 1999, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,12 +21,6 @@
 #include "mips/tm-bigmips.h"
 #include "tm-sysv4.h"
 
-/* When calling functions on a MIPS SVR4 ABI compliant platform
-   $25 must hold the function address.  Dest_Reg is a macro
-   used in CALL_DUMMY in tm-mips.h.  */
-#undef Dest_Reg
-#define Dest_Reg 25
-
 /* The signal handler trampoline is called _sigtramp.  */
 #undef IN_SIGTRAMP
 #define IN_SIGTRAMP(pc, name) ((name) && STREQ ("_sigtramp", name))
@@ -40,7 +34,7 @@
 #define SIGFRAME_FPREGSAVE_OFF	(SIGFRAME_BASE + 40 + 36 * 4)
 
 /* Use the alternate method of determining valid frame chains. */
-#define FRAME_CHAIN_VALID(fp,fi) alternate_frame_chain_valid (fp, fi)
+#define FRAME_CHAIN_VALID(fp,fi) func_frame_chain_valid (fp, fi)
 
 /* Convert a DWARF register number to a gdb REGNUM.  */
 #define DWARF_REG_TO_REGNUM(num) ((num) < 32 ? (num) : (num)+FP0_REGNUM-32)

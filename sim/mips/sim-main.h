@@ -56,15 +56,6 @@ typedef unsigned64 uword64;
 #define WORD64(h,l)     ((word64)((SET64HI(h)|SET64LO(l))))
 #define UWORD64(h,l)     (SET64HI(h)|SET64LO(l))
 
-/* Sign-extend the given value (e) as a value (b) bits long. We cannot
-   assume the HI32bits of the operand are zero, so we must perform a
-   mask to ensure we can use the simple subtraction to sign-extend. */
-#define SIGNEXTEND(e,b) \
- ((unsigned_word) \
-  (((e) & ((uword64) 1 << ((b) - 1))) \
-   ? (((e) & (((uword64) 1 << (b)) - 1)) - ((uword64)1 << (b))) \
-   : ((e) & (((((uword64) 1 << ((b) - 1)) - 1) << 1) | 1))))
-
 /* Check if a value will fit within a halfword: */
 #define NOTHALFWORDVALUE(v) ((((((uword64)(v)>>16) == 0) && !((v) & ((unsigned)1 << 15))) || (((((uword64)(v)>>32) == 0xFFFFFFFF) && ((((uword64)(v)>>16) & 0xFFFF) == 0xFFFF)) && ((v) & ((unsigned)1 << 15)))) ? (1 == 0) : (1 == 1))
 
@@ -297,6 +288,13 @@ do {									\
 } while (0)
 
 
+enum float_operation
+  {
+    FLOP_ADD,    FLOP_SUB,    FLOP_MUL,    FLOP_MADD,
+    FLOP_MSUB,   FLOP_MAX=10, FLOP_MIN,    FLOP_ABS,
+    FLOP_ITOF0=14, FLOP_FTOI0=18, FLOP_NEG=23
+  };
+
 
 struct _sim_cpu {
 
@@ -328,6 +326,7 @@ struct _sim_cpu {
 #define simSIGINT	(1 << 28)  /* 0 = do nothing; 1 = SIGINT has occured */
 #define simJALDELAYSLOT	(1 << 29) /* 1 = in jal delay slot */
 
+#ifndef ENGINE_ISSUE_PREFIX_HOOK
 #define ENGINE_ISSUE_PREFIX_HOOK() \
   { \
     /* Perform any pending writes */ \
@@ -343,6 +342,7 @@ struct _sim_cpu {
     else \
      STATE &= ~simPCOC0; \
   }
+#endif /* ENGINE_ISSUE_PREFIX_HOOK */
 
 
 /* This is nasty, since we have to rely on matching the register
@@ -359,13 +359,6 @@ struct _sim_cpu {
 
 #endif
 
-
-enum float_operation
-  {
-    FLOP_ADD,    FLOP_SUB,    FLOP_MUL,    FLOP_MADD,
-    FLOP_MSUB,   FLOP_MAX=10, FLOP_MIN,    FLOP_ABS,
-    FLOP_ITOF0=14, FLOP_FTOI0=18, FLOP_NEG=23
-  };
 
 /* To keep this default simulator simple, and fast, we use a direct
    vector of registers. The internal simulator engine then uses
@@ -403,7 +396,6 @@ enum float_operation
 #define Debug	(REGISTERS[86])
 #define DEPC	(REGISTERS[87])
 #define EPC	(REGISTERS[88])
-#define COCIDX  (LAST_EMBED_REGNUM + 2) /* special case : outside the normal range */
 
   /* All internal state modified by signal_exception() that may need to be
      rolled back for passing moment-of-exception image back to gdb. */
@@ -542,6 +534,18 @@ struct sim_state {
 #define status_NMI       (1 << 20)      /* NMI */
 #define status_NMI       (1 << 20)      /* NMI */
 
+/* Status bits used by MIPS32/MIPS64.  */
+#define status_UX        (1 <<  5)      /* 64-bit user addrs */
+#define status_SX        (1 <<  6)      /* 64-bit supervisor addrs */
+#define status_KX        (1 <<  7)      /* 64-bit kernel addrs */
+#define status_TS        (1 << 21)      /* TLB shutdown has occurred */
+#define status_PX        (1 << 23)      /* Enable 64 bit operations */
+#define status_MX        (1 << 24)      /* Enable MDMX resources */
+#define status_CU0       (1 << 28)      /* Coprocessor 0 usable */
+#define status_CU1       (1 << 29)      /* Coprocessor 1 usable */
+#define status_CU2       (1 << 30)      /* Coprocessor 2 usable */
+#define status_CU3       (1 << 31)      /* Coprocessor 3 usable */
+
 #define cause_BD ((unsigned)1 << 31)    /* L1 Exception in branch delay slot */
 #define cause_BD2         (1 << 30)     /* L2 Exception in branch delay slot */
 #define cause_CE_mask     0x30000000	/* Coprocessor exception */
@@ -619,9 +623,12 @@ enum ExceptionCause {
   IntegerOverflow         = 12,    /* Arithmetic overflow (IDT monitor raises SIGFPE) */
   Trap                    = 13,
   FPE                     = 15,
-  DebugBreakPoint         = 16,
+  DebugBreakPoint         = 16,    /* Impl. dep. in MIPS32/MIPS64.  */
+  MDMX                    = 22,
   Watch                   = 23,
-  NMIReset                = 31,
+  MCheck                  = 24,
+  CacheErr                = 30,
+  NMIReset                = 31,    /* Reserved in MIPS32/MIPS64.  */
 
 
 /* The following exception code is actually private to the simulator
@@ -661,15 +668,22 @@ void signal_exception (SIM_DESC sd, sim_cpu *cpu, address_word cia, int exceptio
 #define SignalExceptionSimulatorFault(buf)   signal_exception (SD, CPU, cia, SimulatorFault, buf)
 #define SignalExceptionFPE()                 signal_exception (SD, CPU, cia, FPE)
 #define SignalExceptionIntegerOverflow()     signal_exception (SD, CPU, cia, IntegerOverflow)
-#define SignalExceptionCoProcessorUnusable() signal_exception (SD, CPU, cia, CoProcessorUnusable)
+#define SignalExceptionCoProcessorUnusable(cop) signal_exception (SD, CPU, cia, CoProcessorUnusable)
 #define SignalExceptionNMIReset()            signal_exception (SD, CPU, cia, NMIReset)
 #define SignalExceptionTLBRefillStore()      signal_exception (SD, CPU, cia, TLBStore, TLB_REFILL)
 #define SignalExceptionTLBRefillLoad()       signal_exception (SD, CPU, cia, TLBLoad, TLB_REFILL)
 #define SignalExceptionTLBInvalidStore()     signal_exception (SD, CPU, cia, TLBStore, TLB_INVALID)
 #define SignalExceptionTLBInvalidLoad()      signal_exception (SD, CPU, cia, TLBLoad, TLB_INVALID)
 #define SignalExceptionTLBModification()     signal_exception (SD, CPU, cia, TLBModification)
+#define SignalExceptionMDMX()                signal_exception (SD, CPU, cia, MDMX)
+#define SignalExceptionWatch()               signal_exception (SD, CPU, cia, Watch)
+#define SignalExceptionMCheck()              signal_exception (SD, CPU, cia, MCheck)
+#define SignalExceptionCacheErr()            signal_exception (SD, CPU, cia, CacheErr)
 
 /* Co-processor accesses */
+
+/* XXX FIXME: For now, assume that FPU (cp1) is always usable.  */
+#define COP_Usable(coproc_num)		(coproc_num == 1)
 
 void cop_lw  PARAMS ((SIM_DESC sd, sim_cpu *cpu, address_word cia, int coproc_num, int coproc_reg, unsigned int memword));
 void cop_ld  PARAMS ((SIM_DESC sd, sim_cpu *cpu, address_word cia, int coproc_num, int coproc_reg, uword64 memword));
@@ -690,7 +704,7 @@ void decode_coproc PARAMS ((SIM_DESC sd, sim_cpu *cpu, address_word cia, unsigne
 #define DecodeCoproc(instruction) \
 decode_coproc (SD, CPU, cia, (instruction))
 
-void sim_monitor (SIM_DESC sd, sim_cpu *cpu, address_word cia, unsigned int arg);
+int sim_monitor (SIM_DESC sd, sim_cpu *cpu, address_word cia, unsigned int arg);
   
 
 
@@ -757,6 +771,9 @@ INLINE_SIM_MAIN (void) prefetch PARAMS ((SIM_DESC sd, sim_cpu *cpu, address_word
 #define Prefetch(CCA,pAddr,vAddr,DATA,hint) \
 prefetch (SD, CPU, cia, CCA, pAddr, vAddr, DATA, hint)
 
+#define UndefinedResult()
+#define Unpredictable()
+
 INLINE_SIM_MAIN (unsigned32) ifetch32 PARAMS ((SIM_DESC sd, sim_cpu *cpu, address_word cia, address_word vaddr));
 #define IMEM32(CIA) ifetch32 (SD, CPU, (CIA), (CIA))
 INLINE_SIM_MAIN (unsigned16) ifetch16 PARAMS ((SIM_DESC sd, sim_cpu *cpu, address_word cia, address_word vaddr));
@@ -772,6 +789,8 @@ extern SIM_CORE_SIGNAL_FN mips_core_signal;
 char* pr_addr PARAMS ((SIM_ADDR addr));
 char* pr_uword64 PARAMS ((uword64 addr));
 
+
+#define GPR_CLEAR(N) do { GPR_SET((N),0); } while (0)
 
 void mips_cpu_exception_trigger(SIM_DESC sd, sim_cpu* cpu, address_word pc);
 void mips_cpu_exception_suspend(SIM_DESC sd, sim_cpu* cpu, int exception);

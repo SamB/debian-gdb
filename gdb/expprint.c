@@ -1,5 +1,6 @@
 /* Print in infix form a struct expression.
-   Copyright (C) 1986, 1989, 1991 Free Software Foundation, Inc.
+   Copyright 1986, 1988, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 1999, 2000 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -32,13 +33,11 @@
 
 /* Prototypes for local functions */
 
-static void
-print_subexp PARAMS ((struct expression *, int *, GDB_FILE *, enum precedence));
+static void print_subexp (struct expression *, int *, struct ui_file *,
+			  enum precedence);
 
 void
-print_expression (exp, stream)
-     struct expression *exp;
-     GDB_FILE *stream;
+print_expression (struct expression *exp, struct ui_file *stream)
 {
   int pc = 0;
   print_subexp (exp, &pc, stream, PREC_NULL);
@@ -50,11 +49,8 @@ print_expression (exp, stream)
    parentheses are needed here.  */
 
 static void
-print_subexp (exp, pos, stream, prec)
-     register struct expression *exp;
-     register int *pos;
-     GDB_FILE *stream;
-     enum precedence prec;
+print_subexp (register struct expression *exp, register int *pos,
+	      struct ui_file *stream, enum precedence prec)
 {
   register unsigned tem;
   register const struct op_print *op_print_tab;
@@ -66,7 +62,7 @@ print_subexp (exp, pos, stream, prec)
   enum precedence myprec = PREC_NULL;
   /* Set to 1 for a right-associative operator.  */
   int assoc = 0;
-  value_ptr val;
+  struct value *val;
   char *tempstr = NULL;
 
   op_print_tab = exp->language_defn->la_op_print_tab;
@@ -488,8 +484,7 @@ print_subexp (exp, pos, stream, prec)
    a string.   NULL indicates that the opcode was not found in the
    current language table.  */
 char *
-op_string (op)
-     enum exp_opcode op;
+op_string (enum exp_opcode op)
 {
   int tem;
   register const struct op_print *op_print_tab;
@@ -504,11 +499,10 @@ op_string (op)
 /* Support for dumping the raw data from expressions in a human readable
    form.  */
 
-static char *op_name PARAMS ((int opcode));
+static char *op_name (int opcode);
 
 static char *
-op_name (opcode)
-     int opcode;
+op_name (int opcode)
 {
   switch (opcode)
     {
@@ -575,8 +569,6 @@ op_name (opcode)
       return "BINOP_MIN";
     case BINOP_MAX:
       return "BINOP_MAX";
-    case BINOP_SCOPE:
-      return "BINOP_SCOPE";
     case STRUCTOP_MEMBER:
       return "STRUCTOP_MEMBER";
     case STRUCTOP_MPTR:
@@ -695,10 +687,8 @@ op_name (opcode)
 }
 
 void
-dump_prefix_expression (exp, stream, note)
-     struct expression *exp;
-     GDB_FILE *stream;
-     char *note;
+dump_prefix_expression (struct expression *exp, struct ui_file *stream,
+			char *note)
 {
   int elt;
   char *opcode_name;
@@ -712,9 +702,9 @@ dump_prefix_expression (exp, stream, note)
     print_expression (exp, stream);
   else
     fprintf_filtered (stream, "Type printing not yet supported....");
-  fprintf_filtered (stream, "'\n\tLanguage %s, %d elements, %d bytes each.\n",
+  fprintf_filtered (stream, "'\n\tLanguage %s, %d elements, %ld bytes each.\n",
 		    exp->language_defn->la_name, exp->nelts,
-		    sizeof (union exp_element));
+		    (long) sizeof (union exp_element));
   fprintf_filtered (stream, "\t%5s  %20s  %16s  %s\n", "Index", "Opcode",
 		    "Hex Value", "String Value");
   for (elt = 0; elt < exp->nelts; elt++)
@@ -738,13 +728,11 @@ dump_prefix_expression (exp, stream, note)
     }
 }
 
-static int dump_subexp PARAMS ((struct expression * exp, GDB_FILE * stream, int elt));
+static int dump_subexp (struct expression *exp, struct ui_file *stream,
+			int elt);
 
 static int
-dump_subexp (exp, stream, elt)
-     struct expression *exp;
-     GDB_FILE *stream;
-     int elt;
+dump_subexp (struct expression *exp, struct ui_file *stream, int elt)
 {
   static int indent = 0;
   int i;
@@ -790,7 +778,6 @@ dump_subexp (exp, stream, elt)
     case BINOP_EXP:
     case BINOP_MIN:
     case BINOP_MAX:
-    case BINOP_SCOPE:
     case BINOP_INTDIV:
     case BINOP_ASSIGN_MODIFY:
     case BINOP_VAL:
@@ -975,10 +962,8 @@ dump_subexp (exp, stream, elt)
 }
 
 void
-dump_postfix_expression (exp, stream, note)
-     struct expression *exp;
-     GDB_FILE *stream;
-     char *note;
+dump_postfix_expression (struct expression *exp, struct ui_file *stream,
+			 char *note)
 {
   int elt;
 
@@ -989,9 +974,9 @@ dump_postfix_expression (exp, stream, note)
     print_expression (exp, stream);
   else
     fputs_filtered ("Type printing not yet supported....", stream);
-  fprintf_filtered (stream, "'\n\tLanguage %s, %d elements, %d bytes each.\n",
+  fprintf_filtered (stream, "'\n\tLanguage %s, %d elements, %ld bytes each.\n",
 		    exp->language_defn->la_name, exp->nelts,
-		    sizeof (union exp_element));
+		    (long) sizeof (union exp_element));
   fputs_filtered ("\n", stream);
 
   for (elt = 0; elt < exp->nelts;)

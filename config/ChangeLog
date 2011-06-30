@@ -1,5 +1,37 @@
+2001-02-09  Martin Schwidefsky  <schwidefsky@de.ibm.com>
+
+	* mh-s390pic: New file.
+	* mt-s390pic: New file.
+
+2000-07-14  Mark P Mitchell  <mark@codesourcery.com>
+
+	* mh-irix6 (CC): Don't set it.
+
+2000-06-21  Branko Cibej  <branko.cibej@hermes.si>
+
+	* mh-sparcpic: Use single instead of double quotes.
+	* mt-sparcpic: Likewise.
+
+2000-06-19  Syd Polk <spolk@redhat.com>
+
+	* acinclude.m4: Updated for Incr Tcl 3.0.
+
+2000-02-23  Linas Vepstas <linas@linas.org>
+
+	* mh-i370pic: New file.
+	* mt-i370pic: New file.
+
+2000-02-22  Nick Clifton  <nickc@cygnus.com>
+
+	* config/mt-wince: new file: Makefile fragment for WinCE targets.
+
+2000-01-06  Geoff Keating  <geoffk@cygnus.com>
+
+	* mh-aix43: Delete, move to mt-aix43.
+	* mt-aix43: New file.
+
 Tue Sep  7 23:31:01 1999  Linas Vepstas  <linas@linas.org>
-  
+
 	* mh-openedition: New file.
 
 1999-04-07  Michael Meissner  <meissner@cygnus.com>

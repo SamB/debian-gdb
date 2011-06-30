@@ -1,6 +1,6 @@
 /* Native support for the SGI Iris running IRIX version 5, for GDB.
-   Copyright 1988, 89, 90, 91, 92, 93, 94, 95, 96, 98, 1999
-   Free Software Foundation, Inc.
+   Copyright 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998,
+   1999, 2000, 2001 Free Software Foundation, Inc.
    Contributed by Alessandro Forin(af@cs.cmu.edu) at CMU
    and by Per Bothner(bothner@cs.wisc.edu) at U.Wisconsin.
    Implemented for Irix 4.x by Garrett A. Wollman.
@@ -27,14 +27,17 @@
 #include "inferior.h"
 #include "gdbcore.h"
 #include "target.h"
+#include "regcache.h"
 
 #include "gdb_string.h"
 #include <sys/time.h>
 #include <sys/procfs.h>
 #include <setjmp.h>		/* For JB_XXX.  */
 
-static void
-fetch_core_registers PARAMS ((char *, unsigned int, int, CORE_ADDR));
+/* Prototypes for supply_gregset etc. */
+#include "gregset.h"
+
+static void fetch_core_registers (char *, unsigned int, int, CORE_ADDR);
 
 /* Size of elements in jmpbuf */
 
@@ -48,8 +51,7 @@ fetch_core_registers PARAMS ((char *, unsigned int, int, CORE_ADDR));
  */
 
 void
-supply_gregset (gregsetp)
-     gregset_t *gregsetp;
+supply_gregset (gregset_t *gregsetp)
 {
   register int regi;
   register greg_t *regp = &(*gregsetp)[0];
@@ -70,9 +72,7 @@ supply_gregset (gregsetp)
 }
 
 void
-fill_gregset (gregsetp, regno)
-     gregset_t *gregsetp;
-     int regno;
+fill_gregset (gregset_t *gregsetp, int regno)
 {
   int regi;
   register greg_t *regp = &(*gregsetp)[0];
@@ -117,8 +117,7 @@ fill_gregset (gregsetp, regno)
  */
 
 void
-supply_fpregset (fpregsetp)
-     fpregset_t *fpregsetp;
+supply_fpregset (fpregset_t *fpregsetp)
 {
   register int regi;
   static char zerobuf[MAX_REGISTER_RAW_SIZE] =
@@ -137,9 +136,7 @@ supply_fpregset (fpregsetp)
 }
 
 void
-fill_fpregset (fpregsetp, regno)
-     fpregset_t *fpregsetp;
-     int regno;
+fill_fpregset (fpregset_t *fpregsetp, int regno)
 {
   int regi;
   char *from, *to;
@@ -167,12 +164,12 @@ fill_fpregset (fpregsetp, regno)
    This routine returns true on success. */
 
 int
-get_longjmp_target (pc)
-     CORE_ADDR *pc;
+get_longjmp_target (CORE_ADDR *pc)
 {
-  char buf[TARGET_PTR_BIT / TARGET_CHAR_BIT];
+  char *buf;
   CORE_ADDR jb_addr;
 
+  buf = alloca (TARGET_PTR_BIT / TARGET_CHAR_BIT);
   jb_addr = read_register (A0_REGNUM);
 
   if (target_read_memory (jb_addr + JB_PC * JB_ELEMENT_SIZE, buf,
@@ -184,12 +181,22 @@ get_longjmp_target (pc)
   return 1;
 }
 
+/* Provide registers to GDB from a core file.
+
+   CORE_REG_SECT points to an array of bytes, which were obtained from
+   a core file which BFD thinks might contain register contents. 
+   CORE_REG_SIZE is its size.
+
+   Normally, WHICH says which register set corelow suspects this is:
+     0 --- the general-purpose register set
+     2 --- the floating-point register set
+   However, for Irix 5, WHICH isn't used.
+
+   REG_ADDR is also unused.  */
+
 static void
-fetch_core_registers (core_reg_sect, core_reg_size, which, reg_addr)
-     char *core_reg_sect;
-     unsigned core_reg_size;
-     int which;			/* Unused */
-     CORE_ADDR reg_addr;	/* Unused */
+fetch_core_registers (char *core_reg_sect, unsigned core_reg_size,
+		      int which, CORE_ADDR reg_addr)
 {
   if (core_reg_size == REGISTER_BYTES)
     {
@@ -278,7 +285,7 @@ fetch_core_registers (core_reg_sect, core_reg_size, which, reg_addr)
 #include "objfiles.h"
 #include "command.h"
 #include "frame.h"
-#include "gnu-regex.h"
+#include "gdb_regex.h"
 #include "inferior.h"
 #include "language.h"
 #include "gdbcmd.h"
@@ -342,38 +349,27 @@ static CORE_ADDR breakpoint_addr;	/* Address where end bkpt is set */
 
 /* Local function prototypes */
 
-static void
-sharedlibrary_command PARAMS ((char *, int));
+static void sharedlibrary_command (char *, int);
 
-static int
-enable_break PARAMS ((void));
+static int enable_break (void);
 
-static int
-disable_break PARAMS ((void));
+static int disable_break (void);
 
-static void
-info_sharedlibrary_command PARAMS ((char *, int));
+static void info_sharedlibrary_command (char *, int);
 
-static int
-symbol_add_stub PARAMS ((char *));
+static int symbol_add_stub (void *);
 
-static struct so_list *
-  find_solib PARAMS ((struct so_list *));
+static struct so_list *find_solib (struct so_list *);
 
-static struct link_map *
-  first_link_map_member PARAMS ((void));
+static struct link_map *first_link_map_member (void);
 
-static struct link_map *
-  next_link_map_member PARAMS ((struct so_list *));
+static struct link_map *next_link_map_member (struct so_list *);
 
-static void
-xfer_link_map_member PARAMS ((struct so_list *, struct link_map *));
+static void xfer_link_map_member (struct so_list *, struct link_map *);
 
-static CORE_ADDR
-  locate_base PARAMS ((void));
+static CORE_ADDR locate_base (void);
 
-static int
-solib_map_sections PARAMS ((char *));
+static int solib_map_sections (void *);
 
 /*
 
@@ -403,8 +399,7 @@ solib_map_sections PARAMS ((char *));
  */
 
 static int
-solib_map_sections (arg)
-     char *arg;
+solib_map_sections (void *arg)
 {
   struct so_list *so = (struct so_list *) arg;	/* catch_errors bogon */
   char *filename;
@@ -415,7 +410,7 @@ solib_map_sections (arg)
   bfd *abfd;
 
   filename = tilde_expand (so->so_name);
-  old_chain = make_cleanup (free, filename);
+  old_chain = make_cleanup (xfree, filename);
 
   scratch_chan = openp (getenv ("PATH"), 1, filename, O_RDONLY, 0,
 			&scratch_pathname);
@@ -439,7 +434,7 @@ solib_map_sections (arg)
     }
   /* Leave bfd open, core_xfer_memory and "info files" need it.  */
   so->abfd = abfd;
-  abfd->cacheable = true;
+  abfd->cacheable = 1;
 
   if (!bfd_check_format (abfd, bfd_object))
     {
@@ -469,6 +464,7 @@ solib_map_sections (arg)
   /* Free the file names, close the file now.  */
   do_cleanups (old_chain);
 
+  /* must be non-zero */
   return (1);
 }
 
@@ -520,7 +516,7 @@ solib_map_sections (arg)
  */
 
 static CORE_ADDR
-locate_base ()
+locate_base (void)
 {
   struct minimal_symbol *msymbol;
   CORE_ADDR address = 0;
@@ -551,7 +547,7 @@ locate_base ()
  */
 
 static struct link_map *
-first_link_map_member ()
+first_link_map_member (void)
 {
   struct obj_list *listp;
   struct obj_list list_old;
@@ -573,12 +569,13 @@ first_link_map_member ()
     return NULL;
 
   /* Get first list entry.  */
-  lladdr = (CORE_ADDR) listp;
+  /* The MIPS Sign extends addresses. */
+  lladdr = host_pointer_to_address (listp);
   read_memory (lladdr, (char *) &list_old, sizeof (struct obj_list));
 
   /* The first entry in the list is the object file we are debugging,
      so skip it.  */
-  next_lladdr = (CORE_ADDR) list_old.next;
+  next_lladdr = host_pointer_to_address (list_old.next);
 
 #ifdef HANDLE_NEW_OBJ_LIST
   if (list_old.data == NEW_OBJ_INFO_MAGIC)
@@ -618,8 +615,7 @@ first_link_map_member ()
  */
 
 static struct link_map *
-next_link_map_member (so_list_ptr)
-     struct so_list *so_list_ptr;
+next_link_map_member (struct so_list *so_list_ptr)
 {
   struct link_map *lm = &so_list_ptr->lm;
   CORE_ADDR next_lladdr = lm->l_next;
@@ -638,7 +634,7 @@ next_link_map_member (so_list_ptr)
 	  status = target_read_memory (lm->l_lladdr,
 				       (char *) &list_old,
 				       sizeof (struct obj_list));
-	  next_lladdr = (CORE_ADDR) list_old.next;
+	  next_lladdr = host_pointer_to_address (list_old.next);
 	}
 #ifdef HANDLE_NEW_OBJ_LIST
       else if (lm->l_variant == OBJ_LIST_32)
@@ -678,9 +674,7 @@ next_link_map_member (so_list_ptr)
  */
 
 static void
-xfer_link_map_member (so_list_ptr, lm)
-     struct so_list *so_list_ptr;
-     struct link_map *lm;
+xfer_link_map_member (struct so_list *so_list_ptr, struct link_map *lm)
 {
   struct obj_list list_old;
   CORE_ADDR lladdr = lm->l_lladdr;
@@ -691,7 +685,7 @@ xfer_link_map_member (so_list_ptr, lm)
 
   new_lm->l_variant = OBJ_LIST_OLD;
   new_lm->l_lladdr = lladdr;
-  new_lm->l_next = (CORE_ADDR) list_old.next;
+  new_lm->l_next = host_pointer_to_address (list_old.next);
 
 #ifdef HANDLE_NEW_OBJ_LIST
   if (list_old.data == NEW_OBJ_INFO_MAGIC)
@@ -781,8 +775,7 @@ xfer_link_map_member (so_list_ptr, lm)
  */
 
 static struct so_list *
-find_solib (so_list_ptr)
-     struct so_list *so_list_ptr;	/* Last lm or NULL for first one */
+find_solib (struct so_list *so_list_ptr)
 {
   struct so_list *so_list_next = NULL;
   struct link_map *lm = NULL;
@@ -827,12 +820,13 @@ find_solib (so_list_ptr)
 /* A small stub to get us past the arg-passing pinhole of catch_errors.  */
 
 static int
-symbol_add_stub (arg)
-     char *arg;
+symbol_add_stub (void *arg)
 {
   register struct so_list *so = (struct so_list *) arg;		/* catch_errs bogon */
   CORE_ADDR text_addr = 0;
+  struct section_addr_info section_addrs;
 
+  memset (&section_addrs, 0, sizeof (section_addrs));
   if (so->textsection)
     text_addr = so->textsection->addr;
   else if (so->abfd != NULL)
@@ -850,9 +844,12 @@ symbol_add_stub (arg)
 	text_addr = bfd_section_vma (so->abfd, lowest_sect) + LM_OFFSET (so);
     }
 
+
+  section_addrs.other[0].name = ".text";
+  section_addrs.other[0].addr = text_addr;
   so->objfile = symbol_file_add (so->so_name, so->from_tty,
-				 text_addr,
-				 0, 0, 0, 0, 0);
+				 &section_addrs, 0, 0);
+  /* must be non-zero */
   return (1);
 }
 
@@ -865,17 +862,14 @@ symbol_add_stub (arg)
    SYNOPSIS
 
    void solib_add (char *arg_string, int from_tty,
-   struct target_ops *target)
+   struct target_ops *target, int readsyms)
 
    DESCRIPTION
 
  */
 
 void
-solib_add (arg_string, from_tty, target)
-     char *arg_string;
-     int from_tty;
-     struct target_ops *target;
+solib_add (char *arg_string, int from_tty, struct target_ops *target, int readsyms)
 {
   register struct so_list *so = NULL;	/* link map state variable */
 
@@ -885,6 +879,9 @@ solib_add (arg_string, from_tty, target)
   char *re_err;
   int count;
   int old;
+
+  if (!readsyms)
+    return;
 
   if ((re_err = re_comp (arg_string ? arg_string : ".")) != NULL)
     {
@@ -972,16 +969,14 @@ solib_add (arg_string, from_tty, target)
  */
 
 static void
-info_sharedlibrary_command (ignore, from_tty)
-     char *ignore;
-     int from_tty;
+info_sharedlibrary_command (char *ignore, int from_tty)
 {
   register struct so_list *so = NULL;	/* link map state variable */
   int header_done = 0;
 
   if (exec_bfd == NULL)
     {
-      printf_unfiltered ("No exec file.\n");
+      printf_unfiltered ("No executable file.\n");
       return;
     }
   while ((so = find_solib (so)) != NULL)
@@ -1035,8 +1030,7 @@ info_sharedlibrary_command (ignore, from_tty)
  */
 
 char *
-solib_address (address)
-     CORE_ADDR address;
+solib_address (CORE_ADDR address)
 {
   register struct so_list *so = 0;	/* link map state variable */
 
@@ -1055,7 +1049,7 @@ solib_address (address)
 /* Called by free_all_symtabs */
 
 void
-clear_solib ()
+clear_solib (void)
 {
   struct so_list *next;
   char *bfd_filename;
@@ -1066,10 +1060,11 @@ clear_solib ()
     {
       if (so_list_head->sections)
 	{
-	  free ((PTR) so_list_head->sections);
+	  xfree (so_list_head->sections);
 	}
       if (so_list_head->abfd)
 	{
+	  remove_target_sections (so_list_head->abfd);
 	  bfd_filename = bfd_get_filename (so_list_head->abfd);
 	  if (!bfd_close (so_list_head->abfd))
 	    warning ("cannot close \"%s\": %s",
@@ -1081,9 +1076,9 @@ clear_solib ()
 
       next = so_list_head->next;
       if (bfd_filename)
-	free ((PTR) bfd_filename);
-      free (so_list_head->so_name);
-      free ((PTR) so_list_head);
+	xfree (bfd_filename);
+      xfree (so_list_head->so_name);
+      xfree (so_list_head);
       so_list_head = next;
     }
   debug_base = 0;
@@ -1107,7 +1102,7 @@ clear_solib ()
  */
 
 static int
-disable_break ()
+disable_break (void)
 {
   int status = 1;
 
@@ -1149,7 +1144,7 @@ disable_break ()
  */
 
 static int
-enable_break ()
+enable_break (void)
 {
   if (symfile_objfile != NULL
       && target_insert_breakpoint (symfile_objfile->ei.entry_point,
@@ -1215,7 +1210,7 @@ enable_break ()
  */
 
 void
-solib_create_inferior_hook ()
+solib_create_inferior_hook (void)
 {
   if (!enable_break ())
     {
@@ -1233,7 +1228,7 @@ solib_create_inferior_hook ()
   stop_signal = TARGET_SIGNAL_0;
   do
     {
-      target_resume (-1, 0, stop_signal);
+      target_resume (pid_to_ptid (-1), 0, stop_signal);
       wait_for_inferior ();
     }
   while (stop_signal != TARGET_SIGNAL_TRAP);
@@ -1260,8 +1255,7 @@ solib_create_inferior_hook ()
      and will put out an annoying warning.
      Delaying the resetting of stop_soon_quietly until after symbol loading
      suppresses the warning.  */
-  if (auto_solib_add)
-    solib_add ((char *) 0, 0, (struct target_ops *) 0);
+  solib_add ((char *) 0, 0, (struct target_ops *) 0, auto_solib_add);
   stop_soon_quietly = 0;
 }
 
@@ -1280,16 +1274,14 @@ solib_create_inferior_hook ()
  */
 
 static void
-sharedlibrary_command (args, from_tty)
-     char *args;
-     int from_tty;
+sharedlibrary_command (char *args, int from_tty)
 {
   dont_repeat ();
-  solib_add (args, from_tty, (struct target_ops *) 0);
+  solib_add (args, from_tty, (struct target_ops *) 0, 1);
 }
 
 void
-_initialize_solib ()
+_initialize_solib (void)
 {
   add_com ("sharedlibrary", class_files, sharedlibrary_command,
 	   "Load shared object library symbols for files matching REGEXP.");
@@ -1297,13 +1289,13 @@ _initialize_solib ()
 	    "Status of loaded shared object libraries.");
 
   add_show_from_set
-    (add_set_cmd ("auto-solib-add", class_support, var_zinteger,
+    (add_set_cmd ("auto-solib-add", class_support, var_boolean,
 		  (char *) &auto_solib_add,
 		  "Set autoloading of shared library symbols.\n\
-If nonzero, symbols from all shared object libraries will be loaded\n\
-automatically when the inferior begins execution or when the dynamic linker\n\
-informs gdb that a new library has been loaded.  Otherwise, symbols\n\
-must be loaded manually, using `sharedlibrary'.",
+If \"on\", symbols from all shared object libraries will be loaded\n\
+automatically when the inferior begins execution, when the dynamic linker\n\
+informs gdb that a new library has been loaded, or when attaching to the\n\
+inferior.  Otherwise, symbols must be loaded manually, using `sharedlibrary'.",
 		  &setlist),
      &showlist);
 }
@@ -1314,13 +1306,15 @@ must be loaded manually, using `sharedlibrary'.",
 
 static struct core_fns irix5_core_fns =
 {
-  bfd_target_unknown_flavour,
-  fetch_core_registers,
-  NULL
+  bfd_target_unknown_flavour,		/* core_flavour */
+  default_check_format,			/* check_format */
+  default_core_sniffer,			/* core_sniffer */
+  fetch_core_registers,			/* core_read_registers */
+  NULL					/* next */
 };
 
 void
-_initialize_core_irix5 ()
+_initialize_core_irix5 (void)
 {
   add_core_fns (&irix5_core_fns);
 }

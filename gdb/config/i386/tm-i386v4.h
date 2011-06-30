@@ -1,5 +1,6 @@
 /* Macro definitions for GDB on an Intel i386 running SVR4.
-   Copyright (C) 1991, 1994 Free Software Foundation, Inc.
+   Copyright 1991, 1994, 1995, 1998, 1999, 2000
+   Free Software Foundation, Inc.
    Written by Fred Fish at Cygnus Support (fnf@cygnus.com)
 
    This file is part of GDB.
@@ -23,7 +24,7 @@
 #define TM_I386V4_H 1
 
 /* Pick up most of what we need from the generic i386 target include file. */
-
+#define HAVE_I387_REGS
 #include "i386/tm-i386.h"
 
 /* Pick up more stuff from the generic SVR4 host include file. */
@@ -32,7 +33,7 @@
 
 /* Use the alternate method of determining valid frame chains. */
 
-#define FRAME_CHAIN_VALID(fp,fi) alternate_frame_chain_valid (fp, fi)
+#define FRAME_CHAIN_VALID(fp,fi) func_frame_chain_valid (fp, fi)
 
 /* Offsets (in target ints) into jmp_buf.  Not defined in any system header
    file, so we have to step through setjmp/longjmp with a debugger and figure
@@ -55,8 +56,7 @@
    we extract the pc (JB_PC) that we will land at.  The pc is copied into ADDR.
    This routine returns true on success */
 
-extern int
-get_longjmp_target PARAMS ((CORE_ADDR *));
+extern int get_longjmp_target (CORE_ADDR *);
 
 #define GET_LONGJMP_TARGET(ADDR) get_longjmp_target(ADDR)
 
@@ -74,6 +74,6 @@ get_longjmp_target PARAMS ((CORE_ADDR *));
 /* Saved Pc.  Get it from ucontext if within sigtramp.  */
 
 #define sigtramp_saved_pc i386v4_sigtramp_saved_pc
-extern CORE_ADDR i386v4_sigtramp_saved_pc PARAMS ((struct frame_info *));
+extern CORE_ADDR i386v4_sigtramp_saved_pc (struct frame_info *);
 
 #endif /* ifndef TM_I386V4_H */

@@ -1,5 +1,6 @@
 /* Low level interface to simulators, for the remote server for GDB.
-   Copyright (C) 1995, 1996 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,9 +19,8 @@
    Foundation, Inc., 59 Temple Place - Suite 330,
    Boston, MA 02111-1307, USA.  */
 
-#include "defs.h"
-#include "bfd.h"
 #include "server.h"
+#include "bfd.h"
 #include "callback.h"		/* GDB simulator callback interface */
 #include "remote-sim.h"		/* GDB simulator interface */
 
@@ -28,7 +28,8 @@ extern int remote_debug;
 
 extern host_callback default_callback;	/* in sim/common/callback.c */
 
-char registers[REGISTER_BYTES] __attribute__ ((aligned));
+static char my_registers[REGISTER_BYTES] __attribute__ ((aligned));
+char * registers = my_registers;
 
 int target_byte_order;		/* used by simulator */
 
@@ -40,8 +41,7 @@ static SIM_DESC gdbsim_desc = 0;
    does not support loading itself.  */
 
 static void
-generic_load (loadfile_bfd)
-     bfd *loadfile_bfd;
+mygeneric_load (bfd *loadfile_bfd)
 {
   asection *s;
 
@@ -84,16 +84,12 @@ generic_load (loadfile_bfd)
 }
 
 int
-create_inferior (program, argv)
-     char *program;
-     char **argv;
+create_inferior (char *program, char **argv)
 {
   bfd *abfd;
   int pid = 0;
-#ifdef TARGET_BYTE_ORDER_SELECTABLE
   char **new_argv;
   int nargs;
-#endif
 
   abfd = bfd_openr (program, 0);
   if (!abfd)
@@ -110,7 +106,6 @@ create_inferior (program, argv)
       exit (1);
     }
 
-#ifdef TARGET_BYTE_ORDER_SELECTABLE
   /* Add "-E big" or "-E little" to the argument list depending on the
      endianness of the program to be loaded.  */
   for (nargs = 0; argv[nargs] != NULL; nargs++)		/* count the args */
@@ -122,7 +117,6 @@ create_inferior (program, argv)
   new_argv[nargs + 1] = bfd_big_endian (abfd) ? "big" : "little";
   new_argv[nargs + 2] = NULL;
   argv = new_argv;
-#endif
 
   /* Create an instance of the simulator.  */
   default_callback.init (&default_callback);
@@ -133,7 +127,7 @@ create_inferior (program, argv)
   /* Load the program into the simulator.  */
   if (abfd)
     if (sim_load (gdbsim_desc, program, NULL, 0) == SIM_RC_FAIL)
-      generic_load (abfd);
+      mygeneric_load (abfd);
 
   /* Create an inferior process in the simulator.  This initializes SP.  */
   sim_create_inferior (gdbsim_desc, abfd, argv, /* env */ NULL);
@@ -141,10 +135,17 @@ create_inferior (program, argv)
   return pid;
 }
 
+/* Attaching is not supported.  */
+int
+myattach (int pid)
+{
+  return -1;
+}
+
 /* Kill the inferior process.  Make us have no inferior.  */
 
 void
-kill_inferior ()
+kill_inferior (void)
 {
   sim_close (gdbsim_desc, 0);
   default_callback.shutdown (&default_callback);
@@ -153,8 +154,7 @@ kill_inferior ()
 /* Fetch one register.  */
 
 static void
-fetch_register (regno)
-     int regno;
+fetch_register (int regno)
 {
   sim_fetch_register (gdbsim_desc, regno, &registers[REGISTER_BYTE (regno)],
 		      REGISTER_RAW_SIZE (regno));
@@ -163,8 +163,7 @@ fetch_register (regno)
 /* Fetch all registers, or just one, from the child process.  */
 
 void
-fetch_inferior_registers (regno)
-     int regno;
+fetch_inferior_registers (int regno)
 {
   if (regno == -1 || regno == 0)
     for (regno = 0; regno < NUM_REGS /*-NUM_FREGS*/ ; regno++)
@@ -178,8 +177,7 @@ fetch_inferior_registers (regno)
    Otherwise, REGNO specifies which register (so we can save time).  */
 
 void
-store_inferior_registers (regno)
-     int regno;
+store_inferior_registers (int regno)
 {
   if (regno == -1)
     {
@@ -193,8 +191,7 @@ store_inferior_registers (regno)
 
 /* Return nonzero if the given thread is still alive.  */
 int
-mythread_alive (pid)
-     int pid;
+mythread_alive (int pid)
 {
   return 1;
 }
@@ -202,8 +199,7 @@ mythread_alive (pid)
 /* Wait for process, returns status */
 
 unsigned char
-mywait (status)
-     char *status;
+mywait (char *status)
 {
   int sigrc;
   enum sim_stop reason;
@@ -239,9 +235,7 @@ mywait (status)
    If SIGNAL is nonzero, give it that signal.  */
 
 void
-myresume (step, signo)
-     int step;
-     int signo;
+myresume (int step, int signo)
 {
   /* Should be using target_signal_to_host() or signal numbers in target.h
      to convert GDB signal number to target signal number.  */
@@ -252,10 +246,7 @@ myresume (step, signo)
    to debugger memory starting at MYADDR.  */
 
 void
-read_inferior_memory (memaddr, myaddr, len)
-     CORE_ADDR memaddr;
-     char *myaddr;
-     int len;
+read_inferior_memory (CORE_ADDR memaddr, char *myaddr, int len)
 {
   sim_read (gdbsim_desc, memaddr, myaddr, len);
 }
@@ -266,25 +257,13 @@ read_inferior_memory (memaddr, myaddr, len)
    returns the value of errno.  */
 
 int
-write_inferior_memory (memaddr, myaddr, len)
-     CORE_ADDR memaddr;
-     char *myaddr;
-     int len;
+write_inferior_memory (CORE_ADDR memaddr, char *myaddr, int len)
 {
   sim_write (gdbsim_desc, memaddr, myaddr, len);	/* should check for error.  FIXME!! */
   return 0;
 }
 
-#if 0
 void
-initialize ()
+initialize_low (void)
 {
-  inferior_pid = 0;
 }
-
-int
-have_inferior_p ()
-{
-  return inferior_pid != 0;
-}
-#endif

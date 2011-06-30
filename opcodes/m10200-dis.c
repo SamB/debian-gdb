@@ -1,5 +1,5 @@
 /* Disassemble MN10200 instructions.
-   Copyright (C) 1996, 1997, 1998 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 2000 Free Software Foundation, Inc.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
 #include <stdio.h>
 
-#include "ansidecl.h"
+#include "sysdep.h"
 #include "opcode/mn10200.h" 
 #include "dis-asm.h"
 #include "opintl.h"

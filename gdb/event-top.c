@@ -1,5 +1,5 @@
 /* Top level stuff for GDB, the GNU debugger.
-   Copyright 1999 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
    Written by Elena Zannoni <ezannoni@cygnus.com> of Cygnus Solutions.
 
    This file is part of GDB.
@@ -22,10 +22,11 @@
 #include "defs.h"
 #include "top.h"
 #include "inferior.h"
+#include "target.h"
 #include "terminal.h"		/* for job_control */
-#include "signals.h"
 #include "event-loop.h"
 #include "event-top.h"
+#include <signal.h>
 
 /* For dont_repeat() */
 #include "gdbcmd.h"
@@ -126,17 +127,17 @@ struct prompts the_prompts;
    handlers mark these functions as ready to be executed and the event
    loop, in a later iteration, calls them. See the function
    invoke_async_signal_handler. */
-PTR sigint_token;
+void *sigint_token;
 #ifdef SIGHUP
-PTR sighup_token;
+void *sighup_token;
 #endif
-PTR sigquit_token;
-PTR sigfpe_token;
+void *sigquit_token;
+void *sigfpe_token;
 #if defined(SIGWINCH) && defined(SIGWINCH_HANDLER)
-PTR sigwinch_token;
+void *sigwinch_token;
 #endif
 #ifdef STOP_SIGNAL
-PTR sigtstp_token;
+void *sigtstp_token;
 #endif
 
 /* Structure to save a partially entered command.  This is used when
@@ -152,15 +153,21 @@ struct readline_input_state
     char *linebuffer_ptr;
   }
 readline_input_state;
+
+/* This hook is called by rl_callback_read_char_wrapper after each
+   character is processed.  */
+void (*after_char_processing_hook) ();
 
 
-/* Wrapper function foe calling into the readline library. The event
+/* Wrapper function for calling into the readline library. The event
    loop expects the callback function to have a paramter, while readline 
    expects none. */
 static void
 rl_callback_read_char_wrapper (gdb_client_data client_data)
 {
   rl_callback_read_char ();
+  if (after_char_processing_hook)
+    (*after_char_processing_hook) ();
 }
 
 /* Initialize all the necessary variables, start the event loop,
@@ -243,6 +250,10 @@ display_gdb_prompt (char *new_prompt)
   int prompt_length = 0;
   char *gdb_prompt = get_prompt ();
 
+  /* When an alternative interpreter has been installed, do not
+     display the comand prompt. */
+  if (interpreter_p)
+    return;
 
   if (target_executing && sync_execution)
     {
@@ -294,12 +305,6 @@ display_gdb_prompt (char *new_prompt)
          character position to be off, since the newline we read from
          the user is not accounted for.  */
       fputs_unfiltered (new_prompt, gdb_stdout);
-
-#ifdef MPW
-      /* Move to a new line so the entered line doesn't have a prompt
-         on the front of it. */
-      fputs_unfiltered ("\n", gdb_stdout);
-#endif /* MPW */
       gdb_flush (gdb_stdout);
     }
 }
@@ -384,13 +389,13 @@ pop_prompt (void)
        in effect, until the user does another 'set prompt'. */
     if (strcmp (PROMPT (0), PROMPT (-1)))
       {
-	free (PROMPT (-1));
+	xfree (PROMPT (-1));
 	PROMPT (-1) = savestring (PROMPT (0), strlen (PROMPT (0)));
       }
 
-  free (PREFIX (0));
-  free (PROMPT (0));
-  free (SUFFIX (0));
+  xfree (PREFIX (0));
+  xfree (PROMPT (0));
+  xfree (SUFFIX (0));
   the_prompts.top--;
 }
 
@@ -399,15 +404,15 @@ pop_prompt (void)
    instead of calling gdb_readline2, give gdb a chance to detect
    errors and do something. */
 void
-stdin_event_handler (int error, int fd, gdb_client_data client_data)
+stdin_event_handler (int error, gdb_client_data client_data)
 {
   if (error)
     {
-      printf_unfiltered ("error detected on stdin, fd %d\n", fd);
-      delete_file_handler (fd);
+      printf_unfiltered ("error detected on stdin\n");
+      delete_file_handler (input_fd);
       discard_all_continuations ();
       /* If stdin died, we may as well kill gdb. */
-      exit (1);
+      quit_command ((char *) 0, stdin == instream);
     }
   else
     (*call_readline) (client_data);
@@ -443,7 +448,10 @@ async_disable_stdin (void)
      sync/async mode) is refined, the duplicate calls can be
      eliminated (Here or in infcmd.c/infrun.c). */
   target_terminal_inferior ();
-  make_exec_cleanup (async_enable_stdin, NULL);
+  /* Add the reinstate of stdin to the list of cleanups to be done
+     in case the target errors out and dies. These cleanups are also
+     done in case of normal successful termination of the execution
+     command, by complete_execution(). */
   make_exec_error_cleanup (async_enable_stdin, NULL);
 }
 
@@ -468,18 +476,11 @@ command_handler (char *command)
   extern int display_time;
   extern int display_space;
 
-#if defined(TUI)
-  extern int insert_mode;
-#endif
-
   quit_flag = 0;
   if (instream == stdin && stdin_is_tty)
     reinitialize_more_filter ();
-  old_chain = make_cleanup ((make_cleanup_func) command_loop_marker, 0);
+  old_chain = make_cleanup (null_cleanup, 0);
 
-#if defined(TUI)
-  insert_mode = 0;
-#endif
   /* If readline returned a NULL command, it means that the 
      connection with the terminal is gone. This happens at the
      end of a testsuite run, after Expect has hung up 
@@ -503,7 +504,7 @@ command_handler (char *command)
   execute_command (command, instream == stdin);
 
   /* Set things up for this function to be compete later, once the
-     executin has completed, if we are doing an execution command,
+     execution has completed, if we are doing an execution command,
      otherwise, just go ahead and finish. */
   if (target_can_async_p () && target_executing)
     {
@@ -513,8 +514,8 @@ command_handler (char *command)
 	(struct continuation_arg *) xmalloc (sizeof (struct continuation_arg));
       arg1->next = arg2;
       arg2->next = NULL;
-      arg1->data = (PTR) time_at_cmd_start;
-      arg2->data = (PTR) space_at_cmd_start;
+      arg1->data.integer = time_at_cmd_start;
+      arg2->data.integer = space_at_cmd_start;
       add_continuation (command_line_handler_continuation, arg1);
     }
 
@@ -560,8 +561,8 @@ command_line_handler_continuation (struct continuation_arg *arg)
   extern int display_time;
   extern int display_space;
 
-  long time_at_cmd_start = (long) arg->data;
-  long space_at_cmd_start = (long) arg->next->data;
+  long time_at_cmd_start  = arg->data.longint;
+  long space_at_cmd_start = arg->next->data.longint;
 
   bpstat_do_actions (&stop_bpstat);
   /*do_cleanups (old_chain); *//*?????FIXME????? */
@@ -631,7 +632,7 @@ command_line_handler (char *rl)
     {
       strcpy (linebuffer, readline_input_state.linebuffer);
       p = readline_input_state.linebuffer_ptr;
-      free (readline_input_state.linebuffer);
+      xfree (readline_input_state.linebuffer);
       more_to_come = 0;
       pop_prompt ();
     }
@@ -678,26 +679,23 @@ command_line_handler (char *rl)
   while (*p1)
     *p++ = *p1++;
 
-  free (rl);			/* Allocated in readline.  */
+  xfree (rl);			/* Allocated in readline.  */
 
   if (*(p - 1) == '\\')
     {
       p--;			/* Put on top of '\'.  */
 
-      if (*p == '\\')
-	{
-	  readline_input_state.linebuffer = savestring (linebuffer,
-							strlen (linebuffer));
-	  readline_input_state.linebuffer_ptr = p;
+      readline_input_state.linebuffer = savestring (linebuffer,
+						    strlen (linebuffer));
+      readline_input_state.linebuffer_ptr = p;
 
-	  /* We will not invoke a execute_command if there is more
-	     input expected to complete the command. So, we need to
-	     print an empty prompt here. */
-	  more_to_come = 1;
-	  push_prompt ("", "", "");
-	  display_gdb_prompt (0);
-	  return;
-	}
+      /* We will not invoke a execute_command if there is more
+	 input expected to complete the command. So, we need to
+	 print an empty prompt here. */
+      more_to_come = 1;
+      push_prompt ("", "", "");
+      display_gdb_prompt (0);
+      return;
     }
 
 #ifdef STOP_SIGNAL
@@ -737,7 +735,7 @@ command_line_handler (char *rl)
 	  /* If there was an error, call this function again.  */
 	  if (expanded < 0)
 	    {
-	      free (history_value);
+	      xfree (history_value);
 	      return;
 	    }
 	  if (strlen (history_value) > linelength)
@@ -747,7 +745,7 @@ command_line_handler (char *rl)
 	    }
 	  strcpy (linebuffer, history_value);
 	  p = linebuffer + strlen (linebuffer);
-	  free (history_value);
+	  xfree (history_value);
 	}
     }
 
@@ -856,7 +854,7 @@ gdb_readline2 (gdb_client_data client_data)
 	       if we are called again fgetc will still return EOF and
 	       we'll return NULL then.  */
 	    break;
-	  free (result);
+	  xfree (result);
 	  (*input_handler) (0);
 	}
 
@@ -945,7 +943,7 @@ async_init_signals (void)
 }
 
 void
-mark_async_signal_handler_wrapper (PTR token)
+mark_async_signal_handler_wrapper (void *token)
 {
   mark_async_signal_handler ((struct async_signal_handler *) token);
 }
@@ -1004,8 +1002,7 @@ async_do_nothing (gdb_client_data arg)
 /* Tell the event loop what to do if SIGHUP is received. 
    See event-signal.c. */
 static void
-handle_sighup (sig)
-     int sig;
+handle_sighup (int sig)
 {
   mark_async_signal_handler_wrapper (sighup_token);
   signal (sig, handle_sighup);
@@ -1037,7 +1034,16 @@ async_stop_sig (gdb_client_data arg)
   char *prompt = get_prompt ();
 #if STOP_SIGNAL == SIGTSTP
   signal (SIGTSTP, SIG_DFL);
+#if HAVE_SIGPROCMASK
+  {
+    sigset_t zero;
+
+    sigemptyset (&zero);
+    sigprocmask (SIG_SETMASK, &zero, 0);
+  }
+#elif HAVE_SIGSETMASK
   sigsetmask (0);
+#endif
   kill (getpid (), SIGTSTP);
   signal (SIGTSTP, handle_stop_sig);
 #else
@@ -1113,9 +1119,25 @@ _initialize_event_loop (void)
 {
   if (event_loop_p)
     {
-      /* When a character is detected on instream by select or poll,
-         readline will be invoked via this callback function. */
-      call_readline = rl_callback_read_char_wrapper;
+      /* If the input stream is connected to a terminal, turn on
+         editing.  */
+      if (ISATTY (instream))
+	{
+	  /* Tell gdb that we will be using the readline library. This
+	     could be overwritten by a command in .gdbinit like 'set
+	     editing on' or 'off'. */
+	  async_command_editing_p = 1;
+	  
+	  /* When a character is detected on instream by select or
+	     poll, readline will be invoked via this callback
+	     function. */
+	  call_readline = rl_callback_read_char_wrapper;
+	}
+      else
+	{
+	  async_command_editing_p = 0;
+	  call_readline = gdb_readline2;
+	}
 
       /* When readline has read an end-of-line character, it passes
          the complete line to gdb for processing. command_line_handler
@@ -1140,10 +1162,5 @@ _initialize_event_loop (void)
          only when it actually exists (I.e. after we say 'run' or
          after we connect to a remote target. */
       add_file_handler (input_fd, stdin_event_handler, 0);
-
-      /* Tell gdb that we will be using the readline library. This
-         could be overwritten by a command in .gdbinit like 'set
-         editing on' or 'off'. */
-      async_command_editing_p = 1;
     }
 }

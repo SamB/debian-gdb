@@ -1,5 +1,6 @@
 /* Definitions for complaint handling during symbol reading in GDB.
-   Copyright (C) 1990, 1991, 1992  Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1995, 1998, 2000
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -44,11 +45,9 @@ extern struct complaint complaint_root[1];
 
 /* Functions that handle complaints.  (in complaints.c)  */
 
-extern void
-complain PARAMS ((struct complaint *,...));
+extern void complain (struct complaint *, ...);
 
-extern void
-clear_complaints PARAMS ((int, int));
+extern void clear_complaints (int, int);
 
 
 #endif /* !defined (COMPLAINTS_H) */

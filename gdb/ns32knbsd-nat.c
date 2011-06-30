@@ -1,5 +1,6 @@
 /* Functions specific to running gdb native on an ns32k running NetBSD
-   Copyright 1989, 1992, 1993, 1994, 1996 Free Software Foundation, Inc.
+   Copyright 1989, 1992, 1993, 1994, 1996, 1998, 1999, 2000, 2001
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -28,6 +29,7 @@
 #include "inferior.h"
 #include "target.h"
 #include "gdbcore.h"
+#include "regcache.h"
 
 #define RF(dst, src) \
 	memcpy(&registers[REGISTER_BYTE(dst)], &src, sizeof(src))
@@ -36,15 +38,14 @@
 	memcpy(&dst, &registers[REGISTER_BYTE(src)], sizeof(dst))
 
 void
-fetch_inferior_registers (regno)
-     int regno;
+fetch_inferior_registers (int regno)
 {
   struct reg inferior_registers;
   struct fpreg inferior_fpregisters;
 
-  ptrace (PT_GETREGS, inferior_pid,
+  ptrace (PT_GETREGS, PIDGET (inferior_ptid),
 	  (PTRACE_ARG3_TYPE) & inferior_registers, 0);
-  ptrace (PT_GETFPREGS, inferior_pid,
+  ptrace (PT_GETFPREGS, PIDGET (inferior_ptid),
 	  (PTRACE_ARG3_TYPE) & inferior_fpregisters, 0);
 
   RF (R0_REGNUM + 0, inferior_registers.r_r0);
@@ -74,8 +75,7 @@ fetch_inferior_registers (regno)
 }
 
 void
-store_inferior_registers (regno)
-     int regno;
+store_inferior_registers (int regno)
 {
   struct reg inferior_registers;
   struct fpreg inferior_fpregisters;
@@ -104,9 +104,9 @@ store_inferior_registers (regno)
   RS (LP0_REGNUM + 5, inferior_fpregisters.r_freg[5]);
   RS (LP0_REGNUM + 7, inferior_fpregisters.r_freg[7]);
 
-  ptrace (PT_SETREGS, inferior_pid,
+  ptrace (PT_SETREGS, PIDGET (inferior_ptid),
 	  (PTRACE_ARG3_TYPE) & inferior_registers, 0);
-  ptrace (PT_SETFPREGS, inferior_pid,
+  ptrace (PT_SETFPREGS, PIDGET (inferior_ptid),
 	  (PTRACE_ARG3_TYPE) & inferior_fpregisters, 0);
 }
 
@@ -118,13 +118,10 @@ struct coreregs
   struct fpreg freg;
 };
 
-/* Get registers from a core file. */
+/* Get registers from a core file.  REG_ADDR is unused.  */
 static void
-fetch_core_registers (core_reg_sect, core_reg_size, which, reg_addr)
-     char *core_reg_sect;
-     unsigned core_reg_size;
-     int which;
-     unsigned int reg_addr;	/* Unused in this version */
+fetch_core_registers (char *core_reg_sect, unsigned core_reg_size, int which,
+		      unsigned int reg_addr)
 {
   struct coreregs *core_reg;
 
@@ -175,13 +172,15 @@ fetch_core_registers (core_reg_sect, core_reg_size, which, reg_addr)
 
 static struct core_fns nat_core_fns =
 {
-  bfd_target_unknown_flavour,
-  fetch_core_registers,
-  NULL
+  bfd_target_unknown_flavour,		/* core_flavour */
+  default_check_format,			/* check_format */
+  default_core_sniffer,			/* core_sniffer */
+  fetch_core_registers,			/* core_read_registers */
+  NULL					/* next */
 };
 
 void
-_initialize_ns32knbsd_nat ()
+_initialize_ns32knbsd_nat (void)
 {
   add_core_fns (&nat_core_fns);
 }
@@ -198,8 +197,7 @@ _initialize_ns32knbsd_nat ()
  * Called by kcore-nbsd.c:get_kcore_registers().
  */
 void
-fetch_kcore_registers (pcb)
-     struct pcb *pcb;
+fetch_kcore_registers (struct pcb *pcb)
 {
   struct switchframe sf;
   struct reg intreg;
@@ -244,7 +242,7 @@ fetch_kcore_registers (pcb)
 #endif /* FETCH_KCORE_REGISTERS */
 
 void
-clear_regs ()
+clear_regs (void)
 {
   double zero = 0.0;
   int null = 0;
@@ -281,8 +279,7 @@ clear_regs ()
    Can return -1, meaning no way to tell. */
 
 int
-frame_num_args (fi)
-     struct frame_info *fi;
+frame_num_args (struct frame_info *fi)
 {
   CORE_ADDR enter_addr;
   CORE_ADDR argp;
