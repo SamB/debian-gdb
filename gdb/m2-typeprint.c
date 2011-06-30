@@ -1,13 +1,12 @@
 /* Support for printing Modula 2 types for GDB, the GNU debugger.
-   Copyright (C) 1986, 1988, 1989, 1991, 1992, 1995, 2000, 2001,
-                 2002, 2003, 2004, 2005, 2006
-   Free Software Foundation, Inc.
+   Copyright (C) 1986, 1988, 1989, 1991, 1992, 1995, 2000, 2001, 2002, 2003,
+                 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_obstack.h"
@@ -73,7 +70,6 @@ m2_print_type (struct type *type, char *varstring, struct ui_file *stream,
   int demangled_args;
 
   CHECK_TYPEDEF (type);
-  code = TYPE_CODE (type);
 
   QUIT;
 
@@ -84,6 +80,7 @@ m2_print_type (struct type *type, char *varstring, struct ui_file *stream,
       return;
     }
 
+  code = TYPE_CODE (type);
   switch (TYPE_CODE (type))
     {
     case TYPE_CODE_SET:
@@ -110,10 +107,6 @@ m2_print_type (struct type *type, char *varstring, struct ui_file *stream,
 
     case TYPE_CODE_REF:
       m2_ref (type, stream, show, level);
-      break;
-
-    case TYPE_CODE_MEMBER:
-      m2_unknown (_("member"), type, stream, show, level);
       break;
 
     case TYPE_CODE_METHOD:
@@ -210,7 +203,7 @@ static void m2_array (struct type *type, struct ui_file *stream,
 		      int show, int level)
 {
   fprintf_filtered (stream, "ARRAY [");
-  if (TYPE_LENGTH (type) >= 0 && TYPE_LENGTH (TYPE_TARGET_TYPE (type)) > 0
+  if (TYPE_LENGTH (TYPE_TARGET_TYPE (type)) > 0
       && TYPE_ARRAY_UPPER_BOUND_TYPE (type) != BOUND_CANNOT_BE_DETERMINED)
     {
       if (TYPE_INDEX_TYPE (type) != 0)

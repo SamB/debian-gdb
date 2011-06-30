@@ -1,14 +1,14 @@
 /* Top level stuff for GDB, the GNU debugger.
 
-   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "top.h"
@@ -221,18 +219,59 @@ captured_main (void *data)
       if (res == 0)
 	{
 	  xfree (gdb_sysroot);
-	  gdb_sysroot = TARGET_SYSTEM_ROOT;
+	  gdb_sysroot = xstrdup (TARGET_SYSTEM_ROOT);
 	}
     }
   else
-    gdb_sysroot = TARGET_SYSTEM_ROOT;
+    gdb_sysroot = xstrdup (TARGET_SYSTEM_ROOT);
 #else
-#if defined (TARGET_SYSTEM_ROOT)
-  gdb_sysroot = TARGET_SYSTEM_ROOT;
+  gdb_sysroot = xstrdup (TARGET_SYSTEM_ROOT);
+#endif
+
+  /* Canonicalize the sysroot path.  */
+  if (*gdb_sysroot)
+    {
+      char *canon_sysroot = lrealpath (gdb_sysroot);
+      if (canon_sysroot)
+	{
+	  xfree (gdb_sysroot);
+	  gdb_sysroot = canon_sysroot;
+	}
+    }
+
+#ifdef DEBUGDIR_RELOCATABLE
+  debug_file_directory = make_relative_prefix (argv[0], BINDIR, DEBUGDIR);
+  if (debug_file_directory)
+    {
+      struct stat s;
+      int res = 0;
+
+      if (stat (debug_file_directory, &s) == 0)
+	if (S_ISDIR (s.st_mode))
+	  res = 1;
+
+      if (res == 0)
+	{
+	  xfree (debug_file_directory);
+	  debug_file_directory = xstrdup (DEBUGDIR);
+	}
+    }
+  else
+    debug_file_directory = xstrdup (DEBUGDIR);
 #else
-  gdb_sysroot = "";
+  debug_file_directory = xstrdup (DEBUGDIR);
 #endif
-#endif
+
+  /* Canonicalize the debugfile path.  */
+  if (*debug_file_directory)
+    {
+      char *canon_debug = lrealpath (debug_file_directory);
+      if (canon_debug)
+	{
+	  xfree (debug_file_directory);
+	  debug_file_directory = canon_debug;
+	}
+    }
 
   /* There will always be an interpreter.  Either the one passed into
      this captured main, or one specified by the user at start up, or
@@ -257,9 +296,7 @@ captured_main (void *data)
     };
     static struct option long_options[] =
     {
-#if defined(TUI)
       {"tui", no_argument, 0, OPT_TUI},
-#endif
       {"xdb", no_argument, &xdb_commands, 1},
       {"dbx", no_argument, &dbx_commands, 1},
       {"readnow", no_argument, &readnow_symbol_files, 1},
@@ -357,8 +394,15 @@ captured_main (void *data)
 	    break;
 	  case OPT_TUI:
 	    /* --tui is equivalent to -i=tui.  */
+#ifdef TUI
 	    xfree (interpreter_p);
 	    interpreter_p = xstrdup (INTERP_TUI);
+#else
+	    fprintf_unfiltered (gdb_stderr,
+				_("%s: TUI mode is not supported\n"),
+				argv[0]);
+	    exit (1);
+#endif
 	    break;
 	  case OPT_WINDOWS:
 	    /* FIXME: cagney/2003-03-01: Not sure if this option is

@@ -1,13 +1,13 @@
 /* GDB CLI commands.
 
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "readline/readline.h"
@@ -514,7 +512,7 @@ source_command (char *args, int from_tty)
 	}
     }
 
-  return source_script (file, from_tty);
+  source_script (file, from_tty);
 }
 
 
@@ -915,10 +913,7 @@ disassemble_command (char *arg, int from_tty)
   name = NULL;
   if (!arg)
     {
-      if (!deprecated_selected_frame)
-	error (_("No frame selected."));
-
-      pc = get_frame_pc (deprecated_selected_frame);
+      pc = get_frame_pc (get_selected_frame (_("No frame selected.")));
       if (find_pc_partial_function (pc, &name, &low, &high) == 0)
 	error (_("No function contains program counter for selected frame."));
 #if defined(TUI)
@@ -928,7 +923,7 @@ disassemble_command (char *arg, int from_tty)
 	/* FIXME: cagney/2004-02-07: This should be an observer.  */
 	low = tui_get_low_disassembly_address (low, pc);
 #endif
-      low += DEPRECATED_FUNCTION_START_OFFSET;
+      low += gdbarch_deprecated_function_start_offset (current_gdbarch);
     }
   else if (!(space_index = (char *) strchr (arg, ' ')))
     {
@@ -943,7 +938,7 @@ disassemble_command (char *arg, int from_tty)
 	/* FIXME: cagney/2004-02-07: This should be an observer.  */
 	low = tui_get_low_disassembly_address (low, pc);
 #endif
-      low += DEPRECATED_FUNCTION_START_OFFSET;
+      low += gdbarch_deprecated_function_start_offset (current_gdbarch);
     }
   else
     {

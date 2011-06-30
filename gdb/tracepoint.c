@@ -1,13 +1,13 @@
 /* Tracing functionality for remote targets in custom GDB protocol
 
-   Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2006 Free Software Foundation, Inc.
+   Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+   2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -480,7 +478,7 @@ tracepoints_info (char *tpnum_exp, int from_tty)
 	  printf_filtered ("Num Enb ");
 	  if (addressprint)
 	    {
-	      if (TARGET_ADDR_BIT <= 32)
+	      if (gdbarch_addr_bit (current_gdbarch) <= 32)
 		printf_filtered ("Address    ");
 	      else
 		printf_filtered ("Address            ");
@@ -490,7 +488,7 @@ tracepoints_info (char *tpnum_exp, int from_tty)
       strcpy (wrap_indent, "                           ");
       if (addressprint)
 	{
-	  if (TARGET_ADDR_BIT <= 32)
+	  if (gdbarch_addr_bit (current_gdbarch) <= 32)
 	    strcat (wrap_indent, "           ");
 	  else
 	    strcat (wrap_indent, "                   ");
@@ -502,7 +500,7 @@ tracepoints_info (char *tpnum_exp, int from_tty)
 	{
 	  char *tmp;
 
-	  if (TARGET_ADDR_BIT <= 32)
+	  if (gdbarch_addr_bit (current_gdbarch) <= 32)
 	    tmp = hex_string_custom (t->address & (CORE_ADDR) 0xffffffff, 
 				     8);
 	  else
@@ -1162,7 +1160,7 @@ add_register (struct collection_list *collection, unsigned int regno)
 {
   if (info_verbose)
     printf_filtered ("collect register %d\n", regno);
-  if (regno > (8 * sizeof (collection->regs_mask)))
+  if (regno >= (8 * sizeof (collection->regs_mask)))
     error (_("Internal: register number %d too large for tracepoint"),
 	   regno);
   collection->regs_mask[regno / 8] |= 1 << (regno % 8);
@@ -1489,7 +1487,10 @@ stringify_collection_list (struct collection_list *list, char *string)
   (*str_list)[ndx] = NULL;
 
   if (ndx == 0)
-    return NULL;
+    {
+      free (str_list);
+      return NULL;
+    }
   else
     return *str_list;
 }
@@ -1539,7 +1540,8 @@ encode_actions (struct tracepoint *t, char ***tdp_actions,
   *tdp_actions = NULL;
   *stepping_actions = NULL;
 
-  TARGET_VIRTUAL_FRAME_POINTER (t->address, &frame_reg, &frame_offset);
+  gdbarch_virtual_frame_pointer (current_gdbarch, 
+				 t->address, &frame_reg, &frame_offset);
 
   for (action = t->actions; action; action = action->next)
     {
@@ -1565,7 +1567,7 @@ encode_actions (struct tracepoint *t, char ***tdp_actions,
 
 	      if (0 == strncasecmp ("$reg", action_exp, 4))
 		{
-		  for (i = 0; i < NUM_REGS; i++)
+		  for (i = 0; i < gdbarch_num_regs (current_gdbarch); i++)
 		    add_register (collect, i);
 		  action_exp = strchr (action_exp, ',');	/* more? */
 		}
@@ -1601,11 +1603,20 @@ encode_actions (struct tracepoint *t, char ***tdp_actions,
 		  switch (exp->elts[0].opcode)
 		    {
 		    case OP_REGISTER:
-		      i = exp->elts[1].longconst;
-		      if (info_verbose)
-			printf_filtered ("OP_REGISTER: ");
-		      add_register (collect, i);
-		      break;
+		      {
+			const char *name = &exp->elts[2].string;
+
+			i = frame_map_name_to_regnum (deprecated_safe_get_selected_frame (),
+						      name, strlen (name));
+			if (i == -1)
+			  internal_error (__FILE__, __LINE__,
+					  _("Register $%s not available"),
+					  name);
+			if (info_verbose)
+			  printf_filtered ("OP_REGISTER: ");
+			add_register (collect, i);
+			break;
+		      }
 
 		    case UNOP_MEMVAL:
 		      /* safe because we know it's a simple expression */
@@ -1969,9 +1980,8 @@ finish_tfind_command (char **msg,
 	error (_("Bogus reply from target: %s"), reply);
       }
 
-  flush_cached_frames ();
+  reinit_frame_cache ();
   registers_changed ();
-  select_frame (get_current_frame ());
   set_traceframe_num (target_frameno);
   set_tracepoint_num (target_tracept);
   if (target_frameno == -1)
@@ -2444,7 +2454,8 @@ scope_info (char *args, int from_tty)
 	      break;
 	    case LOC_REGISTER:
 	      printf_filtered ("a local variable in register $%s",
-			       REGISTER_NAME (SYMBOL_VALUE (sym)));
+			       gdbarch_register_name
+				 (current_gdbarch, SYMBOL_VALUE (sym)));
 	      break;
 	    case LOC_ARG:
 	    case LOC_LOCAL_ARG:
@@ -2461,11 +2472,13 @@ scope_info (char *args, int from_tty)
 	      break;
 	    case LOC_REGPARM:
 	      printf_filtered ("an argument in register $%s",
-			       REGISTER_NAME (SYMBOL_VALUE (sym)));
+			       gdbarch_register_name
+				 (current_gdbarch, SYMBOL_VALUE (sym)));
 	      break;
 	    case LOC_REGPARM_ADDR:
 	      printf_filtered ("the address of an argument, in register $%s",
-			       REGISTER_NAME (SYMBOL_VALUE (sym)));
+			       gdbarch_register_name
+				 (current_gdbarch, SYMBOL_VALUE (sym)));
 	      break;
 	    case LOC_TYPEDEF:
 	      printf_filtered ("a typedef.\n");
@@ -2483,12 +2496,14 @@ scope_info (char *args, int from_tty)
 	    case LOC_BASEREG:
 	      printf_filtered ("a variable at offset %ld from register $%s",
 			       SYMBOL_VALUE (sym),
-			       REGISTER_NAME (SYMBOL_BASEREG (sym)));
+			       gdbarch_register_name
+				 (current_gdbarch, SYMBOL_BASEREG (sym)));
 	      break;
 	    case LOC_BASEREG_ARG:
 	      printf_filtered ("an argument at offset %ld from register $%s",
 			       SYMBOL_VALUE (sym),
-			       REGISTER_NAME (SYMBOL_BASEREG (sym)));
+			       gdbarch_register_name
+				 (current_gdbarch, SYMBOL_BASEREG (sym)));
 	      break;
 	    case LOC_UNRESOLVED:
 	      msym = lookup_minimal_symbol (DEPRECATED_SYMBOL_NAME (sym), 
@@ -2580,7 +2595,8 @@ trace_dump_command (char *args, int from_tty)
      to the tracepoint PC.  If not, then the current frame was
      collected during single-stepping.  */
 
-  stepping_frame = (t->address != (read_pc () - DECR_PC_AFTER_BREAK));
+  stepping_frame = (t->address != (read_pc () - gdbarch_decr_pc_after_break
+						  (current_gdbarch)));
 
   for (action = t->actions; action; action = action->next)
     {

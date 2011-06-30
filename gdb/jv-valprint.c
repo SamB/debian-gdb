@@ -1,13 +1,13 @@
 /* Support for printing Java values for GDB, the GNU debugger.
 
-   Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005 Free
-   Software Foundation, Inc.
+   Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -95,7 +93,7 @@ java_value_print (struct value *val, struct ui_file *stream, int format,
 	    {
 	      gdb_byte *buf;
 
-	      buf = alloca (TARGET_PTR_BIT / HOST_CHAR_BIT);
+	      buf = alloca (gdbarch_ptr_bit (current_gdbarch) / HOST_CHAR_BIT);
 	      fputs_filtered (", ", stream);
 	      wrap_here (n_spaces (2));
 
@@ -104,7 +102,7 @@ java_value_print (struct value *val, struct ui_file *stream, int format,
 	      else
 		{
 		  read_memory (address, buf, sizeof (buf));
-		  address += TARGET_PTR_BIT / HOST_CHAR_BIT;
+		  address += gdbarch_ptr_bit (current_gdbarch) / HOST_CHAR_BIT;
 		  /* FIXME: cagney/2003-05-24: Bogus or what.  It
                      pulls a host sized pointer out of the target and
                      then extracts that as an address (while assuming
@@ -115,7 +113,7 @@ java_value_print (struct value *val, struct ui_file *stream, int format,
 	      for (reps = 1; i + reps < length; reps++)
 		{
 		  read_memory (address, buf, sizeof (buf));
-		  address += TARGET_PTR_BIT / HOST_CHAR_BIT;
+		  address += gdbarch_ptr_bit (current_gdbarch) / HOST_CHAR_BIT;
 		  /* FIXME: cagney/2003-05-24: Bogus or what.  It
                      pulls a host sized pointer out of the target and
                      then extracts that as an address (while assuming

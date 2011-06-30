@@ -1,6 +1,6 @@
 /* Target-dependent code for NetBSD/mips.
 
-   Copyright (C) 2002, 2003, 2004, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
 
    Contributed by Wasabi Systems, Inc.
 
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbcore.h"
@@ -142,64 +140,71 @@ mipsnbsd_regset_from_core_section (struct gdbarch *gdbarch,
    ptrace register structure used by NetBSD/mips.  */
 
 void
-mipsnbsd_supply_reg (char *regs, int regno)
+mipsnbsd_supply_reg (struct regcache *regcache, const char *regs, int regno)
 {
   int i;
 
-  for (i = 0; i <= PC_REGNUM; i++)
+  for (i = 0; i <= gdbarch_pc_regnum (current_gdbarch); i++)
     {
       if (regno == i || regno == -1)
 	{
-	  if (CANNOT_FETCH_REGISTER (i))
-	    regcache_raw_supply (current_regcache, i, NULL);
+	  if (gdbarch_cannot_fetch_register (current_gdbarch, i))
+	    regcache_raw_supply (regcache, i, NULL);
 	  else
-            regcache_raw_supply (current_regcache, i,
+            regcache_raw_supply (regcache, i,
 				 regs + (i * mips_isa_regsize (current_gdbarch)));
         }
     }
 }
 
 void
-mipsnbsd_fill_reg (char *regs, int regno)
+mipsnbsd_fill_reg (const struct regcache *regcache, char *regs, int regno)
 {
   int i;
 
-  for (i = 0; i <= PC_REGNUM; i++)
-    if ((regno == i || regno == -1) && ! CANNOT_STORE_REGISTER (i))
-      regcache_raw_collect (current_regcache, i,
+  for (i = 0; i <= gdbarch_pc_regnum (current_gdbarch); i++)
+    if ((regno == i || regno == -1)
+	&& ! gdbarch_cannot_store_register (current_gdbarch, i))
+      regcache_raw_collect (regcache, i,
 			    regs + (i * mips_isa_regsize (current_gdbarch)));
 }
 
 void
-mipsnbsd_supply_fpreg (char *fpregs, int regno)
+mipsnbsd_supply_fpreg (struct regcache *regcache, const char *fpregs, int regno)
 {
   int i;
 
-  for (i = FP0_REGNUM;
+  for (i = gdbarch_fp0_regnum (current_gdbarch);
        i <= mips_regnum (current_gdbarch)->fp_implementation_revision;
        i++)
     {
       if (regno == i || regno == -1)
 	{
-	  if (CANNOT_FETCH_REGISTER (i))
-	    regcache_raw_supply (current_regcache, i, NULL);
+	  if (gdbarch_cannot_fetch_register (current_gdbarch, i))
+	    regcache_raw_supply (regcache, i, NULL);
 	  else
-            regcache_raw_supply (current_regcache, i,
-				 fpregs + ((i - FP0_REGNUM) * mips_isa_regsize (current_gdbarch)));
+            regcache_raw_supply (regcache, i,
+				 fpregs 
+				 + ((i - gdbarch_fp0_regnum (current_gdbarch))
+				    * mips_isa_regsize (current_gdbarch)));
 	}
     }
 }
 
 void
-mipsnbsd_fill_fpreg (char *fpregs, int regno)
+mipsnbsd_fill_fpreg (const struct regcache *regcache, char *fpregs, int regno)
 {
   int i;
 
-  for (i = FP0_REGNUM; i <= mips_regnum (current_gdbarch)->fp_control_status;
+  for (i = gdbarch_fp0_regnum (current_gdbarch);
+       i <= mips_regnum (current_gdbarch)->fp_control_status;
        i++)
-    if ((regno == i || regno == -1) && ! CANNOT_STORE_REGISTER (i))
-      regcache_raw_collect (current_regcache, i,
-			    fpregs + ((i - FP0_REGNUM) * mips_isa_regsize (current_gdbarch)));
+    if ((regno == i || regno == -1) 
+	&& ! gdbarch_cannot_store_register (current_gdbarch, i))
+      regcache_raw_collect (regcache, i,
+			    fpregs + ((i - gdbarch_fp0_regnum
+					     (current_gdbarch))
+			      * mips_isa_regsize (current_gdbarch)));
 }
 
 /* Under NetBSD/mips, signal handler invocations can be identified by the
@@ -239,8 +244,9 @@ static LONGEST
 mipsnbsd_sigtramp_offset (struct frame_info *next_frame)
 {
   CORE_ADDR pc = frame_pc_unwind (next_frame);
-  const char *retcode = TARGET_BYTE_ORDER == BFD_ENDIAN_BIG
-  	? sigtramp_retcode_mipseb : sigtramp_retcode_mipsel;
+  const char *retcode = gdbarch_byte_order (current_gdbarch)
+			== BFD_ENDIAN_BIG ? sigtramp_retcode_mipseb :
+			sigtramp_retcode_mipsel;
   unsigned char ret[RETCODE_SIZE], w[4];
   LONGEST off;
   int i;
@@ -281,14 +287,14 @@ mipsnbsd_sigtramp_offset (struct frame_info *next_frame)
 					 NBSD_MIPS_JB_ELEMENT_SIZE)
 
 static int
-mipsnbsd_get_longjmp_target (CORE_ADDR *pc)
+mipsnbsd_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
 {
   CORE_ADDR jb_addr;
   char *buf;
 
   buf = alloca (NBSD_MIPS_JB_ELEMENT_SIZE);
 
-  jb_addr = read_register (MIPS_A0_REGNUM);
+  jb_addr = get_frame_register_unsigned (frame, MIPS_A0_REGNUM);
 
   if (target_read_memory (jb_addr + NBSD_MIPS_JB_OFFSET, buf,
   			  NBSD_MIPS_JB_ELEMENT_SIZE))
@@ -336,15 +342,10 @@ mipsnbsd_ilp32_fetch_link_map_offsets (void)
       /* Everything we need is in the first 24 bytes.  */
       lmo.link_map_size = 24;
       lmo.l_addr_offset = 4;
-      lmo.l_addr_size = 4;
       lmo.l_name_offset = 8;
-      lmo.l_name_size = 4;
       lmo.l_ld_offset = 12;
-      lmo.l_ld_size = 4;
       lmo.l_next_offset = 16;
-      lmo.l_next_size = 4;
       lmo.l_prev_offset = 20;
-      lmo.l_prev_size = 4;
     }
 
   return lmp;
@@ -368,15 +369,10 @@ mipsnbsd_lp64_fetch_link_map_offsets (void)
       /* Everything we need is in the first 40 bytes.  */
       lmo.link_map_size = 48;
       lmo.l_addr_offset = 0;
-      lmo.l_addr_size = 8;
       lmo.l_name_offset = 16; 
-      lmo.l_name_size = 8;
       lmo.l_ld_offset = 24;
-      lmo.l_ld_size = 8;
       lmo.l_next_offset = 32;
-      lmo.l_next_size = 8;
       lmo.l_prev_offset = 40;
-      lmo.l_prev_size = 8;
     }
 
   return lmp;

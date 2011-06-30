@@ -1,7 +1,7 @@
 /* Fork a Unix child process, and set up to debug it, for GDB.
 
-   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999,
-   2000, 2001, 2004, 2005, 2006 Free Software Foundation, Inc.
+   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000,
+   2001, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
 
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -336,11 +334,9 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
       environ = env;
 
       /* If we decided above to start up with a shell, we exec the
-        shell, "-c" says to interpret the next arg as a shell command
-        to execute, and this command is "exec <target-program>
-        <args>".  "-f" means "fast startup" to the c-shell, which
-        means don't do .cshrc file. Doing .cshrc may cause fork/exec
-        events which will confuse debugger start-up code.  */
+	 shell, "-c" says to interpret the next arg as a shell command
+	 to execute, and this command is "exec <target-program>
+	 <args>".  */
       if (shell)
 	{
 	  execlp (shell_file, shell_file, "-c", shell_command, (char *) 0);
@@ -398,11 +394,6 @@ fork_inferior (char *exec_file_arg, char *allargs, char **env,
   /* We are now in the child process of interest, having exec'd the
      correct program, and are poised at the first instruction of the
      new program.  */
-
-  /* Allow target dependent code to play with the new process.  This
-     might be used to have target-specific code initialize a variable
-     in the new process prior to executing the first instruction.  */
-  TARGET_CREATE_INFERIOR_HOOK (pid);
 }
 
 /* Accept NTRAPS traps from the inferior.  */
@@ -421,10 +412,6 @@ startup_inferior (int ntraps)
 
   init_wait_for_inferior ();
 
-  if (STARTUP_WITH_SHELL)
-    inferior_ignoring_startup_exec_events = ntraps;
-  else
-    inferior_ignoring_startup_exec_events = 0;
   inferior_ignoring_leading_exec_events =
     target_reported_exec_events_per_exec_call () - 1;
 

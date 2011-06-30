@@ -1,14 +1,14 @@
 /* Print and select stack frames for GDB, the GNU debugger.
 
-   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "value.h"
@@ -106,6 +104,8 @@ print_stack_frame (struct frame_info *frame, int print_level,
   args.frame = frame;
   args.print_level = print_level;
   args.print_what = print_what;
+  /* For mi, alway print location and address.  */
+  args.print_what = ui_out_is_mi_like_p (uiout) ? LOC_AND_ADDRESS : print_what;
   args.print_args = 1;
 
   catch_errors (print_stack_frame_stub, &args, "", RETURN_MASK_ALL);
@@ -245,6 +245,7 @@ print_frame_args (struct symbol *func, struct frame_info *frame,
 	      struct symbol *nsym;
 	      nsym = lookup_symbol (DEPRECATED_SYMBOL_NAME (sym),
 				    b, VAR_DOMAIN, NULL, NULL);
+	      gdb_assert (nsym != NULL);
 	      if (SYMBOL_CLASS (nsym) == LOC_REGISTER)
 		{
 		  /* There is a LOC_ARG/LOC_REGISTER pair.  This means
@@ -337,7 +338,7 @@ print_frame_args (struct symbol *func, struct frame_info *frame,
       long start;
 
       if (highest_offset == -1)
-	start = FRAME_ARGS_SKIP;
+	start = gdbarch_frame_args_skip (current_gdbarch);
       else
 	start = highest_offset;
 
@@ -356,9 +357,9 @@ print_args_stub (void *args)
   struct print_args_args *p = args;
   int numargs;
 
-  if (FRAME_NUM_ARGS_P ())
+  if (gdbarch_frame_num_args_p (current_gdbarch))
     {
-      numargs = FRAME_NUM_ARGS (p->frame);
+      numargs = gdbarch_frame_num_args (current_gdbarch, p->frame);
       gdb_assert (numargs >= 0);
     }
   else
@@ -579,6 +580,8 @@ print_frame (struct frame_info *frame, int print_level,
 		   the symbol table. That'll have parameters, but
 		   that's preferable to displaying a mangled name.  */
 		funname = SYMBOL_PRINT_NAME (func);
+	      else
+		xfree (demangled);
 	    }
 	}
     }
@@ -838,13 +841,14 @@ frame_info (char *addr_exp, int from_tty)
 
   /* Name of the value returned by get_frame_pc().  Per comments, "pc"
      is not a good name.  */
-  if (PC_REGNUM >= 0)
-    /* OK, this is weird.  The PC_REGNUM hardware register's value can
+  if (gdbarch_pc_regnum (current_gdbarch) >= 0)
+    /* OK, this is weird.  The gdbarch_pc_regnum hardware register's value can
        easily not match that of the internal value returned by
        get_frame_pc().  */
-    pc_regname = REGISTER_NAME (PC_REGNUM);
+    pc_regname = gdbarch_register_name (current_gdbarch,
+					gdbarch_pc_regnum (current_gdbarch));
   else
-    /* But then, this is weird to.  Even without PC_REGNUM, an
+    /* But then, this is weird to.  Even without gdbarch_pc_regnum, an
        architectures will often have a hardware register called "pc",
        and that register's value, again, can easily not match
        get_frame_pc().  */
@@ -878,6 +882,8 @@ frame_info (char *addr_exp, int from_tty)
 	     preferable to displaying a mangled name.  */
 	  if (demangled == NULL)
 	    funname = SYMBOL_PRINT_NAME (func);
+	  else
+	    xfree (demangled);
 	}
     }
   else
@@ -969,14 +975,14 @@ frame_info (char *addr_exp, int from_tty)
 	deprecated_print_address_numeric (arg_list, 1, gdb_stdout);
 	printf_filtered (",");
 
-	if (!FRAME_NUM_ARGS_P ())
+	if (!gdbarch_frame_num_args_p (current_gdbarch))
 	  {
 	    numargs = -1;
 	    puts_filtered (" args: ");
 	  }
 	else
 	  {
-	    numargs = FRAME_NUM_ARGS (fi);
+	    numargs = gdbarch_frame_num_args (current_gdbarch, fi);
 	    gdb_assert (numargs >= 0);
 	    if (numargs == 0)
 	      puts_filtered (" no args.");
@@ -1019,22 +1025,26 @@ frame_info (char *addr_exp, int from_tty)
        at one stage the frame cached the previous frame's SP instead
        of its address, hence it was easiest to just display the cached
        value.  */
-    if (SP_REGNUM >= 0)
+    if (gdbarch_sp_regnum (current_gdbarch) >= 0)
       {
 	/* Find out the location of the saved stack pointer with out
            actually evaluating it.  */
-	frame_register_unwind (fi, SP_REGNUM, &optimized, &lval, &addr,
+	frame_register_unwind (fi, gdbarch_sp_regnum (current_gdbarch),
+			       &optimized, &lval, &addr,
 			       &realnum, NULL);
 	if (!optimized && lval == not_lval)
 	  {
 	    gdb_byte value[MAX_REGISTER_SIZE];
 	    CORE_ADDR sp;
-	    frame_register_unwind (fi, SP_REGNUM, &optimized, &lval, &addr,
+	    frame_register_unwind (fi, gdbarch_sp_regnum (current_gdbarch),
+				   &optimized, &lval, &addr,
 				   &realnum, value);
 	    /* NOTE: cagney/2003-05-22: This is assuming that the
                stack pointer was packed as an unsigned integer.  That
                may or may not be valid.  */
-	    sp = extract_unsigned_integer (value, register_size (current_gdbarch, SP_REGNUM));
+	    sp = extract_unsigned_integer (value,
+					   register_size (current_gdbarch,
+					   gdbarch_sp_regnum (current_gdbarch)));
 	    printf_filtered (" Previous frame's sp is ");
 	    deprecated_print_address_numeric (sp, 1, gdb_stdout);
 	    printf_filtered ("\n");
@@ -1050,16 +1060,17 @@ frame_info (char *addr_exp, int from_tty)
 	else if (!optimized && lval == lval_register)
 	  {
 	    printf_filtered (" Previous frame's sp in %s\n",
-			     REGISTER_NAME (realnum));
+			     gdbarch_register_name (current_gdbarch, realnum));
 	    need_nl = 0;
 	  }
 	/* else keep quiet.  */
       }
 
     count = 0;
-    numregs = NUM_REGS + NUM_PSEUDO_REGS;
+    numregs = gdbarch_num_regs (current_gdbarch)
+	      + gdbarch_num_pseudo_regs (current_gdbarch);
     for (i = 0; i < numregs; i++)
-      if (i != SP_REGNUM
+      if (i != gdbarch_sp_regnum (current_gdbarch)
 	  && gdbarch_register_reggroup_p (current_gdbarch, i, all_reggroup))
 	{
 	  /* Find out the location of the saved register without
@@ -1075,7 +1086,8 @@ frame_info (char *addr_exp, int from_tty)
 	      else
 		puts_filtered (",");
 	      wrap_here (" ");
-	      printf_filtered (" %s at ", REGISTER_NAME (i));
+	      printf_filtered (" %s at ",
+			       gdbarch_register_name (current_gdbarch, i));
 	      deprecated_print_address_numeric (addr, 1, gdb_stdout);
 	      count++;
 	    }
@@ -1592,24 +1604,7 @@ get_selected_block (CORE_ADDR *addr_in_block)
   if (!target_has_stack)
     return 0;
 
-  /* NOTE: cagney/2002-11-28: Why go to all this effort to not create
-     a selected/current frame?  Perhaps this function is called,
-     indirectly, by WFI in "infrun.c" where avoiding the creation of
-     an inner most frame is very important (it slows down single
-     step).  I suspect, though that this was true in the deep dark
-     past but is no longer the case.  A mindless look at all the
-     callers tends to support this theory.  I think we should be able
-     to assume that there is always a selcted frame.  */
-  /* gdb_assert (deprecated_selected_frame != NULL); So, do you feel
-     lucky? */
-  if (!deprecated_selected_frame)
-    {
-      CORE_ADDR pc = read_pc ();
-      if (addr_in_block != NULL)
-	*addr_in_block = pc;
-      return block_for_pc (pc);
-    }
-  return get_frame_block (deprecated_selected_frame, addr_in_block);
+  return get_frame_block (get_selected_frame (NULL), addr_in_block);
 }
 
 /* Find a frame a certain number of levels away from FRAME.
@@ -1800,7 +1795,7 @@ return_command (char *retval_exp, int from_tty)
 		   || TYPE_CODE (return_type) == TYPE_CODE_UNION))
 	{
 	  /* NOTE: cagney/2003-10-20: Compatibility hack for legacy
-	     code.  Old architectures don't expect STORE_RETURN_VALUE
+	     code.  Old architectures don't expect gdbarch_store_return_value
 	     to be called with with a small struct that needs to be
 	     stored in registers.  Don't start doing it now.  */
 	  query_prefix = "\
@@ -1863,7 +1858,7 @@ If you continue, the return value that you specified will be ignored.\n";
 					NULL, NULL, NULL)
 		  == RETURN_VALUE_REGISTER_CONVENTION);
       gdbarch_return_value (current_gdbarch, return_type,
-			    current_regcache, NULL /*read*/,
+			    get_current_regcache (), NULL /*read*/,
 			    value_contents (return_value) /*write*/);
     }
 
@@ -1933,7 +1928,7 @@ func_command (char *arg, int from_tty)
 
   if (!found)
     printf_filtered (_("'%s' not within current stack frame.\n"), arg);
-  else if (frame != deprecated_selected_frame)
+  else if (frame != get_selected_frame (NULL))
     select_and_print_frame (frame);
 }
 
@@ -1942,7 +1937,7 @@ func_command (char *arg, int from_tty)
 enum language
 get_frame_language (void)
 {
-  struct frame_info *frame = deprecated_selected_frame;
+  struct frame_info *frame = deprecated_safe_get_selected_frame ();
 
   if (frame)
     {

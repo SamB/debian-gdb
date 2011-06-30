@@ -1,7 +1,7 @@
 /* Read ELF (Executable and Linking Format) object files for GDB.
 
-   Copyright (C) 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
+   Copyright (C) 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
+   2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    Written by Fred Fish at Cygnus Support.
 
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,14 +18,14 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "bfd.h"
 #include "gdb_string.h"
 #include "elf-bfd.h"
+#include "elf/common.h"
+#include "elf/internal.h"
 #include "elf/mips.h"
 #include "symtab.h"
 #include "symfile.h"
@@ -44,16 +44,82 @@ extern void _initialize_elfread (void);
 
 struct elfinfo
   {
-    file_ptr dboffset;		/* Offset to dwarf debug section */
-    unsigned int dbsize;	/* Size of dwarf debug section */
-    file_ptr lnoffset;		/* Offset to dwarf line number section */
-    unsigned int lnsize;	/* Size of dwarf line number section */
     asection *stabsect;		/* Section pointer for .stab section */
     asection *stabindexsect;	/* Section pointer for .stab.index section */
     asection *mdebugsect;	/* Section pointer for .mdebug section */
   };
 
 static void free_elfinfo (void *);
+
+/* Locate the segments in ABFD.  */
+
+static struct symfile_segment_data *
+elf_symfile_segments (bfd *abfd)
+{
+  Elf_Internal_Phdr *phdrs, **segments;
+  long phdrs_size;
+  int num_phdrs, num_segments, num_sections, i;
+  asection *sect;
+  struct symfile_segment_data *data;
+
+  phdrs_size = bfd_get_elf_phdr_upper_bound (abfd);
+  if (phdrs_size == -1)
+    return NULL;
+
+  phdrs = alloca (phdrs_size);
+  num_phdrs = bfd_get_elf_phdrs (abfd, phdrs);
+  if (num_phdrs == -1)
+    return NULL;
+
+  num_segments = 0;
+  segments = alloca (sizeof (Elf_Internal_Phdr *) * num_phdrs);
+  for (i = 0; i < num_phdrs; i++)
+    if (phdrs[i].p_type == PT_LOAD)
+      segments[num_segments++] = &phdrs[i];
+
+  if (num_segments == 0)
+    return NULL;
+
+  data = XZALLOC (struct symfile_segment_data);
+  data->num_segments = num_segments;
+  data->segment_bases = XCALLOC (num_segments, CORE_ADDR);
+  data->segment_sizes = XCALLOC (num_segments, CORE_ADDR);
+
+  for (i = 0; i < num_segments; i++)
+    {
+      data->segment_bases[i] = segments[i]->p_vaddr;
+      data->segment_sizes[i] = segments[i]->p_memsz;
+    }
+
+  num_sections = bfd_count_sections (abfd);
+  data->segment_info = XCALLOC (num_sections, int);
+
+  for (i = 0, sect = abfd->sections; sect != NULL; i++, sect = sect->next)
+    {
+      int j;
+      CORE_ADDR vma;
+
+      if ((bfd_get_section_flags (abfd, sect) & SEC_ALLOC) == 0)
+	continue;
+
+      vma = bfd_get_section_vma (abfd, sect);
+
+      for (j = 0; j < num_segments; j++)
+	if (segments[j]->p_memsz > 0
+	    && vma >= segments[j]->p_vaddr
+	    && vma < segments[j]->p_vaddr + segments[j]->p_memsz)
+	  {
+	    data->segment_info[i] = j + 1;
+	    break;
+	  }
+
+      if (bfd_get_section_size (sect) > 0 && j == num_segments)
+	warning (_("Loadable segment \"%s\" outside of ELF segments"),
+		 bfd_section_name (abfd, sect));
+    }
+
+  return data;
+}
 
 /* We are called once per section from elf_symfile_read.  We
    need to examine each section we are passed, check to see
@@ -80,17 +146,7 @@ elf_locate_sections (bfd *ignore_abfd, asection *sectp, void *eip)
   struct elfinfo *ei;
 
   ei = (struct elfinfo *) eip;
-  if (strcmp (sectp->name, ".debug") == 0)
-    {
-      ei->dboffset = sectp->filepos;
-      ei->dbsize = bfd_get_section_size (sectp);
-    }
-  else if (strcmp (sectp->name, ".line") == 0)
-    {
-      ei->lnoffset = sectp->filepos;
-      ei->lnsize = bfd_get_section_size (sectp);
-    }
-  else if (strcmp (sectp->name, ".stab") == 0)
+  if (strcmp (sectp->name, ".stab") == 0)
     {
       ei->stabsect = sectp;
     }
@@ -110,7 +166,7 @@ record_minimal_symbol (char *name, CORE_ADDR address,
 		       asection *bfd_section, struct objfile *objfile)
 {
   if (ms_type == mst_text || ms_type == mst_file_text)
-    address = SMASH_TEXT_ADDRESS (address);
+    address = gdbarch_smash_text_address (current_gdbarch, address);
 
   return prim_record_minimal_symbol_and_info
     (name, address, ms_type, NULL, bfd_section->index, bfd_section, objfile);
@@ -284,7 +340,7 @@ elf_symtab_read (struct objfile *objfile, int dynamic,
 	    }
 	  else if (sym->section->flags & SEC_CODE)
 	    {
-	      if (sym->flags & BSF_GLOBAL)
+	      if (sym->flags & (BSF_GLOBAL | BSF_WEAK))
 		{
 		  ms_type = mst_text;
 		}
@@ -424,7 +480,7 @@ elf_symtab_read (struct objfile *objfile, int dynamic,
 	  if (msym != NULL)
 	    msym->filename = filesymname;
 #endif
-	  ELF_MAKE_MSYMBOL_SPECIAL (sym, msym);
+	  gdbarch_elf_make_msymbol_special (current_gdbarch, sym, msym);
 	}
     }
 }
@@ -451,7 +507,6 @@ elf_symtab_read (struct objfile *objfile, int dynamic,
    We look for sections with specific names, to tell us what debug
    format to look for:  FIXME!!!
 
-   dwarf_build_psymtabs() builds psymtabs for DWARF symbols;
    elfstab_build_psymtabs() handles STABS symbols;
    mdebug_build_psymtabs() handles ECOFF debugging information.
 
@@ -608,14 +663,6 @@ elf_symfile_read (struct objfile *objfile, int mainline)
       /* DWARF 2 sections */
       dwarf2_build_psymtabs (objfile, mainline);
     }
-  else if (ei.dboffset && ei.lnoffset)
-    {
-      /* DWARF sections */
-      dwarf_build_psymtabs (objfile,
-			    mainline,
-			    ei.dboffset, ei.dbsize,
-			    ei.lnoffset, ei.lnsize);
-    }
 
   /* FIXME: kettenis/20030504: This still needs to be integrated with
      dwarf2read.c in a better way.  */
@@ -764,6 +811,8 @@ static struct sym_fns elf_sym_fns =
   elf_symfile_read,		/* sym_read: read a symbol file into symtab */
   elf_symfile_finish,		/* sym_finish: finished with file, cleanup */
   default_symfile_offsets,	/* sym_offsets:  Translate ext. to int. relocation */
+  elf_symfile_segments,		/* sym_segments: Get segment information from
+				   a file.  */
   NULL				/* next: pointer to next struct sym_fns */
 };
 

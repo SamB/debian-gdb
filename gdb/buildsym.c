@@ -1,13 +1,13 @@
 /* Support routines for building symbol tables in GDB's internal format.
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This module provides subroutines used for creating and adding to
    the symbol table.  These routines are called from various symbol-
@@ -549,11 +547,27 @@ start_subfile (char *name, char *dirname)
 
   for (subfile = subfiles; subfile; subfile = subfile->next)
     {
-      if (FILENAME_CMP (subfile->name, name) == 0)
+      char *subfile_name;
+
+      /* If NAME is an absolute path, and this subfile is not, then
+	 attempt to create an absolute path to compare.  */
+      if (IS_ABSOLUTE_PATH (name)
+	  && !IS_ABSOLUTE_PATH (subfile->name)
+	  && subfile->dirname != NULL)
+	subfile_name = concat (subfile->dirname, SLASH_STRING,
+			       subfile->name, NULL);
+      else
+	subfile_name = subfile->name;
+
+      if (FILENAME_CMP (subfile_name, name) == 0)
 	{
 	  current_subfile = subfile;
+	  if (subfile_name != subfile->name)
+	    xfree (subfile_name);
 	  return;
 	}
+      if (subfile_name != subfile->name)
+	xfree (subfile_name);
     }
 
   /* This subfile is not known.  Add an entry for it. Make an entry
@@ -595,6 +609,9 @@ start_subfile (char *name, char *dirname)
   /* Initialize the debug format string to NULL.  We may supply it
      later via a call to record_debugformat. */
   subfile->debugformat = NULL;
+
+  /* Similarly for the producer.  */
+  subfile->producer = NULL;
 
   /* If the filename of this subfile ends in .C, then change the
      language of any pending subfiles from C to C++.  We also accept
@@ -737,7 +754,7 @@ record_line (struct subfile *subfile, int line, CORE_ADDR pc)
 
   e = subfile->line_vector->item + subfile->line_vector->nitems++;
   e->line = line;
-  e->pc = ADDR_BITS_REMOVE(pc);
+  e->pc = gdbarch_addr_bits_remove (current_gdbarch, pc);
 }
 
 /* Needed in order to sort line tables from IBM xcoff files.  Sigh!  */
@@ -956,7 +973,10 @@ end_symtab (CORE_ADDR end_addr, struct objfile *objfile, int section)
 	    }
 
 	  /* Now, allocate a symbol table.  */
-	  symtab = allocate_symtab (subfile->name, objfile);
+	  if (subfile->symtab == NULL)
+	    symtab = allocate_symtab (subfile->name, objfile);
+	  else
+	    symtab = subfile->symtab;
 
 	  /* Fill in its components.  */
 	  symtab->blockvector = blockvector;
@@ -1004,6 +1024,12 @@ end_symtab (CORE_ADDR end_addr, struct objfile *objfile, int section)
 						  &objfile->objfile_obstack);
 	    }
 
+	  /* Similarly for the producer.  */
+	  if (subfile->producer != NULL)
+	    symtab->producer = obsavestring (subfile->producer,
+					     strlen (subfile->producer),
+					     &objfile->objfile_obstack);
+
 	  /* All symtabs for the main file and the subfiles share a
 	     blockvector, so we need to clear primary for everything
 	     but the main file.  */
@@ -1026,6 +1052,8 @@ end_symtab (CORE_ADDR end_addr, struct objfile *objfile, int section)
 	{
 	  xfree ((void *) subfile->debugformat);
 	}
+      if (subfile->producer != NULL)
+	xfree (subfile->producer);
 
       nextsub = subfile->next;
       xfree ((void *) subfile);
@@ -1035,6 +1063,26 @@ end_symtab (CORE_ADDR end_addr, struct objfile *objfile, int section)
   if (symtab)
     {
       symtab->primary = 1;
+    }
+
+  /* Default any symbols without a specified symtab to the primary
+     symtab.  */
+  if (blockvector)
+    {
+      int block_i;
+
+      for (block_i = 0; block_i < BLOCKVECTOR_NBLOCKS (blockvector); block_i++)
+	{
+	  struct block *block = BLOCKVECTOR_BLOCK (blockvector, block_i);
+	  struct symbol *sym;
+	  struct dict_iterator iter;
+
+	  for (sym = dict_iterator_first (BLOCK_DICT (block), &iter);
+	       sym != NULL;
+	       sym = dict_iterator_next (&iter))
+	    if (SYMBOL_SYMTAB (sym) == NULL)
+	      SYMBOL_SYMTAB (sym) = symtab;
+	}
     }
 
   last_source_file = NULL;
@@ -1100,6 +1148,17 @@ void
 record_debugformat (char *format)
 {
   current_subfile->debugformat = savestring (format, strlen (format));
+}
+
+void
+record_producer (const char *producer)
+{
+  /* The producer is not always provided in the debugging info.
+     Do nothing if PRODUCER is NULL.  */
+  if (producer == NULL)
+    return;
+
+  current_subfile->producer = savestring (producer, strlen (producer));
 }
 
 /* Merge the first symbol list SRCLIST into the second symbol list

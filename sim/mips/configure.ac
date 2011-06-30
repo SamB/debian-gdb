@@ -25,6 +25,7 @@ SIM_AC_OPTION_RESERVED_BITS(1)
 case "${target}" in
   mips64vr*-*-*)	SIM_SUBTARGET="-DTARGET_ENABLE_FR=1" ;;
   mips*tx39*)           SIM_SUBTARGET="-DSUBTARGET_R3900=1";;
+  mips*-sde-elf*)       SIM_SUBTARGET="-DTARGET_ENABLE_FR=1";;
   mipsisa32*-*-*)       SIM_SUBTARGET="-DTARGET_ENABLE_FR=1";;
   mipsisa64*-*-*)       SIM_SUBTARGET="-DTARGET_ENABLE_FR=1";;
   *)                    SIM_SUBTARGET="";;
@@ -57,6 +58,7 @@ SIM_AC_OPTION_ENDIAN($mips_endian,$default_endian)
 #
 mips_addr_bitsize=
 case "${target}" in
+  mips*-sde-elf*)       mips_bitsize=64 ; mips_msb=63 ;;
   mips64*-*-*)          mips_bitsize=64 ; mips_msb=63 ;;
   mips16*-*-*)          mips_bitsize=64 ; mips_msb=63 ;;
   mipsisa32*-*-*)       mips_bitsize=32 ; mips_msb=31 ;;
@@ -74,9 +76,8 @@ SIM_AC_OPTION_BITSIZE($mips_bitsize,$mips_msb,$mips_addr_bitsize)
 mips_fpu=HARDWARE_FLOATING_POINT
 mips_fpu_bitsize=
 case "${target}" in
-  mips*tx39*)		mips_fpu=HARD_FLOATING_POINT
-			mips_fpu_bitsize=32
-			;;
+  mips*tx39*)		mips_fpu=HARD_FLOATING_POINT ; mips_fpu_bitsize=32 ;;
+  mips*-sde-elf*)       mips_fpu=HARD_FLOATING_POINT ; mips_fpu_bitsize=64 ;;
   mips64*-*-*)          mips_fpu=HARD_FLOATING_POINT ;;
   mips16*-*-*)          mips_fpu=HARD_FLOATING_POINT ;;
   mipsisa32*-*-*)       mips_fpu=HARD_FLOATING_POINT ; mips_fpu_bitsize=64 ;;
@@ -138,6 +139,12 @@ case "${target}" in
 			  vr5500:mipsIV,vr5500:32,64,f:mips5500"
 			sim_multi_default=mips5000
 			;;
+  mips*-sde-elf*)	sim_gen=M16
+			sim_igen_machine="-M mips64r2,mips3d,mips16,mips16e,mdmx,dsp,dsp2,smartmips"
+			sim_m16_machine="-M mips16,mips16e,mips64r2"
+			sim_igen_filter="32,64,f"
+			sim_mach_default="mipsisa64r2"
+			;;
   mips64*-*-*)		sim_igen_filter="32,64,f"
 			sim_gen=IGEN
 			;;
@@ -146,41 +153,41 @@ case "${target}" in
 			sim_m16_filter="16"
 			;;
   mipsisa32r2*-*-*)	sim_gen=M16
-		        sim_igen_machine="-M mips32r2,mips16,mips16e,dsp,smartmips"
+			sim_igen_machine="-M mips32r2,mips16,mips16e,mdmx,dsp,dsp2,smartmips"
 			sim_m16_machine="-M mips16,mips16e,mips32r2"
 			sim_igen_filter="32,f"
 			sim_mach_default="mipsisa32r2"
 			;;
   mipsisa32*-*-*)	sim_gen=M16
-		        sim_igen_machine="-M mips32,mips16,mips16e,dsp,smartmips"
+			sim_igen_machine="-M mips32,mips16,mips16e,smartmips"
 			sim_m16_machine="-M mips16,mips16e,mips32"
 			sim_igen_filter="32,f"
 			sim_mach_default="mipsisa32"
 			;;
   mipsisa64r2*-*-*)	sim_gen=M16
-		        sim_igen_machine="-M mips64r2,mips3d,mips16,mips16e,dsp"
+			sim_igen_machine="-M mips64r2,mips3d,mips16,mips16e,mdmx,dsp,dsp2"
 			sim_m16_machine="-M mips16,mips16e,mips64r2"
 			sim_igen_filter="32,64,f"
 			sim_mach_default="mipsisa64r2"
 			;;
   mipsisa64sb1*-*-*)	sim_gen=IGEN
-		        sim_igen_machine="-M mips64,mips3d,sb1"
+			sim_igen_machine="-M mips64,mips3d,sb1"
 			sim_igen_filter="32,64,f"
 			sim_mach_default="mips_sb1"
 			;;
   mipsisa64*-*-*)	sim_gen=M16
-		        sim_igen_machine="-M mips64,mips3d,mips16,mips16e,dsp"
+			sim_igen_machine="-M mips64,mips3d,mips16,mips16e,mdmx"
 			sim_m16_machine="-M mips16,mips16e,mips64"
 			sim_igen_filter="32,64,f"
 			sim_mach_default="mipsisa64"
 			;;
-  mips*lsi*)	        sim_gen=M16
+  mips*lsi*)		sim_gen=M16
 			sim_igen_machine="-M mipsIII,mips16"
 			sim_m16_machine="-M mips16,mipsIII"
 			sim_igen_filter="32,f"
 			sim_m16_filter="16"
 			sim_mach_default="mips4000"
-                        ;;
+			;;
   mips*-*-*)		sim_gen=IGEN
 			sim_igen_filter="32,f"
 			;;
@@ -227,11 +234,11 @@ if test ${sim_gen} = MULTI; then
 
   cat << __EOF__ > multi-run.c
 /* Main entry point for MULTI simulators.
-   Copyright (C) 2003 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2007 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -240,8 +247,7 @@ if test ${sim_gen} = MULTI; then
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
    --
 

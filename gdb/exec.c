@@ -1,14 +1,13 @@
 /* Work with executable files, for GDB. 
 
-   Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2002, 2003 Free Software Foundation,
-   Inc.
+   Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 1999, 2000, 2001, 2002, 2003, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -346,11 +343,15 @@ add_to_section_table (bfd *abfd, struct bfd_section *asect,
   struct section_table **table_pp = (struct section_table **) table_pp_char;
   flagword aflag;
 
+  /* Check the section flags, but do not discard zero-length sections, since
+     some symbols may still be attached to this section.  For instance, we
+     encountered on sparc-solaris 2.10 a shared library with an empty .bss
+     section to which a symbol named "_end" was attached.  The address
+     of this symbol still needs to be relocated.  */
   aflag = bfd_get_section_flags (abfd, asect);
   if (!(aflag & SEC_ALLOC))
     return;
-  if (0 == bfd_section_size (abfd, asect))
-    return;
+
   (*table_pp)->bfd = abfd;
   (*table_pp)->the_bfd_section = asect;
   (*table_pp)->addr = bfd_section_vma (abfd, asect);
@@ -476,7 +477,7 @@ xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
 
   for (p = target->to_sections; p < target->to_sections_end; p++)
     {
-      if (overlay_debugging && section && p->the_bfd_section &&
+      if (overlay_debugging && section && 
 	  strcmp (section->name, p->the_bfd_section->name) != 0)
 	continue;		/* not the section we need */
       if (memaddr >= p->addr)
@@ -529,8 +530,8 @@ void
 print_section_info (struct target_ops *t, bfd *abfd)
 {
   struct section_table *p;
-  /* FIXME: 16 is not wide enough when TARGET_ADDR_BIT > 64.  */
-  int wid = TARGET_ADDR_BIT <= 32 ? 8 : 16;
+  /* FIXME: 16 is not wide enough when gdbarch_addr_bit > 64.  */
+  int wid = gdbarch_addr_bit (current_gdbarch) <= 32 ? 8 : 16;
 
   printf_filtered ("\t`%s', ", bfd_get_filename (abfd));
   wrap_here ("        ");

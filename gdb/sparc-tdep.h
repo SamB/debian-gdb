@@ -1,12 +1,12 @@
 /* Target-dependent code for SPARC.
 
-   Copyright (C) 2003, 2004, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef SPARC_TDEP_H
 #define SPARC_TDEP_H 1
@@ -67,7 +65,7 @@ struct gdbarch_tdep
   size_t plt_entry_size;
 
   /* Alternative location for trap return.  Used for single-stepping.  */
-  CORE_ADDR (*step_trap) (unsigned long insn);
+  CORE_ADDR (*step_trap) (struct frame_info *frame, unsigned long insn);
 };
 
 /* Register numbers of various important registers.  */
@@ -150,9 +148,6 @@ struct sparc_frame_cache
 /* Fetch the instruction at PC.  */
 extern unsigned long sparc_fetch_instruction (CORE_ADDR pc);
 
-/* Return the contents if register REGNUM as an address.  */
-extern CORE_ADDR sparc_address_from_register (int regnum);
-
 /* Fetch StackGhost Per-Process XOR cookie.  */
 extern ULONGEST sparc_fetch_wcookie (void);
 
@@ -167,8 +162,7 @@ extern struct sparc_frame_cache *
 
 
 
-extern void sparc_software_single_step (enum target_signal sig,
-					int insert_breakpoints_p);
+extern int sparc_software_single_step (struct frame_info *frame);
 
 extern void sparc_supply_rwindow (struct regcache *regcache,
 				  CORE_ADDR sp, int regnum);
@@ -206,7 +200,8 @@ extern const struct sparc_gregset sparc32nbsd_gregset;
 
 /* Return the address of a system call's alternative return
    address.  */
-extern CORE_ADDR sparcnbsd_step_trap (unsigned long insn);
+extern CORE_ADDR sparcnbsd_step_trap (struct frame_info *frame,
+				      unsigned long insn);
 
 extern void sparc32nbsd_elf_init_abi (struct gdbarch_info info,
 				      struct gdbarch *gdbarch);

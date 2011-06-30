@@ -1,13 +1,13 @@
 /* Print in infix form a struct expression.
 
    Copyright (C) 1986, 1988, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2003 Free Software Foundation, Inc.
+   1998, 1999, 2000, 2003, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -32,6 +30,7 @@
 #include "gdb_string.h"
 #include "block.h"
 #include "objfiles.h"
+#include "gdb_assert.h"
 
 #ifdef HAVE_CTYPE_H
 #include <ctype.h>
@@ -130,10 +129,8 @@ print_subexp_standard (struct expression *exp, int *pos,
 
     case OP_REGISTER:
       {
-	int regnum = longest_to_int (exp->elts[pc + 1].longconst);
-	const char *name = user_reg_map_regnum_to_name (current_gdbarch,
-							regnum);
-	(*pos) += 2;
+	const char *name = &exp->elts[pc + 2].string;
+	(*pos) += 3 + BYTES_TO_EXP_ELEM (exp->elts[pc + 1].longconst + 1);
 	fprintf_filtered (stream, "$%s", name);
 	return;
       }
@@ -166,7 +163,6 @@ print_subexp_standard (struct expression *exp, int *pos,
       return;
 
     case OP_NAME:
-    case OP_EXPRSTRING:
       nargs = longest_to_int (exp->elts[pc + 1].longconst);
       (*pos) += 3 + BYTES_TO_EXP_ELEM (nargs + 1);
       fputs_filtered (&exp->elts[pc + 2].string, stream);
@@ -217,6 +213,7 @@ print_subexp_standard (struct expression *exp, int *pos,
 	    for (tem = 0; tem < nargs; tem++)
 	      {
 		nextS = strchr (s, ':');
+		gdb_assert (nextS);	/* Make sure we found ':'.  */
 		*nextS = '\0';
 		fprintf_unfiltered (stream, " %s: ", s);
 		s = nextS + 1;
@@ -966,9 +963,8 @@ dump_subexp_body_standard (struct expression *exp,
       elt += 2;
       break;
     case OP_REGISTER:
-      fprintf_filtered (stream, "Register %ld",
-			(long) exp->elts[elt].longconst);
-      elt += 2;
+      fprintf_filtered (stream, "Register $%s", &exp->elts[elt + 1].string);
+      elt += 3 + BYTES_TO_EXP_ELEM (exp->elts[elt].longconst + 1);
       break;
     case OP_INTERNALVAR:
       fprintf_filtered (stream, "Internal var @");
@@ -1075,7 +1071,6 @@ dump_subexp_body_standard (struct expression *exp,
     case OP_THIS:
     case OP_LABELED:
     case OP_NAME:
-    case OP_EXPRSTRING:
       fprintf_filtered (stream, "Unknown format");
     }
 

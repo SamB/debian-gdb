@@ -1,12 +1,12 @@
 /* Target-dependent code for the IA-64 for GDB, the GNU debugger.
 
-   Copyright (C) 2000, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "ia64-tdep.h"
@@ -26,6 +24,7 @@
 #include "regcache.h"
 #include "osabi.h"
 #include "solib-svr4.h"
+#include "symtab.h"
 
 /* The sigtramp code is in a non-readable (executable-only) region
    of memory called the ``gate page''.  The addresses in question
@@ -38,8 +37,8 @@
 /* Offset to sigcontext structure from frame of handler */
 #define IA64_LINUX_SIGCONTEXT_OFFSET 192
 
-int
-ia64_linux_in_sigtramp (CORE_ADDR pc, char *func_name)
+static int
+ia64_linux_pc_in_sigtramp (CORE_ADDR pc)
 {
   return (pc >= (CORE_ADDR) GATE_AREA_START && pc < (CORE_ADDR) GATE_AREA_END);
 }
@@ -99,9 +98,9 @@ ia64_linux_sigcontext_register_address (CORE_ADDR sp, int regno)
 }
 
 static void
-ia64_linux_write_pc (CORE_ADDR pc, ptid_t ptid)
+ia64_linux_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
-  ia64_write_pc (pc, ptid);
+  ia64_write_pc (regcache, pc);
 
   /* We must be careful with modifying the instruction-pointer: if we
      just interrupt a system call, the kernel would ordinarily try to
@@ -112,7 +111,7 @@ ia64_linux_write_pc (CORE_ADDR pc, ptid_t ptid)
 
      The clearing of r10 is safe as long as ia64_write_pc() is only
      called as part of setting up an inferior call.  */
-  write_register_pid (IA64_GR10_REGNUM, 0, ptid);
+  regcache_cooked_write_unsigned (regcache, IA64_GR10_REGNUM, 0);
 }
 
 static void
@@ -124,7 +123,12 @@ ia64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
      registers are saved.  */
   tdep->sigcontext_register_address = ia64_linux_sigcontext_register_address;
 
+  /* Set the pc_in_sigtramp method.  */
+  tdep->pc_in_sigtramp = ia64_linux_pc_in_sigtramp;
+
   set_gdbarch_write_pc (gdbarch, ia64_linux_write_pc);
+
+  set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);
 
   /* Enable TLS support.  */
   set_gdbarch_fetch_tls_load_module_address (gdbarch,

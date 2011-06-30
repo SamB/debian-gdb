@@ -1,14 +1,13 @@
 /* Support for printing Modula 2 values for GDB, the GNU debugger.
 
-   Copyright (C) 1986, 1988, 1989, 1991, 1992, 1996, 1998,
-                 2000, 2005, 2006
-   Free Software Foundation, Inc.
+   Copyright (C) 1986, 1988, 1989, 1991, 1992, 1996, 1998, 2000, 2005, 2006,
+                 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -325,10 +322,6 @@ m2_val_print (struct type *type, const gdb_byte *valaddr, int embedded_offset,
 	  addr = unpack_pointer (type, valaddr + embedded_offset);
 	  print_unpacked_pointer (type, addr, address, format, stream);
 	}
-      break;
-
-    case TYPE_CODE_MEMBER:
-      error (_("not implemented: member type in m2_val_print"));
       break;
 
     case TYPE_CODE_REF:

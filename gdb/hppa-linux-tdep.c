@@ -1,12 +1,12 @@
 /* Target-dependent code for GNU/Linux running on PA-RISC, for GDB.
 
-   Copyright (C) 2004, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbcore.h"
@@ -31,6 +29,7 @@
 #include "dwarf2-frame.h"
 #include "value.h"
 #include "regset.h"
+#include "regcache.h"
 #include "hppa-tdep.h"
 
 #include "elf/common.h"
@@ -55,11 +54,11 @@ hppa_dwarf_reg_to_regnum (int reg)
 #endif
 
 static void
-hppa_linux_target_write_pc (CORE_ADDR v, ptid_t ptid)
+hppa_linux_target_write_pc (struct regcache *regcache, CORE_ADDR v)
 {
   /* Probably this should be done by the kernel, but it isn't.  */
-  write_register_pid (HPPA_PCOQ_HEAD_REGNUM, v | 0x3, ptid);
-  write_register_pid (HPPA_PCOQ_TAIL_REGNUM, (v + 4) | 0x3, ptid);
+  regcache_cooked_write_unsigned (regcache, HPPA_PCOQ_HEAD_REGNUM, v | 0x3);
+  regcache_cooked_write_unsigned (regcache, HPPA_PCOQ_TAIL_REGNUM, (v + 4) | 0x3);
 }
 
 /* An instruction to match.  */

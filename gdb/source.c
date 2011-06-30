@@ -1,13 +1,13 @@
 /* List lines of source files for GDB, the GNU debugger.
-   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -1001,6 +999,18 @@ find_and_open_source (struct objfile *objfile,
 	  strcat (path + len, source_path + len + cdir_len);	/* After $cdir */
 	}
     }
+  else
+    {
+      /* If dirname is NULL, chances are the path is embedded in
+         the filename.  Try the source path substitution on it.  */
+      char *rewritten_filename = rewrite_source_path (filename);
+
+      if (rewritten_filename != NULL)
+        {
+          make_cleanup (xfree, rewritten_filename);
+          filename = rewritten_filename;
+        }
+    }
 
   result = openp (path, OPF_SEARCH_IN_PATH, filename, OPEN_MODE, 0, fullname);
   if (result < 0)
@@ -1110,11 +1120,12 @@ find_source_lines (struct symtab *s, int desc)
   long mtime = 0;
   int size;
 
+  gdb_assert (s);
   line_charpos = (int *) xmalloc (lines_allocated * sizeof (int));
   if (fstat (desc, &st) < 0)
     perror_with_name (s->filename);
 
-  if (s && s->objfile && s->objfile->obfd)
+  if (s->objfile && s->objfile->obfd)
     mtime = bfd_get_mtime (s->objfile->obfd);
   else if (exec_bfd)
     mtime = bfd_get_mtime (exec_bfd);
@@ -1840,6 +1851,7 @@ unset_substitute_path_command (char *args, int from_tty)
 
   /* This function takes either 0 or 1 argument.  */
 
+  make_cleanup_freeargv (argv);
   if (argv != NULL && argv[0] != NULL && argv[1] != NULL)
     error (_("Incorrect usage, too many arguments in command"));
 
@@ -1997,16 +2009,24 @@ Show number of source lines gdb will list by default."), NULL,
 
   add_cmd ("substitute-path", class_files, set_substitute_path_command,
            _("\
-Add a source path substitution rule.  If a substitution rule was previously\n\
-set, it is overridden."), &setlist);
+Usage: set substitute-path FROM TO\n\
+Add a substitution rule replacing FROM into TO in source file names.\n\
+If a substitution rule was previously set for FROM, the old rule\n\
+is replaced by the new one."),
+           &setlist);
 
   add_cmd ("substitute-path", class_files, unset_substitute_path_command,
            _("\
-Remove the current source path substitution rule.  This has no effect\n\
-if no path substitution rule was previously specified."),
+Usage: unset substitute-path [FROM]\n\
+Delete the rule for substituting FROM in source file names.  If FROM\n\
+is not specified, all substituting rules are deleted.\n\
+If the debugger cannot find a rule for FROM, it will display a warning."),
            &unsetlist);
 
   add_cmd ("substitute-path", class_files, show_substitute_path_command,
-           _("Show the current source path substitution rule."),
+           _("\
+Usage: show substitute-path [FROM]\n\
+Print the rule for substituting FROM in source file names. If FROM\n\
+is not specified, print all substitution rules."),
            &showlist);
 }

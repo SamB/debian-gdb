@@ -1,12 +1,12 @@
 /* Target-dependent code for the Matsushita MN10300 for GDB, the GNU debugger.
 
-   Copyright (C) 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbcore.h"
@@ -263,10 +261,10 @@ am33_supply_fpregset_method (const struct regset *regset,
 				   E_FPCR_REGNUM, fpregs, len);
     }
   else if (regnum == E_FPCR_REGNUM)
-    regcache_raw_supply (current_regcache, E_FPCR_REGNUM, 
+    regcache_raw_supply (regcache, E_FPCR_REGNUM, 
 			 &fpregset->fpcr);
   else if (E_FS0_REGNUM <= regnum && regnum < E_FS0_REGNUM + MN10300_ELF_NFPREG)
-    regcache_raw_supply (current_regcache, regnum, 
+    regcache_raw_supply (regcache, regnum, 
 			 &fpregset->fpregs[regnum - E_FS0_REGNUM]);
 
   return;
@@ -441,11 +439,11 @@ am33_collect_fpregset_method (const struct regset *regset,
 				    E_FPCR_REGNUM, fpregs, len);
     }
   else if (regnum == E_FPCR_REGNUM)
-    regcache_raw_collect (current_regcache, E_FPCR_REGNUM, 
+    regcache_raw_collect (regcache, E_FPCR_REGNUM, 
 			  &fpregset->fpcr);
   else if (E_FS0_REGNUM <= regnum
            && regnum < E_FS0_REGNUM + MN10300_ELF_NFPREG)
-    regcache_raw_collect (current_regcache, regnum, 
+    regcache_raw_collect (regcache, regnum, 
 			  &fpregset->fpregs[regnum - E_FS0_REGNUM]);
 
   return;

@@ -1,6 +1,6 @@
 /* Manages interpreters for GDB, the GNU debugger.
 
-   Copyright (C) 2000, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2002, 2003, 2007 Free Software Foundation, Inc.
 
    Written by Jim Ingham <jingham@apple.com> of Apple Computer, Inc.
 
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA. */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>. */
 
 /* This is just a first cut at separating out the "interpreter"
    functions of gdb into self-contained modules.  There are a couple
@@ -329,7 +327,6 @@ clear_interpreter_hooks (void)
   deprecated_delete_breakpoint_hook = 0;
   deprecated_modify_breakpoint_hook = 0;
   deprecated_interactive_hook = 0;
-  deprecated_registers_changed_hook = 0;
   deprecated_readline_begin_hook = 0;
   deprecated_readline_hook = 0;
   deprecated_readline_end_hook = 0;

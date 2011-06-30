@@ -1,13 +1,13 @@
 /* Target-dependent code for the Matsushita MN10300 for GDB, the GNU debugger.
 
-   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
-   Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "arch-utils.h"
@@ -269,15 +267,17 @@ mn10300_register_type (struct gdbarch *gdbarch, int reg)
 }
 
 static CORE_ADDR
-mn10300_read_pc (ptid_t ptid)
+mn10300_read_pc (struct regcache *regcache)
 {
-  return read_register_pid (E_PC_REGNUM, ptid);
+  ULONGEST val;
+  regcache_cooked_read_unsigned (regcache, E_PC_REGNUM, &val);
+  return val;
 }
 
 static void
-mn10300_write_pc (CORE_ADDR val, ptid_t ptid)
+mn10300_write_pc (struct regcache *regcache, CORE_ADDR val)
 {
-  return write_register_pid (E_PC_REGNUM, val, ptid);
+  regcache_cooked_write_unsigned (regcache, E_PC_REGNUM, val);
 }
 
 /* The breakpoint instruction must be the same size as the smallest
@@ -850,9 +850,12 @@ mn10300_frame_unwind_cache (struct frame_info *next_frame,
 		       frame_id_build (trad_frame_get_this_base (cache), 
 				       start));
   else
-    trad_frame_set_id (cache, 
-		       frame_id_build (trad_frame_get_this_base (cache), 
-				       frame_func_unwind (next_frame)));
+    {
+      start = frame_func_unwind (next_frame, NORMAL_FRAME);
+      trad_frame_set_id (cache,
+			 frame_id_build (trad_frame_get_this_base (cache),
+					 start));
+    }
 
   (*this_prologue_cache) = cache;
   return cache;
@@ -1005,7 +1008,7 @@ mn10300_push_dummy_call (struct gdbarch *gdbarch,
   if (struct_return)
     {
       regs_used = 1;
-      write_register (E_D0_REGNUM, struct_addr);
+      regcache_cooked_write_unsigned (regcache, E_D0_REGNUM, struct_addr);
     }
   else
     regs_used = 0;
@@ -1031,8 +1034,8 @@ mn10300_push_dummy_call (struct gdbarch *gdbarch,
 
       while (regs_used < 2 && arg_len > 0)
 	{
-	  write_register (regs_used, 
-			  extract_unsigned_integer (val, push_size));
+	  regcache_cooked_write_unsigned (regcache, regs_used, 
+				  extract_unsigned_integer (val, push_size));
 	  val += push_size;
 	  arg_len -= push_size;
 	  regs_used++;
@@ -1075,7 +1078,7 @@ mn10300_push_dummy_call (struct gdbarch *gdbarch,
 static int
 mn10300_dwarf2_reg_to_regnum (int dwarf2)
 {
-  /* This table is supposed to be shaped like the REGISTER_NAMES
+  /* This table is supposed to be shaped like the gdbarch_register_name
      initializer in gcc/config/mn10300/mn10300.h.  Registers which
      appear in GCC's numbering, but have no counterpart in GDB's
      world, are marked with a -1.  */

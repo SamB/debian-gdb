@@ -1,13 +1,13 @@
 /* Target-dependent code for NetBSD/sparc.
 
-   Copyright (C) 2002, 2003, 2004, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
    Contributed by Wasabi Systems, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,15 +16,13 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
-#include "floatformat.h"
 #include "frame.h"
 #include "frame-unwind.h"
 #include "gdbcore.h"
+#include "gdbtypes.h"
 #include "osabi.h"
 #include "regcache.h"
 #include "regset.h"
@@ -265,21 +263,18 @@ sparc32nbsd_sigtramp_frame_sniffer (struct frame_info *next_frame)
    address.  */
 
 CORE_ADDR
-sparcnbsd_step_trap (unsigned long insn)
+sparcnbsd_step_trap (struct frame_info *frame, unsigned long insn)
 {
   if ((X_I (insn) == 0 && X_RS1 (insn) == 0 && X_RS2 (insn) == 0)
       || (X_I (insn) == 1 && X_RS1 (insn) == 0 && (insn & 0x7f) == 0))
     {
       /* "New" system call.  */
-      ULONGEST number;
-
-      regcache_cooked_read_unsigned (current_regcache,
-				     SPARC_G1_REGNUM, &number);
+      ULONGEST number = get_frame_register_unsigned (frame, SPARC_G1_REGNUM);
 
       if (number & 0x400)
-	return sparc_address_from_register (SPARC_G2_REGNUM);
+	return get_frame_register_unsigned (frame, SPARC_G2_REGNUM);
       if (number & 0x800)
-	return sparc_address_from_register (SPARC_G7_REGNUM);
+	return get_frame_register_unsigned (frame, SPARC_G7_REGNUM);
     }
 
   return 0;
@@ -293,7 +288,7 @@ sparc32nbsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   /* NetBSD doesn't support the 128-bit `long double' from the psABI.  */
   set_gdbarch_long_double_bit (gdbarch, 64);
-  set_gdbarch_long_double_format (gdbarch, &floatformat_ieee_double_big);
+  set_gdbarch_long_double_format (gdbarch, floatformats_ieee_double);
 
   tdep->gregset = regset_alloc (gdbarch, sparc32nbsd_supply_gregset, NULL);
   tdep->sizeof_gregset = 20 * 4;

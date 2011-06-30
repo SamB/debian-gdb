@@ -1,13 +1,13 @@
 /* Modula 2 language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 2000, 2002, 2003,
-   2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 2000, 2002, 2003, 2004,
+   2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -206,7 +204,7 @@ m2_create_fundamental_type (struct objfile *objfile, int typeid)
          name "<?type?>".  When all the dust settles from the type
          reconstruction work, this should probably become an error. */
       type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
+			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "<?type?>", objfile);
       warning (_("internal error: no Modula fundamental type %d"), typeid);
       break;
@@ -242,106 +240,113 @@ m2_create_fundamental_type (struct objfile *objfile, int typeid)
       break;
     case FT_SHORT:
       type = init_type (TYPE_CODE_INT,
-			TARGET_SHORT_BIT / TARGET_CHAR_BIT,
+			gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "short", objfile);
       break;
     case FT_SIGNED_SHORT:
       type = init_type (TYPE_CODE_INT,
-			TARGET_SHORT_BIT / TARGET_CHAR_BIT,
+			gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "short", objfile);	/* FIXME-fnf */
       break;
     case FT_UNSIGNED_SHORT:
       type = init_type (TYPE_CODE_INT,
-			TARGET_SHORT_BIT / TARGET_CHAR_BIT,
+			gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			TYPE_FLAG_UNSIGNED, "unsigned short", objfile);
       break;
     case FT_INTEGER:
       type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
+			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "int", objfile);
       break;
     case FT_SIGNED_INTEGER:
       type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
+			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "int", objfile);	/* FIXME -fnf */
       break;
     case FT_UNSIGNED_INTEGER:
       type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
+			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			TYPE_FLAG_UNSIGNED, "unsigned int", objfile);
       break;
     case FT_FIXED_DECIMAL:
       type = init_type (TYPE_CODE_INT,
-			TARGET_INT_BIT / TARGET_CHAR_BIT,
+			gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "fixed decimal", objfile);
       break;
     case FT_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "long", objfile);
       break;
     case FT_SIGNED_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "long", objfile);	/* FIXME -fnf */
       break;
     case FT_UNSIGNED_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			TYPE_FLAG_UNSIGNED, "unsigned long", objfile);
       break;
     case FT_LONG_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_long_bit (current_gdbarch)
+			  / TARGET_CHAR_BIT,
 			0, "long long", objfile);
       break;
     case FT_SIGNED_LONG_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_long_bit (current_gdbarch)
+			  / TARGET_CHAR_BIT,
 			0, "signed long long", objfile);
       break;
     case FT_UNSIGNED_LONG_LONG:
       type = init_type (TYPE_CODE_INT,
-			TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_long_bit (current_gdbarch)
+			  / TARGET_CHAR_BIT,
 			TYPE_FLAG_UNSIGNED, "unsigned long long", objfile);
       break;
     case FT_FLOAT:
       type = init_type (TYPE_CODE_FLT,
-			TARGET_FLOAT_BIT / TARGET_CHAR_BIT,
+			gdbarch_float_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "float", objfile);
       break;
     case FT_DBL_PREC_FLOAT:
       type = init_type (TYPE_CODE_FLT,
-			TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
+			gdbarch_double_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "double", objfile);
       break;
     case FT_FLOAT_DECIMAL:
       type = init_type (TYPE_CODE_FLT,
-			TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
+			gdbarch_double_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			0, "floating decimal", objfile);
       break;
     case FT_EXT_PREC_FLOAT:
       type = init_type (TYPE_CODE_FLT,
-			TARGET_LONG_DOUBLE_BIT / TARGET_CHAR_BIT,
+			gdbarch_long_double_bit (current_gdbarch)
+			  / TARGET_CHAR_BIT,
 			0, "long double", objfile);
       break;
     case FT_COMPLEX:
       type = init_type (TYPE_CODE_COMPLEX,
-			2 * TARGET_FLOAT_BIT / TARGET_CHAR_BIT,
+			2 * gdbarch_float_bit (current_gdbarch)
+			  / TARGET_CHAR_BIT,
 			0, "complex", objfile);
       TYPE_TARGET_TYPE (type)
 	= m2_create_fundamental_type (objfile, FT_FLOAT);
       break;
     case FT_DBL_PREC_COMPLEX:
       type = init_type (TYPE_CODE_COMPLEX,
-			2 * TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
+			2 * gdbarch_double_bit (current_gdbarch)
+			  / TARGET_CHAR_BIT,
 			0, "double complex", objfile);
       TYPE_TARGET_TYPE (type)
 	= m2_create_fundamental_type (objfile, FT_DBL_PREC_FLOAT);
       break;
     case FT_EXT_PREC_COMPLEX:
       type = init_type (TYPE_CODE_COMPLEX,
-			2 * TARGET_LONG_DOUBLE_BIT / TARGET_CHAR_BIT,
+			2 * gdbarch_long_double_bit (current_gdbarch)
+			  / TARGET_CHAR_BIT,
 			0, "long double complex", objfile);
       TYPE_TARGET_TYPE (type)
 	= m2_create_fundamental_type (objfile, FT_EXT_PREC_FLOAT);
@@ -389,27 +394,43 @@ static const struct op_print m2_op_print_tab[] =
 
 /* The built-in types of Modula-2.  */
 
-struct type *builtin_type_m2_char;
-struct type *builtin_type_m2_int;
-struct type *builtin_type_m2_card;
-struct type *builtin_type_m2_real;
-struct type *builtin_type_m2_bool;
-
-struct type **const (m2_builtin_types[]) =
-{
-  &builtin_type_m2_char,
-    &builtin_type_m2_int,
-    &builtin_type_m2_card,
-    &builtin_type_m2_real,
-    &builtin_type_m2_bool,
-    0
+enum m2_primitive_types {
+  m2_primitive_type_char,
+  m2_primitive_type_int,
+  m2_primitive_type_card,
+  m2_primitive_type_real,
+  m2_primitive_type_bool,
+  nr_m2_primitive_types
 };
+
+static void
+m2_language_arch_info (struct gdbarch *gdbarch,
+		       struct language_arch_info *lai)
+{
+  const struct builtin_m2_type *builtin = builtin_m2_type (gdbarch);
+
+  lai->string_char_type = builtin->builtin_char;
+  lai->primitive_type_vector
+    = GDBARCH_OBSTACK_CALLOC (gdbarch, nr_m2_primitive_types + 1,
+                              struct type *);
+
+  lai->primitive_type_vector [m2_primitive_type_char]
+    = builtin->builtin_char;
+  lai->primitive_type_vector [m2_primitive_type_int]
+    = builtin->builtin_int;
+  lai->primitive_type_vector [m2_primitive_type_card]
+    = builtin->builtin_card;
+  lai->primitive_type_vector [m2_primitive_type_real]
+    = builtin->builtin_real;
+  lai->primitive_type_vector [m2_primitive_type_bool]
+    = builtin->builtin_bool;
+}
 
 const struct language_defn m2_language_defn =
 {
   "modula-2",
   language_m2,
-  m2_builtin_types,
+  NULL,
   range_check_on,
   type_check_on,
   case_sensitive_on,
@@ -434,39 +455,62 @@ const struct language_defn m2_language_defn =
   m2_op_print_tab,		/* expression operators for printing */
   0,				/* arrays are first-class (not c-style) */
   0,				/* String lower bound */
-  &builtin_type_m2_char,	/* Type of string elements */
+  NULL,
   default_word_break_characters,
-  NULL, /* FIXME: la_language_arch_info.  */
+  m2_language_arch_info,
   default_print_array_index,
   LANG_MAGIC
 };
+
+static void *
+build_m2_types (struct gdbarch *gdbarch)
+{
+  struct builtin_m2_type *builtin_m2_type
+    = GDBARCH_OBSTACK_ZALLOC (gdbarch, struct builtin_m2_type);
+
+  /* Modula-2 "pervasive" types.  NOTE:  these can be redefined!!! */
+  builtin_m2_type->builtin_int =
+    init_type (TYPE_CODE_INT, 
+	       gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       0, "INTEGER", (struct objfile *) NULL);
+  builtin_m2_type->builtin_card =
+    init_type (TYPE_CODE_INT, 
+	       gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       TYPE_FLAG_UNSIGNED,
+	       "CARDINAL", (struct objfile *) NULL);
+  builtin_m2_type->builtin_real =
+    init_type (TYPE_CODE_FLT,
+	       gdbarch_float_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       0,
+	       "REAL", (struct objfile *) NULL);
+  builtin_m2_type->builtin_char =
+    init_type (TYPE_CODE_CHAR, TARGET_CHAR_BIT / TARGET_CHAR_BIT,
+	       TYPE_FLAG_UNSIGNED,
+	       "CHAR", (struct objfile *) NULL);
+  builtin_m2_type->builtin_bool =
+    init_type (TYPE_CODE_BOOL, 
+	       gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
+	       TYPE_FLAG_UNSIGNED,
+	       "BOOLEAN", (struct objfile *) NULL);
+
+  return builtin_m2_type;
+}
+
+static struct gdbarch_data *m2_type_data;
+
+const struct builtin_m2_type *
+builtin_m2_type (struct gdbarch *gdbarch)
+{
+  return gdbarch_data (gdbarch, m2_type_data);
+}
+
 
 /* Initialization for Modula-2 */
 
 void
 _initialize_m2_language (void)
 {
-  /* Modula-2 "pervasive" types.  NOTE:  these can be redefined!!! */
-  builtin_type_m2_int =
-    init_type (TYPE_CODE_INT, TARGET_INT_BIT / TARGET_CHAR_BIT,
-	       0,
-	       "INTEGER", (struct objfile *) NULL);
-  builtin_type_m2_card =
-    init_type (TYPE_CODE_INT, TARGET_INT_BIT / TARGET_CHAR_BIT,
-	       TYPE_FLAG_UNSIGNED,
-	       "CARDINAL", (struct objfile *) NULL);
-  builtin_type_m2_real =
-    init_type (TYPE_CODE_FLT, TARGET_FLOAT_BIT / TARGET_CHAR_BIT,
-	       0,
-	       "REAL", (struct objfile *) NULL);
-  builtin_type_m2_char =
-    init_type (TYPE_CODE_CHAR, TARGET_CHAR_BIT / TARGET_CHAR_BIT,
-	       TYPE_FLAG_UNSIGNED,
-	       "CHAR", (struct objfile *) NULL);
-  builtin_type_m2_bool =
-    init_type (TYPE_CODE_BOOL, TARGET_INT_BIT / TARGET_CHAR_BIT,
-	       TYPE_FLAG_UNSIGNED,
-	       "BOOLEAN", (struct objfile *) NULL);
+  m2_type_data = gdbarch_data_register_post_init (build_m2_types);
 
   add_language (&m2_language_defn);
 }

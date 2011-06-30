@@ -1,14 +1,14 @@
 /* GDB CLI command scripting.
 
-   Copyright (c) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2004, 2005, 2006
+   Copyright (c) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "value.h"
@@ -30,6 +28,7 @@
 #include "gdb_string.h"
 #include "exceptions.h"
 #include "top.h"
+#include "breakpoint.h"
 #include "cli/cli-cmds.h"
 #include "cli/cli-decode.h"
 #include "cli/cli-script.h"
@@ -82,8 +81,9 @@ build_command_line (enum command_control_type type, char *args)
 {
   struct command_line *cmd;
 
-  if (args == NULL)
+  if (args == NULL && (type == if_control || type == while_control))
     error (_("if/while commands require arguments."));
+  gdb_assert (args != NULL);
 
   cmd = (struct command_line *) xmalloc (sizeof (struct command_line));
   cmd->next = NULL;
@@ -95,6 +95,7 @@ build_command_line (enum command_control_type type, char *args)
 					* cmd->body_count);
   memset (cmd->body_list, 0, sizeof (struct command_line *) * cmd->body_count);
   cmd->line = savestring (args, strlen (args));
+
   return cmd;
 }
 
@@ -115,7 +116,7 @@ get_command_line (enum command_control_type type, char *arg)
   /* Read in the body of this command.  */
   if (recurse_read_control_structure (cmd) == invalid_control)
     {
-      warning (_("Error reading in control structure."));
+      warning (_("Error reading in canned sequence of commands."));
       do_cleanups (old_chain);
       return NULL;
     }
@@ -199,6 +200,23 @@ print_command_lines (struct ui_out *uiout, struct command_line *cmd,
 	      print_command_lines (uiout, list->body_list[1], depth + 1);
 	    }
 
+	  if (depth)
+	    ui_out_spaces (uiout, 2 * depth);
+	  ui_out_field_string (uiout, NULL, "end");
+	  ui_out_text (uiout, "\n");
+	  list = list->next;
+	  continue;
+	}
+
+      /* A commands command.  Print the breakpoint commands and continue.  */
+      if (list->control_type == commands_control)
+	{
+	  if (*(list->line))
+	    ui_out_field_fmt (uiout, NULL, "commands %s", list->line);
+	  else
+	    ui_out_field_string (uiout, NULL, "commands");
+	  ui_out_text (uiout, "\n");
+	  print_command_lines (uiout, *list->body_list, depth + 1);
 	  if (depth)
 	    ui_out_spaces (uiout, 2 * depth);
 	  ui_out_field_string (uiout, NULL, "end");
@@ -292,7 +310,7 @@ execute_user_command (struct cmd_list_element *c, char *args)
       ret = execute_control_command (cmdlines);
       if (ret != simple_control && ret != break_control)
 	{
-	  warning (_("Error in control structure."));
+	  warning (_("Error executing canned sequence of commands."));
 	  break;
 	}
       cmdlines = cmdlines->next;
@@ -498,9 +516,20 @@ execute_control_command (struct command_line *cmd)
 
 	break;
       }
+    case commands_control:
+      {
+	/* Breakpoint commands list, record the commands in the breakpoint's
+	   command list and return.  */
+	new_line = insert_args (cmd->line);
+	if (!new_line)
+	  break;
+	make_cleanup (free_current_contents, &new_line);
+	ret = commands_from_control_command (new_line, cmd);
+	break;
+      }
 
     default:
-      warning (_("Invalid control type in command structure."));
+      warning (_("Invalid control type in canned commands structure."));
       break;
     }
 
@@ -849,6 +878,14 @@ read_next_line (struct command_line **command)
         first_arg++;
       *command = build_command_line (if_control, first_arg);
     }
+  else if (p1 - p >= 8 && !strncmp (p, "commands", 8))
+    {
+      char *first_arg;
+      first_arg = p + 8;
+      while (first_arg < p1 && isspace (*first_arg))
+        first_arg++;
+      *command = build_command_line (commands_control, first_arg);
+    }
   else if (p1 - p == 10 && !strncmp (p, "loop_break", 10))
     {
       *command = (struct command_line *)
@@ -924,9 +961,10 @@ recurse_read_control_structure (struct command_line *current_cmd)
       if (val == end_command)
 	{
 	  if (current_cmd->control_type == while_control
-	      || current_cmd->control_type == if_control)
+	      || current_cmd->control_type == if_control
+	      || current_cmd->control_type == commands_control)
 	    {
-	      /* Success reading an entire control structure.  */
+	      /* Success reading an entire canned sequence of commands.  */
 	      ret = simple_control;
 	      break;
 	    }
@@ -974,7 +1012,8 @@ recurse_read_control_structure (struct command_line *current_cmd)
       /* If the latest line is another control structure, then recurse
          on it.  */
       if (next->control_type == while_control
-	  || next->control_type == if_control)
+	  || next->control_type == if_control
+	  || next->control_type == commands_control)
 	{
 	  control_level++;
 	  ret = recurse_read_control_structure (next);
@@ -1026,6 +1065,7 @@ read_command_lines (char *prompt_arg, int from_tty)
 
   while (1)
     {
+      dont_repeat ();
       val = read_next_line (&next);
 
       /* Ignore blank lines or comments.  */
@@ -1045,7 +1085,8 @@ read_command_lines (char *prompt_arg, int from_tty)
 	}
 
       if (next->control_type == while_control
-	  || next->control_type == if_control)
+	  || next->control_type == if_control
+	  || next->control_type == commands_control)
 	{
 	  control_level++;
 	  ret = recurse_read_control_structure (next);

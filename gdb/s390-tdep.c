@@ -1,6 +1,6 @@
 /* Target-dependent code for GDB, the GNU debugger.
 
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    Contributed by D.J. Barrow (djbarrow@de.ibm.com,barrow_dj@yahoo.com)
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "arch-utils.h"
@@ -65,97 +63,54 @@ struct gdbarch_tdep
 };
 
 
-/* Register information.  */
-
-struct s390_register_info
-{
-  char *name;
-  struct type **type;
-};
-
-static struct s390_register_info s390_register_info[S390_NUM_TOTAL_REGS] = 
-{
-  /* Program Status Word.  */
-  { "pswm", &builtin_type_long },
-  { "pswa", &builtin_type_long },
-
-  /* General Purpose Registers.  */
-  { "r0", &builtin_type_long },
-  { "r1", &builtin_type_long },
-  { "r2", &builtin_type_long },
-  { "r3", &builtin_type_long },
-  { "r4", &builtin_type_long },
-  { "r5", &builtin_type_long },
-  { "r6", &builtin_type_long },
-  { "r7", &builtin_type_long },
-  { "r8", &builtin_type_long },
-  { "r9", &builtin_type_long },
-  { "r10", &builtin_type_long },
-  { "r11", &builtin_type_long },
-  { "r12", &builtin_type_long },
-  { "r13", &builtin_type_long },
-  { "r14", &builtin_type_long },
-  { "r15", &builtin_type_long },
-
-  /* Access Registers.  */
-  { "acr0", &builtin_type_int },
-  { "acr1", &builtin_type_int },
-  { "acr2", &builtin_type_int },
-  { "acr3", &builtin_type_int },
-  { "acr4", &builtin_type_int },
-  { "acr5", &builtin_type_int },
-  { "acr6", &builtin_type_int },
-  { "acr7", &builtin_type_int },
-  { "acr8", &builtin_type_int },
-  { "acr9", &builtin_type_int },
-  { "acr10", &builtin_type_int },
-  { "acr11", &builtin_type_int },
-  { "acr12", &builtin_type_int },
-  { "acr13", &builtin_type_int },
-  { "acr14", &builtin_type_int },
-  { "acr15", &builtin_type_int },
-
-  /* Floating Point Control Word.  */
-  { "fpc", &builtin_type_int },
-
-  /* Floating Point Registers.  */
-  { "f0", &builtin_type_double },
-  { "f1", &builtin_type_double },
-  { "f2", &builtin_type_double },
-  { "f3", &builtin_type_double },
-  { "f4", &builtin_type_double },
-  { "f5", &builtin_type_double },
-  { "f6", &builtin_type_double },
-  { "f7", &builtin_type_double },
-  { "f8", &builtin_type_double },
-  { "f9", &builtin_type_double },
-  { "f10", &builtin_type_double },
-  { "f11", &builtin_type_double },
-  { "f12", &builtin_type_double },
-  { "f13", &builtin_type_double },
-  { "f14", &builtin_type_double },
-  { "f15", &builtin_type_double },
-
-  /* Pseudo registers.  */
-  { "pc", &builtin_type_void_func_ptr },
-  { "cc", &builtin_type_int },
-};
-
 /* Return the name of register REGNUM.  */
 static const char *
 s390_register_name (int regnum)
 {
+  static const char *register_names[S390_NUM_TOTAL_REGS] =
+    {
+      /* Program Status Word.  */
+      "pswm", "pswa",
+      /* General Purpose Registers.  */
+      "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
+      "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
+      /* Access Registers.  */
+      "acr0", "acr1", "acr2", "acr3", "acr4", "acr5", "acr6", "acr7",
+      "acr8", "acr9", "acr10", "acr11", "acr12", "acr13", "acr14", "acr15",
+      /* Floating Point Control Word.  */
+      "fpc",
+      /* Floating Point Registers.  */
+      "f0", "f1", "f2", "f3", "f4", "f5", "f6", "f7",
+      "f8", "f9", "f10", "f11", "f12", "f13", "f14", "f15",
+      /* Pseudo registers.  */
+      "pc", "cc",
+    };
+
   gdb_assert (regnum >= 0 && regnum < S390_NUM_TOTAL_REGS);
-  return s390_register_info[regnum].name;
+  return register_names[regnum];
 }
 
 /* Return the GDB type object for the "standard" data type of data in
-   register REGNUM. */
+   register REGNUM.  */
 static struct type *
 s390_register_type (struct gdbarch *gdbarch, int regnum)
 {
-  gdb_assert (regnum >= 0 && regnum < S390_NUM_TOTAL_REGS);
-  return *s390_register_info[regnum].type;
+  if (regnum == S390_PSWM_REGNUM || regnum == S390_PSWA_REGNUM)
+    return builtin_type_long;
+  if (regnum >= S390_R0_REGNUM && regnum <= S390_R15_REGNUM)
+    return builtin_type_long;
+  if (regnum >= S390_A0_REGNUM && regnum <= S390_A15_REGNUM)
+    return builtin_type_int;
+  if (regnum == S390_FPC_REGNUM)
+    return builtin_type_int;
+  if (regnum >= S390_F0_REGNUM && regnum <= S390_F15_REGNUM)
+    return builtin_type_double;
+  if (regnum == S390_PC_REGNUM)
+    return builtin_type_void_func_ptr;
+  if (regnum == S390_CC_REGNUM)
+    return builtin_type_int;
+
+  internal_error (__FILE__, __LINE__, _("invalid regnum"));
 }
 
 /* DWARF Register Mapping.  */
@@ -306,36 +261,17 @@ s390x_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
 /* 'float' values are stored in the upper half of floating-point
    registers, even though we are otherwise a big-endian platform.  */
 
-static int
-s390_convert_register_p (int regno, struct type *type)
+static struct value *
+s390_value_from_register (struct type *type, int regnum,
+			  struct frame_info *frame)
 {
-  return (regno >= S390_F0_REGNUM && regno <= S390_F15_REGNUM)
-	 && TYPE_LENGTH (type) < 8;
-}
+  struct value *value = default_value_from_register (type, regnum, frame);
+  int len = TYPE_LENGTH (type);
 
-static void
-s390_register_to_value (struct frame_info *frame, int regnum,
-                        struct type *valtype, gdb_byte *out)
-{
-  gdb_byte in[8];
-  int len = TYPE_LENGTH (valtype);
-  gdb_assert (len < 8);
+  if (regnum >= S390_F0_REGNUM && regnum <= S390_F15_REGNUM && len < 8)
+    set_value_offset (value, 0);
 
-  get_frame_register (frame, regnum, in);
-  memcpy (out, in, len);
-}
-
-static void
-s390_value_to_register (struct frame_info *frame, int regnum,
-                        struct type *valtype, const gdb_byte *in)
-{
-  gdb_byte out[8];
-  int len = TYPE_LENGTH (valtype);
-  gdb_assert (len < 8);
-
-  memset (out, 0, 8);
-  memcpy (out, in, len);
-  put_frame_register (frame, regnum, out);
+  return value;
 }
 
 /* Register groups.  */
@@ -1251,7 +1187,7 @@ s390_prologue_frame_unwind_cache (struct frame_info *next_frame,
      bother searching for it -- with modern compilers this would be mostly
      pointless anyway.  Trust that we'll either have valid DWARF-2 CFI data
      or else a valid backchain ...  */
-  func = frame_func_unwind (next_frame);
+  func = frame_func_unwind (next_frame, NORMAL_FRAME);
   if (!func)
     return 0;
 
@@ -1575,14 +1511,15 @@ static const struct frame_unwind s390_stub_frame_unwind = {
 static const struct frame_unwind *
 s390_stub_frame_sniffer (struct frame_info *next_frame)
 {
-  CORE_ADDR pc = frame_pc_unwind (next_frame);
+  CORE_ADDR addr_in_block;
   bfd_byte insn[S390_MAX_INSTR_SIZE];
 
   /* If the current PC points to non-readable memory, we assume we
      have trapped due to an invalid function pointer call.  We handle
      the non-existing current function like a PLT stub.  */
-  if (in_plt_section (pc, NULL)
-      || s390_readinstruction (insn, pc) < 0)
+  addr_in_block = frame_unwind_address_in_block (next_frame, NORMAL_FRAME);
+  if (in_plt_section (addr_in_block, NULL)
+      || s390_readinstruction (insn, frame_pc_unwind (next_frame)) < 0)
     return &s390_stub_frame_unwind;
   return NULL;
 }
@@ -2392,7 +2329,7 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_char_signed (gdbarch, 0);
 
   /* Amount PC must be decremented by after a breakpoint.  This is
-     often the number of bytes returned by BREAKPOINT_FROM_PC but not
+     often the number of bytes returned by gdbarch_breakpoint_from_pc but not
      always.  */
   set_gdbarch_decr_pc_after_break (gdbarch, 2);
   /* Stack grows downward.  */
@@ -2411,9 +2348,7 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_stab_reg_to_regnum (gdbarch, s390_dwarf_reg_to_regnum);
   set_gdbarch_dwarf_reg_to_regnum (gdbarch, s390_dwarf_reg_to_regnum);
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, s390_dwarf_reg_to_regnum);
-  set_gdbarch_convert_register_p (gdbarch, s390_convert_register_p);
-  set_gdbarch_register_to_value (gdbarch, s390_register_to_value);
-  set_gdbarch_value_to_register (gdbarch, s390_value_to_register);
+  set_gdbarch_value_from_register (gdbarch, s390_value_from_register);
   set_gdbarch_register_reggroup_p (gdbarch, s390_register_reggroup_p);
   set_gdbarch_regset_from_core_section (gdbarch,
                                         s390_regset_from_core_section);
@@ -2477,6 +2412,8 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     }
 
   set_gdbarch_print_insn (gdbarch, print_insn_s390);
+
+  set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);
 
   /* Enable TLS support.  */
   set_gdbarch_fetch_tls_load_module_address (gdbarch,

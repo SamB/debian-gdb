@@ -1,7 +1,7 @@
 /* Remote debugging interface for MIPS remote debugging protocol.
 
-   Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2006 Free Software Foundation, Inc.
+   Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+   2003, 2004, 2006, 2007 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.  Written by Ian Lance Taylor
    <ian@cygnus.com>.
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "inferior.h"
@@ -32,7 +30,6 @@
 #include "serial.h"
 #include "target.h"
 #include "exceptions.h"
-#include "remote-utils.h"
 #include "gdb_string.h"
 #include "gdb_stat.h"
 #include "regcache.h"
@@ -97,18 +94,18 @@ static ptid_t mips_wait (ptid_t ptid,
 
 static int mips_map_regno (int regno);
 
-static void mips_fetch_registers (int regno);
+static void mips_fetch_registers (struct regcache *regcache, int regno);
 
-static void mips_prepare_to_store (void);
+static void mips_prepare_to_store (struct regcache *regcache);
 
-static void mips_store_registers (int regno);
+static void mips_store_registers (struct regcache *regcache, int regno);
 
 static unsigned int mips_fetch_word (CORE_ADDR addr);
 
 static int mips_store_word (CORE_ADDR addr, unsigned int value,
 			    char *old_contents);
 
-static int mips_xfer_memory (CORE_ADDR memaddr, char *myaddr, int len,
+static int mips_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len,
 			     int write, 
 			     struct mem_attrib *attrib,
 			     struct target_ops *target);
@@ -1584,7 +1581,7 @@ device is attached to the target board (e.g., /dev/ttya).\n"
      of some sort.  That doesn't happen here (in fact, it may not be
      possible to get the monitor to send the appropriate packet).  */
 
-  flush_cached_frames ();
+  reinit_frame_cache ();
   registers_changed ();
   stop_pc = read_pc ();
   print_stack_frame (get_selected_frame (NULL), 0, SRC_AND_LOC);
@@ -1595,10 +1592,10 @@ static void
 mips_open (char *name, int from_tty)
 {
   const char *monitor_prompt = NULL;
-  if (TARGET_ARCHITECTURE != NULL
-      && TARGET_ARCHITECTURE->arch == bfd_arch_mips)
+  if (gdbarch_bfd_arch_info (current_gdbarch) != NULL
+      && gdbarch_bfd_arch_info (current_gdbarch)->arch == bfd_arch_mips)
     {
-    switch (TARGET_ARCHITECTURE->mach)
+    switch (gdbarch_bfd_arch_info (current_gdbarch)->mach)
       {
       case bfd_mach_mips4100:
       case bfd_mach_mips4300:
@@ -1756,19 +1753,31 @@ mips_wait (ptid_t ptid, struct target_waitstatus *status)
 		    &rpc, &rfp, &rsp, flags);
   if (nfields >= 3)
     {
+      struct regcache *regcache = get_current_regcache ();
       char buf[MAX_REGISTER_SIZE];
 
-      store_unsigned_integer (buf, register_size (current_gdbarch, PC_REGNUM), rpc);
-      regcache_raw_supply (current_regcache, PC_REGNUM, buf);
+      store_unsigned_integer (buf,
+			      register_size
+			        (current_gdbarch, gdbarch_pc_regnum
+						    (current_gdbarch)), rpc);
+      regcache_raw_supply (regcache, gdbarch_pc_regnum (current_gdbarch), buf);
 
-      store_unsigned_integer (buf, register_size (current_gdbarch, PC_REGNUM), rfp);
-      regcache_raw_supply (current_regcache, 30, buf);	/* This register they are avoiding and so it is unnamed */
+      store_unsigned_integer
+	(buf, register_size (current_gdbarch,
+	 gdbarch_pc_regnum (current_gdbarch)), rfp);
+      regcache_raw_supply (regcache, 30, buf);	/* This register they are avoiding and so it is unnamed */
 
-      store_unsigned_integer (buf, register_size (current_gdbarch, SP_REGNUM), rsp);
-      regcache_raw_supply (current_regcache, SP_REGNUM, buf);
+      store_unsigned_integer (buf, register_size (current_gdbarch,
+			      gdbarch_sp_regnum (current_gdbarch)), rsp);
+      regcache_raw_supply (regcache, gdbarch_sp_regnum (current_gdbarch), buf);
 
-      store_unsigned_integer (buf, register_size (current_gdbarch, DEPRECATED_FP_REGNUM), 0);
-      regcache_raw_supply (current_regcache, DEPRECATED_FP_REGNUM, buf);
+      store_unsigned_integer (buf,
+			      register_size (current_gdbarch,
+					     gdbarch_deprecated_fp_regnum
+					       (current_gdbarch)),
+			      0);
+      regcache_raw_supply (regcache,
+			   gdbarch_deprecated_fp_regnum (current_gdbarch), buf);
 
       if (nfields == 9)
 	{
@@ -1893,20 +1902,21 @@ mips_map_regno (int regno)
 /* Fetch the remote registers.  */
 
 static void
-mips_fetch_registers (int regno)
+mips_fetch_registers (struct regcache *regcache, int regno)
 {
   unsigned LONGEST val;
   int err;
 
   if (regno == -1)
     {
-      for (regno = 0; regno < NUM_REGS; regno++)
-	mips_fetch_registers (regno);
+      for (regno = 0; regno < gdbarch_num_regs (current_gdbarch); regno++)
+	mips_fetch_registers (regcache, regno);
       return;
     }
 
-  if (regno == DEPRECATED_FP_REGNUM || regno == MIPS_ZERO_REGNUM)
-    /* DEPRECATED_FP_REGNUM on the mips is a hack which is just
+  if (regno == gdbarch_deprecated_fp_regnum (current_gdbarch)
+      || regno == MIPS_ZERO_REGNUM)
+    /* gdbarch_deprecated_fp_regnum on the mips is a hack which is just
        supposed to read zero (see also mips-nat.c).  */
     val = 0;
   else
@@ -1939,7 +1949,7 @@ mips_fetch_registers (int regno)
     /* We got the number the register holds, but gdb expects to see a
        value in the target byte ordering.  */
     store_unsigned_integer (buf, register_size (current_gdbarch, regno), val);
-    regcache_raw_supply (current_regcache, regno, buf);
+    regcache_raw_supply (regcache, regno, buf);
   }
 }
 
@@ -1947,26 +1957,27 @@ mips_fetch_registers (int regno)
    registers, so this function doesn't have to do anything.  */
 
 static void
-mips_prepare_to_store (void)
+mips_prepare_to_store (struct regcache *regcache)
 {
 }
 
 /* Store remote register(s).  */
 
 static void
-mips_store_registers (int regno)
+mips_store_registers (struct regcache *regcache, int regno)
 {
+  ULONGEST val;
   int err;
 
   if (regno == -1)
     {
-      for (regno = 0; regno < NUM_REGS; regno++)
-	mips_store_registers (regno);
+      for (regno = 0; regno < gdbarch_num_regs (current_gdbarch); regno++)
+	mips_store_registers (regcache, regno);
       return;
     }
 
-  mips_request ('R', mips_map_regno (regno),
-		read_register (regno),
+  regcache_cooked_read_unsigned (regcache, regno, &val);
+  mips_request ('R', mips_map_regno (regno), val,
 		&err, mips_receive_wait, NULL);
   if (err)
     mips_error ("Can't write register %d: %s", regno, safe_strerror (errno));
@@ -2029,7 +2040,7 @@ mips_store_word (CORE_ADDR addr, unsigned int val, char *old_contents)
 static int mask_address_p = 1;
 
 static int
-mips_xfer_memory (CORE_ADDR memaddr, char *myaddr, int len, int write,
+mips_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
 		  struct mem_attrib *attrib, struct target_ops *target)
 {
   int i;
@@ -2404,7 +2415,7 @@ common_breakpoint (int set, CORE_ADDR addr, int len, enum break_type type)
   int rpid, rerrflg, rresponse, rlen;
   int nfields;
 
-  addr = ADDR_BITS_REMOVE (addr);
+  addr = gdbarch_addr_bits_remove (current_gdbarch, addr);
 
   if (mips_monitor == MON_LSI)
     {
@@ -3262,7 +3273,7 @@ mips_load (char *file, int from_tty)
       /* Work around problem where PMON monitor updates the PC after a load
          to a different value than GDB thinks it has. The following ensures
          that the write_pc() WILL update the PC value: */
-      deprecated_register_valid[PC_REGNUM] = 0;
+      deprecated_register_valid[gdbarch_pc_regnum (current_gdbarch)] = 0;
     }
   if (exec_bfd)
     write_pc (bfd_get_start_address (exec_bfd));

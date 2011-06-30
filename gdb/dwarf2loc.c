@@ -1,6 +1,6 @@
 /* DWARF 2 location expression support for GDB.
 
-   Copyright (C) 2003, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2005, 2007 Free Software Foundation, Inc.
 
    Contributed by Daniel Jacobowitz, MontaVista Software, Inc.
 
@@ -8,18 +8,16 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or (at
-   your option) any later version.
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-   This program is distributed in the hope that it will be useful, but
-   WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "ui-out.h"
@@ -40,10 +38,6 @@
 
 #include "gdb_string.h"
 
-#ifndef DWARF2_REG_TO_REGNUM
-#define DWARF2_REG_TO_REGNUM(REG) (REG)
-#endif
-
 /* A helper function for dealing with location lists.  Given a
    symbol baton (BATON) and a pc value (PC), find the appropriate
    location expression, set *LOCEXPR_LENGTH, and return a pointer
@@ -59,7 +53,7 @@ find_location_expression (struct dwarf2_loclist_baton *baton,
   CORE_ADDR low, high;
   gdb_byte *loc_ptr, *buf_end;
   int length;
-  unsigned int addr_size = TARGET_ADDR_BIT / TARGET_CHAR_BIT;
+  unsigned int addr_size = gdbarch_addr_bit (current_gdbarch) / TARGET_CHAR_BIT;
   CORE_ADDR base_mask = ~(~(CORE_ADDR)1 << (addr_size * 8 - 1));
   /* Adjust base_address for relocatable objects.  */
   CORE_ADDR base_offset = ANOFFSET (baton->objfile->section_offsets,
@@ -123,7 +117,7 @@ dwarf_expr_read_reg (void *baton, int dwarf_regnum)
   CORE_ADDR result;
   int regnum;
 
-  regnum = DWARF2_REG_TO_REGNUM (dwarf_regnum);
+  regnum = gdbarch_dwarf2_reg_to_regnum (current_gdbarch, dwarf_regnum);
   result = address_from_register (builtin_type_void_data_ptr,
 				  regnum, debaton->frame);
   return result;
@@ -201,6 +195,7 @@ dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
       retval = allocate_value (SYMBOL_TYPE (var));
       VALUE_LVAL (retval) = not_lval;
       set_value_optimized_out (retval, 1);
+      return retval;
     }
 
   baton.frame = frame;
@@ -228,7 +223,8 @@ dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
 	  if (p->in_reg)
 	    {
 	      bfd_byte regval[MAX_REGISTER_SIZE];
-	      int gdb_regnum = DWARF2_REG_TO_REGNUM (p->value);
+	      int gdb_regnum = gdbarch_dwarf2_reg_to_regnum
+				 (current_gdbarch, p->value);
 	      get_frame_register (frame, gdb_regnum, regval);
 	      memcpy (contents + offset, regval, p->size);
 	    }
@@ -242,7 +238,8 @@ dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
   else if (ctx->in_reg)
     {
       CORE_ADDR dwarf_regnum = dwarf_expr_fetch (ctx, 0);
-      int gdb_regnum = DWARF2_REG_TO_REGNUM (dwarf_regnum);
+      int gdb_regnum = gdbarch_dwarf2_reg_to_regnum
+			 (current_gdbarch, dwarf_regnum);
       retval = value_from_register (SYMBOL_TYPE (var), gdb_regnum, frame);
     }
   else
@@ -254,6 +251,8 @@ dwarf2_evaluate_loc_desc (struct symbol *var, struct frame_info *frame,
       set_value_lazy (retval, 1);
       VALUE_ADDRESS (retval) = address;
     }
+
+  set_value_initialized (retval, ctx->initialized);
 
   free_dwarf_expr_context (ctx);
 
@@ -384,7 +383,8 @@ dwarf2_tracepoint_var_ref (struct symbol *symbol, struct agent_expr *ax,
 	error (_("Unexpected opcode after DW_OP_fbreg for symbol \"%s\"."),
 	       SYMBOL_PRINT_NAME (symbol));
 
-      TARGET_VIRTUAL_FRAME_POINTER (ax->scope, &frame_reg, &frame_offset);
+      gdbarch_virtual_frame_pointer (current_gdbarch, 
+				     ax->scope, &frame_reg, &frame_offset);
       ax_reg (ax, frame_reg);
       ax_const_l (ax, frame_offset);
       ax_simple (ax, aop_add);
@@ -447,9 +447,11 @@ locexpr_describe_location (struct symbol *symbol, struct ui_file *stream)
       && dlbaton->data[0] >= DW_OP_reg0
       && dlbaton->data[0] <= DW_OP_reg31)
     {
-      int regno = DWARF2_REG_TO_REGNUM (dlbaton->data[0] - DW_OP_reg0);
+      int regno = gdbarch_dwarf2_reg_to_regnum
+		    (current_gdbarch, dlbaton->data[0] - DW_OP_reg0);
       fprintf_filtered (stream,
-			"a variable in register %s", REGISTER_NAME (regno));
+			"a variable in register %s",
+			gdbarch_register_name (current_gdbarch, regno));
       return 1;
     }
 

@@ -1,12 +1,12 @@
 /* Target-dependent header for the MIPS architecture, for GDB, the GNU Debugger.
 
-   Copyright (C) 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef MIPS_TDEP_H
 #define MIPS_TDEP_H
@@ -40,9 +38,6 @@ enum mips_abi
 /* Return the MIPS ABI associated with GDBARCH.  */
 enum mips_abi mips_abi (struct gdbarch *gdbarch);
 
-/* For wince :-(.  */
-extern CORE_ADDR mips_next_pc (CORE_ADDR pc);
-
 /* Return the MIPS ISA's register size.  Just a short cut to the BFD
    architecture's word size.  */
 extern int mips_isa_regsize (struct gdbarch *gdbarch);
@@ -61,12 +56,7 @@ struct mips_regnum
 };
 extern const struct mips_regnum *mips_regnum (struct gdbarch *gdbarch);
 
-/* Register numbers of various important registers.  Note that some of
-   these values are "real" register numbers, and correspond to the
-   general registers of the machine, and some are "phony" register
-   numbers which are too large to be actual register numbers as far as
-   the user is concerned but do serve to get the desired values when
-   passed to read_register.  */
+/* Register numbers of various important registers.  */
 
 enum
 {
@@ -103,7 +93,7 @@ enum
 };
 
 /* Single step based on where the current instruction will take us.  */
-extern void mips_software_single_step (enum target_signal, int);
+extern int mips_software_single_step (struct frame_info *frame);
 
 /* Tell if the program counter value in MEMADDR is in a MIPS16
    function.  */

@@ -1,7 +1,7 @@
 /* Support for printing Fortran values for GDB, the GNU debugger.
 
-   Copyright (C) 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2003, 2005, 2006
-   Free Software Foundation, Inc.
+   Copyright (C) 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2003, 2005, 2006,
+   2007 Free Software Foundation, Inc.
 
    Contributed by Motorola.  Adapted from the C definitions by Farooq Butt
    (fmbutt@engage.sps.mot.com), additionally worked over by Stan Shebs.
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -65,13 +63,15 @@ int f77_array_offset_tbl[MAX_FORTRAN_DIMS + 1][2];
 int
 f77_get_dynamic_lowerbound (struct type *type, int *lower_bound)
 {
+  struct frame_info *frame;
   CORE_ADDR current_frame_addr;
   CORE_ADDR ptr_to_lower_bound;
 
   switch (TYPE_ARRAY_LOWER_BOUND_TYPE (type))
     {
     case BOUND_BY_VALUE_ON_STACK:
-      current_frame_addr = get_frame_base (deprecated_selected_frame);
+      frame = deprecated_safe_get_selected_frame ();
+      current_frame_addr = get_frame_base (frame);
       if (current_frame_addr > 0)
 	{
 	  *lower_bound =
@@ -95,7 +95,8 @@ f77_get_dynamic_lowerbound (struct type *type, int *lower_bound)
       break;
 
     case BOUND_BY_REF_ON_STACK:
-      current_frame_addr = get_frame_base (deprecated_selected_frame);
+      frame = deprecated_safe_get_selected_frame ();
+      current_frame_addr = get_frame_base (frame);
       if (current_frame_addr > 0)
 	{
 	  ptr_to_lower_bound =
@@ -123,13 +124,15 @@ f77_get_dynamic_lowerbound (struct type *type, int *lower_bound)
 int
 f77_get_dynamic_upperbound (struct type *type, int *upper_bound)
 {
+  struct frame_info *frame;
   CORE_ADDR current_frame_addr = 0;
   CORE_ADDR ptr_to_upper_bound;
 
   switch (TYPE_ARRAY_UPPER_BOUND_TYPE (type))
     {
     case BOUND_BY_VALUE_ON_STACK:
-      current_frame_addr = get_frame_base (deprecated_selected_frame);
+      frame = deprecated_safe_get_selected_frame ();
+      current_frame_addr = get_frame_base (frame);
       if (current_frame_addr > 0)
 	{
 	  *upper_bound =
@@ -158,7 +161,8 @@ f77_get_dynamic_upperbound (struct type *type, int *upper_bound)
       break;
 
     case BOUND_BY_REF_ON_STACK:
-      current_frame_addr = get_frame_base (deprecated_selected_frame);
+      frame = deprecated_safe_get_selected_frame ();
+      current_frame_addr = get_frame_base (frame);
       if (current_frame_addr > 0)
 	{
 	  ptr_to_upper_bound =
@@ -643,10 +647,7 @@ info_common_command (char *comname, int from_tty)
      first make sure that it is visible and if so, let 
      us display its contents */
 
-  fi = deprecated_selected_frame;
-
-  if (fi == NULL)
-    error (_("No frame selected"));
+  fi = get_selected_frame (_("No frame selected"));
 
   /* The following is generally ripped off from stack.c's routine 
      print_frame_info() */
@@ -668,7 +669,8 @@ info_common_command (char *comname, int from_tty)
          be any minimal symbols in the middle of a function.
          FIXME:  (Not necessarily true.  What about text labels) */
 
-      struct minimal_symbol *msymbol = lookup_minimal_symbol_by_pc (get_frame_pc (fi));
+      struct minimal_symbol *msymbol = 
+	lookup_minimal_symbol_by_pc (get_frame_pc (fi));
 
       if (msymbol != NULL
 	  && (SYMBOL_VALUE_ADDRESS (msymbol)
@@ -684,6 +686,8 @@ info_common_command (char *comname, int from_tty)
 
       if (msymbol != NULL)
 	funname = DEPRECATED_SYMBOL_NAME (msymbol);
+      else /* Got no 'funname', code below will fail.  */
+	error (_("No function found for frame."));
     }
 
   /* If comname is NULL, we assume the user wishes to see the 
@@ -735,10 +739,7 @@ there_is_a_visible_common_named (char *comname)
   if (comname == NULL)
     error (_("Cannot deal with NULL common name!"));
 
-  fi = deprecated_selected_frame;
-
-  if (fi == NULL)
-    error (_("No frame selected"));
+  fi = get_selected_frame (_("No frame selected"));
 
   /* The following is generally ripped off from stack.c's routine 
      print_frame_info() */

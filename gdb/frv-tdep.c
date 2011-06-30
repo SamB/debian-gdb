@@ -1,12 +1,12 @@
 /* Target-dependent code for the Fujitsu FR-V, for GDB, the GNU Debugger.
 
-   Copyright (C) 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -42,14 +40,6 @@
 #include "frv-tdep.h"
 
 extern void _initialize_frv_tdep (void);
-
-static gdbarch_init_ftype frv_gdbarch_init;
-
-static gdbarch_register_name_ftype frv_register_name;
-static gdbarch_breakpoint_from_pc_ftype frv_breakpoint_from_pc;
-static gdbarch_adjust_breakpoint_address_ftype frv_gdbarch_adjust_breakpoint_address;
-static gdbarch_skip_prologue_ftype frv_skip_prologue;
-
 
 struct frv_unwind_cache		/* was struct frame_extra_info */
   {
@@ -120,17 +110,19 @@ frv_fdpic_loadmap_addresses (struct gdbarch *gdbarch, CORE_ADDR *interp_addr,
     return -1;
   else
     {
+      struct regcache *regcache = get_current_regcache ();
+
       if (interp_addr != NULL)
 	{
 	  ULONGEST val;
-	  regcache_cooked_read_unsigned (current_regcache,
+	  regcache_cooked_read_unsigned (regcache,
 					 fdpic_loadmap_interp_regnum, &val);
 	  *interp_addr = val;
 	}
       if (exec_addr != NULL)
 	{
 	  ULONGEST val;
-	  regcache_cooked_read_unsigned (current_regcache,
+	  regcache_cooked_read_unsigned (regcache,
 					 fdpic_loadmap_exec_regnum, &val);
 	  *exec_addr = val;
 	}
@@ -402,7 +394,7 @@ frv_register_sim_regno (int reg)
       H_SPR_FNER1,		/* fner1_regnum */
     };
 
-  gdb_assert (reg >= 0 && reg < NUM_REGS);
+  gdb_assert (reg >= 0 && reg < gdbarch_num_regs (current_gdbarch));
 
   if (first_gpr_regnum <= reg && reg <= last_gpr_regnum)
     return reg - first_gpr_regnum + SIM_FRV_GR0_REGNUM;
@@ -443,7 +435,7 @@ static const int frv_instr_size = 4;
    constraint that a break instruction must not appear as any but the
    first instruction in the bundle.  */
 static CORE_ADDR
-frv_gdbarch_adjust_breakpoint_address (struct gdbarch *gdbarch, CORE_ADDR bpaddr)
+frv_adjust_breakpoint_address (struct gdbarch *gdbarch, CORE_ADDR bpaddr)
 {
   int count = max_instrs_per_bundle;
   CORE_ADDR addr = bpaddr - frv_instr_size;
@@ -1024,7 +1016,8 @@ frv_frame_unwind_cache (struct frame_info *next_frame,
   info->saved_regs = trad_frame_alloc_saved_regs (next_frame);
 
   /* Prologue analysis does the rest...  */
-  frv_analyze_prologue (frame_func_unwind (next_frame), next_frame, info);
+  frv_analyze_prologue (frame_func_unwind (next_frame, NORMAL_FRAME),
+			next_frame, info);
 
   return info;
 }
@@ -1051,20 +1044,6 @@ frv_extract_return_value (struct type *type, struct regcache *regcache,
     }
   else
     internal_error (__FILE__, __LINE__, _("Illegal return value length: %d"), len);
-}
-
-static CORE_ADDR
-frv_extract_struct_value_address (struct regcache *regcache)
-{
-  ULONGEST addr;
-  regcache_cooked_read_unsigned (regcache, struct_return_regnum, &addr);
-  return addr;
-}
-
-static void
-frv_store_struct_return (CORE_ADDR addr, CORE_ADDR sp)
-{
-  write_register (struct_return_regnum, addr);
 }
 
 static CORE_ADDR
@@ -1304,13 +1283,14 @@ frv_check_watch_resources (int type, int cnt, int ot)
 int
 frv_stopped_data_address (CORE_ADDR *addr_p)
 {
+  struct frame_info *frame = get_current_frame ();
   CORE_ADDR brr, dbar0, dbar1, dbar2, dbar3;
 
-  brr = read_register (brr_regnum);
-  dbar0 = read_register (dbar0_regnum);
-  dbar1 = read_register (dbar1_regnum);
-  dbar2 = read_register (dbar2_regnum);
-  dbar3 = read_register (dbar3_regnum);
+  brr = get_frame_register_unsigned (frame, brr_regnum);
+  dbar0 = get_frame_register_unsigned (frame, dbar0_regnum);
+  dbar1 = get_frame_register_unsigned (frame, dbar1_regnum);
+  dbar2 = get_frame_register_unsigned (frame, dbar2_regnum);
+  dbar3 = get_frame_register_unsigned (frame, dbar3_regnum);
 
   if (brr & (1<<11))
     *addr_p = dbar0;
@@ -1354,7 +1334,7 @@ frv_frame_this_id (struct frame_info *next_frame,
   struct frame_id id;
 
   /* The FUNC is easy.  */
-  func = frame_func_unwind (next_frame);
+  func = frame_func_unwind (next_frame, NORMAL_FRAME);
 
   /* Check if the stack is empty.  */
   msym_stack = lookup_minimal_symbol ("_stack", NULL, NULL);
@@ -1505,14 +1485,13 @@ frv_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_skip_prologue (gdbarch, frv_skip_prologue);
   set_gdbarch_breakpoint_from_pc (gdbarch, frv_breakpoint_from_pc);
-  set_gdbarch_adjust_breakpoint_address (gdbarch, frv_gdbarch_adjust_breakpoint_address);
+  set_gdbarch_adjust_breakpoint_address
+    (gdbarch, frv_adjust_breakpoint_address);
 
   set_gdbarch_deprecated_use_struct_convention (gdbarch, always_use_struct_convention);
   set_gdbarch_extract_return_value (gdbarch, frv_extract_return_value);
 
-  set_gdbarch_deprecated_store_struct_return (gdbarch, frv_store_struct_return);
   set_gdbarch_store_return_value (gdbarch, frv_store_return_value);
-  set_gdbarch_deprecated_extract_struct_value_address (gdbarch, frv_extract_struct_value_address);
 
   /* Frame stuff.  */
   set_gdbarch_unwind_pc (gdbarch, frv_unwind_pc);
@@ -1528,11 +1507,6 @@ frv_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* Settings that should be unnecessary.  */
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
-
-  set_gdbarch_write_pc (gdbarch, generic_target_write_pc);
-
-  set_gdbarch_remote_translate_xfer_address
-    (gdbarch, generic_remote_translate_xfer_address);
 
   /* Hardware watchpoint / breakpoint support.  */
   switch (info.bfd_arch_info->mach)

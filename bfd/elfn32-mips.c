@@ -1,6 +1,6 @@
 /* MIPS-specific support for 32-bit ELF
    Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004, 2005 Free Software Foundation, Inc.
+   2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    Most of the information added by Ian Lance Taylor, Cygnus Support,
    <ian@cygnus.com>.
@@ -9,28 +9,30 @@
    Traditional MIPS targets support added by Koundinya.K, Dansk Data
    Elektronik & Operations Research Group. <kk@ddeorg.soft.net>
 
-This file is part of BFD, the Binary File Descriptor library.
+   This file is part of BFD, the Binary File Descriptor library.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
+
 
 /* This file handles MIPS ELF targets.  SGI Irix 5 uses a slightly
    different MIPS ELF from other targets.  This matters when linking.
    This file supports both, switching at runtime.  */
 
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "libbfd.h"
 #include "bfdlink.h"
 #include "genlink.h"
@@ -2079,6 +2081,40 @@ bfd_elf32_bfd_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
       bfd_set_error (bfd_error_bad_value);
       return NULL;
     }
+}
+
+static reloc_howto_type *
+bfd_elf32_bfd_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
+				 const char *r_name)
+{
+  unsigned int i;
+
+  for (i = 0;
+       i < (sizeof (elf_mips_howto_table_rela)
+	    / sizeof (elf_mips_howto_table_rela[0]));
+       i++)
+    if (elf_mips_howto_table_rela[i].name != NULL
+	&& strcasecmp (elf_mips_howto_table_rela[i].name, r_name) == 0)
+      return &elf_mips_howto_table_rela[i];
+
+  for (i = 0;
+       i < (sizeof (elf_mips16_howto_table_rela)
+	    / sizeof (elf_mips16_howto_table_rela[0]));
+       i++)
+    if (elf_mips16_howto_table_rela[i].name != NULL
+	&& strcasecmp (elf_mips16_howto_table_rela[i].name, r_name) == 0)
+      return &elf_mips16_howto_table_rela[i];
+
+  if (strcasecmp (elf_mips_gnu_vtinherit_howto.name, r_name) == 0)
+    return &elf_mips_gnu_vtinherit_howto;
+  if (strcasecmp (elf_mips_gnu_vtentry_howto.name, r_name) == 0)
+    return &elf_mips_gnu_vtentry_howto;
+  if (strcasecmp (elf_mips_gnu_rel16_s2.name, r_name) == 0)
+    return &elf_mips_gnu_rel16_s2;
+  if (strcasecmp (elf_mips_gnu_rela16_s2.name, r_name) == 0)
+    return &elf_mips_gnu_rela16_s2;
+
+  return NULL;
 }
 
 /* Given a MIPS Elf_Internal_Rel, fill in an arelent structure.  */

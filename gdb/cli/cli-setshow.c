@@ -1,10 +1,10 @@
 /* Handle set and show GDB commands.
 
-   Copyright (c) 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (c) 2000, 2001, 2002, 2003, 2007 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -13,9 +13,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "readline/tilde.h"
@@ -192,6 +190,13 @@ do_setshow_command (char *arg, int from_tty, struct cmd_list_element *c)
 	    error_no_arg (_("filename to set it to."));
 	  if (*(char **) c->var != NULL)
 	    xfree (*(char **) c->var);
+	  {
+	    /* Clear trailing whitespace of filename.  */
+	    char *ptr = arg + strlen (arg) - 1;
+	    while (ptr >= arg && (*ptr == ' ' || *ptr == '\t'))
+	      ptr--;
+	    *(ptr + 1) = '\0';
+	  }
 	  *(char **) c->var = tilde_expand (arg);
 	  break;
 	case var_boolean:

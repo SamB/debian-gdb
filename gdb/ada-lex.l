@@ -1,5 +1,5 @@
 /* FLEX lexer for Ada expressions, for GDB.
-   Copyright (C) 1994, 1997, 1998, 2000, 2001, 2002, 2003
+   Copyright (C) 1994, 1997, 1998, 2000, 2001, 2002, 2003, 2007
    Free Software Foundation, Inc.
 
 This file is part of GDB.
@@ -341,11 +341,11 @@ processInt (const char *base0, const char *num0, const char *exp0)
       exp -= 1;
     }
 
-  if ((result >> (TARGET_INT_BIT-1)) == 0)
+  if ((result >> (gdbarch_int_bit (current_gdbarch)-1)) == 0)
     yylval.typed_val.type = type_int ();
-  else if ((result >> (TARGET_LONG_BIT-1)) == 0)
+  else if ((result >> (gdbarch_long_bit (current_gdbarch)-1)) == 0)
     yylval.typed_val.type = type_long ();
-  else if (((result >> (TARGET_LONG_BIT-1)) >> 1) == 0)
+  else if (((result >> (gdbarch_long_bit (current_gdbarch)-1)) >> 1) == 0)
     {
       /* We have a number representable as an unsigned integer quantity.
          For consistency with the C treatment, we will treat it as an
@@ -376,9 +376,11 @@ processReal (const char *num0)
   sscanf (num0, DOUBLEST_SCAN_FORMAT, &yylval.typed_val_float.dval);
 
   yylval.typed_val_float.type = type_float ();
-  if (sizeof(DOUBLEST) >= TARGET_DOUBLE_BIT / TARGET_CHAR_BIT)
+  if (sizeof(DOUBLEST) >= gdbarch_double_bit (current_gdbarch)
+			    / TARGET_CHAR_BIT)
     yylval.typed_val_float.type = type_double ();
-  if (sizeof(DOUBLEST) >= TARGET_LONG_DOUBLE_BIT / TARGET_CHAR_BIT)
+  if (sizeof(DOUBLEST) >= gdbarch_long_double_bit (current_gdbarch)
+			    / TARGET_CHAR_BIT)
     yylval.typed_val_float.type = type_long_double ();
 
   return FLOAT;

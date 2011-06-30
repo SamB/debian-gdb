@@ -1,13 +1,12 @@
 /* Data structures associated with breakpoints in GDB.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004
-   Free Software Foundation, Inc.
+   2002, 2003, 2004, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (BREAKPOINT_H)
 #define BREAKPOINT_H 1
@@ -62,9 +59,6 @@ enum bptype
     /* Used by wait_for_inferior for stepping over subroutine calls, for
        stepping over signal handlers, and for skipping prologues.  */
     bp_step_resume,
-
-    /* Used by wait_for_inferior for stepping over signal handlers.  */
-    bp_through_sigtramp,
 
     /* Used to detect when a watchpoint expression has gone out of
        scope.  These breakpoints are usually not visible to the user.
@@ -192,7 +186,7 @@ struct bp_target_info
 {
   /* Address at which the breakpoint was placed.  This is normally the
      same as ADDRESS from the bp_location, except when adjustment
-     happens in BREAKPOINT_FROM_PC.  The most common form of
+     happens in gdbarch_breakpoint_from_pc.  The most common form of
      adjustment is stripping an alternate ISA marker from the PC which
      is used to determine the type of breakpoint to insert.  */
   CORE_ADDR placed_address;
@@ -207,7 +201,7 @@ struct bp_target_info
   int shadow_len;
 
   /* The size of the placed breakpoint, according to
-     BREAKPOINT_FROM_PC, when the breakpoint was inserted.  This is
+     gdbarch_breakpoint_from_pc, when the breakpoint was inserted.  This is
      generally the same as SHADOW_LEN, unless we did not need
      to read from the target to implement the memory breakpoint
      (e.g. if a remote stub handled the details).  We may still
@@ -434,9 +428,12 @@ struct breakpoint
 
 typedef struct bpstats *bpstat;
 
-/* Interface:  */
-/* Clear a bpstat so that it says we are not at any breakpoint.
-   Also free any storage that is part of a bpstat.  */
+/* Frees any storage that is part of a bpstat.
+   Does not walk the 'next' chain.  */
+extern void bpstat_free (bpstat);
+
+/* Clears a chain of bpstat, freeing storage
+   of each.  */
 extern void bpstat_clear (bpstat *);
 
 /* Return a copy of a bpstat.  Like "bs1 = bs2" but all storage that
@@ -489,10 +486,6 @@ enum bpstat_what_main_action
 
     /* Clear step resume breakpoint, and keep checking.  */
     BPSTAT_WHAT_STEP_RESUME,
-
-    /* Clear through_sigtramp breakpoint, muck with trap_expected, and keep
-       checking.  */
-    BPSTAT_WHAT_THROUGH_SIGTRAMP,
 
     /* Check the dynamic linker's data structures for new libraries, then
        keep checking.  */
@@ -563,12 +556,15 @@ extern int bpstat_have_active_hw_watchpoints (void);
    return means print the frame as well as the source line).  */
 extern enum print_stop_action bpstat_print (bpstat);
 
-/* Return the breakpoint number of the first breakpoint we are stopped
+/* Put in *NUM the breakpoint number of the first breakpoint we are stopped
    at.  *BSP upon return is a bpstat which points to the remaining
    breakpoints stopped at (but which is not guaranteed to be good for
    anything but further calls to bpstat_num).
-   Return 0 if passed a bpstat which does not indicate any breakpoints.  */
-extern int bpstat_num (bpstat *);
+   Return 0 if passed a bpstat which does not indicate any breakpoints.
+   Return -1 if stopped at a breakpoint that has been deleted since
+   we set it.
+   Return 1 otherwise.  */
+extern int bpstat_num (bpstat *, int *);
 
 /* Perform actions associated with having stopped at *BSP.  Actually, we just
    use this for breakpoint commands.  Perhaps other actions will go here
@@ -760,6 +756,10 @@ extern void disable_watchpoints_before_interactive_call_start (void);
 
 extern void enable_watchpoints_after_interactive_call_stop (void);
 
+/* For script interpreters that need to define breakpoint commands
+   after they've already read the commands into a struct command_line.  */
+extern enum command_control_type commands_from_control_command
+  (char *arg, struct command_line *cmd);
 
 extern void clear_breakpoint_hit_counts (void);
 
@@ -792,7 +792,7 @@ extern void remove_solib_event_breakpoints (void);
 
 extern void remove_thread_event_breakpoints (void);
 
-extern void disable_breakpoints_in_shlibs (int silent);
+extern void disable_breakpoints_in_shlibs (void);
 
 extern void re_enable_breakpoints_in_shlibs (void);
 
@@ -835,13 +835,5 @@ extern void remove_single_step_breakpoints (void);
    ways.  Please do not add more uses!  */
 extern void *deprecated_insert_raw_breakpoint (CORE_ADDR);
 extern int deprecated_remove_raw_breakpoint (void *);
-
-/* Indicator of whether exception catchpoints should be nuked between
-   runs of a program.  */
-extern int deprecated_exception_catchpoints_are_fragile;
-
-/* Indicator of when exception catchpoints set-up should be
-   reinitialized -- e.g. when program is re-run.  */
-extern int deprecated_exception_support_initialized;
 
 #endif /* !defined (BREAKPOINT_H) */

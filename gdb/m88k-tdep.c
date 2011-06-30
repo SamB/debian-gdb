@@ -1,12 +1,12 @@
 /* Target-dependent code for the Motorola 88000 series.
 
-   Copyright (C) 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "arch-utils.h"
@@ -122,7 +120,7 @@ m88k_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 }
 
 static void
-m88k_write_pc (CORE_ADDR pc, ptid_t ptid)
+m88k_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
   /* According to the MC88100 RISC Microprocessor User's Manual,
      section 6.4.3.1.2:
@@ -140,9 +138,9 @@ m88k_write_pc (CORE_ADDR pc, ptid_t ptid)
      with it.  We could even (presumably) give it a totally bogus
      value.  */
 
-  write_register_pid (M88K_SXIP_REGNUM, pc, ptid);
-  write_register_pid (M88K_SNIP_REGNUM, pc | 2, ptid);
-  write_register_pid (M88K_SFIP_REGNUM, (pc + 4) | 2, ptid);
+  regcache_cooked_write_unsigned (regcache, M88K_SXIP_REGNUM, pc);
+  regcache_cooked_write_unsigned (regcache, M88K_SNIP_REGNUM, pc | 2);
+  regcache_cooked_write_unsigned (regcache, M88K_SFIP_REGNUM, (pc + 4) | 2);
 }
 
 
@@ -659,12 +657,9 @@ m88k_frame_cache (struct frame_info *next_frame, void **this_cache)
   cache->saved_regs = trad_frame_alloc_saved_regs (next_frame);
   cache->fp_offset = -1;
 
-  cache->pc = frame_func_unwind (next_frame);
+  cache->pc = frame_func_unwind (next_frame, NORMAL_FRAME);
   if (cache->pc != 0)
-    {
-      CORE_ADDR addr_in_block = frame_unwind_address_in_block (next_frame);
-      m88k_analyze_prologue (cache->pc, addr_in_block, cache);
-    }
+    m88k_analyze_prologue (cache->pc, frame_pc_unwind (next_frame), cache);
 
   /* Calculate the stack pointer used in the prologue.  */
   if (cache->fp_offset != -1)
@@ -845,7 +840,7 @@ m88k_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* There is no real `long double'.  */
   set_gdbarch_long_double_bit (gdbarch, 64);
-  set_gdbarch_long_double_format (gdbarch, &floatformat_ieee_double_big);
+  set_gdbarch_long_double_format (gdbarch, floatformats_ieee_double);
 
   set_gdbarch_num_regs (gdbarch, M88K_NUM_REGS);
   set_gdbarch_register_name (gdbarch, m88k_register_name);

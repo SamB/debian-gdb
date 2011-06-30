@@ -1,13 +1,12 @@
 /* Remote serial support interface definitions for GDB, the GNU Debugger.
-   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001,
-   2004, 2005, 2006
-   Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2004,
+   2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef SERIAL_H
 #define SERIAL_H
@@ -192,6 +189,11 @@ extern int serial_debug_p (struct serial *scb);
 struct serial
   {
     int fd;			/* File descriptor */
+    /* File descriptor for a separate error stream that should be
+       immediately forwarded to gdb_stderr.  This may be -1.
+       If != -1, this descriptor should be non-blocking or
+       ops->avail should be non-NULL.  */
+    int error_fd;               
     struct serial_ops *ops;	/* Function vector */
     void *state;       		/* Local context info for open FD */
     serial_ttystate ttystate;	/* Not used (yet) */
@@ -247,6 +249,11 @@ struct serial_ops
     /* Perform a low-level write operation, writing (at most) COUNT
        bytes from BUF.  */
     int (*write_prim)(struct serial *scb, const void *buf, size_t count);
+    /* Return that number of bytes that can be read from FD
+       without blocking.  Return value of -1 means that the
+       the read will not block even if less that requested bytes
+       are available.  */
+    int (*avail)(struct serial *scb, int fd);
 
 #ifdef USE_WIN32API
     /* Return a handle to wait on, indicating available data from SCB

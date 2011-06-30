@@ -1,18 +1,17 @@
-# Copyright 2005 Free Software Foundation, Inc.
+# Copyright 2005, 2007 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 if $tracelevel then {
 	strace $tracelevel
@@ -55,7 +54,12 @@ gdb_test "shell mv ${binfile1} ${binfile}" "" ""
 gdb_load ${binfile}
 
 # Start the program, we should land in the program main procedure
-gdb_test "start" \
+if { [gdb_start_cmd] < 0 } {
+    untested start
+    return -1
+}
+
+gdb_test "" \
          "first \\(\\) at .*first.adb.*" \
          "start first"
 
@@ -68,20 +72,13 @@ gdb_test "shell mv ${binfile2} ${binfile}" "" ""
 gdb_test "shell sleep 1" "" ""
 gdb_test "shell touch ${binfile}" "" ""
 
-# Stop GDB from asking confirmations. This test will restart the program
-# and we don't need GDB to ask us to confirm that we want to kill the
-# current process.
-gdb_test "set confirm off" "" ""
-
 # Start the program a second time, GDB should land in procedure Second
 # this time.
 
-if [is_remote target] {
-    unsupported "start the program a second time ";
+if { [gdb_start_cmd] < 0 } {
+    fail "start second"
 } else {
-    # Start the program, we should land in the program main procedure
-    gdb_test "start" \
+    gdb_test "" \
              "second \\(\\) at .*second.adb.*" \
              "start second"
 }
-

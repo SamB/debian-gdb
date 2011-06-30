@@ -1,12 +1,12 @@
 /* Target-dependent code for GNU/Linux m32r.
 
-   Copyright (C) 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbcore.h"
@@ -33,6 +31,7 @@
 
 #include "glibc-tdep.h"
 #include "solib-svr4.h"
+#include "symtab.h"
 
 #include "trad-frame.h"
 #include "frame-unwind.h"
@@ -249,7 +248,7 @@ m32r_linux_sigtramp_frame_cache (struct frame_info *next_frame,
       if (addr)
 	sigcontext_addr += 128;
       else
-	addr = frame_func_unwind (next_frame);
+	addr = frame_func_unwind (next_frame, NORMAL_FRAME);
     }
   cache->pc = addr;
 
@@ -382,7 +381,7 @@ m32r_linux_supply_gregset (const struct regset *regset,
 	  break;
 	}
 
-      regcache_raw_supply (current_regcache, i,
+      regcache_raw_supply (regcache, i,
 			   regs + m32r_pt_regs_offset[i]);
     }
 }
@@ -413,6 +412,7 @@ m32r_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   frame_unwind_append_sniffer (gdbarch, m32r_linux_sigtramp_frame_sniffer);
 
   /* GNU/Linux uses SVR4-style shared libraries.  */
+  set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);
   set_solib_svr4_fetch_link_map_offsets
     (gdbarch, svr4_ilp32_fetch_link_map_offsets);
 

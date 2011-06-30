@@ -1,19 +1,571 @@
+2007-09-04  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* linux-low.c (linux_wait_for_event): Do not pass signals while
+	single-stepping.
+
+2007-09-03  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.c (create_process): New.
+	(win32_create_inferior): Use create_process instead of
+	CreateProcess.  If create_process failed retry appending an ".exe"
+	suffix.  Store the GetLastError result immediatelly after
+	create_process calls and use it on the call to error.
+
+2007-09-03  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.c (handle_load_dll): Don't use toolhelp when waiting.
+
+2007-08-23  Joel Brobecker  <brobecker@adacore.com>
+
+	* configure.ac: Switch license to GPLv3.
+
+2007-08-01  Michael Snyder  <msnyder@access-company.com>
+
+	* remote-utils.c (putpkt_binary): Memory leak, free buf2.
+
+2007-07-31  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.c (winapi_CloseToolhelp32Snapshot) [_WIN32_WCE]: New
+	typedef.
+	(win32_CloseToolhelp32Snapshot) [_WIN32_WCE]: New global var.
+	(load_toolhelp) [_WIN32_WCE]: Load TOOLHELP.DLL.  Get
+	CloseToolhelp32Snapshot.
+	(toolhelp_get_dll_name) [_WIN32_WCE]: Close the snapshot with
+	CloseToolhelp32Snapshot.
+
+2007-07-27  Michael Snyder  <michael.snyder@access-company.com>
+
+	* server.c (main): Check for inferior exit before main loop.
+
+2007-07-18  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* remote-utils.c (remote_open): Set SO_KEEPALIVE on remote_desc
+	instead of on tmp_desc.
+
+2007-07-17  Pedro Alves  <pedro_alves@portugalmail.pt>
+	    Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* inferiors.c (all_dlls, dlls_changed, get_dll): New.
+	(add_thread): Minor cleanups.
+	(clear_inferiors): Move lower in the file.  Clear the DLL
+	list.
+	(free_one_dll, match_dll, loaded_dll, unloaded_dll, clear_list): New.
+	* remote-utils.c (prepare_resume_reply): Check dlls_changed.
+	(xml_escape_text): New.
+	* server.c (handle_query): Handle qXfer:libraries:read.  Report it
+	for qSupported.
+	(handle_v_cont): Report errors.
+	(gdbserver_version): Update.
+	(main): Correct size of own_buf.  Do not report initial DLL events.
+	* server.h (struct dll_info, all_dlls, dlls_changed, loaded_dll)
+	(unloaded_dll, xml_escape_text): New.
+	* win32-low.c (enum target_waitkind): Update comments.
+	(win32_add_one_solib, get_image_name, winapi_EnumProcessModules)
+	(winapi_GetModuleInformation, winapi_GetModuleFileNameExA)
+	(win32_EnumProcessModules, win32_GetModuleInformation)
+	(win32_GetModuleFileNameExA, load_psapi, psapi_get_dll_name)
+	(winapi_CreateToolhelp32Snapshot, winapi_Module32First)
+	(winapi_Module32Next, win32_CreateToolhelp32Snapshot)
+	(win32_Module32First, win32_Module32Next, load_toolhelp)
+	(toolhelp_get_dll_name, handle_load_dll, handle_unload_dll): New.
+	(get_child_debug_event): Handle DLL events.
+	(win32_wait): Likewise.
+
+2007-07-12  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* configure.srv: Set srv_linux_regsets for sh*-*-linux*.
+	* linux-sh-low.c (sh_fill_gregset, target_regsets): New.
+
+2007-07-08  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.c (handle_output_debug_string): Ignore event if not
+	waiting.
+
+2007-07-08  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-arm-low.c (arm_wince_breakpoint): Fix typo.
+
+2007-07-03  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* remote-utils.c (look_up_one_symbol): Handle 'm' packets.
+
+2007-07-02  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* inferiors.c (change_inferior_id): Add comment.
+	* linux-low.c (check_removed_breakpoint): Add an early
+	prototype.  Improve debug output.
+	(linux_attach): Doc update.
+	(linux_detach_one_process, linux_detach): Clean up before releasing
+	each process.
+	(send_sigstop, wait_for_sigstop): Improve comments and debug output.
+	* linux-low.h (struct process_info): Doc improvement.
+	* mem-break.c (delete_all_breakpoints): New.
+	* mem-break.h (delete_all_breakpoints): New prototype.
+	* thread-db.c (find_first_thread): New.
+	(thread_db_create_event): Call it instead of
+	thread_db_find_new_threads.  Clean up unused variables.
+	(maybe_attach_thread): Remove first thread handling.
+	(thread_db_find_new_threads): Use find_first_thread.
+	(thread_db_get_tls_address): Likewise.
+
+2007-06-27  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* thread-db.c (thread_db_find_new_threads): Add prototype.
+	(thread_db_create_event): Check for the main thread before adding
+	a new thread.
+	(maybe_attach_thread): Only enable event reporting if TID == 0.
+	(thread_db_get_tls_address): Check for new threads.
+
+2007-06-20  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* linux-low.c (linux_create_inferior): Try execv before execvp.
+	* spu-low.c (spu_create_inferior): Likewise.
+
+2007-06-13  Mike Frysinger  <vapier@gentoo.org>
+
+	* linux-low.c (linux_create_inferior): Change execv to execvp.
+	* spu-low.c (spu_create_inferior): Likewies.
+
+2007-06-13  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* Makefile.in (clean): Clean new files instead of deleted ones.
+	(reg-mips.o, reg-mips.c, reg-mips64.o, reg-mips64.c): Delete.
+	(mips-linux.o, mips-linux.c, mips64-linux.o, mips64-linux.c): New
+	rules.
+	* configure.srv: Specify XML files and new regformats for MIPS and
+	MIPS64 GNU/Linux.
+	* linux-mips-low.c (mips_num_regs): Set to only used registers.
+	(mips_regmap): Do not fetch $0.  Remove unused registers.  Add
+	an entry for the restart register.
+	(mips_cannot_fetch_register, mips_cannot_store_register)
+	(mips_reinsert_addr, mips_fill_fpregset, mips_store_fpregset): Update
+	register names to match the XML descriptions.
+	(mips_fill_gregset, mips_store_gregset): Likewise.  Handle the
+	restart register instead of $0.
+
+2007-06-12  Ulrich Weigand  <uweigand@de.ibm.com>
+	    Markus Deuling  <deuling@de.ibm.com>
+
+	* remote-utils.c (decode_xfer_write): New function.
+	* server.h (decode_xfer_write): Add prototype.
+	* server.c (handle_query): Add PACKET_LEN argument.  Support
+	qXfer:spu:read and qXfer:spu:write packets.
+	(main): Pass packet_len to handle_query.
+	* spu-low.c (spu_target_ops): Add spu_proc_xfer_spu.
+	* target.h (target_ops): Add qxfer_spu.
+
+2007-06-12  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* spu-low.c (spu_proc_xfer_spu): Do not return failure when
+	accessing non-seekable spufs files.
+
+2007-05-16  Markus Deuling  <deuling@de.ibm.com>
+
+	* server.c (handle_query): Add reply for qC packet. 
+
+2007-05-10  Pedro Alves  <pedro_alves@portugalmail.pt>
+	    Leo Zayas  <lerele@champenstudios@com>
+
+	* server.h (check_remote_input_interrupt_request): New function.
+	* remote_utils.c (INVALID_DESCRIPTOR): New define.
+	(remote_desc): Initialize with INVALID_DESCRIPTOR.
+	(input_interrupt): Expose on USE_WIN32API too.  Fix whitespace.
+	(check_remote_input_interrupt_request): New function.
+	* server.h (check_remote_input_interrupt_request): Declare.
+	* win32-low.c (winapi_DebugBreakProcess,
+	winapi_GenerateConsoleCtrlEvent): New typedefs.
+	(get_child_debug_event): Lower Win32 debug event polling from 1 sec
+	to 250 ms.
+	(win32_wait): Check for remote interrupt request
+	with check_remote_input_interrupt_request.
+	(win32_request_interrupt): New function.
+	(win32_target_op): Set request_interrupt to win32_request_interrupt.
+
+2007-05-10  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.c (debug_registers_changed,
+	debug_registers_used, CONTEXT_EXTENDED_REGISTERS,
+	CONTEXT_FLOATING_POINT, CONTEXT_DEBUG_REGISTERS,
+	CONTEXT_DEBUGGER, CONTEXT_DEBUGGER_DR): Delete.
+	(thread_rec): Get context using the low target.
+	(child_add_thread): Call thread_added on the low target,
+	which does the same thing.
+	(regptr): Delete.
+	(do_initial_child_stuff): Remove debug registers references.
+	Set context using the low target.  Resume threads after
+	setting the contexts.
+	(child_continue): Remove dead variable.  Remove debug
+	registers references.
+	(child_fetch_inferior_registers): Go through the low target.
+	(do_child_store_inferior_registers): Remove.
+	(child_store_inferior_registers): Go through the low target.
+	(win32_resume): Remove debug registers references.
+	Set context using the low target.
+	(handle_exception): Change return type to void.  Don't record
+	context here.  Set status to TARGET_WAITKIND_SPURIOUS on a
+	first chance exception.
+	(get_child_debug_event): Change return type to void.  Remove 
+	goto loop.  Always return after waiting for debug event.
+	(win32_wait): Convert to switch statement.  Handle spurious
+	events.
+
+	* win32-i386-low.c (debug_registers_changed,
+	debug_registers_used): New.
+	(initial_stuff): Rename to ...
+	(i386_initial_stuff): ... this.  Clear debug registers
+	state variables.
+	(store_debug_registers): Delete.
+	(i386_get_thread_context): New.
+	(load_debug_registers): Delete.
+	(i386_set_thread_context): New.
+	(i386_thread_added): New.
+	(single_step): Rename to ...
+	(i386_single_step): ... this.
+	(do_fetch_inferior_registers): Rename to ...
+	(i386_fetch_inferior_register): ... this.
+	(i386_store_inferior_register): New.
+	(the_low_target): Adapt to new interface.
+
+	* win32-arm-low.c (CONTEXT_FLOATING_POINT): Define.
+	(arm_get_thread_context): New.
+	(arm_set_thread_context): New.
+	(regptr): New.
+	(do_fetch_inferior_registers): Rename to ...
+	(arm_fetch_inferior_register): ... this.
+	(arm_store_inferior_register): New.
+	(arm_wince_breakpoint): Reimplement as unsigned long.
+	(arm_wince_breakpoint_len): Define.
+	(the_low_target): Adapt to new interface.
+
+	* win32-low.h (target_ops): Remove regmap, store_debug_registers and
+	load_debug_registers.  Add get_thread_context, set_thread_context,
+	thread_added and store_inferior_register.  Rename
+	fetch_inferior_registers to fetch_inferior_register.
+	(regptr): Remove declaration.
+
+2007-05-10  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* linux-low.c (linux_detach): Change return type to int.  Return 0.
+	* spu-low.c (spu_detach): Likewise.
+
+2007-05-10  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* target.h (target_ops): Change return type of detach to int.
+	Add join.
+	(join_inferior): New.
+	* server.c (main): Don't skip detach support on mingw32.
+	If the inferior doesn't support detaching return error.
+	Call join_inferior instead of using waitpid.
+	* linux-low.c (linux_join): New.
+	(linux_target_op): Add linux_join.
+	* spu-low.c (spu_join): New.
+	(spu_target_ops): Add spu_join.
+	* win32-low.c (win32_detach): Adapt to new interface.
+	Reopen current_process_handle before detaching.  Issue a child
+	resume before detaching.
+	(win32_join): New.
+	(win32_target_op): Add win32_join.
+
+2007-05-10  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.c (win32-attach): Fix return value.
+	* target.h (target_ops): Describe ATTACH return values.
+
+2007-05-10  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.c (GETPROCADDRESS): Define.
+	(winapi_DebugActiveProcessStop): Add WINAPI.  typedef as pointer.
+	(winapi_DebugSetProcessKillOnExit): Likewise.
+	(win32_create_inferior): Force usage of ansi CreateProcessA.
+	(win32_attach): Use GETPROCADDRESS.
+	(win32_detach): Likewise.
+
+2007-05-10  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.c (win32_wait): Don't use WSTOPSIG.
+
+2007-03-30  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.c: Commit leftover changes from 2007-03-29.
+
+2007-03-30  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* i387-fp.c (struct i387_fsave, struct i387_fxsave): Make 16-bit
+	fields short instead of int.  Add explicit padding.
+	(i387_cache_to_fsave): Remove unnecessary casts.
+	(i387_fsave_to_cache): Doc fix.
+	(i387_cache_to_fxsave): Remove unnecessary casts and masking.
+
+2007-03-30  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* i387-fp.c (i387_cache_to_fxsave): Reinitialize val2 before use.
+	(i387_fxsave_to_cache): Check fp->ftag while building ftag value.
+
+2007-03-29  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* configure.srv (arm*-*-mingw32ce*): Move near the other
+	arm targets.
+
+2007-03-29  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* configure.ac: Add errno checking.
+	(AC_CHECK_HEADERS): Add errno.h, fcntl.h, signal.h,
+	sys/file.h and malloc.h.
+	(AC_CHECK_DECLS): Add perror.
+	(srv_mingwce): Handle.
+	* configure.srv (i[34567]86-*-cygwin*): Add
+	win32-i386-low.o to srv_tgtobj.
+	(i[34567]86-*-mingw*): Likewise.
+	(arm*-*-mingw32ce*): Add case.
+	* gdbreplay.c [HAVE_SYS_FILE_H, HAVE_SIGNAL_H,
+	HAVE_FCNTL_H, HAVE_ERRNO_H, HAVE_MALLOC_H]: Check.
+	[__MINGW32CE__] (strerror): New function.
+	[__MINGW32CE__] (errno): Define to GetLastError.
+	[__MINGW32CE__] (COUNTOF): New macro.
+	(remote_open): Remove extra close call.
+	* mem-break.c (delete_breakpoint_at): New function.
+	* mem-break.h (delete_breakpoint_at): Declare.
+	* remote-utils.c [HAVE_SYS_FILE_H, HAVE_SIGNAL_H,
+	HAVE_FCNTL_H, HAVE_UNISTD_H, HAVE_ERRNO_H]: Check.
+	[USE_WIN32API] (read, write): Add char* casts.
+	* server.c [HAVE_UNISTD_H, HAVE_SIGNAL_H]: Check.
+	* server.h: Include wincecompat.h on Windows CE.
+	[HAVE_ERRNO_H]: Check.
+	(perror): Declare if not declared.
+	* utils.c: Add stdlib.h, errno.h and malloc.h includes.
+	(perror_with_name): Remove errno declaration.
+	* wincecompat.h: New.
+	* wincecompat.c: New.
+	* win32-low.h: New.
+	* win32-arm-low.c: New.
+	* win32-i386-low.c: New.
+	(win32-low.c): Include mem-break.h and win32-low.h, and winnt.h.
+	(OUTMSG2): Make it safe.
+	(_T): New macro.
+	(COUNTOF): New macro.
+	(NUM_REGS): Get it from the low target.
+	(CONTEXT_EXTENDED_REGISTERS, CONTEXT_FLOATING_POINT,
+	CONTEXT_DEBUG_REGISTERS): Add fallbacks to 0.
+	(thread_rec): Let low target handle debug registers.
+	(child_add_thread): Likewise.
+	(child_init_thread_list): Likewise.
+	(continue_one_thread): Likewise.
+	(regptr): New.
+	(do_child_fetch_inferior_registers): Move to ...
+	* win32-i386-low.c: ... here, and rename to ...
+	(do_fetch_inferior_registers): ... this.
+	* win32-low.c (child_fetch_inferior_registers): 
+	Go through the low target.
+	(do_child_store_inferior_registers): Use regptr.
+	(strwinerror): New function.
+	(win32_create_inferior): Handle Windows CE.
+	Use strwinerror instead of strerror on Windows error
+	codes.  Add program to the error output.
+	Don't close the main thread handle on Windows CE.
+	(win32_attach): Use coredll.dll on Windows CE.
+	(win32_kill): Close current process and current
+	thread handles.
+	(win32_detach): Use coredll.dll on Windows CE.
+	(win32_resume): Let low target handle debug registers, and
+	step request.
+	(handle_exception): Add/Remove initial breakpoint.  Avoid
+	non-existant WSTOPSIG on Windows CE.
+	(win32_read_inferior_memory): Cast to remove warning.
+	(win32_arch_string): Go through the low target.
+	(initialize_low): Call set_breakpoint_data with the low
+	target's breakpoint.
+	* win32-low.c (dr, FLAG_TRACE_BIT, FCS_REGNUM,
+	FOP_REGNUM, mappings): Move to ...
+	* win32-i386-low.c: ... here.
+	* win32-low.c (win32_thread_info): Move to ...
+	* win32-low.h: ... here.
+	* Makefile.in (SFILES): Add win32-low.c, win32-i386-low.c,
+	win32-arm-low.c and wincecompat.c.
+	(all:): Add $EXEEXT.
+	(install-only:): Likewise.
+	(gdbserver:): Likewise.
+	(gdbreplay:): Likewise.
+	* config.in: Regenerate.
+	* configure: Regenerate.
+
+2007-03-28  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-low.c: Rename typedef thread_info to
+	win32_thread_info throughout.
+
+2007-03-28  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* win32-i386-low.c: Rename to ...
+	* win32-low.c: ... this.
+	* configure.srv: Replace win32-i386-low.o with win32-low.o.
+	* Makefile.in: Likewise.
+
+2007-03-27  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* remote-utils.c (monitor_output): Constify msg parameter.
+	* server.h (monitor_output): Likewise.
+	* win32-i386-low.c (handle_output_debug_string): New.
+	(win32_kill): Handle OUTPUT_DEBUG_STRING_EVENT events using
+	handle_output_debug_string.
+	(get_child_debug_event): Likewise.
+
+2007-03-27  Mat Hostetter  <mat@lcs.mit.edu>
+
+	* server.c (main): Correct strtoul check.
+
+2007-03-27  Jon Ringle  <jon@ringle.org>
+
+	* linux-low.c: Check __ARCH_HAS_MMU__ also.
+
+2007-03-27  Brooks Moses  <brooks.moses@codesourcery.com>
+
+	* Makefile.in: Add dummy "pdf" and "install-pdf" targets.
+
+2007-02-27  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* terminal.h: Check HAVE_SGTTY_H.
+
+2007-02-27  Mat Hostetter  <mat@lcs.mit.edu>
+
+	* remote-utils.c (remote_open): Print out the assigned port number.
+
+2007-02-26  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* remote-utils.c (monitor_output): New function.
+	* server.c (debug_threads): Define here.
+	(monitor_show_help): New function.
+	(handle_query): Handle qRcmd.
+	(main): Do not handle 'd' packet.
+	* server.h (debug_threads, remote_debug, monitor_output): Declare.
+	* linux-low.c, spu-low.c, win32-i386-low.c: Remove definitions
+	of debug_threads.
+
+2007-02-25  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* Makefile.in (EXEEXT): New.
+	(clean): Use $(EXEEXT).
+
+2007-02-25  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* target.h (target_ops): Rename send_signal to request_interrupt,
+	and remove enum target_signal parameter.
+	* linux-low.c (linux_request_interrupt): Rename from
+	linux_send_signal, and always send SIGINT.
+	* spu-low.c (spu_request_interrupt): Rename from spu_send_signal,
+	and always send SIGINT.
+	* remote-utils.c (putpkt_binary): Call request_interrupt, instead
+	of send_signal.
+	(input_interrupt): Likewise.
+
+2007-02-25  Pedro Alves  <pedro_alves@portugalmail.pt>
+
+	* server.c (get_features_xml): Check if target implemented
+	arch_string.
+	* win32-i386-low.c (win32_arch_string): New.
+	(win32_target_ops): Add win32_arch_string as arch_string member.
+
+2007-02-22  Markus Deuling  <deuling@de.ibm.com>
+
+	* spu-low.c (spu_arch_string): New.
+	(spu_target_ops): Add spu_arch_string.
+
+2007-02-16  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* remote-utils.c: Remove HAVE_TERMINAL_H check.
+	* configure.ac: Do not check for terminal.h.
+	* configure, config.in: Regenerated.
+
+2007-02-08  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* Makefile.in (OBS): Add $(XML_BUILTIN).
+	(XML_DIR, XML_TARGET, XML_FILES, XML_BUILTIN): New.
+	(clean): Update.
+	(target.xml, xml-builtin.c, stamp-xml, arm-with-iwmmxt.o)
+	(arm-with-iwmmxt.c): New.
+	* config.in, configure: Regenerate.
+	* configure.ac: Check for iWMMXt.  Handle srv_xmltarget,
+	srv_xmlbuiltin, and srv_xmlfiles.  Define USE_XML.
+	* configure.srv: Mention srv_xmltarget and srv_xmlfiles.
+	(arm*-*-linux*): Add iWMMXt and regset support.
+	* linux-arm-low.c (PTRACE_GETWMMXREGS, PTRACE_SETWMMXREGS): Define.
+	(arm_fill_gregset, arm_store_gregset, arm_fill_wmmxregset)
+	(arm_store_wmmxregset, target_regsets): New.
+	* server.c (get_features_xml): Take annex argument.  Check builtin
+	XML documents.
+	(handle_query): Handle multiple annexes.
+
+2007-01-29  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* remote-utils.c [USE_WIN32API] (read, write): Define.
+	(putpkt_binary, input_interrupt, readchar, getpkt): Use read and
+	write.
+
+2007-01-09  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* linux-i386-low.c (the_low_target): Set arch_string.
+	* linux-x86-64-low.c (the_low_target): Likewise.
+	* linux-low.c (linux_arch_string): New.
+	(linux_target_ops): Add it.
+	* linux-low.h (struct linux_target_ops): Add arch_string.
+	* server.c (write_qxfer_response): Use const void * for DATA.
+	(get_features_xml): New.
+	(handle_query): Handle qXfer:features:read.  Report it for qSupported.
+	* target.h (struct target_ops): Add arch_string method.
+
+2007-01-03  Denis Pilat  <denis.pilat@st.com>
+	    Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* linux-low.c (linux_kill): Handle being called with no threads.
+	* win32-i386-low.c (win32_kill): Likewise.
+	(get_child_debug_event): Clear current_process_handle.
+
+2006-12-30  Denis PILAT  <denis.pilat@st.com>
+	    Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* remote-utils.c (remote_open): Check the type of specified
+	serial port devices before opening them.
+	* server.c (main): Kill the inferior if an error occurs during
+	the first remote_open.
+
 2006-12-05  Markus Deuling  <deuling@de.ibm.com>
 
 	* README: Update supported targets.
 
-2006-11-24  Ulrich Weigand  <uweigand@de.ibm.com>
+2006-11-28  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* Makefile.in (clean): Remove reg-mips64.c.
+	(reg-mips64.c, reg-mips64.o): New rules.
+	* configure.srv: Handle mips64.  Include regset support for mips.
+	* linux-mips-low.c (union mips_register): New.
+	(mips_get_pc, mips_set_pc, mips_reinsert_addr): Use it.
+	(mips_breakpoint, mips_breakpoint_at): Use int.
+	(mips_collect_register, mips_supply_register)
+	(mips_collect_register_32bit, mips_supply_register_32bit)
+	(mips_fill_gregset, mips_store_gregset, mips_fill_fpregset)
+	(mips_store_fpregset, target_regsets): New.
+	* thread-db.c (thread_db_get_tls_address): Use uintptr_t.
+
+2006-11-22  Ulrich Weigand  <uweigand@de.ibm.com>
 
 	* configure.srv: Add target "spu*-*-*".
 	* Makefile.in (clean): Remove reg-spu.c.
 	(reg-spu.c, reg-spu.o, spu-low.o): Add dependencies.
 	* spu-low.c: New file.
 
-2006-11-21  Daniel Jacobowitz  <dan@codesourcery.com>
+2006-11-16  Daniel Jacobowitz  <dan@codesourcery.com>
 
-	Checked in by Joel Brobecker  <brobecker@adacore.com>
 	* configure.ac: Correct td_thr_tls_get_addr test.
 	* configure: Regenerated.
+
+2006-11-16  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* linux-low.c (linux_wait_for_event): Reformat.  Use the
+	pass_signals array.
+	* remote-utils.c (decode_address_to_semicolon): New.
+	* server.c (pass_signals, handle_general_set): New.
+	(handle_query): Mention QPassSignals for qSupported.
+	(main): Call handle_general_set.
+	* server.h (pass_signals, decode_address_to_semicolon): New.
 
 2006-11-06  Daniel Jacobowitz  <dan@codesourcery.com>
 

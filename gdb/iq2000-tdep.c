@@ -1,7 +1,7 @@
 /* Target-dependent code for the IQ2000 architecture, for GDB, the GNU
    Debugger.
 
-   Copyright (C) 2000, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    Contributed by Red Hat.
 
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -501,7 +499,8 @@ iq2000_breakpoint_from_pc (CORE_ADDR *pcptr, int *lenptr)
 	   (long) *pcptr);
 
   *lenptr = 4;
-  return (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG) ? big_breakpoint
+  return (gdbarch_byte_order (current_gdbarch)
+	  == BFD_ENDIAN_BIG) ? big_breakpoint
 					       : little_breakpoint;
 }
 
@@ -837,9 +836,9 @@ iq2000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_float_bit            (gdbarch, 4 * TARGET_CHAR_BIT);
   set_gdbarch_double_bit           (gdbarch, 8 * TARGET_CHAR_BIT);
   set_gdbarch_long_double_bit      (gdbarch, 8 * TARGET_CHAR_BIT);
-  set_gdbarch_float_format         (gdbarch, & floatformat_ieee_single_big);
-  set_gdbarch_double_format        (gdbarch, & floatformat_ieee_double_big);
-  set_gdbarch_long_double_format   (gdbarch, & floatformat_ieee_double_big);
+  set_gdbarch_float_format         (gdbarch, floatformats_ieee_single);
+  set_gdbarch_double_format        (gdbarch, floatformats_ieee_double);
+  set_gdbarch_long_double_format   (gdbarch, floatformats_ieee_double);
   set_gdbarch_return_value	   (gdbarch, iq2000_return_value);
   set_gdbarch_breakpoint_from_pc   (gdbarch, iq2000_breakpoint_from_pc);
   set_gdbarch_frame_args_skip      (gdbarch, 0);

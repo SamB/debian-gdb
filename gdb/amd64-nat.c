@@ -1,12 +1,12 @@
 /* Native-dependent code for AMD64.
 
-   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbarch.h"
@@ -66,10 +64,10 @@ amd64_native_gregset_reg_offset (int regnum)
       num_regs = amd64_native_gregset32_num_regs;
     }
 
-  if (num_regs > NUM_REGS)
-    num_regs = NUM_REGS;
+  if (num_regs > gdbarch_num_regs (current_gdbarch))
+    num_regs = gdbarch_num_regs (current_gdbarch);
 
-  if (regnum < num_regs && regnum < NUM_REGS)
+  if (regnum < num_regs && regnum < gdbarch_num_regs (current_gdbarch))
     return reg_offset[regnum];
 
   return -1;
@@ -100,8 +98,8 @@ amd64_supply_native_gregset (struct regcache *regcache,
   if (gdbarch_ptr_bit (gdbarch) == 32)
     num_regs = amd64_native_gregset32_num_regs;
 
-  if (num_regs > NUM_REGS)
-    num_regs = NUM_REGS;
+  if (num_regs > gdbarch_num_regs (current_gdbarch))
+    num_regs = gdbarch_num_regs (current_gdbarch);
 
   for (i = 0; i < num_regs; i++)
     {
@@ -147,8 +145,8 @@ amd64_collect_native_gregset (const struct regcache *regcache,
 	}
     }
 
-  if (num_regs > NUM_REGS)
-    num_regs = NUM_REGS;
+  if (num_regs > gdbarch_num_regs (current_gdbarch))
+    num_regs = gdbarch_num_regs (current_gdbarch);
 
   for (i = 0; i < num_regs; i++)
     {

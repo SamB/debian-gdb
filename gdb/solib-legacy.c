@@ -1,13 +1,12 @@
 /* Provide legacy r_debug and link_map support for SVR4-like native targets.
 
-   Copyright (C) 2000, 2001, 2006
-   Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbcore.h"
@@ -64,51 +61,28 @@ legacy_svr4_fetch_link_map_offsets (void)
       lmo.link_map_size = sizeof (struct link_map);
 
       lmo.l_addr_offset = offsetof (struct link_map, l_addr);
-      lmo.l_addr_size = fieldsize (struct link_map, l_addr);
-
       lmo.l_next_offset = offsetof (struct link_map, l_next);
-      lmo.l_next_size = fieldsize (struct link_map, l_next);
-
       lmo.l_ld_offset = offsetof (struct link_map, l_ld);
-      lmo.l_ld_size = fieldsize (struct link_map, l_ld);
-
       lmo.l_prev_offset = offsetof (struct link_map, l_prev);
-      lmo.l_prev_size = fieldsize (struct link_map, l_prev);
-
       lmo.l_name_offset = offsetof (struct link_map, l_name);
-      lmo.l_name_size = fieldsize (struct link_map, l_name);
 #else /* !defined(HAVE_STRUCT_LINK_MAP_WITH_L_MEMBERS) */
 #ifdef HAVE_STRUCT_LINK_MAP_WITH_LM_MEMBERS
       lmo.link_map_size = sizeof (struct link_map);
 
       lmo.l_addr_offset = offsetof (struct link_map, lm_addr);
-      lmo.l_addr_size = fieldsize (struct link_map, lm_addr);
-
       lmo.l_next_offset = offsetof (struct link_map, lm_next);
-      lmo.l_next_size = fieldsize (struct link_map, lm_next);
-
       /* FIXME: Is this the right field name, or is it available at all?  */
       lmo.l_ld_offset = offsetof (struct link_map, lm_ld);
-      lmo.l_ld_size = fieldsize (struct link_map, lm_ld);
-
       lmo.l_name_offset = offsetof (struct link_map, lm_name);
-      lmo.l_name_size = fieldsize (struct link_map, lm_name);
 #else /* !defined(HAVE_STRUCT_LINK_MAP_WITH_LM_MEMBERS) */
 #if HAVE_STRUCT_SO_MAP_WITH_SOM_MEMBERS
       lmo.link_map_size = sizeof (struct so_map);
 
       lmo.l_addr_offset = offsetof (struct so_map, som_addr);
-      lmo.l_addr_size = fieldsize (struct so_map, som_addr);
-
       lmo.l_next_offset = offsetof (struct so_map, som_next);
-      lmo.l_next_size = fieldsize (struct so_map, som_next);
-
       lmo.l_name_offset = offsetof (struct so_map, som_path);
-      lmo.l_name_size = fieldsize (struct so_map, som_path);
-
       /* FIXME: Is the address of the dynamic table available?  */
-      lmo.l_ld_offset = 0;
-      lmo.l_ld_size = 0;
+      lmo.l_ld_offset = -1;
 #endif /* HAVE_STRUCT_SO_MAP_WITH_SOM_MEMBERS */
 #endif /* HAVE_STRUCT_LINK_MAP_WITH_LM_MEMBERS */
 #endif /* HAVE_STRUCT_LINK_MAP_WITH_L_MEMBERS */
@@ -127,16 +101,9 @@ legacy_svr4_fetch_link_map_offsets (void)
       lmo32.link_map_size = sizeof (struct link_map32);
 
       lmo32.l_addr_offset = offsetof (struct link_map32, l_addr);
-      lmo32.l_addr_size = fieldsize (struct link_map32, l_addr);
-
       lmo32.l_next_offset = offsetof (struct link_map32, l_next);
-      lmo32.l_next_size = fieldsize (struct link_map32, l_next);
-
       lmo32.l_prev_offset = offsetof (struct link_map32, l_prev);
-      lmo32.l_prev_size = fieldsize (struct link_map32, l_prev);
-
       lmo32.l_name_offset = offsetof (struct link_map32, l_name);
-      lmo32.l_name_size = fieldsize (struct link_map32, l_name);
     }
 #endif /* defined (HAVE_STRUCT_LINK_MAP32) */
 
@@ -146,7 +113,7 @@ legacy_svr4_fetch_link_map_offsets (void)
       if (bfd_get_arch_size (exec_bfd) == 32)
 	return lmp32;
     }
-  if (TARGET_PTR_BIT == 32)
+  if (gdbarch_ptr_bit (current_gdbarch) == 32)
     return lmp32;
 #endif
   return lmp;

@@ -1,13 +1,13 @@
 /* GDB-specific functions for operating on agent expressions.
 
-   Copyright (C) 1998, 1999, 2000, 2001, 2003 Free Software Foundation,
-   Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2003, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -461,7 +459,8 @@ gen_frame_args_address (struct agent_expr *ax)
   int frame_reg;
   LONGEST frame_offset;
 
-  TARGET_VIRTUAL_FRAME_POINTER (ax->scope, &frame_reg, &frame_offset);
+  gdbarch_virtual_frame_pointer (current_gdbarch,
+				 ax->scope, &frame_reg, &frame_offset);
   ax_reg (ax, frame_reg);
   gen_offset (ax, frame_offset);
 }
@@ -475,7 +474,8 @@ gen_frame_locals_address (struct agent_expr *ax)
   int frame_reg;
   LONGEST frame_offset;
 
-  TARGET_VIRTUAL_FRAME_POINTER (ax->scope, &frame_reg, &frame_offset);
+  gdbarch_virtual_frame_pointer (current_gdbarch,
+				 ax->scope, &frame_reg, &frame_offset);
   ax_reg (ax, frame_reg);
   gen_offset (ax, frame_offset);
 }
@@ -1170,12 +1170,15 @@ find_field (struct type *type, char *name)
     {
       char *this_name = TYPE_FIELD_NAME (type, i);
 
-      if (this_name && strcmp (name, this_name) == 0)
-	return i;
+      if (this_name)
+	{
+	  if (strcmp (name, this_name) == 0)
+	    return i;
 
-      if (this_name[0] == '\0')
-	internal_error (__FILE__, __LINE__,
-			_("find_field: anonymous unions not supported"));
+	  if (this_name[0] == '\0')
+	    internal_error (__FILE__, __LINE__,
+			    _("find_field: anonymous unions not supported"));
+	}
     }
 
   error (_("Couldn't find member named `%s' in struct/union `%s'"),
@@ -1317,7 +1320,7 @@ gen_bitfield_ref (struct agent_expr *ax, struct axs_value *value,
 	     the sign/zero extension will wipe them out.
 	     - If we're in the interior of the word, then there is no garbage
 	     on either end, because the ref operators zero-extend.  */
-	  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+	  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
 	    gen_left_shift (ax, end - (offset + op_size));
 	  else
 	    gen_left_shift (ax, offset - start);
@@ -1597,8 +1600,14 @@ gen_expr (union exp_element **pc, struct agent_expr *ax,
 
     case OP_REGISTER:
       {
-	int reg = (int) (*pc)[1].longconst;
-	(*pc) += 3;
+	const char *name = &(*pc)[2].string;
+	int reg;
+	(*pc) += 4 + BYTES_TO_EXP_ELEM ((*pc)[1].longconst + 1);
+	reg = frame_map_name_to_regnum (deprecated_safe_get_selected_frame (),
+					name, strlen (name));
+	if (reg == -1)
+	  internal_error (__FILE__, __LINE__,
+			  _("Register $%s not available"), name);
 	value->kind = axs_lvalue_register;
 	value->u.reg = reg;
 	value->type = register_type (current_gdbarch, reg);

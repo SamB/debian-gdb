@@ -1,13 +1,13 @@
 /* Definitions for symbol file management in GDB.
 
-   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
+   2002, 2003, 2004, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (OBJFILES_H)
 #define OBJFILES_H
@@ -148,24 +146,6 @@ struct obj_section
     /* True if this "overlay section" is mapped into an "overlay region". */
     int ovly_mapped;
   };
-
-/* An import entry contains information about a symbol that
-   is used in this objfile but not defined in it, and so needs
-   to be imported from some other objfile */
-/* Currently we just store the name; no attributes. 1997-08-05 */
-typedef char *ImportEntry;
-
-
-/* An export entry contains information about a symbol that
-   is defined in this objfile and available for use in other
-   objfiles */
-typedef struct
-  {
-    char *name;			/* name of exported symbol */
-    int address;		/* offset subject to relocation */
-    /* Currently no other attributes 1997-08-05 */
-  }
-ExportEntry;
 
 
 /* The "objstats" structure provides a place for gdb to record some
@@ -406,18 +386,6 @@ struct objfile
     struct obj_section
      *sections, *sections_end;
 
-    /* Imported symbols */
-    /* FIXME: ezannoni 2004-02-10: This is just SOM (HP) specific (see
-       somread.c). It should not pollute generic objfiles.  */
-    ImportEntry *import_list;
-    int import_list_size;
-
-    /* Exported symbols */
-    /* FIXME: ezannoni 2004-02-10: This is just SOM (HP) specific (see
-       somread.c). It should not pollute generic objfiles.  */
-    ExportEntry *export_list;
-    int export_list_size;
-
     /* Link to objfile that contains the debug symbols for this one.
        One is loaded if this file has an debug link to an existing
        debug file with the right checksum */
@@ -558,8 +526,6 @@ extern struct obj_section *find_pc_sect_section (CORE_ADDR pc,
 
 extern int in_plt_section (CORE_ADDR, char *);
 
-extern int is_in_import_list (char *, struct objfile *);
-
 /* Keep a registry of per-objfile data-pointers required by other GDB
    modules.  */
 
@@ -602,6 +568,14 @@ extern void *objfile_data (struct objfile *objfile,
 #define	ALL_SYMTABS(objfile, s) \
   ALL_OBJFILES (objfile)	 \
     ALL_OBJFILE_SYMTABS (objfile, s)
+
+/* Traverse all symtabs in all objfiles, skipping included files
+   (which share a blockvector with their primary symtab).  */
+
+#define ALL_PRIMARY_SYMTABS(objfile, s) \
+  ALL_OBJFILES (objfile)		\
+    ALL_OBJFILE_SYMTABS (objfile, s)	\
+      if ((s)->primary)
 
 /* Traverse all psymtabs in all objfiles.  */
 

@@ -1,6 +1,5 @@
 /* Memory breakpoint interfaces for the remote server for GDB.
-   Copyright (C) 2002, 2005
-   Free Software Foundation, Inc.
+   Copyright (C) 2002, 2005, 2007 Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
 
@@ -8,7 +7,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef MEM_BREAK_H
 #define MEM_BREAK_H
@@ -31,6 +28,11 @@
 
 void set_breakpoint_at (CORE_ADDR where,
 			void (*handler) (CORE_ADDR));
+
+/* Delete a breakpoint previously inserted at ADDR with
+   set_breakpoint_at.  */
+
+void delete_breakpoint_at (CORE_ADDR addr);
 
 /* Create a reinsertion breakpoint at STOP_AT for the breakpoint
    currently at STOP_PC (and temporarily remove the breakpoint at
@@ -67,5 +69,9 @@ void check_mem_write (CORE_ADDR mem_addr, unsigned char *buf, int mem_len);
    must be called before any breakpoints are set.  */
 
 void set_breakpoint_data (const unsigned char *bp_data, int bp_len);
+
+/* Delete all breakpoints.  */
+
+void delete_all_breakpoints (void);
 
 #endif /* MEM_BREAK_H */

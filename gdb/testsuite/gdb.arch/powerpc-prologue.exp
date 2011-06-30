@@ -1,8 +1,8 @@
-# Copyright 2006 Free Software Foundation, Inc.
+# Copyright 2006, 2007 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 3 of the License, or
 # (at your option) any later version.
 #
 # This program is distributed in the hope that it will be useful,
@@ -11,8 +11,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Test PowerPC prologue analyzer.
 
@@ -50,12 +49,40 @@ if ![runto_main] then {
 
 # Testcase for PIC prologue.
 
-gdb_test "continue" "Program received signal SIGTRAP.*" "continue to PIC"
+gdb_breakpoint "gdb2029_marker"
+gdb_test "continue" "Breakpoint $decimal, $hex in gdb2029_marker \\(\\)" \
+	"continue to PIC"
 
 gdb_test "backtrace 10" \
-	"#0\[ \t\]*$hex in gdb2029.*\r\n#1\[ \t\]*$hex in main.*" \
+	"#0\[ \t\]*$hex in gdb2029_marker.*\r\n#1\[ \t\]*$hex in gdb2029.*\r\n#2\[ \t\]*$hex in main.*" \
+	"backtrace in PIC marker"
+
+gdb_test "finish" ".*$hex in gdb2029 .*" "finish from PIC"
+
+gdb_test "backtrace 10" \
+	"#0\[ \t\]*$hex in gdb2029 .*\r\n#1\[ \t\]*$hex in main.*" \
 	"backtrace in PIC"
 
 gdb_test "info frame" \
 	".*Saved registers:.*r30 at.*r31 at.*pc at.*lr at.*" \
 	"saved registers in PIC"
+
+# Testcase for scheduled prologue.
+
+gdb_breakpoint "optimized_1_marker"
+gdb_test "continue" "Breakpoint $decimal, $hex in optimized_1_marker \\(\\)" \
+	"continue to optimized"
+
+gdb_test "backtrace 10" \
+	"#0\[ \t\]*$hex in optimized_1_marker.*\r\n#1\[ \t\]*$hex in optimized_1.*\r\n#2\[ \t\]*$hex in main.*" \
+	"backtrace in optimized marker"
+
+gdb_test "finish" ".*$hex in optimized_1 .*" "finish from optimized"
+
+gdb_test "backtrace 10" \
+	"#0\[ \t\]*$hex in optimized_1 .*\r\n#1\[ \t\]*$hex in main.*" \
+	"backtrace in optimized"
+
+gdb_test "info frame" \
+	".*Saved registers:.*r30 at.*r31 at.*pc at.*lr at.*" \
+	"saved registers in optimized"

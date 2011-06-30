@@ -1,6 +1,6 @@
 /* BFD support for handling relocation entries.
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
    Written by Cygnus Support.
 
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,7 +18,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 /*
 SECTION
@@ -47,8 +48,8 @@ SECTION
 /* DO compile in the reloc_code name table from libbfd.h.  */
 #define _BFD_MAKE_TABLE_bfd_reloc_code_real
 
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "bfdlink.h"
 #include "libbfd.h"
 /*
@@ -1972,6 +1973,10 @@ ENUMX
   BFD_RELOC_SPU_LO16
 ENUMX
   BFD_RELOC_SPU_HI16
+ENUMX
+  BFD_RELOC_SPU_PPU32
+ENUMX
+  BFD_RELOC_SPU_PPU64
 ENUMDOC
   SPU Relocations.
 
@@ -3701,6 +3706,50 @@ ENUMDOC
   Motorola Mcore relocations.
 
 ENUM
+  BFD_RELOC_MEP_8
+ENUMX
+  BFD_RELOC_MEP_16
+ENUMX
+  BFD_RELOC_MEP_32
+ENUMX
+  BFD_RELOC_MEP_PCREL8A2
+ENUMX
+  BFD_RELOC_MEP_PCREL12A2
+ENUMX
+  BFD_RELOC_MEP_PCREL17A2
+ENUMX
+  BFD_RELOC_MEP_PCREL24A2
+ENUMX
+  BFD_RELOC_MEP_PCABS24A2
+ENUMX
+  BFD_RELOC_MEP_LOW16
+ENUMX
+  BFD_RELOC_MEP_HI16U
+ENUMX
+  BFD_RELOC_MEP_HI16S
+ENUMX
+  BFD_RELOC_MEP_GPREL
+ENUMX
+  BFD_RELOC_MEP_TPREL
+ENUMX
+  BFD_RELOC_MEP_TPREL7
+ENUMX
+  BFD_RELOC_MEP_TPREL7A2
+ENUMX
+  BFD_RELOC_MEP_TPREL7A4
+ENUMX
+  BFD_RELOC_MEP_UIMM24
+ENUMX
+  BFD_RELOC_MEP_ADDR24A4
+ENUMX
+  BFD_RELOC_MEP_GNU_VTINHERIT
+ENUMX
+  BFD_RELOC_MEP_GNU_VTENTRY
+ENUMDOC
+  Toshiba Media Processor Relocations.
+COMMENT
+
+ENUM
   BFD_RELOC_MMIX_GETA
 ENUMX
   BFD_RELOC_MMIX_GETA_1
@@ -4468,6 +4517,63 @@ ENUMDOC
   NS CR16C Relocations.
 
 ENUM
+  BFD_RELOC_CR16_NUM8
+ENUMX
+  BFD_RELOC_CR16_NUM16
+ENUMX
+  BFD_RELOC_CR16_NUM32
+ENUMX
+  BFD_RELOC_CR16_NUM32a
+ENUMX
+  BFD_RELOC_CR16_REGREL0
+ENUMX
+  BFD_RELOC_CR16_REGREL4
+ENUMX
+  BFD_RELOC_CR16_REGREL4a
+ENUMX
+  BFD_RELOC_CR16_REGREL14
+ENUMX
+  BFD_RELOC_CR16_REGREL14a
+ENUMX
+  BFD_RELOC_CR16_REGREL16
+ENUMX
+  BFD_RELOC_CR16_REGREL20
+ENUMX
+  BFD_RELOC_CR16_REGREL20a
+ENUMX
+  BFD_RELOC_CR16_ABS20
+ENUMX
+  BFD_RELOC_CR16_ABS24
+ENUMX
+  BFD_RELOC_CR16_IMM4
+ENUMX
+  BFD_RELOC_CR16_IMM8
+ENUMX
+  BFD_RELOC_CR16_IMM16
+ENUMX
+  BFD_RELOC_CR16_IMM20
+ENUMX
+  BFD_RELOC_CR16_IMM24
+ENUMX
+  BFD_RELOC_CR16_IMM32
+ENUMX
+  BFD_RELOC_CR16_IMM32a
+ENUMX
+  BFD_RELOC_CR16_DISP4
+ENUMX
+  BFD_RELOC_CR16_DISP8
+ENUMX
+  BFD_RELOC_CR16_DISP16
+ENUMX
+  BFD_RELOC_CR16_DISP20
+ENUMX
+  BFD_RELOC_CR16_DISP24
+ENUMX
+  BFD_RELOC_CR16_DISP24a
+ENUMDOC
+  NS CR16 Relocations.
+
+ENUM
   BFD_RELOC_CRX_REL4
 ENUMX
   BFD_RELOC_CRX_REL8
@@ -4669,6 +4775,12 @@ ENUMX
   BFD_RELOC_XSTORMY16_FPTR16
 ENUMDOC
   Sony Xstormy16 Relocations.
+
+ENUM
+  BFD_RELOC_RELC
+ENUMDOC
+  Self-describing complex relocations.
+COMMENT
 
 ENUM
   BFD_RELOC_XC16X_PAG
@@ -4892,10 +5004,13 @@ CODE_FRAGMENT
 /*
 FUNCTION
 	bfd_reloc_type_lookup
+	bfd_reloc_name_lookup
 
 SYNOPSIS
 	reloc_howto_type *bfd_reloc_type_lookup
 	  (bfd *abfd, bfd_reloc_code_real_type code);
+	reloc_howto_type *bfd_reloc_name_lookup
+	  (bfd *abfd, const char *reloc_name);
 
 DESCRIPTION
 	Return a pointer to a howto structure which, when
@@ -4908,6 +5023,12 @@ reloc_howto_type *
 bfd_reloc_type_lookup (bfd *abfd, bfd_reloc_code_real_type code)
 {
   return BFD_SEND (abfd, reloc_type_lookup, (abfd, code));
+}
+
+reloc_howto_type *
+bfd_reloc_name_lookup (bfd *abfd, const char *reloc_name)
+{
+  return BFD_SEND (abfd, reloc_name_lookup, (abfd, reloc_name));
 }
 
 static reloc_howto_type bfd_howto_32 =
@@ -5064,26 +5185,28 @@ bfd_generic_get_relocated_section_contents (bfd *abfd,
 					    bfd_boolean relocatable,
 					    asymbol **symbols)
 {
-  /* Get enough memory to hold the stuff.  */
   bfd *input_bfd = link_order->u.indirect.section->owner;
   asection *input_section = link_order->u.indirect.section;
-
-  long reloc_size = bfd_get_reloc_upper_bound (input_bfd, input_section);
-  arelent **reloc_vector = NULL;
+  long reloc_size;
+  arelent **reloc_vector;
   long reloc_count;
   bfd_size_type sz;
 
+  reloc_size = bfd_get_reloc_upper_bound (input_bfd, input_section);
   if (reloc_size < 0)
-    goto error_return;
-
-  reloc_vector = bfd_malloc (reloc_size);
-  if (reloc_vector == NULL && reloc_size != 0)
-    goto error_return;
+    return NULL;
 
   /* Read in the section.  */
   sz = input_section->rawsize ? input_section->rawsize : input_section->size;
   if (!bfd_get_section_contents (input_bfd, input_section, data, 0, sz))
-    goto error_return;
+    return NULL;
+
+  if (reloc_size == 0)
+    return data;
+
+  reloc_vector = bfd_malloc (reloc_size);
+  if (reloc_vector == NULL)
+    return NULL;
 
   reloc_count = bfd_canonicalize_reloc (input_bfd,
 					input_section,
@@ -5098,13 +5221,31 @@ bfd_generic_get_relocated_section_contents (bfd *abfd,
       for (parent = reloc_vector; *parent != NULL; parent++)
 	{
 	  char *error_message = NULL;
-	  bfd_reloc_status_type r =
-	    bfd_perform_relocation (input_bfd,
-				    *parent,
-				    data,
-				    input_section,
-				    relocatable ? abfd : NULL,
-				    &error_message);
+	  asymbol *symbol;
+	  bfd_reloc_status_type r;
+
+	  symbol = *(*parent)->sym_ptr_ptr;
+	  if (symbol->section && elf_discarded_section (symbol->section))
+	    {
+	      bfd_byte *p;
+	      static reloc_howto_type none_howto
+		= HOWTO (0, 0, 0, 0, FALSE, 0, complain_overflow_dont, NULL,
+			 "unused", FALSE, 0, 0, FALSE);
+
+	      p = data + (*parent)->address * bfd_octets_per_byte (input_bfd);
+	      _bfd_clear_contents ((*parent)->howto, input_bfd, p);
+	      (*parent)->sym_ptr_ptr = bfd_abs_section.symbol_ptr_ptr;
+	      (*parent)->addend = 0;
+	      (*parent)->howto = &none_howto;
+	      r = bfd_reloc_ok;
+	    }
+	  else
+	    r = bfd_perform_relocation (input_bfd,
+					*parent,
+					data,
+					input_section,
+					relocatable ? abfd : NULL,
+					&error_message);
 
 	  if (relocatable)
 	    {
@@ -5150,12 +5291,11 @@ bfd_generic_get_relocated_section_contents (bfd *abfd,
 	    }
 	}
     }
-  if (reloc_vector != NULL)
-    free (reloc_vector);
+
+  free (reloc_vector);
   return data;
 
 error_return:
-  if (reloc_vector != NULL)
-    free (reloc_vector);
+  free (reloc_vector);
   return NULL;
 }

@@ -1,13 +1,13 @@
 /* Native-dependent code for GNU/Linux i386.
 
-   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "inferior.h"
@@ -137,40 +135,20 @@ int have_ptrace_getfpxregs =
 ;
 
 
-/* Support for the user struct.  */
-
-/* Return the address of register REGNUM.  BLOCKEND is the value of
-   u.u_ar0, which should point to the registers.  */
-
-CORE_ADDR
-register_u_addr (CORE_ADDR blockend, int regnum)
-{
-  return (blockend + 4 * regmap[regnum]);
-}
-
-/* Return the size of the user struct.  */
-
-int
-kernel_u_size (void)
-{
-  return (sizeof (struct user));
-}
-
-
 /* Accessing registers through the U area, one at a time.  */
 
 /* Fetch one register.  */
 
 static void
-fetch_register (int regno)
+fetch_register (struct regcache *regcache, int regno)
 {
   int tid;
   int val;
 
   gdb_assert (!have_ptrace_getregs);
-  if (cannot_fetch_register (regno))
+  if (regmap[regno] == -1)
     {
-      regcache_raw_supply (current_regcache, regno, NULL);
+      regcache_raw_supply (regcache, regno, NULL);
       return;
     }
 
@@ -180,24 +158,25 @@ fetch_register (int regno)
     tid = PIDGET (inferior_ptid); /* Not a threaded program.  */
 
   errno = 0;
-  val = ptrace (PTRACE_PEEKUSER, tid, register_addr (regno, 0), 0);
+  val = ptrace (PTRACE_PEEKUSER, tid, 4 * regmap[regno], 0);
   if (errno != 0)
-    error (_("Couldn't read register %s (#%d): %s."), REGISTER_NAME (regno),
+    error (_("Couldn't read register %s (#%d): %s."), 
+	   gdbarch_register_name (current_gdbarch, regno),
 	   regno, safe_strerror (errno));
 
-  regcache_raw_supply (current_regcache, regno, &val);
+  regcache_raw_supply (regcache, regno, &val);
 }
 
 /* Store one register. */
 
 static void
-store_register (int regno)
+store_register (const struct regcache *regcache, int regno)
 {
   int tid;
   int val;
 
   gdb_assert (!have_ptrace_getregs);
-  if (cannot_store_register (regno))
+  if (regmap[regno] == -1)
     return;
 
   /* GNU/Linux LWP ID's are process ID's.  */
@@ -206,10 +185,11 @@ store_register (int regno)
     tid = PIDGET (inferior_ptid); /* Not a threaded program.  */
 
   errno = 0;
-  regcache_raw_collect (current_regcache, regno, &val);
-  ptrace (PTRACE_POKEUSER, tid, register_addr (regno, 0), val);
+  regcache_raw_collect (regcache, regno, &val);
+  ptrace (PTRACE_POKEUSER, tid, 4 * regmap[regno], val);
   if (errno != 0)
-    error (_("Couldn't write register %s (#%d): %s."), REGISTER_NAME (regno),
+    error (_("Couldn't write register %s (#%d): %s."),
+	   gdbarch_register_name (current_gdbarch, regno),
 	   regno, safe_strerror (errno));
 }
 
@@ -221,16 +201,16 @@ store_register (int regno)
    in *GREGSETP.  */
 
 void
-supply_gregset (elf_gregset_t *gregsetp)
+supply_gregset (struct regcache *regcache, const elf_gregset_t *gregsetp)
 {
-  elf_greg_t *regp = (elf_greg_t *) gregsetp;
+  const elf_greg_t *regp = (const elf_greg_t *) gregsetp;
   int i;
 
   for (i = 0; i < I386_NUM_GREGS; i++)
-    regcache_raw_supply (current_regcache, i, regp + regmap[i]);
+    regcache_raw_supply (regcache, i, regp + regmap[i]);
 
-  if (I386_LINUX_ORIG_EAX_REGNUM < NUM_REGS)
-    regcache_raw_supply (current_regcache, I386_LINUX_ORIG_EAX_REGNUM,
+  if (I386_LINUX_ORIG_EAX_REGNUM < gdbarch_num_regs (current_gdbarch))
+    regcache_raw_supply (regcache, I386_LINUX_ORIG_EAX_REGNUM,
 			 regp + ORIG_EAX);
 }
 
@@ -239,18 +219,19 @@ supply_gregset (elf_gregset_t *gregsetp)
    do this for all registers.  */
 
 void
-fill_gregset (elf_gregset_t *gregsetp, int regno)
+fill_gregset (const struct regcache *regcache,
+	      elf_gregset_t *gregsetp, int regno)
 {
   elf_greg_t *regp = (elf_greg_t *) gregsetp;
   int i;
 
   for (i = 0; i < I386_NUM_GREGS; i++)
     if (regno == -1 || regno == i)
-      regcache_raw_collect (current_regcache, i, regp + regmap[i]);
+      regcache_raw_collect (regcache, i, regp + regmap[i]);
 
   if ((regno == -1 || regno == I386_LINUX_ORIG_EAX_REGNUM)
-      && I386_LINUX_ORIG_EAX_REGNUM < NUM_REGS)
-    regcache_raw_collect (current_regcache, I386_LINUX_ORIG_EAX_REGNUM,
+      && I386_LINUX_ORIG_EAX_REGNUM < gdbarch_num_regs (current_gdbarch))
+    regcache_raw_collect (regcache, I386_LINUX_ORIG_EAX_REGNUM,
 			  regp + ORIG_EAX);
 }
 
@@ -260,9 +241,10 @@ fill_gregset (elf_gregset_t *gregsetp, int regno)
    store their values in GDB's register array.  */
 
 static void
-fetch_regs (int tid)
+fetch_regs (struct regcache *regcache, int tid)
 {
   elf_gregset_t regs;
+  elf_gregset_t *regs_p = &regs;
 
   if (ptrace (PTRACE_GETREGS, tid, 0, (int) &regs) < 0)
     {
@@ -277,21 +259,21 @@ fetch_regs (int tid)
       perror_with_name (_("Couldn't get registers"));
     }
 
-  supply_gregset (&regs);
+  supply_gregset (regcache, (const elf_gregset_t *) regs_p);
 }
 
 /* Store all valid general-purpose registers in GDB's register array
    into the process/thread specified by TID.  */
 
 static void
-store_regs (int tid, int regno)
+store_regs (const struct regcache *regcache, int tid, int regno)
 {
   elf_gregset_t regs;
 
   if (ptrace (PTRACE_GETREGS, tid, 0, (int) &regs) < 0)
     perror_with_name (_("Couldn't get registers"));
 
-  fill_gregset (&regs, regno);
+  fill_gregset (regcache, &regs, regno);
   
   if (ptrace (PTRACE_SETREGS, tid, 0, (int) &regs) < 0)
     perror_with_name (_("Couldn't write registers"));
@@ -299,8 +281,8 @@ store_regs (int tid, int regno)
 
 #else
 
-static void fetch_regs (int tid) {}
-static void store_regs (int tid, int regno) {}
+static void fetch_regs (struct regcache *regcache, int tid) {}
+static void store_regs (const struct regcache *regcache, int tid, int regno) {}
 
 #endif
 
@@ -311,9 +293,9 @@ static void store_regs (int tid, int regno) {}
    *FPREGSETP.  */
 
 void 
-supply_fpregset (elf_fpregset_t *fpregsetp)
+supply_fpregset (struct regcache *regcache, const elf_fpregset_t *fpregsetp)
 {
-  i387_supply_fsave (current_regcache, -1, fpregsetp);
+  i387_supply_fsave (regcache, -1, fpregsetp);
 }
 
 /* Fill register REGNO (if it is a floating-point register) in
@@ -321,9 +303,10 @@ supply_fpregset (elf_fpregset_t *fpregsetp)
    do this for all registers.  */
 
 void
-fill_fpregset (elf_fpregset_t *fpregsetp, int regno)
+fill_fpregset (const struct regcache *regcache,
+	       elf_fpregset_t *fpregsetp, int regno)
 {
-  i387_fill_fsave ((char *) fpregsetp, regno);
+  i387_collect_fsave (regcache, regno, fpregsetp);
 }
 
 #ifdef HAVE_PTRACE_GETREGS
@@ -332,28 +315,28 @@ fill_fpregset (elf_fpregset_t *fpregsetp, int regno)
    thier values in GDB's register array.  */
 
 static void
-fetch_fpregs (int tid)
+fetch_fpregs (struct regcache *regcache, int tid)
 {
   elf_fpregset_t fpregs;
 
   if (ptrace (PTRACE_GETFPREGS, tid, 0, (int) &fpregs) < 0)
     perror_with_name (_("Couldn't get floating point status"));
 
-  supply_fpregset (&fpregs);
+  supply_fpregset (regcache, (const elf_fpregset_t *) &fpregs);
 }
 
 /* Store all valid floating-point registers in GDB's register array
    into the process/thread specified by TID.  */
 
 static void
-store_fpregs (int tid, int regno)
+store_fpregs (const struct regcache *regcache, int tid, int regno)
 {
   elf_fpregset_t fpregs;
 
   if (ptrace (PTRACE_GETFPREGS, tid, 0, (int) &fpregs) < 0)
     perror_with_name (_("Couldn't get floating point status"));
 
-  fill_fpregset (&fpregs, regno);
+  fill_fpregset (regcache, &fpregs, regno);
 
   if (ptrace (PTRACE_SETFPREGS, tid, 0, (int) &fpregs) < 0)
     perror_with_name (_("Couldn't write floating point status"));
@@ -361,8 +344,8 @@ store_fpregs (int tid, int regno)
 
 #else
 
-static void fetch_fpregs (int tid) {}
-static void store_fpregs (int tid, int regno) {}
+static void fetch_fpregs (struct regcache *regcache, int tid) {}
+static void store_fpregs (const struct regcache *regcache, int tid, int regno) {}
 
 #endif
 
@@ -375,9 +358,10 @@ static void store_fpregs (int tid, int regno) {}
    values in *FPXREGSETP.  */
 
 void
-supply_fpxregset (elf_fpxregset_t *fpxregsetp)
+supply_fpxregset (struct regcache *regcache,
+		  const elf_fpxregset_t *fpxregsetp)
 {
-  i387_supply_fxsave (current_regcache, -1, fpxregsetp);
+  i387_supply_fxsave (regcache, -1, fpxregsetp);
 }
 
 /* Fill register REGNO (if it is a floating-point or SSE register) in
@@ -385,9 +369,10 @@ supply_fpxregset (elf_fpxregset_t *fpxregsetp)
    -1, do this for all registers.  */
 
 void
-fill_fpxregset (elf_fpxregset_t *fpxregsetp, int regno)
+fill_fpxregset (const struct regcache *regcache,
+		elf_fpxregset_t *fpxregsetp, int regno)
 {
-  i387_fill_fxsave ((char *) fpxregsetp, regno);
+  i387_collect_fxsave (regcache, regno, fpxregsetp);
 }
 
 /* Fetch all registers covered by the PTRACE_GETFPXREGS request from
@@ -395,7 +380,7 @@ fill_fpxregset (elf_fpxregset_t *fpxregsetp, int regno)
    Return non-zero if successful, zero otherwise.  */
 
 static int
-fetch_fpxregs (int tid)
+fetch_fpxregs (struct regcache *regcache, int tid)
 {
   elf_fpxregset_t fpxregs;
 
@@ -413,7 +398,7 @@ fetch_fpxregs (int tid)
       perror_with_name (_("Couldn't read floating-point and SSE registers"));
     }
 
-  supply_fpxregset (&fpxregs);
+  supply_fpxregset (regcache, (const elf_fpxregset_t *) &fpxregs);
   return 1;
 }
 
@@ -422,7 +407,7 @@ fetch_fpxregs (int tid)
    Return non-zero if successful, zero otherwise.  */
 
 static int
-store_fpxregs (int tid, int regno)
+store_fpxregs (const struct regcache *regcache, int tid, int regno)
 {
   elf_fpxregset_t fpxregs;
 
@@ -440,7 +425,7 @@ store_fpxregs (int tid, int regno)
       perror_with_name (_("Couldn't read floating-point and SSE registers"));
     }
 
-  fill_fpxregset (&fpxregs, regno);
+  fill_fpxregset (regcache, &fpxregs, regno);
 
   if (ptrace (PTRACE_SETFPXREGS, tid, 0, &fpxregs) == -1)
     perror_with_name (_("Couldn't write floating-point and SSE registers"));
@@ -450,39 +435,20 @@ store_fpxregs (int tid, int regno)
 
 #else
 
-static int fetch_fpxregs (int tid) { return 0; }
-static int store_fpxregs (int tid, int regno) { return 0; }
+static int fetch_fpxregs (struct regcache *regcache, int tid) { return 0; }
+static int store_fpxregs (const struct regcache *regcache, int tid, int regno) { return 0; }
 
 #endif /* HAVE_PTRACE_GETFPXREGS */
 
 
 /* Transferring arbitrary registers between GDB and inferior.  */
 
-/* Check if register REGNO in the child process is accessible.
-   If we are accessing registers directly via the U area, only the
-   general-purpose registers are available.
-   All registers should be accessible if we have GETREGS support.  */
-   
-int
-cannot_fetch_register (int regno)
-{
-  gdb_assert (regno >= 0 && regno < NUM_REGS);
-  return (!have_ptrace_getregs && regmap[regno] == -1);
-}
-
-int
-cannot_store_register (int regno)
-{
-  gdb_assert (regno >= 0 && regno < NUM_REGS);
-  return (!have_ptrace_getregs && regmap[regno] == -1);
-}
-
 /* Fetch register REGNO from the child process.  If REGNO is -1, do
    this for all registers (including the floating point and SSE
    registers).  */
 
 static void
-i386_linux_fetch_inferior_registers (int regno)
+i386_linux_fetch_inferior_registers (struct regcache *regcache, int regno)
 {
   int tid;
 
@@ -492,9 +458,9 @@ i386_linux_fetch_inferior_registers (int regno)
     {
       int i;
 
-      for (i = 0; i < NUM_REGS; i++)
+      for (i = 0; i < gdbarch_num_regs (current_gdbarch); i++)
 	if (regno == -1 || regno == i)
-	  fetch_register (i);
+	  fetch_register (regcache, i);
 
       return;
     }
@@ -510,30 +476,30 @@ i386_linux_fetch_inferior_registers (int regno)
      zero.  */
   if (regno == -1)
     {
-      fetch_regs (tid);
+      fetch_regs (regcache, tid);
 
       /* The call above might reset `have_ptrace_getregs'.  */
       if (!have_ptrace_getregs)
 	{
-	  i386_linux_fetch_inferior_registers (regno);
+	  i386_linux_fetch_inferior_registers (regcache, regno);
 	  return;
 	}
 
-      if (fetch_fpxregs (tid))
+      if (fetch_fpxregs (regcache, tid))
 	return;
-      fetch_fpregs (tid);
+      fetch_fpregs (regcache, tid);
       return;
     }
 
   if (GETREGS_SUPPLIES (regno))
     {
-      fetch_regs (tid);
+      fetch_regs (regcache, tid);
       return;
     }
 
   if (GETFPXREGS_SUPPLIES (regno))
     {
-      if (fetch_fpxregs (tid))
+      if (fetch_fpxregs (regcache, tid))
 	return;
 
       /* Either our processor or our kernel doesn't support the SSE
@@ -542,7 +508,7 @@ i386_linux_fetch_inferior_registers (int regno)
 	 more graceful to handle differences in the register set using
 	 gdbarch.  Until then, this will at least make things work
 	 plausibly.  */
-      fetch_fpregs (tid);
+      fetch_fpregs (regcache, tid);
       return;
     }
 
@@ -554,7 +520,7 @@ i386_linux_fetch_inferior_registers (int regno)
    do this for all registers (including the floating point and SSE
    registers).  */
 static void
-i386_linux_store_inferior_registers (int regno)
+i386_linux_store_inferior_registers (struct regcache *regcache, int regno)
 {
   int tid;
 
@@ -564,9 +530,9 @@ i386_linux_store_inferior_registers (int regno)
     {
       int i;
 
-      for (i = 0; i < NUM_REGS; i++)
+      for (i = 0; i < gdbarch_num_regs (current_gdbarch); i++)
 	if (regno == -1 || regno == i)
-	  store_register (i);
+	  store_register (regcache, i);
 
       return;
     }
@@ -581,28 +547,28 @@ i386_linux_store_inferior_registers (int regno)
      store_fpxregs can fail, and return zero.  */
   if (regno == -1)
     {
-      store_regs (tid, regno);
-      if (store_fpxregs (tid, regno))
+      store_regs (regcache, tid, regno);
+      if (store_fpxregs (regcache, tid, regno))
 	return;
-      store_fpregs (tid, regno);
+      store_fpregs (regcache, tid, regno);
       return;
     }
 
   if (GETREGS_SUPPLIES (regno))
     {
-      store_regs (tid, regno);
+      store_regs (regcache, tid, regno);
       return;
     }
 
   if (GETFPXREGS_SUPPLIES (regno))
     {
-      if (store_fpxregs (tid, regno))
+      if (store_fpxregs (regcache, tid, regno))
 	return;
 
       /* Either our processor or our kernel doesn't support the SSE
 	 registers, so just write the FP registers in the traditional
 	 way.  */
-      store_fpregs (tid, regno);
+      store_fpregs (regcache, tid, regno);
       return;
     }
 
@@ -771,10 +737,14 @@ i386_linux_resume (ptid_t ptid, int step, enum target_signal signal)
 
   if (step)
     {
-      CORE_ADDR pc = read_pc_pid (pid_to_ptid (pid));
+      struct regcache *regcache = get_thread_regcache (pid_to_ptid (pid));
+      ULONGEST pc;
       gdb_byte buf[LINUX_SYSCALL_LEN];
 
       request = PTRACE_SINGLESTEP;
+
+      regcache_cooked_read_unsigned (regcache,
+				     gdbarch_pc_regnum (current_gdbarch), &pc);
 
       /* Returning from a signal trampoline is done by calling a
          special system call (sigreturn or rt_sigreturn, see
@@ -788,18 +758,21 @@ i386_linux_resume (ptid_t ptid, int step, enum target_signal signal)
       if (read_memory_nobpt (pc, buf, LINUX_SYSCALL_LEN) == 0
 	  && memcmp (buf, linux_syscall, LINUX_SYSCALL_LEN) == 0)
 	{
-	  int syscall = read_register_pid (LINUX_SYSCALL_REGNUM,
-	                                   pid_to_ptid (pid));
+	  ULONGEST syscall;
+	  regcache_cooked_read_unsigned (regcache,
+					 LINUX_SYSCALL_REGNUM, &syscall);
 
 	  /* Then check the system call number.  */
 	  if (syscall == SYS_sigreturn || syscall == SYS_rt_sigreturn)
 	    {
-	      CORE_ADDR sp = read_register (I386_ESP_REGNUM);
-	      CORE_ADDR addr = sp;
+	      ULONGEST sp, addr;
 	      unsigned long int eflags;
 
+	      regcache_cooked_read_unsigned (regcache, I386_ESP_REGNUM, &sp);
 	      if (syscall == SYS_rt_sigreturn)
 		addr = read_memory_integer (sp + 8, 4) + 20;
+	      else
+		addr = sp;
 
 	      /* Set the trace flag in the context that's about to be
                  restored.  */

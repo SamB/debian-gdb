@@ -1,16 +1,14 @@
 /* Abstraction of GNU v2 abi.
 
-   Copyright (C) 2001, 2002, 2003, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2005, 2007 Free Software Foundation, Inc.
 
    Contributed by Daniel Berlin <dberlin@redhat.com>
 
    This file is part of GDB.
 
-   This program is free software; you can redistribute it and/or
-   modify
-   it under the terms of the GNU General Public License as published
-   by
-   the Free Software Foundation; either version 2 of the License, or
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -196,7 +192,7 @@ gnuv2_value_rtti_type (struct value *v, int *full, int *top, int *using_enc)
   CORE_ADDR vtbl;
   struct minimal_symbol *minsym;
   struct symbol *sym;
-  char *demangled_name;
+  char *demangled_name, *p;
   struct type *btype;
 
   if (full)
@@ -256,7 +252,9 @@ gnuv2_value_rtti_type (struct value *v, int *full, int *top, int *using_enc)
 
   /* If we just skip the prefix, we get screwed by namespaces */
   demangled_name=cplus_demangle(demangled_name,DMGL_PARAMS|DMGL_ANSI);
-  *(strchr(demangled_name,' '))=0;
+  p = strchr (demangled_name, ' ');
+  if (p)
+    *p = '\0';
 
   /* Lookup the type for the name */
   /* FIXME: chastain/2003-11-26: block=NULL is bogus.  See pr gdb/1465. */

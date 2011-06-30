@@ -1,13 +1,14 @@
 /* linker.c -- BFD linker routines
    Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004, 2005, 2006 Free Software Foundation, Inc.
+   2003, 2004, 2005, 2006, 2007
+   Free Software Foundation, Inc.
    Written by Steve Chamberlain and Ian Lance Taylor, Cygnus Support
 
    This file is part of BFD, the Binary File Descriptor library.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,10 +18,11 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "libbfd.h"
 #include "bfdlink.h"
 #include "genlink.h"
@@ -1314,7 +1316,7 @@ generic_link_add_symbol_list (bfd *abfd,
 	  struct generic_link_hash_entry *h;
 	  struct bfd_link_hash_entry *bh;
 
-	  name = bfd_asymbol_name (p);
+	  string = name = bfd_asymbol_name (p);
 	  if (((p->flags & BSF_INDIRECT) != 0
 	       || bfd_is_ind_section (p->section))
 	      && pp + 1 < ppend)
@@ -1327,12 +1329,9 @@ generic_link_add_symbol_list (bfd *abfd,
 	    {
 	      /* The name of P is actually the warning string, and the
 		 next symbol is the one to warn about.  */
-	      string = name;
 	      pp++;
 	      name = bfd_asymbol_name (*pp);
 	    }
-	  else
-	    string = NULL;
 
 	  bh = NULL;
 	  if (! (_bfd_generic_link_add_one_symbol
@@ -2924,7 +2923,7 @@ bfd_section_already_linked_table_lookup (const char *name)
 			   TRUE, FALSE));
 }
 
-void
+bfd_boolean
 bfd_section_already_linked_table_insert
   (struct bfd_section_already_linked_hash_entry *already_linked_list,
    asection *sec)
@@ -2934,9 +2933,12 @@ bfd_section_already_linked_table_insert
   /* Allocate the memory from the same obstack as the hash table is
      kept in.  */
   l = bfd_hash_allocate (&_bfd_section_already_linked_table, sizeof *l);
+  if (l == NULL)
+    return FALSE;
   l->sec = sec;
   l->next = already_linked_list->entry;
   already_linked_list->entry = l;
+  return TRUE;
 }
 
 static struct bfd_hash_entry *
@@ -2946,6 +2948,9 @@ already_linked_newfunc (struct bfd_hash_entry *entry ATTRIBUTE_UNUSED,
 {
   struct bfd_section_already_linked_hash_entry *ret =
     bfd_hash_allocate (table, sizeof *ret);
+
+  if (ret == NULL)
+    return NULL;
 
   ret->entry = NULL;
 
@@ -2971,7 +2976,7 @@ bfd_section_already_linked_table_free (void)
 
 void
 _bfd_generic_section_already_linked (bfd *abfd, asection *sec,
-				     struct bfd_link_info *info ATTRIBUTE_UNUSED)
+				     struct bfd_link_info *info)
 {
   flagword flags;
   const char *name;
@@ -3072,7 +3077,8 @@ _bfd_generic_section_already_linked (bfd *abfd, asection *sec,
     }
 
   /* This is the first section with this name.  Record it.  */
-  bfd_section_already_linked_table_insert (already_linked_list, sec);
+  if (! bfd_section_already_linked_table_insert (already_linked_list, sec))
+    info->callbacks->einfo (_("%F%P: already_linked_table: %E"));
 }
 
 /* Convert symbols in excluded output sections to use a kept section.  */

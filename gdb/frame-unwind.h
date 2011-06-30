@@ -1,12 +1,12 @@
 /* Definitions for a frame unwinder, for GDB, the GNU debugger.
 
-   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (FRAME_UNWIND_H)
 #define FRAME_UNWIND_H 1
@@ -125,6 +123,10 @@ typedef void (frame_prev_register_ftype) (struct frame_info *next_frame,
 typedef CORE_ADDR (frame_prev_pc_ftype) (struct frame_info *next_frame,
 					 void **this_prologue_cache);
 
+/* Deallocate extra memory associated with the frame cache if any.  */
+
+typedef void (frame_dealloc_cache_ftype) (struct frame_info *self,
+					  void *this_cache);
 
 struct frame_unwind
 {
@@ -138,6 +140,7 @@ struct frame_unwind
   const struct frame_data *unwind_data;
   frame_sniffer_ftype *sniffer;
   frame_prev_pc_ftype *prev_pc;
+  frame_dealloc_cache_ftype *dealloc_cache;
 };
 
 /* Register a frame unwinder, _prepending_ it to the front of the

@@ -1,13 +1,13 @@
 /* Handle SunOS shared libraries for GDB, the GNU Debugger.
 
-   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999,
-   2000, 2001, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000,
+   2001, 2004, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 
@@ -775,12 +773,18 @@ sunos_solib_create_inferior_hook (void)
   /* We are now either at the "mapping complete" breakpoint (or somewhere
      else, a condition we aren't prepared to deal with anyway), so adjust
      the PC as necessary after a breakpoint, disable the breakpoint, and
-     add any shared libraries that were mapped in. */
+     add any shared libraries that were mapped in.
 
-  if (DECR_PC_AFTER_BREAK)
+     Note that adjust_pc_after_break did not perform any PC adjustment,
+     as the breakpoint the inferior just hit was not inserted by GDB,
+     but by the dynamic loader itself, and is therefore not found on
+     the GDB software break point list.  Thus we have to adjust the
+     PC here.  */
+
+  if (gdbarch_decr_pc_after_break (current_gdbarch))
     {
-      stop_pc -= DECR_PC_AFTER_BREAK;
-      write_register (PC_REGNUM, stop_pc);
+      stop_pc -= gdbarch_decr_pc_after_break (current_gdbarch);
+      write_pc (stop_pc);
     }
 
   if (!disable_break ())

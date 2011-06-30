@@ -1,6 +1,6 @@
 /* Read coff symbol tables and convert to internal format, for GDB.
    Copyright (C) 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
    Free Software Foundation, Inc.
    Contributed by David D. Johnson, Brown University (ddj@cs.brown.edu).
 
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -259,29 +257,27 @@ find_targ_sec (bfd *abfd, asection *sect, void *obj)
     *args->resultp = sect;
 }
 
-/* Return the section number (SECT_OFF_*) that CS points to.  */
-static int
-cs_to_section (struct coff_symbol *cs, struct objfile *objfile)
+/* Return the bfd_section that CS points to.  */
+static struct bfd_section*
+cs_to_bfd_section (struct coff_symbol *cs, struct objfile *objfile)
 {
   asection *sect = NULL;
   struct find_targ_sec_arg args;
-  int off = SECT_OFF_TEXT (objfile);
 
   args.targ_index = cs->c_secnum;
   args.resultp = &sect;
   bfd_map_over_sections (objfile->obfd, find_targ_sec, &args);
-  if (sect != NULL)
-    {
-      /* This is the section.  Figure out what SECT_OFF_* code it is.  */
-      if (bfd_get_section_flags (abfd, sect) & SEC_CODE)
-	off = SECT_OFF_TEXT (objfile);
-      else if (bfd_get_section_flags (abfd, sect) & SEC_LOAD)
-	off = SECT_OFF_DATA (objfile);
-      else
-	/* Just return the bfd section index. */
-	off = sect->index;
-    }
-  return off;
+  return sect;
+}
+
+/* Return the section number (SECT_OFF_*) that CS points to.  */
+static int
+cs_to_section (struct coff_symbol *cs, struct objfile *objfile)
+{
+  asection *sect = cs_to_bfd_section (cs, objfile);
+  if (sect == NULL)
+    return SECT_OFF_TEXT (objfile);
+  return sect->index;
 }
 
 /* Return the address of the section of a COFF symbol.  */
@@ -408,15 +404,19 @@ coff_end_symtab (struct objfile *objfile)
   last_source_file = NULL;
 }
 
-static void
-record_minimal_symbol (char *name, CORE_ADDR address,
-		       enum minimal_symbol_type type, struct objfile *objfile)
+static struct minimal_symbol *
+record_minimal_symbol (struct coff_symbol *cs, CORE_ADDR address,
+		       enum minimal_symbol_type type, int section, 
+		       struct objfile *objfile)
 {
+  struct bfd_section *bfd_section;
   /* We don't want TDESC entry points in the minimal symbol table */
-  if (name[0] == '@')
-    return;
+  if (cs->c_name[0] == '@')
+    return NULL;
 
-  prim_record_minimal_symbol (name, address, type, objfile);
+  bfd_section = cs_to_bfd_section (cs, objfile);
+  return prim_record_minimal_symbol_and_info (cs->c_name, address, type,
+    NULL, section, bfd_section, objfile);
 }
 
 /* coff_symfile_init ()
@@ -699,6 +699,7 @@ coff_symtab_read (long symtab_offset, unsigned int nsyms,
   long fcn_line_ptr = 0;
   int val;
   CORE_ADDR tmpaddr;
+  struct minimal_symbol *msym;
 
   /* Work around a stdio bug in SunOS4.1.1 (this makes me nervous....
      it's hard to know I've really worked around it.  The fix should be
@@ -762,8 +763,9 @@ coff_symtab_read (long symtab_offset, unsigned int nsyms,
       if (ISFCN (cs->c_type) && cs->c_sclass != C_TPDEF)
 	{
 	  /* Record all functions -- external and static -- in minsyms. */
+	  int section = cs_to_section (cs, objfile);
 	  tmpaddr = cs->c_value + ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
-	  record_minimal_symbol (cs->c_name, tmpaddr, mst_text, objfile);
+	  record_minimal_symbol (cs, tmpaddr, mst_text, section, objfile);
 
 	  fcn_line_ptr = main_aux.x_sym.x_fcnary.x_fcn.x_lnnoptr;
 	  fcn_start_addr = tmpaddr;
@@ -890,6 +892,7 @@ coff_symtab_read (long symtab_offset, unsigned int nsyms,
  	      }
 	    else
 	      {
+		asection *bfd_section = cs_to_bfd_section (cs, objfile);
 		sec = cs_to_section (cs, objfile);
 		tmpaddr = cs->c_value;
  		/* Statics in a PE file also get relocated */
@@ -899,39 +902,37 @@ coff_symtab_read (long symtab_offset, unsigned int nsyms,
  		    || (pe_file && (cs->c_sclass == C_STAT)))
 		  tmpaddr += ANOFFSET (objfile->section_offsets, sec);
 
-		if (sec == SECT_OFF_TEXT (objfile))
+		if (bfd_section->flags & SEC_CODE)
 		  {
 		    ms_type =
 		      cs->c_sclass == C_EXT || cs->c_sclass == C_THUMBEXTFUNC
 		      || cs->c_sclass == C_THUMBEXT ?
 		      mst_text : mst_file_text;
-		    tmpaddr = SMASH_TEXT_ADDRESS (tmpaddr);
+		    tmpaddr = gdbarch_smash_text_address
+				(current_gdbarch, tmpaddr);
 		  }
-		else if (sec == SECT_OFF_DATA (objfile))
+		else if (bfd_section->flags & SEC_ALLOC
+			 && bfd_section->flags & SEC_LOAD)
 		  {
 		    ms_type =
 		      cs->c_sclass == C_EXT || cs->c_sclass == C_THUMBEXT ?
 		      mst_data : mst_file_data;
 		  }
-		else if (sec == SECT_OFF_BSS (objfile))
+		else if (bfd_section->flags & SEC_ALLOC)
 		  {
 		    ms_type =
 		      cs->c_sclass == C_EXT || cs->c_sclass == C_THUMBEXT ?
-		      mst_data : mst_file_data;
+		      mst_bss : mst_file_bss;
 		  }
 		else
 		  ms_type = mst_unknown;
 	      }
 
-	    if (cs->c_name[0] != '@' /* Skip tdesc symbols */ )
-	      {
-		struct minimal_symbol *msym;
-		msym = prim_record_minimal_symbol_and_info
-		  (cs->c_name, tmpaddr, ms_type, NULL,
-		   sec, NULL, objfile);
-		if (msym)
-		  COFF_MAKE_MSYMBOL_SPECIAL (cs->c_sclass, msym);
-	      }
+	    msym = record_minimal_symbol (cs, tmpaddr, ms_type, sec, objfile);
+	    if (msym)
+	      gdbarch_coff_make_msymbol_special
+	      (current_gdbarch, cs->c_sclass, msym);
+
 	    if (SDB_TYPE (cs->c_type))
 	      {
 		struct symbol *sym;
@@ -1546,7 +1547,8 @@ process_coff_symbol (struct coff_symbol *cs,
 #endif
 	case C_REG:
 	  SYMBOL_CLASS (sym) = LOC_REGISTER;
-	  SYMBOL_VALUE (sym) = SDB_REG_TO_REGNUM (cs->c_value);
+	  SYMBOL_VALUE (sym) = gdbarch_sdb_reg_to_regnum
+				 (current_gdbarch, cs->c_value);
 	  add_symbol_to_list (sym, &local_symbols);
 	  break;
 
@@ -1557,51 +1559,13 @@ process_coff_symbol (struct coff_symbol *cs,
 	case C_ARG:
 	  SYMBOL_CLASS (sym) = LOC_ARG;
 	  add_symbol_to_list (sym, &local_symbols);
-#if !defined (BELIEVE_PCC_PROMOTION)
-	  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
-	    {
-	      /* If PCC says a parameter is a short or a char,
-	         aligned on an int boundary, realign it to the
-	         "little end" of the int.  */
-	      struct type *temptype;
-	      temptype = lookup_fundamental_type (current_objfile,
-						  FT_INTEGER);
-	      if (TYPE_LENGTH (SYMBOL_TYPE (sym)) < TYPE_LENGTH (temptype)
-		  && TYPE_CODE (SYMBOL_TYPE (sym)) == TYPE_CODE_INT
-		  && 0 == SYMBOL_VALUE (sym) % TYPE_LENGTH (temptype))
-		{
-		  SYMBOL_VALUE (sym) +=
-		    TYPE_LENGTH (temptype)
-		    - TYPE_LENGTH (SYMBOL_TYPE (sym));
-		}
-	    }
-#endif
 	  break;
 
 	case C_REGPARM:
 	  SYMBOL_CLASS (sym) = LOC_REGPARM;
-	  SYMBOL_VALUE (sym) = SDB_REG_TO_REGNUM (cs->c_value);
+	  SYMBOL_VALUE (sym) = gdbarch_sdb_reg_to_regnum
+				 (current_gdbarch, cs->c_value);
 	  add_symbol_to_list (sym, &local_symbols);
-#if !defined (BELIEVE_PCC_PROMOTION)
-	  /* FIXME:  This should retain the current type, since it's just
-	     a register value.  gnu@adobe, 26Feb93 */
-	  {
-	    /* If PCC says a parameter is a short or a char,
-	       it is really an int.  */
-	    struct type *temptype;
-	    temptype =
-	      lookup_fundamental_type (current_objfile, FT_INTEGER);
-	    if (TYPE_LENGTH (SYMBOL_TYPE (sym)) < TYPE_LENGTH (temptype)
-		&& TYPE_CODE (SYMBOL_TYPE (sym)) == TYPE_CODE_INT)
-	      {
-		SYMBOL_TYPE (sym) =
-		  (TYPE_UNSIGNED (SYMBOL_TYPE (sym))
-		   ? lookup_fundamental_type (current_objfile,
-					      FT_UNSIGNED_INTEGER)
-		   : temptype);
-	      }
-	  }
-#endif
 	  break;
 
 	case C_TPDEF:
@@ -1807,7 +1771,8 @@ decode_base_type (struct coff_symbol *cs, unsigned int c_type,
 
     case T_LONG:
       if (cs->c_sclass == C_FIELD
-	  && aux->x_sym.x_misc.x_lnsz.x_size > TARGET_LONG_BIT)
+	  && aux->x_sym.x_misc.x_lnsz.x_size
+	     > gdbarch_long_bit (current_gdbarch))
 	return lookup_fundamental_type (current_objfile, FT_LONG_LONG);
       else
 	return lookup_fundamental_type (current_objfile, FT_LONG);
@@ -1907,7 +1872,8 @@ decode_base_type (struct coff_symbol *cs, unsigned int c_type,
 
     case T_ULONG:
       if (cs->c_sclass == C_FIELD
-	  && aux->x_sym.x_misc.x_lnsz.x_size > TARGET_LONG_BIT)
+	  && aux->x_sym.x_misc.x_lnsz.x_size
+	     > gdbarch_long_bit (current_gdbarch))
 	return lookup_fundamental_type (current_objfile, FT_UNSIGNED_LONG_LONG);
       else
 	return lookup_fundamental_type (current_objfile, FT_UNSIGNED_LONG);
@@ -2080,8 +2046,8 @@ coff_read_enum_type (int index, int length, int lastsym)
 
   if (length > 0)
     TYPE_LENGTH (type) = length;
-  else
-    TYPE_LENGTH (type) = TARGET_INT_BIT / TARGET_CHAR_BIT;	/* Assume ints */
+  else /* Assume ints.  */
+    TYPE_LENGTH (type) = gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT;
   TYPE_CODE (type) = TYPE_CODE_ENUM;
   TYPE_NFIELDS (type) = nsyms;
   TYPE_FIELDS (type) = (struct field *)
@@ -2132,6 +2098,8 @@ static struct sym_fns coff_sym_fns =
   coff_symfile_read,		/* sym_read: read a symbol file into symtab */
   coff_symfile_finish,		/* sym_finish: finished with file, cleanup */
   default_symfile_offsets,	/* sym_offsets:  xlate external to internal form */
+  default_symfile_segments,	/* sym_segments: Get segment information from
+				   a file.  */
   NULL				/* next: pointer to next struct sym_fns */
 };
 

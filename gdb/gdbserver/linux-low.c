@@ -1,13 +1,12 @@
 /* Low level interface to ptrace, for the remote server for GDB.
    Copyright (C) 1995, 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2006
-   Free Software Foundation, Inc.
+   2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "server.h"
 #include "linux-low.h"
@@ -43,6 +40,12 @@
 # define PTRACE_SETSIGINFO 0x4203
 #endif
 
+#ifdef __UCLIBC__
+#if !(defined(__UCLIBC_HAS_MMU__) || defined(__ARCH_HAS_MMU__))
+#define HAS_NOMMU
+#endif
+#endif
+
 /* ``all_threads'' is keyed by the LWP ID - it should be the thread ID instead,
    however.  This requires changing the ID in place when we go from !using_threads
    to using_threads, immediately.
@@ -63,6 +66,7 @@ static void linux_resume_one_process (struct inferior_list_entry *entry,
 static void linux_resume (struct thread_resume *resume_info);
 static void stop_all_processes (void);
 static int linux_wait_for_event (struct thread_info *child);
+static int check_removed_breakpoint (struct process_info *event_child);
 
 struct pending_signals
 {
@@ -77,8 +81,6 @@ struct pending_signals
 #ifdef HAVE_LINUX_REGSETS
 static int use_regsets_p = 1;
 #endif
-
-int debug_threads = 0;
 
 #define pid_of(proc) ((proc)->head.id)
 
@@ -146,7 +148,7 @@ linux_create_inferior (char *program, char **allargs)
   void *new_process;
   int pid;
 
-#if defined(__UCLIBC__) && !defined(__UCLIBC_HAS_MMU__)
+#if defined(__UCLIBC__) && defined(HAS_NOMMU)
   pid = vfork ();
 #else
   pid = fork ();
@@ -163,6 +165,8 @@ linux_create_inferior (char *program, char **allargs)
       setpgid (0, 0);
 
       execv (program, allargs);
+      if (errno == ENOENT)
+	execvp (program, allargs);
 
       fprintf (stderr, "Cannot exec %s: %s.\n", program,
 	       strerror (errno));
@@ -219,7 +223,8 @@ linux_attach (unsigned long pid)
 
   linux_attach_lwp (pid, pid);
 
-  /* Don't ignore the initial SIGSTOP if we just attached to this process.  */
+  /* Don't ignore the initial SIGSTOP if we just attached to this process.
+     It will be collected by wait shortly.  */
   process = (struct process_info *) find_inferior_id (&all_processes, pid);
   process->stop_expected = 0;
 
@@ -255,13 +260,17 @@ static void
 linux_kill (void)
 {
   struct thread_info *thread = (struct thread_info *) all_threads.head;
-  struct process_info *process = get_thread_process (thread);
+  struct process_info *process;
   int wstat;
+
+  if (thread == NULL)
+    return;
 
   for_each_inferior (&all_threads, linux_kill_one_process);
 
   /* See the comment in linux_kill_one_process.  We did not kill the first
      thread in the list, so do so now.  */
+  process = get_thread_process (thread);
   do
     {
       ptrace (PTRACE_KILL, pid_of (process), 0, 0);
@@ -277,13 +286,50 @@ linux_detach_one_process (struct inferior_list_entry *entry)
   struct thread_info *thread = (struct thread_info *) entry;
   struct process_info *process = get_thread_process (thread);
 
+  /* Make sure the process isn't stopped at a breakpoint that's
+     no longer there.  */
+  check_removed_breakpoint (process);
+
+  /* If this process is stopped but is expecting a SIGSTOP, then make
+     sure we take care of that now.  This isn't absolutely guaranteed
+     to collect the SIGSTOP, but is fairly likely to.  */
+  if (process->stop_expected)
+    {
+      /* Clear stop_expected, so that the SIGSTOP will be reported.  */
+      process->stop_expected = 0;
+      if (process->stopped)
+	linux_resume_one_process (&process->head, 0, 0, NULL);
+      linux_wait_for_event (thread);
+    }
+
+  /* Flush any pending changes to the process's registers.  */
+  regcache_invalidate_one ((struct inferior_list_entry *)
+			   get_process_thread (process));
+
+  /* Finally, let it resume.  */
   ptrace (PTRACE_DETACH, pid_of (process), 0, 0);
 }
 
-static void
+static int
 linux_detach (void)
 {
+  delete_all_breakpoints ();
   for_each_inferior (&all_threads, linux_detach_one_process);
+  clear_inferiors ();
+  return 0;
+}
+
+static void
+linux_join (void)
+{
+  extern unsigned long signal_pid;
+  int status, ret;
+
+  do {
+    ret = waitpid (signal_pid, &status, 0);
+    if (WIFEXITED (status) || WIFSIGNALED (status))
+      break;
+  } while (ret != -1 || errno != ECHILD);
 }
 
 /* Return nonzero if the given thread is still alive.  */
@@ -309,7 +355,8 @@ check_removed_breakpoint (struct process_info *event_child)
     return 0;
 
   if (debug_threads)
-    fprintf (stderr, "Checking for breakpoint.\n");
+    fprintf (stderr, "Checking for breakpoint in process %ld.\n",
+	     event_child->lwpid);
 
   saved_inferior = current_inferior;
   current_inferior = get_process_thread (event_child);
@@ -322,7 +369,8 @@ check_removed_breakpoint (struct process_info *event_child)
   if (stop_pc != event_child->pending_stop_pc)
     {
       if (debug_threads)
-	fprintf (stderr, "Ignoring, PC was changed.\n");
+	fprintf (stderr, "Ignoring, PC was changed.  Old PC was 0x%08llx\n",
+		 event_child->pending_stop_pc);
 
       event_child->pending_is_breakpoint = 0;
       current_inferior = saved_inferior;
@@ -498,69 +546,78 @@ linux_wait_for_event (struct thread_info *child)
       current_inferior = (struct thread_info *)
 	find_inferior_id (&all_threads, event_child->tid);
 
-      if (using_threads)
+      /* Check for thread exit.  */
+      if (using_threads && ! WIFSTOPPED (wstat))
 	{
-	  /* Check for thread exit.  */
-	  if (! WIFSTOPPED (wstat))
-	    {
-	      if (debug_threads)
-		fprintf (stderr, "Thread %ld (LWP %ld) exiting\n",
-			 event_child->tid, event_child->head.id);
+	  if (debug_threads)
+	    fprintf (stderr, "Thread %ld (LWP %ld) exiting\n",
+		     event_child->tid, event_child->head.id);
 
-	      /* If the last thread is exiting, just return.  */
-	      if (all_threads.head == all_threads.tail)
-		return wstat;
+	  /* If the last thread is exiting, just return.  */
+	  if (all_threads.head == all_threads.tail)
+	    return wstat;
 
-	      dead_thread_notify (event_child->tid);
+	  dead_thread_notify (event_child->tid);
 
-	      remove_inferior (&all_processes, &event_child->head);
-	      free (event_child);
-	      remove_thread (current_inferior);
-	      current_inferior = (struct thread_info *) all_threads.head;
+	  remove_inferior (&all_processes, &event_child->head);
+	  free (event_child);
+	  remove_thread (current_inferior);
+	  current_inferior = (struct thread_info *) all_threads.head;
 
-	      /* If we were waiting for this particular child to do something...
-		 well, it did something.  */
-	      if (child != NULL)
-		return wstat;
+	  /* If we were waiting for this particular child to do something...
+	     well, it did something.  */
+	  if (child != NULL)
+	    return wstat;
 
-	      /* Wait for a more interesting event.  */
-	      continue;
-	    }
+	  /* Wait for a more interesting event.  */
+	  continue;
+	}
 
-	  if (WIFSTOPPED (wstat)
-	      && WSTOPSIG (wstat) == SIGSTOP
-	      && event_child->stop_expected)
-	    {
-	      if (debug_threads)
-		fprintf (stderr, "Expected stop.\n");
-	      event_child->stop_expected = 0;
-	      linux_resume_one_process (&event_child->head,
-					event_child->stepping, 0, NULL);
-	      continue;
-	    }
+      if (using_threads
+	  && WIFSTOPPED (wstat)
+	  && WSTOPSIG (wstat) == SIGSTOP
+	  && event_child->stop_expected)
+	{
+	  if (debug_threads)
+	    fprintf (stderr, "Expected stop.\n");
+	  event_child->stop_expected = 0;
+	  linux_resume_one_process (&event_child->head,
+				    event_child->stepping, 0, NULL);
+	  continue;
+	}
 
-	  /* FIXME drow/2002-06-09: Get signal numbers from the inferior's
-	     thread library?  */
-	  if (WIFSTOPPED (wstat)
-	      && (WSTOPSIG (wstat) == __SIGRTMIN
-		  || WSTOPSIG (wstat) == __SIGRTMIN + 1))
-	    {
-	      siginfo_t info, *info_p;
+      /* If GDB is not interested in this signal, don't stop other
+	 threads, and don't report it to GDB.  Just resume the
+	 inferior right away.  We do this for threading-related
+	 signals as well as any that GDB specifically requested we
+	 ignore.  But never ignore SIGSTOP if we sent it ourselves,
+	 and do not ignore signals when stepping - they may require
+	 special handling to skip the signal handler.  */
+      /* FIXME drow/2002-06-09: Get signal numbers from the inferior's
+	 thread library?  */
+      if (WIFSTOPPED (wstat)
+	  && !event_child->stepping
+	  && ((using_threads && (WSTOPSIG (wstat) == __SIGRTMIN
+				 || WSTOPSIG (wstat) == __SIGRTMIN + 1))
+	      || (pass_signals[target_signal_from_host (WSTOPSIG (wstat))]
+		  && (WSTOPSIG (wstat) != SIGSTOP
+		      || !event_child->sigstop_sent))))
+	{
+	  siginfo_t info, *info_p;
 
-	      if (debug_threads)
-		fprintf (stderr, "Ignored signal %d for %ld (LWP %ld).\n",
-			 WSTOPSIG (wstat), event_child->tid,
-			 event_child->head.id);
+	  if (debug_threads)
+	    fprintf (stderr, "Ignored signal %d for %ld (LWP %ld).\n",
+		     WSTOPSIG (wstat), event_child->tid,
+		     event_child->head.id);
 
-	      if (ptrace (PTRACE_GETSIGINFO, event_child->lwpid, 0, &info) == 0)
-		info_p = &info;
-	      else
-		info_p = NULL;
-	      linux_resume_one_process (&event_child->head,
-					event_child->stepping,
-					WSTOPSIG (wstat), info_p);
-	      continue;
-	    }
+	  if (ptrace (PTRACE_GETSIGINFO, event_child->lwpid, 0, &info) == 0)
+	    info_p = &info;
+	  else
+	    info_p = NULL;
+	  linux_resume_one_process (&event_child->head,
+				    event_child->stepping,
+				    WSTOPSIG (wstat), info_p);
+	  continue;
 	}
 
       /* If this event was not handled above, and is not a SIGTRAP, report
@@ -787,6 +844,13 @@ send_sigstop (struct inferior_list_entry *entry)
      send another.  */
   if (process->stop_expected)
     {
+      if (debug_threads)
+	fprintf (stderr, "Have pending sigstop for process %ld\n",
+		 process->lwpid);
+
+      /* We clear the stop_expected flag so that wait_for_sigstop
+	 will receive the SIGSTOP event (instead of silently resuming and
+	 waiting again).  It'll be reset below.  */
       process->stop_expected = 0;
       return;
     }
@@ -822,7 +886,9 @@ wait_for_sigstop (struct inferior_list_entry *entry)
       && WSTOPSIG (wstat) != SIGSTOP)
     {
       if (debug_threads)
-	fprintf (stderr, "Stopped with non-sigstop signal\n");
+	fprintf (stderr, "Process %ld (thread %ld) "
+		 "stopped with non-sigstop status %06x\n",
+		 process->lwpid, process->tid, wstat);
       process->status_pending_p = 1;
       process->status_pending = wstat;
       process->stop_expected = 1;
@@ -1504,7 +1570,7 @@ linux_look_up_symbols (void)
 }
 
 static void
-linux_send_signal (int signum)
+linux_request_interrupt (void)
 {
   extern unsigned long signal_pid;
 
@@ -1513,10 +1579,10 @@ linux_send_signal (int signum)
       struct process_info *process;
 
       process = get_thread_process (current_inferior);
-      kill_lwp (process->lwpid, signum);
+      kill_lwp (process->lwpid, SIGINT);
     }
   else
-    kill_lwp (signal_pid, signum);
+    kill_lwp (signal_pid, SIGINT);
 }
 
 /* Copy LEN bytes from inferior's auxiliary vector starting at OFFSET
@@ -1586,7 +1652,7 @@ linux_stopped_data_address (void)
     return 0;
 }
 
-#if defined(__UCLIBC__) && !defined(__UCLIBC_HAS_MMU__)
+#if defined(__UCLIBC__) && defined(HAS_NOMMU)
 #if defined(__mcoldfire__)
 /* These should really be defined in the kernel's ptrace.h header.  */
 #define PT_TEXT_ADDR 49*4
@@ -1631,11 +1697,18 @@ linux_read_offsets (CORE_ADDR *text_p, CORE_ADDR *data_p)
 }
 #endif
 
+static const char *
+linux_arch_string (void)
+{
+  return the_low_target.arch_string;
+}
+
 static struct target_ops linux_target_ops = {
   linux_create_inferior,
   linux_attach,
   linux_kill,
   linux_detach,
+  linux_join,
   linux_thread_alive,
   linux_resume,
   linux_wait,
@@ -1644,13 +1717,13 @@ static struct target_ops linux_target_ops = {
   linux_read_memory,
   linux_write_memory,
   linux_look_up_symbols,
-  linux_send_signal,
+  linux_request_interrupt,
   linux_read_auxv,
   linux_insert_watchpoint,
   linux_remove_watchpoint,
   linux_stopped_by_watchpoint,
   linux_stopped_data_address,
-#if defined(__UCLIBC__) && !defined(__UCLIBC_HAS_MMU__)
+#if defined(__UCLIBC__) && defined(HAS_NOMMU)
   linux_read_offsets,
 #else
   NULL,
@@ -1660,6 +1733,7 @@ static struct target_ops linux_target_ops = {
 #else
   NULL,
 #endif
+  linux_arch_string,
 };
 
 static void

@@ -1,14 +1,14 @@
 /* Find a variable's value in memory, for GDB, the GNU debugger.
 
-   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2003, 2004, 2005 Free
-   Software Foundation, Inc.
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2003, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -63,7 +61,7 @@ That operation is not available on integers of more than %d bytes."),
 
   /* Start at the most significant end of the integer, and work towards
      the least significant.  */
-  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
     {
       p = startaddr;
       /* Do the sign extension once at the start.  */
@@ -98,7 +96,7 @@ That operation is not available on integers of more than %d bytes."),
   /* Start at the most significant end of the integer, and work towards
      the least significant.  */
   retval = 0;
-  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
     {
       for (p = startaddr; p < endaddr; ++p)
 	retval = (retval << 8) | *p;
@@ -125,7 +123,7 @@ extract_long_unsigned_integer (const gdb_byte *addr, int orig_len,
   int len;
 
   len = orig_len;
-  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
     {
       for (p = addr;
 	   len > (int) sizeof (LONGEST) && p < addr + orig_len;
@@ -174,7 +172,7 @@ extract_typed_address (const gdb_byte *buf, struct type *type)
 		    _("extract_typed_address: "
 		    "type is not a pointer or reference"));
 
-  return POINTER_TO_ADDRESS (type, buf);
+  return gdbarch_pointer_to_address (current_gdbarch, type, buf);
 }
 
 
@@ -187,7 +185,7 @@ store_signed_integer (gdb_byte *addr, int len, LONGEST val)
 
   /* Start at the least significant end of the integer, and work towards
      the most significant.  */
-  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
     {
       for (p = endaddr - 1; p >= startaddr; --p)
 	{
@@ -214,7 +212,7 @@ store_unsigned_integer (gdb_byte *addr, int len, ULONGEST val)
 
   /* Start at the least significant end of the integer, and work towards
      the most significant.  */
-  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
     {
       for (p = endaddr - 1; p >= startaddr; --p)
 	{
@@ -243,17 +241,14 @@ store_typed_address (gdb_byte *buf, struct type *type, CORE_ADDR addr)
 		    _("store_typed_address: "
 		    "type is not a pointer or reference"));
 
-  ADDRESS_TO_POINTER (type, buf, addr);
+  gdbarch_address_to_pointer (current_gdbarch, type, buf, addr);
 }
 
 
 
 /* Return a `value' with the contents of (virtual or cooked) register
    REGNUM as found in the specified FRAME.  The register's type is
-   determined by register_type().
-
-   NOTE: returns NULL if register value is not available.  Caller will
-   check return value or die!  */
+   determined by register_type().  */
 
 struct value *
 value_of_register (int regnum, struct frame_info *frame)
@@ -267,20 +262,11 @@ value_of_register (int regnum, struct frame_info *frame)
 
   /* User registers lie completely outside of the range of normal
      registers.  Catch them early so that the target never sees them.  */
-  if (regnum >= NUM_REGS + NUM_PSEUDO_REGS)
+  if (regnum >= gdbarch_num_regs (current_gdbarch)
+		+ gdbarch_num_pseudo_regs (current_gdbarch))
     return value_of_user_reg (regnum, frame);
 
   frame_register (frame, regnum, &optim, &lval, &addr, &realnum, raw_buffer);
-
-  /* FIXME: cagney/2002-05-15: This test is just bogus.
-
-     It indicates that the target failed to supply a value for a
-     register because it was "not available" at this time.  Problem
-     is, the target still has the register and so get saved_register()
-     may be returning a value saved on the stack.  */
-
-  if (register_cached (regnum) < 0)
-    return NULL;		/* register value not available */
 
   reg_val = allocate_value (register_type (current_gdbarch, regnum));
 
@@ -378,7 +364,7 @@ symbol_read_needs_frame (struct symbol *sym)
    and a stack frame id, read the value of the variable
    and return a (pointer to a) struct value containing the value. 
    If the variable cannot be found, return a zero pointer.
-   If FRAME is NULL, use the deprecated_selected_frame.  */
+   If FRAME is NULL, use the selected frame.  */
 
 struct value *
 read_var_value (struct symbol *var, struct frame_info *frame)
@@ -599,131 +585,70 @@ addresses have not been bound by the dynamic loader. Try again when executable i
   return v;
 }
 
-/* Return a value of type TYPE, stored in register REGNUM, in frame
-   FRAME.
+/* Install default attributes for register values.  */
 
-   NOTE: returns NULL if register value is not available.
-   Caller will check return value or die!  */
+struct value *
+default_value_from_register (struct type *type, int regnum,
+			     struct frame_info *frame)
+{
+  struct gdbarch *gdbarch = get_frame_arch (frame);
+  int len = TYPE_LENGTH (type);
+  struct value *value = allocate_value (type);
+
+  VALUE_LVAL (value) = lval_register;
+  VALUE_FRAME_ID (value) = get_frame_id (frame);
+  VALUE_REGNUM (value) = regnum;
+
+  /* Any structure stored in more than one register will always be
+     an integral number of registers.  Otherwise, you need to do
+     some fiddling with the last register copied here for little
+     endian machines.  */
+  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG
+      && len < register_size (gdbarch, regnum))
+    /* Big-endian, and we want less than full size.  */
+    set_value_offset (value, register_size (gdbarch, regnum) - len);
+  else
+    set_value_offset (value, 0);
+
+  return value;
+}
+
+/* Return a value of type TYPE, stored in register REGNUM, in frame FRAME.  */
 
 struct value *
 value_from_register (struct type *type, int regnum, struct frame_info *frame)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
-  struct value *v = allocate_value (type);
-  CHECK_TYPEDEF (type);
+  struct type *type1 = check_typedef (type);
+  struct value *v;
 
-  if (TYPE_LENGTH (type) == 0)
-    {
-      /* It doesn't matter much what we return for this: since the
-         length is zero, it could be anything.  But if allowed to see
-         a zero-length type, the register-finding loop below will set
-         neither mem_stor nor reg_stor, and then report an internal
-         error.  
-
-         Zero-length types can legitimately arise from declarations
-         like 'struct {}' (a GCC extension, not valid ISO C).  GDB may
-         also create them when it finds bogus debugging information;
-         for example, in GCC 2.95.4 and binutils 2.11.93.0.2, the
-         STABS BINCL->EXCL compression process can create bad type
-         numbers.  GDB reads these as TYPE_CODE_UNDEF types, with zero
-         length.  (That bug is actually the only known way to get a
-         zero-length value allocated to a register --- which is what
-         it takes to make it here.)
-
-         We'll just attribute the value to the original register.  */
-      VALUE_LVAL (v) = lval_register;
-      VALUE_ADDRESS (v) = regnum;
-      VALUE_REGNUM (v) = regnum;
-    }
-  else if (CONVERT_REGISTER_P (regnum, type))
+  if (gdbarch_convert_register_p (current_gdbarch, regnum, type1))
     {
       /* The ISA/ABI need to something weird when obtaining the
          specified value from this register.  It might need to
          re-order non-adjacent, starting with REGNUM (see MIPS and
          i386).  It might need to convert the [float] register into
          the corresponding [integer] type (see Alpha).  The assumption
-         is that REGISTER_TO_VALUE populates the entire value
+         is that gdbarch_register_to_value populates the entire value
          including the location.  */
-      REGISTER_TO_VALUE (frame, regnum, type, value_contents_raw (v));
+      v = allocate_value (type);
       VALUE_LVAL (v) = lval_register;
       VALUE_FRAME_ID (v) = get_frame_id (frame);
       VALUE_REGNUM (v) = regnum;
+      gdbarch_register_to_value (current_gdbarch,
+				 frame, regnum, type1, value_contents_raw (v));
     }
   else
     {
-      int local_regnum;
-      int mem_stor = 0, reg_stor = 0;
-      int mem_tracking = 1;
-      CORE_ADDR last_addr = 0;
-      CORE_ADDR first_addr = 0;
-      int first_realnum = regnum;
       int len = TYPE_LENGTH (type);
-      int value_bytes_copied;
-      int optimized = 0;
-      gdb_byte *value_bytes = alloca (len + MAX_REGISTER_SIZE);
 
-      /* Copy all of the data out, whereever it may be.  */
-      for (local_regnum = regnum, value_bytes_copied = 0;
-	   value_bytes_copied < len;
-	   (value_bytes_copied += register_size (current_gdbarch, local_regnum),
-	    ++local_regnum))
-	{
-	  int realnum;
-	  int optim;
-	  enum lval_type lval;
-	  CORE_ADDR addr;
-	  frame_register (frame, local_regnum, &optim, &lval, &addr,
-			  &realnum, value_bytes + value_bytes_copied);
-	  optimized += optim;
-	  if (register_cached (local_regnum) == -1)
-	    return NULL;	/* register value not available */
-	  
-	  if (regnum == local_regnum)
-	    {
-	      first_addr = addr;
-	      first_realnum = realnum;
-	    }
-	  if (lval == lval_register)
-	    reg_stor++;
-	  else
-	    {
-	      mem_stor++;
-	      
-	      /* FIXME: cagney/2004-11-12: I think this is trying to
-		 check that the stored registers are adjacent in
-		 memory.  It isn't doing a good job?  */
-	      mem_tracking = (mem_tracking
-			      && (regnum == local_regnum
-				  || addr == last_addr));
-	    }
-	  last_addr = addr;
-	}
-      
-      if (mem_tracking && mem_stor && !reg_stor)
-	{
-	  VALUE_LVAL (v) = lval_memory;
-	  VALUE_ADDRESS (v) = first_addr;
-	}
-      else
-	{
-	  VALUE_LVAL (v) = lval_register;
-	  VALUE_FRAME_ID (v) = get_frame_id (frame);
-	  VALUE_REGNUM (v) = regnum;
-	}
-      
-      set_value_optimized_out (v, optimized);
-      
-      /* Any structure stored in more than one register will always be
-         an integral number of registers.  Otherwise, you need to do
-         some fiddling with the last register copied here for little
-         endian machines.  */
-      if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG
-	  && len < register_size (current_gdbarch, regnum))
-	/* Big-endian, and we want less than full size.  */
-	set_value_offset (v, register_size (current_gdbarch, regnum) - len);
-      else
-	set_value_offset (v, 0);
-      memcpy (value_contents_raw (v), value_bytes + value_offset (v), len);
+      /* Construct the value.  */
+      v = gdbarch_value_from_register (gdbarch, type, regnum, frame);
+
+      /* Get the data.  */
+      if (!get_frame_register_bytes (frame, regnum, value_offset (v), len,
+				     value_contents_raw (v)))
+	set_value_optimized_out (v, 1);
     }
   return v;
 }
@@ -782,12 +707,14 @@ locate_var_value (struct symbol *var, struct frame_info *frame)
   switch (VALUE_LVAL (lazy_value))
     {
     case lval_register:
-      gdb_assert (REGISTER_NAME (VALUE_REGNUM (lazy_value)) != NULL
-		  && *REGISTER_NAME (VALUE_REGNUM (lazy_value)) != '\0');
+      gdb_assert (gdbarch_register_name
+		   (current_gdbarch, VALUE_REGNUM (lazy_value)) != NULL
+		  && *gdbarch_register_name
+		    (current_gdbarch, VALUE_REGNUM (lazy_value)) != '\0');
       error (_("Address requested for identifier "
 	       "\"%s\" which is in register $%s"),
             SYMBOL_PRINT_NAME (var), 
-	    REGISTER_NAME (VALUE_REGNUM (lazy_value)));
+	    gdbarch_register_name (current_gdbarch, VALUE_REGNUM (lazy_value)));
       break;
 
     default:

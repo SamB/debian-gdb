@@ -1,12 +1,11 @@
 /* Support for printing Pascal types for GDB, the GNU debugger.
-   Copyright (C) 2000, 2001, 2002
-   Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +14,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This file is derived from p-typeprint.c */
 
@@ -208,19 +205,6 @@ pascal_type_print_varspec_prefix (struct type *type, struct ui_file *stream,
       pascal_type_print_varspec_prefix (TYPE_TARGET_TYPE (type), stream, 0, 1);
       break;			/* pointer should be handled normally in pascal */
 
-    case TYPE_CODE_MEMBER:
-      if (passed_a_ptr)
-	fprintf_filtered (stream, "(");
-      pascal_type_print_varspec_prefix (TYPE_TARGET_TYPE (type), stream, 0, 0);
-      fprintf_filtered (stream, " ");
-      name = type_name_no_tag (TYPE_DOMAIN_TYPE (type));
-      if (name)
-	fputs_filtered (name, stream);
-      else
-	pascal_type_print_base (TYPE_DOMAIN_TYPE (type), stream, 0, passed_a_ptr);
-      fprintf_filtered (stream, "::");
-      break;
-
     case TYPE_CODE_METHOD:
       if (passed_a_ptr)
 	fprintf_filtered (stream, "(");
@@ -265,7 +249,7 @@ pascal_type_print_varspec_prefix (struct type *type, struct ui_file *stream,
       if (passed_a_ptr)
 	fprintf_filtered (stream, "(");
       fprintf_filtered (stream, "array ");
-      if (TYPE_LENGTH (type) >= 0 && TYPE_LENGTH (TYPE_TARGET_TYPE (type)) > 0
+      if (TYPE_LENGTH (TYPE_TARGET_TYPE (type)) > 0
 	&& TYPE_ARRAY_UPPER_BOUND_TYPE (type) != BOUND_CANNOT_BE_DETERMINED)
 	fprintf_filtered (stream, "[%d..%d] ",
 			  TYPE_ARRAY_LOWER_BOUND_VALUE (type),
@@ -351,12 +335,6 @@ pascal_type_print_varspec_suffix (struct type *type, struct ui_file *stream,
     case TYPE_CODE_ARRAY:
       if (passed_a_ptr)
 	fprintf_filtered (stream, ")");
-      break;
-
-    case TYPE_CODE_MEMBER:
-      if (passed_a_ptr)
-	fprintf_filtered (stream, ")");
-      pascal_type_print_varspec_suffix (TYPE_TARGET_TYPE (type), stream, 0, 0, 0);
       break;
 
     case TYPE_CODE_METHOD:
@@ -481,7 +459,6 @@ pascal_type_print_base (struct type *type, struct ui_file *stream, int show,
     {
     case TYPE_CODE_TYPEDEF:
     case TYPE_CODE_PTR:
-    case TYPE_CODE_MEMBER:
     case TYPE_CODE_REF:
       /* case TYPE_CODE_FUNC:
          case TYPE_CODE_METHOD: */

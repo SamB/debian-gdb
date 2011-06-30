@@ -35,7 +35,7 @@ extern "C" {
 #include <stdio.h>
 #include "bfd.h"
 
-typedef int (*fprintf_ftype) (void *, const char*, ...) ATTRIBUTE_FPTR_PRINTF_2;
+  typedef int (*fprintf_ftype) (void *, const char*, ...) /*ATTRIBUTE_FPTR_PRINTF_2*/;
 
 enum dis_insn_type
 {
@@ -217,6 +217,7 @@ extern int print_insn_big_mips		(bfd_vma, disassemble_info *);
 extern int print_insn_big_or32		(bfd_vma, disassemble_info *);
 extern int print_insn_big_powerpc	(bfd_vma, disassemble_info *);
 extern int print_insn_big_score         (bfd_vma, disassemble_info *);
+extern int print_insn_cr16              (bfd_vma, disassemble_info *);
 extern int print_insn_crx               (bfd_vma, disassemble_info *);
 extern int print_insn_d10v		(bfd_vma, disassemble_info *);
 extern int print_insn_d30v		(bfd_vma, disassemble_info *);
@@ -251,6 +252,7 @@ extern int print_insn_m88k		(bfd_vma, disassemble_info *);
 extern int print_insn_maxq_big		(bfd_vma, disassemble_info *);
 extern int print_insn_maxq_little	(bfd_vma, disassemble_info *);
 extern int print_insn_mcore		(bfd_vma, disassemble_info *);
+extern int print_insn_mep		(bfd_vma, disassemble_info *);
 extern int print_insn_mmix		(bfd_vma, disassemble_info *);
 extern int print_insn_mn10200		(bfd_vma, disassemble_info *);
 extern int print_insn_mn10300		(bfd_vma, disassemble_info *);
@@ -284,6 +286,7 @@ extern int print_insn_z8002		(bfd_vma, disassemble_info *);
 extern disassembler_ftype arc_get_disassembler (void *);
 extern disassembler_ftype cris_get_disassembler (bfd *);
 
+extern void print_i386_disassembler_options (FILE *);
 extern void print_mips_disassembler_options (FILE *);
 extern void print_ppc_disassembler_options (FILE *);
 extern void print_arm_disassembler_options (FILE *);

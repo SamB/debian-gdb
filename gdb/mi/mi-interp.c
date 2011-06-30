@@ -1,12 +1,12 @@
 /* MI Interpreter Definitions and Commands for GDB, the GNU debugger.
 
-   Copyright (C) 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -69,10 +67,6 @@ static void *
 mi_interpreter_init (void)
 {
   struct mi_interp *mi = XMALLOC (struct mi_interp);
-
-  /* Why is this a part of the mi architecture? */
-
-  mi_setup_architecture_data ();
 
   /* HACK: We need to force stdout/stderr to point at the console.  This avoids
      any potential side effects caused by legacy code that is still
@@ -222,18 +216,6 @@ mi_cmd_interpreter_exec (char *command, char **argv, int argc)
 
   for (i = 1; i < argc; i++)
     {
-      char *buff = NULL;
-      /* Do this in a cleaner way...  We want to force execution to be
-         asynchronous for commands that run the target.  */
-      if (target_can_async_p () && (strcmp (argv[0], "console") == 0))
-	{
-	  int len = strlen (argv[i]);
-	  buff = xmalloc (len + 2);
-	  memcpy (buff, argv[i], len);
-	  buff[len] = '&';
-	  buff[len + 1] = '\0';
-	}
-
       /* We had to set sync_execution = 0 for the mi (well really for Project
          Builder's use of the mi - particularly so interrupting would work.
          But for console commands to work, we need to initialize it to 1 -
@@ -249,7 +231,6 @@ mi_cmd_interpreter_exec (char *command, char **argv, int argc)
 	    break;
 	  }
       }
-      xfree (buff);
       do_exec_error_cleanups (ALL_CLEANUPS);
       sync_execution = 0;
     }
@@ -349,7 +330,6 @@ mi_command_loop (int mi_version)
   deprecated_delete_breakpoint_hook = 0;
   deprecated_modify_breakpoint_hook = 0;
   deprecated_interactive_hook = 0;
-  deprecated_registers_changed_hook = 0;
   deprecated_readline_begin_hook = 0;
   deprecated_readline_hook = 0;
   deprecated_readline_end_hook = 0;

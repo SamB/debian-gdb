@@ -1,6 +1,6 @@
 /* Native-dependent code for GNU/Linux x86-64.
 
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
    Contributed by Jiri Smid, SuSE Labs.
 
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "inferior.h"
@@ -111,9 +109,9 @@ static int amd64_linux_gregset32_reg_offset[] =
    in *GREGSETP.  */
 
 void
-supply_gregset (elf_gregset_t *gregsetp)
+supply_gregset (struct regcache *regcache, const elf_gregset_t *gregsetp)
 {
-  amd64_supply_native_gregset (current_regcache, gregsetp, -1);
+  amd64_supply_native_gregset (regcache, gregsetp, -1);
 }
 
 /* Fill register REGNUM (if it is a general-purpose register) in
@@ -121,9 +119,10 @@ supply_gregset (elf_gregset_t *gregsetp)
    do this for all registers.  */
 
 void
-fill_gregset (elf_gregset_t *gregsetp, int regnum)
+fill_gregset (const struct regcache *regcache,
+	      elf_gregset_t *gregsetp, int regnum)
 {
-  amd64_collect_native_gregset (current_regcache, gregsetp, regnum);
+  amd64_collect_native_gregset (regcache, gregsetp, regnum);
 }
 
 /* Transfering floating-point registers between GDB, inferiors and cores.  */
@@ -132,9 +131,9 @@ fill_gregset (elf_gregset_t *gregsetp, int regnum)
    values in *FPREGSETP.  */
 
 void
-supply_fpregset (elf_fpregset_t *fpregsetp)
+supply_fpregset (struct regcache *regcache, const elf_fpregset_t *fpregsetp)
 {
-  amd64_supply_fxsave (current_regcache, -1, fpregsetp);
+  amd64_supply_fxsave (regcache, -1, fpregsetp);
 }
 
 /* Fill register REGNUM (if it is a floating-point or SSE register) in
@@ -142,9 +141,10 @@ supply_fpregset (elf_fpregset_t *fpregsetp)
    -1, do this for all registers.  */
 
 void
-fill_fpregset (elf_fpregset_t *fpregsetp, int regnum)
+fill_fpregset (const struct regcache *regcache,
+	       elf_fpregset_t *fpregsetp, int regnum)
 {
-  amd64_collect_fxsave (current_regcache, regnum, fpregsetp);
+  amd64_collect_fxsave (regcache, regnum, fpregsetp);
 }
 
 
@@ -155,7 +155,7 @@ fill_fpregset (elf_fpregset_t *fpregsetp, int regnum)
    registers).  */
 
 static void
-amd64_linux_fetch_inferior_registers (int regnum)
+amd64_linux_fetch_inferior_registers (struct regcache *regcache, int regnum)
 {
   int tid;
 
@@ -171,7 +171,7 @@ amd64_linux_fetch_inferior_registers (int regnum)
       if (ptrace (PTRACE_GETREGS, tid, 0, (long) &regs) < 0)
 	perror_with_name (_("Couldn't get registers"));
 
-      amd64_supply_native_gregset (current_regcache, &regs, -1);
+      amd64_supply_native_gregset (regcache, &regs, -1);
       if (regnum != -1)
 	return;
     }
@@ -183,7 +183,7 @@ amd64_linux_fetch_inferior_registers (int regnum)
       if (ptrace (PTRACE_GETFPREGS, tid, 0, (long) &fpregs) < 0)
 	perror_with_name (_("Couldn't get floating point status"));
 
-      amd64_supply_fxsave (current_regcache, -1, &fpregs);
+      amd64_supply_fxsave (regcache, -1, &fpregs);
     }
 }
 
@@ -192,7 +192,7 @@ amd64_linux_fetch_inferior_registers (int regnum)
    registers).  */
 
 static void
-amd64_linux_store_inferior_registers (int regnum)
+amd64_linux_store_inferior_registers (struct regcache *regcache, int regnum)
 {
   int tid;
 
@@ -208,7 +208,7 @@ amd64_linux_store_inferior_registers (int regnum)
       if (ptrace (PTRACE_GETREGS, tid, 0, (long) &regs) < 0)
 	perror_with_name (_("Couldn't get registers"));
 
-      amd64_collect_native_gregset (current_regcache, &regs, regnum);
+      amd64_collect_native_gregset (regcache, &regs, regnum);
 
       if (ptrace (PTRACE_SETREGS, tid, 0, (long) &regs) < 0)
 	perror_with_name (_("Couldn't write registers"));
@@ -224,7 +224,7 @@ amd64_linux_store_inferior_registers (int regnum)
       if (ptrace (PTRACE_GETFPREGS, tid, 0, (long) &fpregs) < 0)
 	perror_with_name (_("Couldn't get floating point status"));
 
-      amd64_collect_fxsave (current_regcache, regnum, &fpregs);
+      amd64_collect_fxsave (regcache, regnum, &fpregs);
 
       if (ptrace (PTRACE_SETFPREGS, tid, 0, (long) &fpregs) < 0)
 	perror_with_name (_("Couldn't write floating point status"));

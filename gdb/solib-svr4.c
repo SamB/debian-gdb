@@ -1,14 +1,13 @@
 /* Handle SVR4 shared libraries for GDB, the GNU Debugger.
 
-   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999,
-   2000, 2001, 2003, 2004, 2005, 2006
-   Free Software Foundation, Inc.
+   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000,
+   2001, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 
@@ -85,16 +82,6 @@ static char *solib_break_names[] =
   "rtld_db_dlactivity",
   "_rtld_debug_state",
 
-  /* On the 64-bit PowerPC, the linker symbol with the same name as
-     the C function points to a function descriptor, not to the entry
-     point.  The linker symbol whose name is the C function name
-     prefixed with a '.' points to the function's entry point.  So
-     when we look through this table, we ignore symbols that point
-     into the data section (thus skipping the descriptor's symbol),
-     and eventually try this one, giving us the real entry point
-     address.  */
-  "._dl_debug_state",
-
   NULL
 };
 
@@ -119,19 +106,6 @@ static char *main_name_list[] =
   NULL
 };
 
-/* Macro to extract an address from a solib structure.  When GDB is
-   configured for some 32-bit targets (e.g. Solaris 2.7 sparc), BFD is
-   configured to handle 64-bit targets, so CORE_ADDR is 64 bits.  We
-   have to extract only the significant bits of addresses to get the
-   right address when accessing the core file BFD.
-
-   Assume that the address is unsigned.  */
-
-#define SOLIB_EXTRACT_ADDRESS(MEMBER) \
-	extract_unsigned_integer (&(MEMBER), sizeof (MEMBER))
-
-/* local data declarations */
-
 /* link map access functions */
 
 static CORE_ADDR
@@ -139,9 +113,8 @@ LM_ADDR_FROM_LINK_MAP (struct so_list *so)
 {
   struct link_map_offsets *lmo = svr4_fetch_link_map_offsets ();
 
-  return (CORE_ADDR) extract_signed_integer (so->lm_info->lm
-					     + lmo->l_addr_offset,
-					     lmo->l_addr_size);
+  return extract_typed_address (so->lm_info->lm + lmo->l_addr_offset,
+				builtin_type_void_data_ptr);
 }
 
 static int
@@ -149,7 +122,7 @@ HAS_LM_DYNAMIC_FROM_LINK_MAP ()
 {
   struct link_map_offsets *lmo = svr4_fetch_link_map_offsets ();
 
-  return (lmo->l_ld_size != 0);
+  return lmo->l_ld_offset >= 0;
 }
 
 static CORE_ADDR
@@ -157,11 +130,8 @@ LM_DYNAMIC_FROM_LINK_MAP (struct so_list *so)
 {
   struct link_map_offsets *lmo = svr4_fetch_link_map_offsets ();
 
-  gdb_assert (lmo->l_ld_size != 0);
-
-  return (CORE_ADDR) extract_signed_integer (so->lm_info->lm
-					     + lmo->l_ld_offset,
-					     lmo->l_ld_size);
+  return extract_typed_address (so->lm_info->lm + lmo->l_ld_offset,
+				builtin_type_void_data_ptr);
 }
 
 static CORE_ADDR
@@ -212,7 +182,7 @@ LM_ADDR_CHECK (struct so_list *so, bfd *abfd)
 	     don't adjust the base offset in the latter case, although
 	     odds are that, if things really changed, debugging won't
 	     quite work.  */
-	  if ((l_addr & align) == 0 && ((dynaddr - l_dynaddr) & align) == 0)
+	  if ((l_addr & align) == ((l_dynaddr - dynaddr) & align))
 	    {
 	      l_addr = l_dynaddr - dynaddr;
 
@@ -239,9 +209,8 @@ LM_NEXT (struct so_list *so)
 {
   struct link_map_offsets *lmo = svr4_fetch_link_map_offsets ();
 
-  /* Assume that the address is unsigned.  */
-  return extract_unsigned_integer (so->lm_info->lm + lmo->l_next_offset,
-				   lmo->l_next_size);
+  return extract_typed_address (so->lm_info->lm + lmo->l_next_offset,
+				builtin_type_void_data_ptr);
 }
 
 static CORE_ADDR
@@ -249,9 +218,8 @@ LM_NAME (struct so_list *so)
 {
   struct link_map_offsets *lmo = svr4_fetch_link_map_offsets ();
 
-  /* Assume that the address is unsigned.  */
-  return extract_unsigned_integer (so->lm_info->lm + lmo->l_name_offset,
-				   lmo->l_name_size);
+  return extract_typed_address (so->lm_info->lm + lmo->l_name_offset,
+				builtin_type_void_data_ptr);
 }
 
 static int
@@ -259,13 +227,16 @@ IGNORE_FIRST_LINK_MAP_ENTRY (struct so_list *so)
 {
   struct link_map_offsets *lmo = svr4_fetch_link_map_offsets ();
 
-  /* Assume that the address is unsigned.  */
-  return extract_unsigned_integer (so->lm_info->lm + lmo->l_prev_offset,
-				   lmo->l_prev_size) == 0;
+  /* Assume that everything is a library if the dynamic loader was loaded
+     late by a static executable.  */
+  if (bfd_get_section_by_name (exec_bfd, ".dynamic") == NULL)
+    return 0;
+
+  return extract_typed_address (so->lm_info->lm + lmo->l_prev_offset,
+				builtin_type_void_data_ptr) == 0;
 }
 
 static CORE_ADDR debug_base;	/* Base of dynamic linker structures */
-static CORE_ADDR breakpoint_addr;	/* Address where end bkpt is set */
 
 /* Validity flag for debug_loader_offset.  */
 static int debug_loader_offset_p;
@@ -280,7 +251,7 @@ static char *debug_loader_name;
 
 static int match_main (char *);
 
-static CORE_ADDR bfd_lookup_symbol (bfd *, char *, flagword);
+static CORE_ADDR bfd_lookup_symbol (bfd *, char *);
 
 /*
 
@@ -290,24 +261,25 @@ static CORE_ADDR bfd_lookup_symbol (bfd *, char *, flagword);
 
    SYNOPSIS
 
-   CORE_ADDR bfd_lookup_symbol (bfd *abfd, char *symname, flagword sect_flags)
+   CORE_ADDR bfd_lookup_symbol (bfd *abfd, char *symname)
 
    DESCRIPTION
 
    An expensive way to lookup the value of a single symbol for
    bfd's that are only temporary anyway.  This is used by the
    shared library support to find the address of the debugger
-   interface structures in the shared library.
+   notification routine in the shared library.
 
-   If SECT_FLAGS is non-zero, only match symbols in sections whose
-   flags include all those in SECT_FLAGS.
+   The returned symbol may be in a code or data section; functions
+   will normally be in a code section, but may be in a data section
+   if this architecture uses function descriptors.
 
    Note that 0 is specifically allowed as an error return (no
    such symbol).
  */
 
 static CORE_ADDR
-bfd_lookup_symbol (bfd *abfd, char *symname, flagword sect_flags)
+bfd_lookup_symbol (bfd *abfd, char *symname)
 {
   long storage_needed;
   asymbol *sym;
@@ -329,9 +301,9 @@ bfd_lookup_symbol (bfd *abfd, char *symname, flagword sect_flags)
 	{
 	  sym = *symbol_table++;
 	  if (strcmp (sym->name, symname) == 0
-              && (sym->section->flags & sect_flags) == sect_flags)
+              && (sym->section->flags & (SEC_CODE | SEC_DATA)) != 0)
 	    {
-	      /* Bfd symbols are section relative. */
+	      /* BFD symbols are section relative.  */
 	      symaddr = sym->value + sym->section->vma;
 	      break;
 	    }
@@ -358,9 +330,9 @@ bfd_lookup_symbol (bfd *abfd, char *symname, flagword sect_flags)
 	  sym = *symbol_table++;
 
 	  if (strcmp (sym->name, symname) == 0
-              && (sym->section->flags & sect_flags) == sect_flags)
+              && (sym->section->flags & (SEC_CODE | SEC_DATA)) != 0)
 	    {
-	      /* Bfd symbols are section relative. */
+	      /* BFD symbols are section relative.  */
 	      symaddr = sym->value + sym->section->vma;
 	      break;
 	    }
@@ -370,6 +342,84 @@ bfd_lookup_symbol (bfd *abfd, char *symname, flagword sect_flags)
 
   return symaddr;
 }
+
+/* Scan for DYNTAG in .dynamic section of ABFD. If DYNTAG is found 1 is
+   returned and the corresponding PTR is set.  */
+
+static int
+scan_dyntag (int dyntag, bfd *abfd, CORE_ADDR *ptr)
+{
+  int arch_size, step, sect_size;
+  long dyn_tag;
+  CORE_ADDR dyn_ptr, dyn_addr;
+  gdb_byte *bufend, *bufstart, *buf;
+  Elf32_External_Dyn *x_dynp_32;
+  Elf64_External_Dyn *x_dynp_64;
+  struct bfd_section *sect;
+
+  if (abfd == NULL)
+    return 0;
+  arch_size = bfd_get_arch_size (abfd);
+  if (arch_size == -1)
+   return 0;
+
+  /* Find the start address of the .dynamic section.  */
+  sect = bfd_get_section_by_name (abfd, ".dynamic");
+  if (sect == NULL)
+    return 0;
+  dyn_addr = bfd_section_vma (abfd, sect);
+
+  /* Read in .dynamic from the BFD.  We will get the actual value
+     from memory later.  */
+  sect_size = bfd_section_size (abfd, sect);
+  buf = bufstart = alloca (sect_size);
+  if (!bfd_get_section_contents (abfd, sect,
+				 buf, 0, sect_size))
+    return 0;
+
+  /* Iterate over BUF and scan for DYNTAG.  If found, set PTR and return.  */
+  step = (arch_size == 32) ? sizeof (Elf32_External_Dyn)
+			   : sizeof (Elf64_External_Dyn);
+  for (bufend = buf + sect_size;
+       buf < bufend;
+       buf += step)
+  {
+    if (arch_size == 32)
+      {
+	x_dynp_32 = (Elf32_External_Dyn *) buf;
+	dyn_tag = bfd_h_get_32 (abfd, (bfd_byte *) x_dynp_32->d_tag);
+	dyn_ptr = bfd_h_get_32 (abfd, (bfd_byte *) x_dynp_32->d_un.d_ptr);
+      }
+    else
+      {
+	x_dynp_64 = (Elf64_External_Dyn *) buf;
+	dyn_tag = bfd_h_get_64 (abfd, (bfd_byte *) x_dynp_64->d_tag);
+	dyn_ptr = bfd_h_get_64 (abfd, (bfd_byte *) x_dynp_64->d_un.d_ptr);
+      }
+     if (dyn_tag == DT_NULL)
+       return 0;
+     if (dyn_tag == dyntag)
+       {
+	 /* If requested, try to read the runtime value of this .dynamic
+	    entry.  */
+	 if (ptr)
+	   {
+	     gdb_byte ptr_buf[8];
+	     CORE_ADDR ptr_addr;
+
+	     ptr_addr = dyn_addr + (buf - bufstart) + arch_size / 8;
+	     if (target_read_memory (ptr_addr, ptr_buf, arch_size / 8) == 0)
+	       dyn_ptr = extract_typed_address (ptr_buf,
+						builtin_type_void_data_ptr);
+	     *ptr = dyn_ptr;
+	   }
+	 return 1;
+       }
+  }
+
+  return 0;
+}
+
 
 /*
 
@@ -398,103 +448,33 @@ bfd_lookup_symbol (bfd *abfd, char *symname, flagword sect_flags)
 static CORE_ADDR
 elf_locate_base (void)
 {
-  struct bfd_section *dyninfo_sect;
-  int dyninfo_sect_size;
-  CORE_ADDR dyninfo_addr;
-  gdb_byte *buf;
-  gdb_byte *bufend;
-  int arch_size;
+  struct minimal_symbol *msymbol;
+  CORE_ADDR dyn_ptr;
 
-  /* Find the start address of the .dynamic section.  */
-  dyninfo_sect = bfd_get_section_by_name (exec_bfd, ".dynamic");
-  if (dyninfo_sect == NULL)
-    return 0;
-  dyninfo_addr = bfd_section_vma (exec_bfd, dyninfo_sect);
-
-  /* Read in .dynamic section, silently ignore errors.  */
-  dyninfo_sect_size = bfd_section_size (exec_bfd, dyninfo_sect);
-  buf = alloca (dyninfo_sect_size);
-  if (target_read_memory (dyninfo_addr, buf, dyninfo_sect_size))
-    return 0;
-
-  /* Find the DT_DEBUG entry in the the .dynamic section.
-     For mips elf we look for DT_MIPS_RLD_MAP, mips elf apparently has
-     no DT_DEBUG entries.  */
-
-  arch_size = bfd_get_arch_size (exec_bfd);
-  if (arch_size == -1)	/* failure */
-    return 0;
-
-  if (arch_size == 32)
-    { /* 32-bit elf */
-      for (bufend = buf + dyninfo_sect_size;
-	   buf < bufend;
-	   buf += sizeof (Elf32_External_Dyn))
-	{
-	  Elf32_External_Dyn *x_dynp = (Elf32_External_Dyn *) buf;
-	  long dyn_tag;
-	  CORE_ADDR dyn_ptr;
-
-	  dyn_tag = bfd_h_get_32 (exec_bfd, (bfd_byte *) x_dynp->d_tag);
-	  if (dyn_tag == DT_NULL)
-	    break;
-	  else if (dyn_tag == DT_DEBUG)
-	    {
-	      dyn_ptr = bfd_h_get_32 (exec_bfd, 
-				      (bfd_byte *) x_dynp->d_un.d_ptr);
-	      return dyn_ptr;
-	    }
-	  else if (dyn_tag == DT_MIPS_RLD_MAP)
-	    {
-	      gdb_byte *pbuf;
-	      int pbuf_size = TARGET_PTR_BIT / HOST_CHAR_BIT;
-
-	      pbuf = alloca (pbuf_size);
-	      /* DT_MIPS_RLD_MAP contains a pointer to the address
-		 of the dynamic link structure.  */
-	      dyn_ptr = bfd_h_get_32 (exec_bfd, 
-				      (bfd_byte *) x_dynp->d_un.d_ptr);
-	      if (target_read_memory (dyn_ptr, pbuf, pbuf_size))
-		return 0;
-	      return extract_unsigned_integer (pbuf, pbuf_size);
-	    }
-	}
-    }
-  else /* 64-bit elf */
+  /* Look for DT_MIPS_RLD_MAP first.  MIPS executables use this
+     instead of DT_DEBUG, although they sometimes contain an unused
+     DT_DEBUG.  */
+  if (scan_dyntag (DT_MIPS_RLD_MAP, exec_bfd, &dyn_ptr))
     {
-      for (bufend = buf + dyninfo_sect_size;
-	   buf < bufend;
-	   buf += sizeof (Elf64_External_Dyn))
-	{
-	  Elf64_External_Dyn *x_dynp = (Elf64_External_Dyn *) buf;
-	  long dyn_tag;
-	  CORE_ADDR dyn_ptr;
-
-	  dyn_tag = bfd_h_get_64 (exec_bfd, (bfd_byte *) x_dynp->d_tag);
-	  if (dyn_tag == DT_NULL)
-	    break;
-	  else if (dyn_tag == DT_DEBUG)
-	    {
-	      dyn_ptr = bfd_h_get_64 (exec_bfd, 
-				      (bfd_byte *) x_dynp->d_un.d_ptr);
-	      return dyn_ptr;
-	    }
-	  else if (dyn_tag == DT_MIPS_RLD_MAP)
-	    {
-	      gdb_byte *pbuf;
-	      int pbuf_size = TARGET_PTR_BIT / HOST_CHAR_BIT;
-
-	      pbuf = alloca (pbuf_size);
-	      /* DT_MIPS_RLD_MAP contains a pointer to the address
-		 of the dynamic link structure.  */
-	      dyn_ptr = bfd_h_get_64 (exec_bfd, 
-				      (bfd_byte *) x_dynp->d_un.d_ptr);
-	      if (target_read_memory (dyn_ptr, pbuf, pbuf_size))
-		return 0;
-	      return extract_unsigned_integer (pbuf, pbuf_size);
-	    }
-	}
+      gdb_byte *pbuf;
+      int pbuf_size = TYPE_LENGTH (builtin_type_void_data_ptr);
+      pbuf = alloca (pbuf_size);
+      /* DT_MIPS_RLD_MAP contains a pointer to the address
+	 of the dynamic link structure.  */
+      if (target_read_memory (dyn_ptr, pbuf, pbuf_size))
+	return 0;
+      return extract_typed_address (pbuf, builtin_type_void_data_ptr);
     }
+
+  /* Find DT_DEBUG.  */
+  if (scan_dyntag (DT_DEBUG, exec_bfd, &dyn_ptr))
+    return dyn_ptr;
+
+  /* This may be a static executable.  Look for the symbol
+     conventionally named _r_debug, as a last resort.  */
+  msymbol = lookup_minimal_symbol ("_r_debug", NULL, symfile_objfile);
+  if (msymbol != NULL)
+    return SYMBOL_VALUE_ADDRESS (msymbol);
 
   /* DT_DEBUG entry not found.  */
   return 0;
@@ -621,7 +601,8 @@ open_symbol_file_object (void *from_ttyp)
   int errcode;
   int from_tty = *(int *)from_ttyp;
   struct link_map_offsets *lmo = svr4_fetch_link_map_offsets ();
-  gdb_byte *l_name_buf = xmalloc (lmo->l_name_size);
+  int l_name_size = TYPE_LENGTH (builtin_type_void_data_ptr);
+  gdb_byte *l_name_buf = xmalloc (l_name_size);
   struct cleanup *cleanups = make_cleanup (xfree, l_name_buf);
 
   if (symfile_objfile)
@@ -637,11 +618,10 @@ open_symbol_file_object (void *from_ttyp)
     return 0;	/* failed somehow... */
 
   /* Read address of name from target memory to GDB.  */
-  read_memory (lm + lmo->l_name_offset, l_name_buf, lmo->l_name_size);
+  read_memory (lm + lmo->l_name_offset, l_name_buf, l_name_size);
 
-  /* Convert the address to host format.  Assume that the address is
-     unsigned.  */
-  l_name = extract_unsigned_integer (l_name_buf, lmo->l_name_size);
+  /* Convert the address to host format.  */
+  l_name = extract_typed_address (l_name_buf, builtin_type_void_data_ptr);
 
   /* Free l_name_buf.  */
   do_cleanups (cleanups);
@@ -651,6 +631,7 @@ open_symbol_file_object (void *from_ttyp)
 
   /* Now fetch the filename from target memory.  */
   target_read_string (l_name, &filename, SO_NAME_MAX_PATH_SIZE - 1, &errcode);
+  make_cleanup (xfree, filename);
 
   if (errcode)
     {
@@ -659,7 +640,6 @@ open_symbol_file_object (void *from_ttyp)
       return 0;
     }
 
-  make_cleanup (xfree, filename);
   /* Have a pathname: read the symbol file.  */
   symbol_file_add_main (filename, from_tty);
 
@@ -779,9 +759,9 @@ svr4_current_sos (void)
 	    {
 	      strncpy (new->so_name, buffer, SO_NAME_MAX_PATH_SIZE - 1);
 	      new->so_name[SO_NAME_MAX_PATH_SIZE - 1] = '\0';
-	      xfree (buffer);
 	      strcpy (new->so_original_name, new->so_name);
 	    }
+	  xfree (buffer);
 
 	  /* If this entry has no name, or its name matches the name
 	     for the main executable, don't include it in the list.  */
@@ -837,7 +817,8 @@ svr4_fetch_objfile_link_map (struct objfile *objfile)
       struct lm_info objfile_lm_info;
       struct cleanup *old_chain;
       CORE_ADDR name_address;
-      gdb_byte *l_name_buf = xmalloc (lmo->l_name_size);
+      int l_name_size = TYPE_LENGTH (builtin_type_void_data_ptr);
+      gdb_byte *l_name_buf = xmalloc (l_name_size);
       old_chain = make_cleanup (xfree, l_name_buf);
 
       /* Set up the buffer to contain the portion of the link_map
@@ -850,11 +831,11 @@ svr4_fetch_objfile_link_map (struct objfile *objfile)
       read_memory (lm, objfile_lm_info.lm, lmo->link_map_size);
 
       /* Read address of name from target memory to GDB.  */
-      read_memory (lm + lmo->l_name_offset, l_name_buf, lmo->l_name_size);
+      read_memory (lm + lmo->l_name_offset, l_name_buf, l_name_size);
 
-      /* Extract this object's name.  Assume that the address is
-         unsigned.  */
-      name_address = extract_unsigned_integer (l_name_buf, lmo->l_name_size);
+      /* Extract this object's name.  */
+      name_address = extract_typed_address (l_name_buf,
+					    builtin_type_void_data_ptr);
       target_read_string (name_address, &buffer,
       			  SO_NAME_MAX_PATH_SIZE - 1, &errcode);
       make_cleanup (xfree, buffer);
@@ -866,17 +847,19 @@ svr4_fetch_objfile_link_map (struct objfile *objfile)
 	  /* Is this the linkmap for the file we want?  */
 	  /* If the file is not a shared library and has no name,
 	     we are sure it is the main executable, so we return that.  */
-	  if ((buffer && strcmp (buffer, objfile->name) == 0)
-              || (!(objfile->flags & OBJF_SHARED) && (strcmp (buffer, "") == 0)))
+
+	  if (buffer 
+	      && ((strcmp (buffer, objfile->name) == 0)
+		  || (!(objfile->flags & OBJF_SHARED) 
+		      && (strcmp (buffer, "") == 0))))
   	    {
     	      do_cleanups (old_chain);
     	      return lm;
       	    }
   	}
-      /* Not the file we wanted, continue checking.  Assume that the
-         address is unsigned.  */
-      lm = extract_unsigned_integer (objfile_lm_info.lm + lmo->l_next_offset,
-				     lmo->l_next_size);
+      /* Not the file we wanted, continue checking.  */
+      lm = extract_typed_address (objfile_lm_info.lm + lmo->l_next_offset,
+				  builtin_type_void_data_ptr);
       do_cleanups (old_chain);
     }
   return 0;
@@ -907,7 +890,7 @@ static CORE_ADDR interp_text_sect_high;
 static CORE_ADDR interp_plt_sect_low;
 static CORE_ADDR interp_plt_sect_high;
 
-static int
+int
 svr4_in_dynsym_resolve_code (CORE_ADDR pc)
 {
   return ((pc >= interp_text_sect_low && pc < interp_text_sect_high)
@@ -980,8 +963,6 @@ exec_entry_point (struct bfd *abfd, struct target_ops *targ)
 static int
 enable_break (void)
 {
-  int success = 0;
-
 #ifdef BKPT_AT_SYMBOL
 
   struct minimal_symbol *msymbol;
@@ -1054,7 +1035,7 @@ enable_break (void)
 
       /* On a running target, we can get the dynamic linker's base
          address from the shared library table.  */
-      solib_add (NULL, 0, NULL, auto_solib_add);
+      solib_add (NULL, 0, &current_target, auto_solib_add);
       so = master_so_list ();
       while (so)
 	{
@@ -1077,7 +1058,7 @@ enable_break (void)
 	  debug_loader_name = xstrdup (buf);
 	  debug_loader_offset_p = 1;
 	  debug_loader_offset = load_addr;
-	  solib_add (NULL, 0, NULL, auto_solib_add);
+	  solib_add (NULL, 0, &current_target, auto_solib_add);
 	}
 
       /* Record the relocated start and end address of the dynamic linker
@@ -1102,19 +1083,18 @@ enable_break (void)
       /* Now try to set a breakpoint in the dynamic linker.  */
       for (bkpt_namep = solib_break_names; *bkpt_namep != NULL; bkpt_namep++)
 	{
-          /* On ABI's that use function descriptors, there are usually
-             two linker symbols associated with each C function: one
-             pointing at the actual entry point of the machine code,
-             and one pointing at the function's descriptor.  The
-             latter symbol has the same name as the C function.
-
-             What we're looking for here is the machine code entry
-             point, so we are only interested in symbols in code
-             sections.  */
-	  sym_addr = bfd_lookup_symbol (tmp_bfd, *bkpt_namep, SEC_CODE);
+	  sym_addr = bfd_lookup_symbol (tmp_bfd, *bkpt_namep);
 	  if (sym_addr != 0)
 	    break;
 	}
+
+      if (sym_addr != 0)
+	/* Convert 'sym_addr' from a function pointer to an address.
+	   Because we pass tmp_bfd_target instead of the current
+	   target, this will always produce an unrelocated value.  */
+	sym_addr = gdbarch_convert_from_func_ptr_addr (current_gdbarch,
+						       sym_addr,
+						       tmp_bfd_target);
 
       /* We're done with both the temporary bfd and target.  Remember,
          closing the target closes the underlying bfd.  */
@@ -1129,16 +1109,16 @@ enable_break (void)
       /* For whatever reason we couldn't set a breakpoint in the dynamic
          linker.  Warn and drop into the old code.  */
     bkpt_at_symbol:
+      xfree (tmp_pathname);
       warning (_("Unable to find dynamic linker breakpoint function.\n"
                "GDB will be unable to debug shared library initializers\n"
                "and track explicitly loaded dynamic code."));
     }
 
-  /* Scan through the list of symbols, trying to look up the symbol and
-     set a breakpoint there.  Terminate loop when we/if we succeed. */
+  /* Scan through the lists of symbols, trying to look up the symbol and
+     set a breakpoint there.  Terminate loop when we/if we succeed.  */
 
-  breakpoint_addr = 0;
-  for (bkpt_namep = bkpt_names; *bkpt_namep != NULL; bkpt_namep++)
+  for (bkpt_namep = solib_break_names; *bkpt_namep != NULL; bkpt_namep++)
     {
       msymbol = lookup_minimal_symbol (*bkpt_namep, NULL, symfile_objfile);
       if ((msymbol != NULL) && (SYMBOL_VALUE_ADDRESS (msymbol) != 0))
@@ -1148,12 +1128,18 @@ enable_break (void)
 	}
     }
 
-  /* Nothing good happened.  */
-  success = 0;
-
+  for (bkpt_namep = bkpt_names; *bkpt_namep != NULL; bkpt_namep++)
+    {
+      msymbol = lookup_minimal_symbol (*bkpt_namep, NULL, symfile_objfile);
+      if ((msymbol != NULL) && (SYMBOL_VALUE_ADDRESS (msymbol) != 0))
+	{
+	  create_solib_event_breakpoint (SYMBOL_VALUE_ADDRESS (msymbol));
+	  return 1;
+	}
+    }
 #endif /* BKPT_AT_SYMBOL */
 
-  return (success);
+  return 0;
 }
 
 /*
@@ -1351,17 +1337,10 @@ svr4_solib_create_inferior_hook (void)
   svr4_relocate_main_executable ();
 
   if (!svr4_have_link_map_offsets ())
-    {
-      warning (_("no shared library support for this OS / ABI"));
-      return;
-
-    }
+    return;
 
   if (!enable_break ())
-    {
-      warning (_("shared library handler failed to enable breakpoint"));
-      return;
-    }
+    return;
 
 #if defined(_SCO_DS)
   /* SCO needs the loop below, other systems should be using the
@@ -1415,17 +1394,17 @@ svr4_free_so (struct so_list *so)
    natural pointer/address correspondence.  (For example, on the MIPS,
    converting a 32-bit pointer to a 64-bit CORE_ADDR requires you to
    sign-extend the value.  There, simply truncating the bits above
-   TARGET_PTR_BIT, as we do below, is no good.)  This should probably
+   gdbarch_ptr_bit, as we do below, is no good.)  This should probably
    be a new gdbarch method or something.  */
 static CORE_ADDR
 svr4_truncate_ptr (CORE_ADDR addr)
 {
-  if (TARGET_PTR_BIT == sizeof (CORE_ADDR) * 8)
+  if (gdbarch_ptr_bit (current_gdbarch) == sizeof (CORE_ADDR) * 8)
     /* We don't need to truncate anything, and the bit twiddling below
        will fail due to overflow problems.  */
     return addr;
   else
-    return addr & (((CORE_ADDR) 1 << TARGET_PTR_BIT) - 1);
+    return addr & (((CORE_ADDR) 1 << gdbarch_ptr_bit (current_gdbarch)) - 1);
 }
 
 
@@ -1522,15 +1501,10 @@ svr4_ilp32_fetch_link_map_offsets (void)
       /* Everything we need is in the first 20 bytes.  */
       lmo.link_map_size = 20;
       lmo.l_addr_offset = 0;
-      lmo.l_addr_size = 4;
       lmo.l_name_offset = 4;
-      lmo.l_name_size = 4;
       lmo.l_ld_offset = 8;
-      lmo.l_ld_size = 4;
       lmo.l_next_offset = 12;
-      lmo.l_next_size = 4;
       lmo.l_prev_offset = 16;
-      lmo.l_prev_size = 4;
     }
 
   return lmp;
@@ -1557,22 +1531,35 @@ svr4_lp64_fetch_link_map_offsets (void)
       /* Everything we need is in the first 40 bytes.  */
       lmo.link_map_size = 40;
       lmo.l_addr_offset = 0;
-      lmo.l_addr_size = 8;
       lmo.l_name_offset = 8;
-      lmo.l_name_size = 8;
       lmo.l_ld_offset = 16;
-      lmo.l_ld_size = 8;
       lmo.l_next_offset = 24;
-      lmo.l_next_size = 8;
       lmo.l_prev_offset = 32;
-      lmo.l_prev_size = 8;
     }
 
   return lmp;
 }
 
 
-static struct target_so_ops svr4_so_ops;
+struct target_so_ops svr4_so_ops;
+
+/* Lookup global symbol for ELF DSOs linked with -Bsymbolic. Those DSOs have a
+   different rule for symbol lookup.  The lookup begins here in the DSO, not in
+   the main executable.  */
+
+static struct symbol *
+elf_lookup_lib_symbol (const struct objfile *objfile,
+		       const char *name,
+		       const char *linkage_name,
+		       const domain_enum domain, struct symtab **symtab)
+{
+  if (objfile->obfd == NULL
+     || scan_dyntag (DT_SYMBOLIC, objfile->obfd, NULL) != 1)
+    return NULL;
+
+  return lookup_global_symbol_from_objfile
+		(objfile, name, linkage_name, domain, symtab);
+}
 
 extern initialize_file_ftype _initialize_svr4_solib; /* -Wmissing-prototypes */
 
@@ -1589,6 +1576,7 @@ _initialize_svr4_solib (void)
   svr4_so_ops.current_sos = svr4_current_sos;
   svr4_so_ops.open_symbol_file_object = open_symbol_file_object;
   svr4_so_ops.in_dynsym_resolve_code = svr4_in_dynsym_resolve_code;
+  svr4_so_ops.lookup_lib_global_symbol = elf_lookup_lib_symbol;
 
   /* FIXME: Don't do this here.  *_gdbarch_init() should set so_ops. */
   current_target_so_ops = &svr4_so_ops;

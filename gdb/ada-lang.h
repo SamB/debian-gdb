@@ -1,24 +1,22 @@
 /* Ada language support definitions for GDB, the GNU debugger.
 
-   Copyright (C) 1992, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
-   2005 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2007 Free Software Foundation, Inc.
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor,
-Boston, MA 02110-1301, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (ADA_LANG_H)
 #define ADA_LANG_H 1
@@ -470,20 +468,21 @@ extern int ada_print_exception_breakpoint_nontask (struct breakpoint *);
 
 extern void ada_print_exception_breakpoint_task (struct breakpoint *);
 
-extern void ada_find_printable_frame (struct frame_info *fi);
-
 extern void ada_reset_thread_registers (void);
 
 extern int ada_build_task_list (void);
 
-/* Look up a symbol by name using the search conventions of 
-   a specific language (optional block, optional symtab). 
-   FIXME: Should be symtab.h. */
+extern int ada_exception_catchpoint_p (struct breakpoint *b);
+  
+extern struct symtab_and_line
+  ada_decode_exception_location (char *args, char **addr_string,
+                                 char **exp_string, char **cond_string,
+                                 struct expression **cond,
+                                 struct breakpoint_ops **ops);
 
-extern struct symbol *lookup_symbol_in_language (const char *, 
-						 const struct block *,
-						 domain_enum, 
-						 enum language,
-						 int *,
-						 struct symtab **);
+extern struct symtab_and_line
+  ada_decode_assert_location (char *args, char **addr_string,
+                              struct breakpoint_ops **ops);
+
+
 #endif

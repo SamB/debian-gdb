@@ -1,14 +1,14 @@
 /* Intel 386 target-dependent stuff.
 
-   Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+   Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "arch-utils.h"
@@ -27,13 +25,13 @@
 #include "dummy-frame.h"
 #include "dwarf2-frame.h"
 #include "doublest.h"
-#include "floatformat.h"
 #include "frame.h"
 #include "frame-base.h"
 #include "frame-unwind.h"
 #include "inferior.h"
 #include "gdbcmd.h"
 #include "gdbcore.h"
+#include "gdbtypes.h"
 #include "objfiles.h"
 #include "osabi.h"
 #include "regcache.h"
@@ -201,7 +199,8 @@ i386_dbx_reg_to_regnum (int reg)
     }
 
   /* This will hopefully provoke a warning.  */
-  return NUM_REGS + NUM_PSEUDO_REGS;
+  return gdbarch_num_regs (current_gdbarch)
+	 + gdbarch_num_pseudo_regs (current_gdbarch);
 }
 
 /* Convert SVR4 register number REG to the appropriate register number
@@ -245,7 +244,8 @@ i386_svr4_reg_to_regnum (int reg)
     }
 
   /* This will hopefully provoke a warning.  */
-  return NUM_REGS + NUM_PSEUDO_REGS;
+  return gdbarch_num_regs (current_gdbarch)
+	 + gdbarch_num_pseudo_regs (current_gdbarch);
 }
 
 #undef I387_ST0_REGNUM
@@ -497,15 +497,31 @@ static CORE_ADDR
 i386_analyze_stack_align (CORE_ADDR pc, CORE_ADDR current_pc,
 			  struct i386_frame_cache *cache)
 {
-  static const gdb_byte insns[10] = { 
+  /* The register used by the compiler to perform the stack re-alignment 
+     is, in order of preference, either %ecx, %edx, or %eax.  GCC should
+     never use %ebx as it always treats it as callee-saved, whereas
+     the compiler can only use caller-saved registers.  */
+  static const gdb_byte insns_ecx[10] = { 
     0x8d, 0x4c, 0x24, 0x04,	/* leal  4(%esp), %ecx */
     0x83, 0xe4, 0xf0,		/* andl  $-16, %esp */
     0xff, 0x71, 0xfc		/* pushl -4(%ecx) */
   };
+  static const gdb_byte insns_edx[10] = { 
+    0x8d, 0x54, 0x24, 0x04,	/* leal  4(%esp), %edx */
+    0x83, 0xe4, 0xf0,		/* andl  $-16, %esp */
+    0xff, 0x72, 0xfc		/* pushl -4(%edx) */
+  };
+  static const gdb_byte insns_eax[10] = { 
+    0x8d, 0x44, 0x24, 0x04,	/* leal  4(%esp), %eax */
+    0x83, 0xe4, 0xf0,		/* andl  $-16, %esp */
+    0xff, 0x70, 0xfc		/* pushl -4(%eax) */
+  };
   gdb_byte buf[10];
 
   if (target_read_memory (pc, buf, sizeof buf)
-      || memcmp (buf, insns, sizeof buf) != 0)
+      || (memcmp (buf, insns_ecx, sizeof buf) != 0
+          && memcmp (buf, insns_edx, sizeof buf) != 0
+          && memcmp (buf, insns_eax, sizeof buf) != 0))
     return pc;
 
   if (current_pc > pc + 4)
@@ -874,7 +890,7 @@ i386_skip_prologue (CORE_ADDR start_pc)
 
       /* addl y,%ebx */
       if (delta > 0 && op == 0x81
-	  && read_memory_unsigned_integer (pc + delta + 1, 1) == 0xc3);
+	  && read_memory_unsigned_integer (pc + delta + 1, 1) == 0xc3)
 	{
 	  pc += delta + 6;
 	}
@@ -896,7 +912,7 @@ i386_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   gdb_byte buf[8];
 
-  frame_unwind_register (next_frame, PC_REGNUM, buf);
+  frame_unwind_register (next_frame, gdbarch_pc_regnum (current_gdbarch), buf);
   return extract_typed_address (buf, builtin_type_void_func_ptr);
 }
 
@@ -933,7 +949,7 @@ i386_frame_cache (struct frame_info *next_frame, void **this_cache)
   /* For normal frames, %eip is stored at 4(%ebp).  */
   cache->saved_regs[I386_EIP_REGNUM] = 4;
 
-  cache->pc = frame_func_unwind (next_frame);
+  cache->pc = frame_func_unwind (next_frame, NORMAL_FRAME);
   if (cache->pc != 0)
     i386_analyze_prologue (cache->pc, frame_pc_unwind (next_frame), cache);
 
@@ -1248,11 +1264,11 @@ i386_unwind_dummy_id (struct gdbarch *gdbarch, struct frame_info *next_frame)
    This function is 64-bit safe.  */
 
 static int
-i386_get_longjmp_target (CORE_ADDR *pc)
+i386_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
 {
   gdb_byte buf[8];
   CORE_ADDR sp, jb_addr;
-  int jb_pc_offset = gdbarch_tdep (current_gdbarch)->jb_pc_offset;
+  int jb_pc_offset = gdbarch_tdep (get_frame_arch (frame))->jb_pc_offset;
   int len = TYPE_LENGTH (builtin_type_void_func_ptr);
 
   /* If JB_PC_OFFSET is -1, we have no way to find out where the
@@ -1262,7 +1278,7 @@ i386_get_longjmp_target (CORE_ADDR *pc)
 
   /* Don't use I386_ESP_REGNUM here, since this function is also used
      for AMD64.  */
-  regcache_cooked_read (current_regcache, SP_REGNUM, buf);
+  get_frame_register (frame, gdbarch_sp_regnum (current_gdbarch), buf);
   sp = extract_typed_address (buf, builtin_type_void_data_ptr);
   if (target_read_memory (sp + len, buf, len))
     return 0;
@@ -1577,9 +1593,7 @@ i386_return_value (struct gdbarch *gdbarch, struct type *type,
 /* Type for %eflags.  */
 struct type *i386_eflags_type;
 
-/* Types for the MMX and SSE registers.  */
-struct type *i386_mmx_type;
-struct type *i386_sse_type;
+/* Type for %mxcsr.  */
 struct type *i386_mxcsr_type;
 
 /* Construct types for ISA-specific registers.  */
@@ -1608,52 +1622,6 @@ i386_init_types (void)
   append_flags_type_flag (type, 21, "ID");
   i386_eflags_type = type;
 
-  /* The type we're building is this: */
-#if 0
-  union __gdb_builtin_type_vec64i
-  {
-    int64_t uint64;
-    int32_t v2_int32[2];
-    int16_t v4_int16[4];
-    int8_t v8_int8[8];
-  };
-#endif
-
-  type = init_composite_type ("__gdb_builtin_type_vec64i", TYPE_CODE_UNION);
-  append_composite_type_field (type, "uint64", builtin_type_int64);
-  append_composite_type_field (type, "v2_int32", builtin_type_v2_int32);
-  append_composite_type_field (type, "v4_int16", builtin_type_v4_int16);
-  append_composite_type_field (type, "v8_int8", builtin_type_v8_int8);
-  TYPE_FLAGS (type) |= TYPE_FLAG_VECTOR;
-  TYPE_NAME (type) = "builtin_type_vec64i";
-  i386_mmx_type = type;
-
-  /* The type we're building is this: */
-#if 0
-  union __gdb_builtin_type_vec128i
-  {
-    int128_t uint128;
-    int64_t v2_int64[2];
-    int32_t v4_int32[4];
-    int16_t v8_int16[8];
-    int8_t v16_int8[16];
-    double v2_double[2];
-    float v4_float[4];
-  };
-#endif
-
-  type = init_composite_type ("__gdb_builtin_type_vec128i", TYPE_CODE_UNION);
-  append_composite_type_field (type, "v4_float", builtin_type_v4_float);
-  append_composite_type_field (type, "v2_double", builtin_type_v2_double);
-  append_composite_type_field (type, "v16_int8", builtin_type_v16_int8);
-  append_composite_type_field (type, "v8_int16", builtin_type_v8_int16);
-  append_composite_type_field (type, "v4_int32", builtin_type_v4_int32);
-  append_composite_type_field (type, "v2_int64", builtin_type_v2_int64);
-  append_composite_type_field (type, "uint128", builtin_type_int128);
-  TYPE_FLAGS (type) |= TYPE_FLAG_VECTOR;
-  TYPE_NAME (type) = "builtin_type_vec128i";
-  i386_sse_type = type;
-
   type = init_flags_type ("builtin_type_i386_mxcsr", 4);
   append_flags_type_flag (type, 0, "IE");
   append_flags_type_flag (type, 1, "DE");
@@ -1670,6 +1638,90 @@ i386_init_types (void)
   append_flags_type_flag (type, 12, "PM");
   append_flags_type_flag (type, 15, "FZ");
   i386_mxcsr_type = type;
+}
+
+/* Construct vector type for MMX registers.  */
+struct type *
+i386_mmx_type (struct gdbarch *gdbarch)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
+  if (!tdep->i386_mmx_type)
+    {
+      /* The type we're building is this: */
+#if 0
+      union __gdb_builtin_type_vec64i
+      {
+        int64_t uint64;
+        int32_t v2_int32[2];
+        int16_t v4_int16[4];
+        int8_t v8_int8[8];
+      };
+#endif
+
+      struct type *t;
+
+      t = init_composite_type ("__gdb_builtin_type_vec64i", TYPE_CODE_UNION);
+      append_composite_type_field (t, "uint64", builtin_type_int64);
+      append_composite_type_field (t, "v2_int32",
+				   init_vector_type (builtin_type_int32, 2));
+      append_composite_type_field (t, "v4_int16",
+				   init_vector_type (builtin_type_int16, 4));
+      append_composite_type_field (t, "v8_int8",
+				   init_vector_type (builtin_type_int8, 8));
+
+      TYPE_FLAGS (t) |= TYPE_FLAG_VECTOR;
+      TYPE_NAME (t) = "builtin_type_vec64i";
+      tdep->i386_mmx_type = t;
+    }
+
+  return tdep->i386_mmx_type;
+}
+
+struct type *
+i386_sse_type (struct gdbarch *gdbarch)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
+  if (!tdep->i386_sse_type)
+    {
+      /* The type we're building is this: */
+#if 0
+      union __gdb_builtin_type_vec128i
+      {
+        int128_t uint128;
+        int64_t v2_int64[2];
+        int32_t v4_int32[4];
+        int16_t v8_int16[8];
+        int8_t v16_int8[16];
+        double v2_double[2];
+        float v4_float[4];
+      };
+#endif
+
+      struct type *t;
+
+      t = init_composite_type ("__gdb_builtin_type_vec128i", TYPE_CODE_UNION);
+      append_composite_type_field (t, "v4_float",
+				   init_vector_type (builtin_type_float, 4));
+      append_composite_type_field (t, "v2_double",
+				   init_vector_type (builtin_type_double, 2));
+      append_composite_type_field (t, "v16_int8",
+				   init_vector_type (builtin_type_int8, 16));
+      append_composite_type_field (t, "v8_int16",
+				   init_vector_type (builtin_type_int16, 8));
+      append_composite_type_field (t, "v4_int32",
+				   init_vector_type (builtin_type_int32, 4));
+      append_composite_type_field (t, "v2_int64",
+				   init_vector_type (builtin_type_int64, 2));
+      append_composite_type_field (t, "uint128", builtin_type_int128);
+
+      TYPE_FLAGS (t) |= TYPE_FLAG_VECTOR;
+      TYPE_NAME (t) = "builtin_type_vec128i";
+      tdep->i386_sse_type = t;
+    }
+
+  return tdep->i386_sse_type;
 }
 
 /* Return the GDB type object for the "standard" data type of data in
@@ -1692,10 +1744,10 @@ i386_register_type (struct gdbarch *gdbarch, int regnum)
     return builtin_type_i387_ext;
 
   if (i386_mmx_regnum_p (gdbarch, regnum))
-    return i386_mmx_type;
+    return i386_mmx_type (gdbarch);
 
   if (i386_sse_regnum_p (gdbarch, regnum))
-    return i386_sse_type;
+    return i386_sse_type (gdbarch);
 
 #define I387_ST0_REGNUM I386_ST0_REGNUM
 #define I387_NUM_XMM_REGS (gdbarch_tdep (current_gdbarch)->num_xmm_regs)
@@ -2179,16 +2231,6 @@ i386_go32_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   tdep->jb_pc_offset = 36;
 }
-
-/* NetWare.  */
-
-static void
-i386_nw_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
-{
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-
-  tdep->jb_pc_offset = 24;
-}
 
 
 /* i386 register groups.  In addition to the normal groups, add "mmx"
@@ -2266,7 +2308,7 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     return arches->gdbarch;
 
   /* Allocate space for the new architecture.  */
-  tdep = XMALLOC (struct gdbarch_tdep);
+  tdep = XCALLOC (1, struct gdbarch_tdep);
   gdbarch = gdbarch_alloc (&info, tdep);
 
   /* General-purpose registers.  */
@@ -2317,7 +2359,7 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
      the i387 extended floating-point format.  In fact, of all targets
      in the GCC 2.95 tree, only OSF/1 does it different, and insists
      on having a `long double' that's not `long' at all.  */
-  set_gdbarch_long_double_format (gdbarch, &floatformat_i387_ext);
+  set_gdbarch_long_double_format (gdbarch, floatformats_i387_ext);
 
   /* Although the i387 extended floating-point has only 80 significant
      bits, a `long double' actually takes up 96, probably to enforce
@@ -2374,7 +2416,7 @@ i386_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_dwarf_reg_to_regnum (gdbarch, i386_svr4_reg_to_regnum);
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, i386_svr4_reg_to_regnum);
 
-  /* We don't define ECOFF_REG_TO_REGNUM, since ECOFF doesn't seem to
+  /* We don't set gdbarch_stab_reg_to_regnum, since ECOFF doesn't seem to
      be in use on any of the supported i386 targets.  */
 
   set_gdbarch_print_float_info (gdbarch, i387_print_float_info);
@@ -2453,12 +2495,6 @@ i386_coff_osabi_sniffer (bfd *abfd)
 
   return GDB_OSABI_UNKNOWN;
 }
-
-static enum gdb_osabi
-i386_nlm_osabi_sniffer (bfd *abfd)
-{
-  return GDB_OSABI_NETWARE;
-}
 
 
 /* Provide a prototype to silence -Wmissing-prototypes.  */
@@ -2493,15 +2529,11 @@ is \"default\"."),
 
   gdbarch_register_osabi_sniffer (bfd_arch_i386, bfd_target_coff_flavour,
 				  i386_coff_osabi_sniffer);
-  gdbarch_register_osabi_sniffer (bfd_arch_i386, bfd_target_nlm_flavour,
-				  i386_nlm_osabi_sniffer);
 
   gdbarch_register_osabi (bfd_arch_i386, 0, GDB_OSABI_SVR4,
 			  i386_svr4_init_abi);
   gdbarch_register_osabi (bfd_arch_i386, 0, GDB_OSABI_GO32,
 			  i386_go32_init_abi);
-  gdbarch_register_osabi (bfd_arch_i386, 0, GDB_OSABI_NETWARE,
-			  i386_nw_init_abi);
 
   /* Initialize the i386-specific register groups & types.  */
   i386_init_reggroups ();

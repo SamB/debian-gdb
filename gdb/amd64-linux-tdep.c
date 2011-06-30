@@ -1,13 +1,14 @@
 /* Target-dependent code for GNU/Linux x86-64.
 
-   Copyright (C) 2001, 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2003, 2004, 2005, 2006, 2007
+   Free Software Foundation, Inc.
    Contributed by Jiri Smid, SuSE Labs.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -155,7 +154,7 @@ amd64_linux_sigcontext_addr (struct frame_info *next_frame)
   CORE_ADDR sp;
   gdb_byte buf[8];
 
-  frame_unwind_register (next_frame, SP_REGNUM, buf);
+  frame_unwind_register (next_frame, gdbarch_sp_regnum (current_gdbarch), buf);
   sp = extract_unsigned_integer (buf, 8);
 
   /* The sigcontext structure is part of the user context.  A pointer
@@ -236,9 +235,9 @@ amd64_linux_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 /* Set the program counter for process PTID to PC.  */
 
 static void
-amd64_linux_write_pc (CORE_ADDR pc, ptid_t ptid)
+amd64_linux_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
-  write_register_pid (AMD64_RIP_REGNUM, pc, ptid);
+  regcache_cooked_write_unsigned (regcache, AMD64_RIP_REGNUM, pc);
 
   /* We must be careful with modifying the program counter.  If we
      just interrupted a system call, the kernel might try to restart
@@ -254,7 +253,7 @@ amd64_linux_write_pc (CORE_ADDR pc, ptid_t ptid)
      when we resume the inferior on return from a function call from
      within GDB.  In all other cases the system call will not be
      restarted.  */
-  write_register_pid (AMD64_LINUX_ORIG_RAX_REGNUM, -1, ptid);
+  regcache_cooked_write_unsigned (regcache, AMD64_LINUX_ORIG_RAX_REGNUM, -1);
 }
 
 static void

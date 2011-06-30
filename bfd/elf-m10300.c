@@ -1,12 +1,12 @@
 /* Matsushita 10300 specific support for 32-bit ELF
    Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2006 Free Software Foundation, Inc.
+   2006, 2007 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,10 +16,11 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 #include "libbfd.h"
 #include "elf-bfd.h"
 #include "elf/mn10300.h"
@@ -633,6 +634,23 @@ bfd_elf32_bfd_reloc_type_lookup (abfd, code)
       if (mn10300_reloc_map[i].bfd_reloc_val == code)
 	return &elf_mn10300_howto_table[mn10300_reloc_map[i].elf_reloc_val];
     }
+
+  return NULL;
+}
+
+static reloc_howto_type *
+bfd_elf32_bfd_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
+				 const char *r_name)
+{
+  unsigned int i;
+
+  for (i = 0;
+       i < (sizeof (elf_mn10300_howto_table)
+	    / sizeof (elf_mn10300_howto_table[0]));
+       i++)
+    if (elf_mn10300_howto_table[i].name != NULL
+	&& strcasecmp (elf_mn10300_howto_table[i].name, r_name) == 0)
+      return &elf_mn10300_howto_table[i];
 
   return NULL;
 }
@@ -1362,9 +1380,6 @@ mn10300_elf_relocate_section (output_bfd, info, input_bfd, input_section,
   struct elf_link_hash_entry **sym_hashes;
   Elf_Internal_Rela *rel, *relend;
 
-  if (info->relocatable)
-    return TRUE;
-
   symtab_hdr = &elf_tdata (input_bfd)->symtab_hdr;
   sym_hashes = elf_sym_hashes (input_bfd);
 
@@ -1440,7 +1455,7 @@ mn10300_elf_relocate_section (output_bfd, info, input_bfd, input_section,
 	       obscure cases sec->output_section will be NULL.  */
 	    relocation = 0;
 
-	  else if (unresolved_reloc)
+	  else if (!info->relocatable && unresolved_reloc)
 	    (*_bfd_error_handler)
 	      (_("%B(%A+0x%lx): unresolvable %s relocation against symbol `%s'"),
 	       input_bfd,
@@ -1449,6 +1464,20 @@ mn10300_elf_relocate_section (output_bfd, info, input_bfd, input_section,
 	       howto->name,
 	       h->root.root.root.string);
 	}
+
+      if (sec != NULL && elf_discarded_section (sec))
+	{
+	  /* For relocs against symbols from removed linkonce sections,
+	     or sections discarded by a linker script, we just want the
+	     section contents zeroed.  Avoid any special processing.  */
+	  _bfd_clear_contents (howto, input_bfd, contents + rel->r_offset);
+	  rel->r_info = 0;
+	  rel->r_addend = 0;
+	  continue;
+	}
+
+      if (info->relocatable)
+	continue;
 
       r = mn10300_elf_final_link_relocate (howto, input_bfd, output_bfd,
 					   input_section,
@@ -1499,7 +1528,12 @@ mn10300_elf_relocate_section (output_bfd, info, input_bfd, input_section,
 	      goto common_error;
 
 	    case bfd_reloc_dangerous:
-	      msg = _("internal error: dangerous error");
+	      if (r_type == R_MN10300_PCREL32)
+		msg = _("error: inappropriate relocation type for shared"
+			" library (did you forget -fpic?)");
+	      else
+		msg = _("internal error: suspicious relocation type used"
+			" in shared library");
 	      goto common_error;
 
 	    default:
@@ -4063,7 +4097,6 @@ _bfd_mn10300_elf_adjust_dynamic_symbol (info, h)
 {
   bfd * dynobj;
   asection * s;
-  unsigned int power_of_two;
 
   dynobj = elf_hash_table (info)->dynobj;
 
@@ -4203,28 +4236,7 @@ _bfd_mn10300_elf_adjust_dynamic_symbol (info, h)
       h->needs_copy = 1;
     }
 
-  /* We need to figure out the alignment required for this symbol.  I
-     have no idea how ELF linkers handle this.  */
-  power_of_two = bfd_log2 (h->size);
-  if (power_of_two > 3)
-    power_of_two = 3;
-
-  /* Apply the required alignment.  */
-  s->size = BFD_ALIGN (s->size, (bfd_size_type) (1 << power_of_two));
-  if (power_of_two > bfd_get_section_alignment (dynobj, s))
-    {
-      if (! bfd_set_section_alignment (dynobj, s, power_of_two))
-	return FALSE;
-    }
-
-  /* Define the symbol as being at this point in the section.  */
-  h->root.u.def.section = s;
-  h->root.u.def.value = s->size;
-
-  /* Increment the section size to make room for the symbol.  */
-  s->size += h->size;
-
-  return TRUE;
+  return _bfd_elf_adjust_dynamic_copy (h, s);
 }
 
 /* Set the sizes of the dynamic sections.  */

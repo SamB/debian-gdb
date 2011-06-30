@@ -1,14 +1,14 @@
 /* Code dealing with dummy stack frames, for GDB, the GNU debugger.
 
-   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-   1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free
-   Software Foundation, Inc.
+   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
+   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 
 #include "defs.h"
@@ -52,7 +50,7 @@ static struct dummy_frame *dummy_frame_stack = NULL;
 /* Function: deprecated_pc_in_call_dummy (pc)
 
    Return non-zero if the PC falls in a dummy frame created by gdb for
-   an inferior call.  The code below which allows DECR_PC_AFTER_BREAK
+   an inferior call.  The code below which allows gdbarch_decr_pc_after_break
    is for infrun.c, which may give the function a PC without that
    subtracted out.
 
@@ -75,7 +73,8 @@ deprecated_pc_in_call_dummy (CORE_ADDR pc)
        dummyframe = dummyframe->next)
     {
       if ((pc >= dummyframe->id.code_addr)
-	  && (pc <= dummyframe->id.code_addr + DECR_PC_AFTER_BREAK))
+	  && (pc <= dummyframe->id.code_addr
+		    + gdbarch_decr_pc_after_break (current_gdbarch)))
 	return 1;
     }
   return 0;

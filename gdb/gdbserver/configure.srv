@@ -6,6 +6,9 @@
 #   srv_regobj		The register protocol appropriate for this target.
 #   srv_tgtobj		Any other target-specific modules appropriate
 #			for this target.
+#   srv_xmltarget	The XML source file to use for target.xml, if any.
+#   srv_xmlfiles	Any other XML files which should be available for
+#			gdbserver in this configuration.
 #
 # In addition, on GNU/Linux the following shell variables will be set:
 #   srv_linux_regsets	Set to "yes" if ptrace(PTRACE_GETREGS) and friends
@@ -18,10 +21,23 @@
 # Input is taken from the "${target}" variable.
 
 case "${target}" in
-  arm*-*-linux*)	srv_regobj=reg-arm.o
-			srv_tgtobj="linux-low.o linux-arm-low.o"
+  arm*-*-linux*)	srv_tgtobj="linux-low.o linux-arm-low.o"
 			srv_linux_usrregs=yes
+			srv_linux_regsets=yes
 			srv_linux_thread_db=yes
+			if test $gdb_cv_arm_iwmmxt = yes; then
+			  srv_regobj=arm-with-iwmmxt.o
+			  srv_xmltarget=arm-with-iwmmxt.xml
+			  srv_xmlfiles="arm-core.xml xscale-iwmmxt.xml"
+			else
+			  srv_regobj=reg-arm.o
+			fi
+			;;
+  arm*-*-mingw32ce*)	srv_regobj=reg-arm.o
+			srv_tgtobj="win32-low.o win32-arm-low.o"
+			srv_tgtobj="${srv_tgtobj} wincecompat.o"
+			srv_mingw=yes
+			srv_mingwce=yes
 			;;
   crisv32-*-linux*)	srv_regobj=reg-crisv32.o
 			srv_tgtobj="linux-low.o linux-crisv32-low.o"
@@ -34,7 +50,7 @@ case "${target}" in
 			srv_linux_thread_db=yes
 			;;
   i[34567]86-*-cygwin*)	srv_regobj=reg-i386.o
-			srv_tgtobj="win32-i386-low.o"
+			srv_tgtobj="win32-low.o win32-i386-low.o"
 			;;
   i[34567]86-*-linux*)	srv_regobj=reg-i386-linux.o
 			srv_tgtobj="linux-low.o linux-i386-low.o i387-fp.o"
@@ -43,7 +59,7 @@ case "${target}" in
 			srv_linux_thread_db=yes
 			;;
   i[34567]86-*-mingw*)	srv_regobj=reg-i386.o
-			srv_tgtobj="win32-i386-low.o"
+			srv_tgtobj="win32-low.o win32-i386-low.o"
 			srv_mingw=yes
 			;;
   ia64-*-linux*)	srv_regobj=reg-ia64.o
@@ -67,8 +83,19 @@ case "${target}" in
 			srv_linux_regsets=yes
 			srv_linux_thread_db=yes
 			;;
-  mips*-*-linux*)	srv_regobj=reg-mips.o
+  mips*64*-*-linux*)	srv_regobj=mips64-linux.o
+			srv_xmltarget=mips64-linux.xml
+			srv_xmlfiles="mips64-cpu.xml mips64-cp0.xml mips64-fpu.xml"
 			srv_tgtobj="linux-low.o linux-mips-low.o"
+			srv_linux_regsets=yes
+			srv_linux_usrregs=yes
+			srv_linux_thread_db=yes
+			;;
+  mips*-*-linux*)	srv_regobj=mips-linux.o
+			srv_xmltarget=mips-linux.xml
+			srv_xmlfiles="mips-cpu.xml mips-cp0.xml mips-fpu.xml"
+			srv_tgtobj="linux-low.o linux-mips-low.o"
+			srv_linux_regsets=yes
 			srv_linux_usrregs=yes
 			srv_linux_thread_db=yes
 			;;
@@ -99,6 +126,7 @@ case "${target}" in
   sh*-*-linux*)		srv_regobj=reg-sh.o
 			srv_tgtobj="linux-low.o linux-sh-low.o"
 			srv_linux_usrregs=yes
+			srv_linux_regsets=yes
 			srv_linux_thread_db=yes
 			;;
   spu*-*-*)		srv_regobj=reg-spu.o

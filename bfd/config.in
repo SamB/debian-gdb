@@ -63,6 +63,9 @@
    */
 #undef HAVE_DIRENT_H
 
+/* Define to 1 if you have the <dlfcn.h> header file. */
+#undef HAVE_DLFCN_H
+
 /* Define to 1 if you have the `fcntl' function. */
 #undef HAVE_FCNTL
 
@@ -218,6 +221,10 @@
 /* Define if <sys/procfs.h> has win32_pstatus_t. */
 #undef HAVE_WIN32_PSTATUS_T
 
+/* Define to the sub-directory in which libtool stores uninstalled libraries.
+   */
+#undef LT_OBJDIR
+
 /* Name of package */
 #undef PACKAGE
 
@@ -236,6 +243,12 @@
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
 
+/* The size of a `char', as computed by sizeof. */
+#undef SIZEOF_CHAR
+
+/* The size of a `int', as computed by sizeof. */
+#undef SIZEOF_INT
+
 /* The size of a `long', as computed by sizeof. */
 #undef SIZEOF_LONG
 
@@ -244,6 +257,15 @@
 
 /* The size of a `off_t', as computed by sizeof. */
 #undef SIZEOF_OFF_T
+
+/* The size of a `short', as computed by sizeof. */
+#undef SIZEOF_SHORT
+
+/* The size of a `void *', as computed by sizeof. */
+#undef SIZEOF_VOID_P
+
+/* The sizeof of a 'void *', as computed by sizeof. */
+#undef SIZEOF_VOID_P
 
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS

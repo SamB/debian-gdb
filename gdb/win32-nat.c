@@ -1,8 +1,7 @@
 /* Target-vector operations for controlling win32 child processes, for GDB.
 
    Copyright (C) 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
-   2005, 2006
-   Free Software Foundation, Inc.
+   2005, 2006, 2007 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions, A Red Hat Company.
 
@@ -10,18 +9,16 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without eve nthe implied warranty of
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* Originally by Steve Chamberlain, sac@cygnus.com */
 
@@ -49,6 +46,7 @@
 #include "buildsym.h"
 #include "symfile.h"
 #include "objfiles.h"
+#include "gdb_obstack.h"
 #include "gdb_string.h"
 #include "gdbthread.h"
 #include "gdbcmd.h"
@@ -57,12 +55,14 @@
 #include "exec.h"
 #include "solist.h"
 #include "solib.h"
+#include "xml-support.h"
 
 #include "i386-tdep.h"
 #include "i387-tdep.h"
 
+#include "i386-cygwin-tdep.h"
+
 static struct target_ops win32_ops;
-static struct target_so_ops win32_so_ops;
 
 /* The starting and ending address of the cygwin1.dll text segment. */
 static bfd_vma cygwin_load_start;
@@ -344,7 +344,7 @@ win32_delete_thread (DWORD id)
 }
 
 static void
-do_win32_fetch_inferior_registers (int r)
+do_win32_fetch_inferior_registers (struct regcache *regcache, int r)
 {
   char *context_offset = ((char *) &current_thread->context) + mappings[r];
   long l;
@@ -386,58 +386,58 @@ do_win32_fetch_inferior_registers (int r)
   if (r == I387_FISEG_REGNUM)
     {
       l = *((long *) context_offset) & 0xffff;
-      regcache_raw_supply (current_regcache, r, (char *) &l);
+      regcache_raw_supply (regcache, r, (char *) &l);
     }
   else if (r == I387_FOP_REGNUM)
     {
       l = (*((long *) context_offset) >> 16) & ((1 << 11) - 1);
-      regcache_raw_supply (current_regcache, r, (char *) &l);
+      regcache_raw_supply (regcache, r, (char *) &l);
     }
   else if (r >= 0)
-    regcache_raw_supply (current_regcache, r, context_offset);
+    regcache_raw_supply (regcache, r, context_offset);
   else
     {
-      for (r = 0; r < NUM_REGS; r++)
-	do_win32_fetch_inferior_registers (r);
+      for (r = 0; r < gdbarch_num_regs (current_gdbarch); r++)
+	do_win32_fetch_inferior_registers (regcache, r);
     }
 
 #undef I387_ST0_REGNUM
 }
 
 static void
-win32_fetch_inferior_registers (int r)
+win32_fetch_inferior_registers (struct regcache *regcache, int r)
 {
   current_thread = thread_rec (PIDGET (inferior_ptid), TRUE);
   /* Check if current_thread exists.  Windows sometimes uses a non-existent
      thread id in its events */
   if (current_thread)
-    do_win32_fetch_inferior_registers (r);
+    do_win32_fetch_inferior_registers (regcache, r);
 }
 
 static void
-do_win32_store_inferior_registers (int r)
+do_win32_store_inferior_registers (const struct regcache *regcache, int r)
 {
   if (!current_thread)
     /* Windows sometimes uses a non-existent thread id in its events */;
   else if (r >= 0)
-    regcache_raw_collect (current_regcache, r,
+    regcache_raw_collect (regcache, r,
 			  ((char *) &current_thread->context) + mappings[r]);
   else
     {
-      for (r = 0; r < NUM_REGS; r++)
-	do_win32_store_inferior_registers (r);
+      for (r = 0; r < gdbarch_num_regs (current_gdbarch); r++)
+	do_win32_store_inferior_registers (regcache, r);
     }
 }
 
 /* Store a new register value into the current thread context */
 static void
-win32_store_inferior_registers (int r)
+win32_store_inferior_registers (struct regcache *regcache, int r)
 {
   current_thread = thread_rec (PIDGET (inferior_ptid), TRUE);
   /* Check if current_thread exists.  Windows sometimes uses a non-existent
      thread id in its events */
   if (current_thread)
-    do_win32_store_inferior_registers (r);
+    do_win32_store_inferior_registers (regcache, r);
 }
 
 static int psapi_loaded = 0;
@@ -601,123 +601,8 @@ safe_symbol_file_add (char *name, int from_tty,
   return p.ret;
 }
 
-/* Get the loaded address of all sections, given that .text was loaded
-   at text_load. Assumes that all sections are subject to the same
-   relocation offset. Returns NULL if problems occur or if the
-   sections were not relocated. */
-
-static struct section_addr_info *
-get_relocated_section_addrs (bfd *abfd, CORE_ADDR text_load)
-{
-  struct section_addr_info *result = NULL;
-  int section_count = bfd_count_sections (abfd);
-  asection *text_section = bfd_get_section_by_name (abfd, ".text");
-  CORE_ADDR text_vma;
-
-  if (!text_section)
-    {
-      /* Couldn't get the .text section. Weird. */
-    }
-  else if (text_load == (text_vma = bfd_get_section_vma (abfd, text_section)))
-    {
-      /* DLL wasn't relocated. */
-    }
-  else
-    {
-      /* Figure out all sections' loaded addresses. The offset here is
-	 such that taking a bfd_get_section_vma() result and adding
-	 offset will give the real load address of the section. */
-
-      CORE_ADDR offset = text_load - text_vma;
-
-      struct section_table *table_start = NULL;
-      struct section_table *table_end = NULL;
-      struct section_table *iter = NULL;
-
-      build_section_table (abfd, &table_start, &table_end);
-
-      for (iter = table_start; iter < table_end; ++iter)
-	{
-	  /* Relocated addresses. */
-	  iter->addr += offset;
-	  iter->endaddr += offset;
-	}
-
-      result = build_section_addr_info_from_section_table (table_start,
-							   table_end);
-
-      xfree (table_start);
-    }
-
-  return result;
-}
-
-/* Add DLL symbol information. */
-static void
-solib_symbols_add (struct so_list *so, CORE_ADDR load_addr)
-{
-  struct section_addr_info *addrs = NULL;
-  static struct objfile *result = NULL;
-  char *name = so->so_name;
-  bfd *abfd = NULL;
-  char *p;
-
-  /* The symbols in a dll are offset by 0x1000, which is the
-     the offset from 0 of the first byte in an image - because
-     of the file header and the section alignment. */
-
-  if (!name || !name[0])
-    return;
-
-  abfd = bfd_openr (name, "pei-i386");
-
-  if (!abfd)
-    {
-      /* pei failed - try pe */
-      abfd = bfd_openr (name, "pe-i386");
-    }
-
-  if (abfd)
-    {
-      if (bfd_check_format (abfd, bfd_object))
-	addrs = get_relocated_section_addrs (abfd, load_addr);
-    }
-
-  if (addrs)
-    {
-      result = safe_symbol_file_add (name, 0, addrs, 0, OBJF_SHARED);
-      free_section_addr_info (addrs);
-    }
-  else
-    {
-      /* Fallback on handling just the .text section. */
-      struct cleanup *my_cleanups;
-
-      addrs = alloc_section_addr_info (1);
-      my_cleanups = make_cleanup (xfree, addrs);
-      addrs->other[0].name = ".text";
-      addrs->other[0].addr = load_addr;
-
-      result = safe_symbol_file_add (name, 0, addrs, 0, OBJF_SHARED);
-      do_cleanups (my_cleanups);
-    }
-
-  p = strchr (so->so_name, '\0') - (sizeof ("/cygwin1.dll") - 1);
-  if (p >= so->so_name && strcasecmp (p, "/cygwin1.dll") == 0)
-    {
-      asection *text = bfd_get_section_by_name (abfd, ".text");
-      cygwin_load_start = bfd_section_vma (abfd, text);
-      cygwin_load_end = cygwin_load_start + bfd_section_size (abfd, text);
-    }
-
-  bfd_close (abfd);
-
-  so->symbols_loaded = !!result;
-  return;
-}
-
-static char *
-register_loaded_dll (const char *name, DWORD load_addr, int readsyms)
+static struct so_list *
+win32_make_so (const char *name, DWORD load_addr)
 {
   struct so_list *so;
   char buf[MAX_PATH + 1];
@@ -726,7 +611,6 @@ register_loaded_dll (const char *name, DWORD load_addr, int readsyms)
   WIN32_FIND_DATA w32_fd;
   HANDLE h = FindFirstFile(name, &w32_fd);
   MEMORY_BASIC_INFORMATION m;
-  size_t len;
 
   if (h == INVALID_HANDLE_VALUE)
     strcpy (buf, name);
@@ -754,15 +638,40 @@ register_loaded_dll (const char *name, DWORD load_addr, int readsyms)
   so->lm_info = (struct lm_info *) xmalloc (sizeof (struct lm_info));
   so->lm_info->load_addr = load_addr;
   cygwin_conv_to_posix_path (buf, so->so_name);
-  strcpy (so->so_original_name, so->so_name);
+  strcpy (so->so_original_name, name);
 
-  solib_end->next = so;
-  solib_end = so;
-  len = strlen (so->so_name);
-  if (readsyms)
-    solib_symbols_add (so, (CORE_ADDR) load_addr);
+  /* Record cygwin1.dll .text start/end.  */
+  p = strchr (so->so_name, '\0') - (sizeof ("/cygwin1.dll") - 1);
+  if (p >= so->so_name && strcasecmp (p, "/cygwin1.dll") == 0)
+    {
+      bfd *abfd;
+      asection *text = NULL;
+      CORE_ADDR text_vma;
 
-  return so->so_name;
+      abfd = bfd_openr (name, "pei-i386");
+
+      if (!abfd)
+	return so;
+
+      if (bfd_check_format (abfd, bfd_object))
+	text = bfd_get_section_by_name (abfd, ".text");
+
+      if (!text)
+	{
+	  bfd_close (abfd);
+	  return so;
+	}
+
+      /* The symbols in a dll are offset by 0x1000, which is the the
+	 offset from 0 of the first byte in an image - because of the
+	 file header and the section alignment. */
+      cygwin_load_start = load_addr + 0x1000;
+      cygwin_load_end = cygwin_load_start + bfd_section_size (abfd, text);
+
+      bfd_close (abfd);
+    }
+
+  return so;
 }
 
 static char *
@@ -823,11 +732,13 @@ handle_load_dll (void *dummy)
   dll_name = dll_buf;
 
   if (*dll_name == '\0')
-    dll_name = get_image_name (current_process_handle, event->lpImageName, event->fUnicode);
+    dll_name = get_image_name (current_process_handle,
+			       event->lpImageName, event->fUnicode);
   if (!dll_name)
     return 1;
 
-  register_loaded_dll (dll_name, (DWORD) event->lpBaseOfDll + 0x1000, auto_solib_add);
+  solib_end->next = win32_make_so (dll_name, (DWORD) event->lpBaseOfDll);
+  solib_end = solib_end->next;
 
   return 1;
 }
@@ -837,27 +748,13 @@ win32_free_so (struct so_list *so)
 {
   if (so->lm_info)
     xfree (so->lm_info);
-}
-
-static void
-win32_relocate_section_addresses (struct so_list *so,
-				  struct section_table *sec)
-{
-  /* FIXME */
-  return;
-}
-
-static void
-win32_solib_create_inferior_hook (void)
-{
-  solib_add (NULL, 0, NULL, auto_solib_add);
-  return;
+  xfree (so);
 }
 
 static int
 handle_unload_dll (void *dummy)
 {
-  DWORD lpBaseOfDll = (DWORD) current_event.u.UnloadDll.lpBaseOfDll + 0x1000;
+  DWORD lpBaseOfDll = (DWORD) current_event.u.UnloadDll.lpBaseOfDll;
   struct so_list *so;
 
   for (so = &solib_start; so->next != NULL; so = so->next)
@@ -867,7 +764,7 @@ handle_unload_dll (void *dummy)
 	so->next = sodel->next;
 	if (!so->next)
 	  solib_end = so;
-	free_so (sodel);
+	win32_free_so (sodel);
 	solib_add (NULL, 0, NULL, auto_solib_add);
 	return 1;
       }
@@ -883,12 +780,6 @@ win32_clear_solib (void)
 {
   solib_start.next = NULL;
   solib_end = &solib_start;
-}
-
-static void
-win32_special_symbol_handling (void)
-{
-  return;
 }
 
 /* Load DLL symbol info. */
@@ -1319,7 +1210,8 @@ win32_resume (ptid_t ptid, int step, enum target_signal sig)
       if (step)
 	{
 	  /* Single step by setting t bit */
-	  win32_fetch_inferior_registers (PS_REGNUM);
+	  win32_fetch_inferior_registers (get_current_regcache (),
+					  gdbarch_ps_regnum (current_gdbarch));
 	  th->context.EFlags |= FLAG_TRACE_BIT;
 	}
 
@@ -1457,11 +1349,9 @@ get_win32_debug_event (int pid, struct target_waitstatus *ourstatus)
       if (saw_create != 1)
 	break;
       catch_errors (handle_load_dll, NULL, (char *) "", RETURN_MASK_ALL);
-      registers_changed ();	/* mark all regs invalid */
       ourstatus->kind = TARGET_WAITKIND_LOADED;
       ourstatus->value.integer = 0;
       retval = main_thread_id;
-      re_enable_breakpoints_in_shlibs ();
       break;
 
     case UNLOAD_DLL_DEBUG_EVENT:
@@ -1472,9 +1362,9 @@ get_win32_debug_event (int pid, struct target_waitstatus *ourstatus)
       if (saw_create != 1)
 	break;
       catch_errors (handle_unload_dll, NULL, (char *) "", RETURN_MASK_ALL);
-      registers_changed ();	/* mark all regs invalid */
-      /* ourstatus->kind = TARGET_WAITKIND_UNLOADED;
-	 does not exist yet. */
+      ourstatus->kind = TARGET_WAITKIND_LOADED;
+      ourstatus->value.integer = 0;
+      retval = main_thread_id;
       break;
 
     case EXCEPTION_DEBUG_EVENT:
@@ -1543,6 +1433,8 @@ win32_wait (ptid_t ptid, struct target_waitstatus *ourstatus)
 {
   int pid = PIDGET (ptid);
 
+  target_terminal_ours ();
+
   /* We loop when we get a non-standard exception rather than return
      with a SPURIOUS because resume can try and step or modify things,
      which needs a current_thread->h.  But some of these exceptions mark
@@ -1580,15 +1472,16 @@ do_initial_win32_stuff (DWORD pid)
   debug_registers_used = 0;
   for (i = 0; i < sizeof (dr) / sizeof (dr[0]); i++)
     dr[i] = 0;
+  cygwin_load_start = cygwin_load_end = 0;
   current_event.dwProcessId = pid;
   memset (&current_event, 0, sizeof (current_event));
   push_target (&win32_ops);
-  disable_breakpoints_in_shlibs (1);
+  disable_breakpoints_in_shlibs ();
   win32_clear_solib ();
   clear_proceed_status ();
   init_wait_for_inferior ();
 
-  target_terminal_init ();
+  terminal_init_inferior_with_pgrp (pid);
   target_terminal_inferior ();
 
   while (1)
@@ -1774,8 +1667,9 @@ win32_detach (char *args, int from_tty)
 
   if (has_detach_ability ())
     {
-      delete_command (NULL, 0);
-      win32_continue (DBG_CONTINUE, -1);
+      ptid_t ptid = {-1};
+      win32_resume (ptid, 0, TARGET_SIGNAL_0);
+
       if (!DebugActiveProcessStop (current_event.dwProcessId))
 	{
 	  error (_("Can't detach process %lu (error %lu)"),
@@ -1842,15 +1736,6 @@ win32_open (char *arg, int from_tty)
   error (_("Use the \"run\" command to start a Unix child process."));
 }
 
-/* Function called by qsort to sort environment strings.  */
-static int
-env_sort (const void *a, const void *b)
-{     
-  const char **p = (const char **) a; 
-  const char **q = (const char **) b;
-  return strcasecmp (*p, *q);
-}
-
 /* Start an inferior win32 child process and sets inferior_ptid to its pid.
    EXEC_FILE is the file to run.
    ALLARGS is a string containing the arguments to the program.
@@ -1860,10 +1745,6 @@ static void
 win32_create_inferior (char *exec_file, char *allargs, char **in_env,
 		       int from_tty)
 {
-  char *winenv;
-  char *temp;
-  int envlen;
-  int i;
   STARTUPINFO si;
   PROCESS_INFORMATION pi;
   BOOL ret;
@@ -1918,83 +1799,7 @@ win32_create_inferior (char *exec_file, char *allargs, char **in_env,
   strcat (args, allargs);
 
   /* Prepare the environment vars for CreateProcess.  */
-  {
-    /* This code used to assume all env vars were file names and would
-       translate them all to win32 style.  That obviously doesn't work in the
-       general case.  The current rule is that we only translate PATH.
-       We need to handle PATH because we're about to call CreateProcess and
-       it uses PATH to find DLL's.  Fortunately PATH has a well-defined value
-       in both posix and win32 environments.  cygwin.dll will change it back
-       to posix style if necessary.  */
-
-    static const char *conv_path_names[] =
-    {
-      "PATH=",
-      0
-    };
-
-    /* CreateProcess takes the environment list as a null terminated set of
-       strings (i.e. two nulls terminate the list).  */
-
-    /* Get total size for env strings.  */
-    for (envlen = 0, i = 0; in_env[i] && *in_env[i]; i++)
-      {
-	int j, len;
-
-	for (j = 0; conv_path_names[j]; j++)
-	  {
-	    len = strlen (conv_path_names[j]);
-	    if (strncmp (conv_path_names[j], in_env[i], len) == 0)
-	      {
-		if (cygwin_posix_path_list_p (in_env[i] + len))
-		  envlen += len
-		    + cygwin_posix_to_win32_path_list_buf_size (in_env[i] + len);
-		else
-		  envlen += strlen (in_env[i]) + 1;
-		break;
-	      }
-	  }
-	if (conv_path_names[j] == NULL)
-	  envlen += strlen (in_env[i]) + 1;
-      }
-
-    size_t envsize = sizeof (in_env[0]) * (i + 1);
-    char **env = (char **) alloca (envsize);
-    memcpy (env, in_env, envsize);
-    /* Windows programs expect the environment block to be sorted.  */
-    qsort (env, i, sizeof (char *), env_sort);
-
-    winenv = alloca (envlen + 1);
-
-    /* Copy env strings into new buffer.  */
-    for (temp = winenv, i = 0; env[i] && *env[i]; i++)
-      {
-	int j, len;
-
-	for (j = 0; conv_path_names[j]; j++)
-	  {
-	    len = strlen (conv_path_names[j]);
-	    if (strncmp (conv_path_names[j], env[i], len) == 0)
-	      {
-		if (cygwin_posix_path_list_p (env[i] + len))
-		  {
-		    memcpy (temp, env[i], len);
-		    cygwin_posix_to_win32_path_list (env[i] + len, temp + len);
-		  }
-		else
-		  strcpy (temp, env[i]);
-		break;
-	      }
-	  }
-	if (conv_path_names[j] == NULL)
-	  strcpy (temp, env[i]);
-
-	temp += strlen (temp) + 1;
-      }
-
-    /* Final nil string to terminate new env.  */
-    *temp = 0;
-  }
+  cygwin_internal (CW_SYNC_WINENV);
 
   if (!inferior_io_terminal)
     tty = ostdin = ostdout = ostderr = -1;
@@ -2024,7 +1829,7 @@ win32_create_inferior (char *exec_file, char *allargs, char **in_env,
 		       NULL,	/* thread */
 		       TRUE,	/* inherit handles */
 		       flags,	/* start flags */
-		       winenv,
+		       NULL,	/* environment */
 		       NULL,	/* current directory */
 		       &si,
 		       &pi);
@@ -2126,7 +1931,7 @@ win32_kill_inferior (void)
 }
 
 static void
-win32_prepare_to_store (void)
+win32_prepare_to_store (struct regcache *regcache)
 {
   /* Do nothing, since we can store individual regs */
 }
@@ -2158,204 +1963,65 @@ cygwin_pid_to_str (ptid_t ptid)
   return buf;
 }
 
-typedef struct
+static LONGEST
+win32_xfer_shared_libraries (struct target_ops *ops,
+			     enum target_object object, const char *annex,
+			     gdb_byte *readbuf, const gdb_byte *writebuf,
+			     ULONGEST offset, LONGEST len)
 {
-  struct target_ops *target;
-  bfd_vma addr;
-} map_code_section_args;
-
-static void
-map_single_dll_code_section (bfd *abfd, asection *sect, void *obj)
-{
-  int old;
-  int update_coreops;
-  struct section_table *new_target_sect_ptr;
-
-  map_code_section_args *args = (map_code_section_args *) obj;
-  struct target_ops *target = args->target;
-  if (sect->flags & SEC_CODE)
-    {
-      update_coreops = core_ops.to_sections == target->to_sections;
-
-      if (target->to_sections)
-	{
-	  old = target->to_sections_end - target->to_sections;
-	  target->to_sections = (struct section_table *)
-	    xrealloc ((char *) target->to_sections,
-		      (sizeof (struct section_table)) * (1 + old));
-	}
-      else
-	{
-	  old = 0;
-	  target->to_sections = (struct section_table *)
-	    xmalloc ((sizeof (struct section_table)));
-	}
-      target->to_sections_end = target->to_sections + (1 + old);
-
-      /* Update the to_sections field in the core_ops structure
-	 if needed.  */
-      if (update_coreops)
-	{
-	  core_ops.to_sections = target->to_sections;
-	  core_ops.to_sections_end = target->to_sections_end;
-	}
-      new_target_sect_ptr = target->to_sections + old;
-      new_target_sect_ptr->addr = args->addr + bfd_section_vma (abfd, sect);
-      new_target_sect_ptr->endaddr = args->addr + bfd_section_vma (abfd, sect) +
-	bfd_section_size (abfd, sect);;
-      new_target_sect_ptr->the_bfd_section = sect;
-      new_target_sect_ptr->bfd = abfd;
-    }
-}
-
-static int
-dll_code_sections_add (const char *dll_name, int base_addr, struct target_ops *target)
-{
-  bfd *dll_bfd;
-  map_code_section_args map_args;
-  asection *lowest_sect;
-  char *name;
-  if (dll_name == NULL || target == NULL)
-    return 0;
-  name = xstrdup (dll_name);
-  dll_bfd = bfd_openr (name, "pei-i386");
-  if (dll_bfd == NULL)
-    return 0;
-
-  if (bfd_check_format (dll_bfd, bfd_object))
-    {
-      lowest_sect = bfd_get_section_by_name (dll_bfd, ".text");
-      if (lowest_sect == NULL)
-	return 0;
-      map_args.target = target;
-      map_args.addr = base_addr - bfd_section_vma (dll_bfd, lowest_sect);
-
-      bfd_map_over_sections (dll_bfd, &map_single_dll_code_section, (void *) (&map_args));
-    }
-
-  return 1;
-}
-
-static void
-core_section_load_dll_symbols (bfd *abfd, asection *sect, void *obj)
-{
-  struct target_ops *target = (struct target_ops *) obj;
-
-  DWORD base_addr;
-
-  int dll_name_size;
-  struct win32_pstatus *pstatus;
+  struct obstack obstack;
+  const char *buf;
+  LONGEST len_avail;
   struct so_list *so;
-  char *dll_name;
-  char *buf = NULL;
-  char *p;
-  struct objfile *objfile;
-  const char *dll_basename;
 
-  if (strncmp (sect->name, ".module", 7) != 0)
-    return;
+  if (writebuf)
+    return -1;
 
-  buf = (char *) xmalloc (bfd_get_section_size (sect) + 1);
-  if (!buf)
-    {
-      printf_unfiltered ("memory allocation failed for %s\n", sect->name);
-      goto out;
-    }
-  if (!bfd_get_section_contents (abfd, sect, buf, 0, bfd_get_section_size (sect)))
-    goto out;
+  obstack_init (&obstack);
+  obstack_grow_str (&obstack, "<library-list>\n");
+  for (so = solib_start.next; so; so = so->next)
+    win32_xfer_shared_library (so->so_name, so->lm_info->load_addr, &obstack);
+  obstack_grow_str0 (&obstack, "</library-list>\n");
 
-  pstatus = (struct win32_pstatus *) buf;
+  buf = obstack_finish (&obstack);
+  len_avail = strlen (buf);
+  if (offset >= len_avail)
+    return 0;
 
-  memmove (&base_addr, &(pstatus->data.module_info.base_address), sizeof (base_addr));
-  dll_name_size = pstatus->data.module_info.module_name_size;
-  if (offsetof (struct win32_pstatus, data.module_info.module_name) + dll_name_size > bfd_get_section_size (sect))
-      goto out;
+  if (len > len_avail - offset)
+    len = len_avail - offset;
+  memcpy (readbuf, buf + offset, len);
 
-  dll_name = pstatus->data.module_info.module_name;
-
-  if (!(dll_basename = strrchr (dll_name, '/')))
-    dll_basename = dll_name;
-  else
-    dll_basename++;
-
-  ALL_OBJFILES (objfile)
-  {
-    char *objfile_basename = strrchr (objfile->name, '/');
-
-    if (objfile_basename &&
-	strcasecmp (dll_basename, objfile_basename + 1) == 0)
-      goto out;
-  }
-
-  base_addr += 0x1000;
-  dll_name = register_loaded_dll (dll_name, base_addr, 1);
-
-  if (!dll_code_sections_add (dll_name, (DWORD) base_addr, target))
-    printf_unfiltered ("%s: Failed to map dll code sections.\n", dll_name);
-
-out:
-  if (buf)
-    xfree (buf);
-  return;
+  obstack_free (&obstack, NULL);
+  return len;
 }
 
-static struct so_list *
-win32_current_sos (void)
+static LONGEST
+win32_xfer_partial (struct target_ops *ops, enum target_object object,
+		    const char *annex, gdb_byte *readbuf,
+		    const gdb_byte *writebuf, ULONGEST offset, LONGEST len)
 {
-  struct so_list *sop;
-  struct so_list *start = NULL;
-  struct so_list *last = NULL;
-
-  if (!solib_start.next && core_bfd)
+  switch (object)
     {
-      win32_clear_solib ();
-      bfd_map_over_sections (core_bfd, &core_section_load_dll_symbols,
-			     &win32_ops);
+    case TARGET_OBJECT_MEMORY:
+      if (readbuf)
+	return (*ops->deprecated_xfer_memory) (offset, readbuf,
+					       len, 0/*write*/, NULL, ops);
+      if (writebuf)
+	return (*ops->deprecated_xfer_memory) (offset, (gdb_byte *) writebuf,
+					       len, 1/*write*/, NULL, ops);
+      return -1;
+
+    case TARGET_OBJECT_LIBRARIES:
+      return win32_xfer_shared_libraries (ops, object, annex, readbuf,
+					  writebuf, offset, len);
+
+    default:
+      if (ops->beneath != NULL)
+	return ops->beneath->to_xfer_partial (ops->beneath, object, annex,
+					      readbuf, writebuf, offset, len);
+      return -1;
     }
-
-  for (sop = solib_start.next; sop; sop = sop->next)
-    {
-      struct so_list *new = XZALLOC (struct so_list);
-      strcpy (new->so_name, sop->so_name);
-      strcpy (new->so_original_name, sop->so_original_name);
-      if (!start)
-	last = start = new;
-      else
-	{
-	  last->next = new;
-	  last = new;
-	}
-    }
-
-  return start;
-}
-
-static void
-fetch_elf_core_registers (char *core_reg_sect,
-			  unsigned core_reg_size,
-			  int which,
-			  CORE_ADDR reg_addr)
-{
-  int r;
-  if (core_reg_size < sizeof (CONTEXT))
-    {
-      error (_("Core file register section too small (%u bytes)."), core_reg_size);
-      return;
-    }
-  for (r = 0; r < NUM_REGS; r++)
-    regcache_raw_supply (current_regcache, r, core_reg_sect + mappings[r]);
-}
-
-static int
-open_symbol_file_object (void *from_ttyp)
-{
-  return 0;
-}
-
-static int
-in_dynsym_resolve_code (CORE_ADDR pc)
-{
-  return 0;
 }
 
 static void
@@ -2374,6 +2040,7 @@ init_win32_ops (void)
   win32_ops.to_store_registers = win32_store_inferior_registers;
   win32_ops.to_prepare_to_store = win32_prepare_to_store;
   win32_ops.deprecated_xfer_memory = win32_xfer_memory;
+  win32_ops.to_xfer_partial = win32_xfer_partial;
   win32_ops.to_files_info = win32_files_info;
   win32_ops.to_insert_breakpoint = memory_insert_breakpoint;
   win32_ops.to_remove_breakpoint = memory_remove_breakpoint;
@@ -2398,18 +2065,6 @@ init_win32_ops (void)
   win32_ops.to_has_execution = 1;
   win32_ops.to_magic = OPS_MAGIC;
   win32_ops.to_pid_to_exec_file = win32_pid_to_exec_file;
-
-  win32_so_ops.relocate_section_addresses = win32_relocate_section_addresses;
-  win32_so_ops.free_so = win32_free_so;
-  win32_so_ops.clear_solib = win32_clear_solib;
-  win32_so_ops.solib_create_inferior_hook = win32_solib_create_inferior_hook;
-  win32_so_ops.special_symbol_handling = win32_special_symbol_handling;
-  win32_so_ops.current_sos = win32_current_sos;
-  win32_so_ops.open_symbol_file_object = open_symbol_file_object;
-  win32_so_ops.in_dynsym_resolve_code = in_dynsym_resolve_code;
-
-  /* FIXME: Don't do this here.  *_gdbarch_init() should set so_ops. */
-  current_target_so_ops = &win32_so_ops;
 }
 
 static void
@@ -2545,21 +2200,6 @@ win32_win32_thread_alive (ptid_t ptid)
 
   return WaitForSingleObject (thread_rec (pid, FALSE)->h, 0) == WAIT_OBJECT_0 ?
     FALSE : TRUE;
-}
-
-static struct core_fns win32_elf_core_fns =
-{
-  bfd_target_elf_flavour,
-  default_check_format,
-  default_core_sniffer,
-  fetch_elf_core_registers,
-  NULL
-};
-
-void
-_initialize_core_win32 (void)
-{
-  deprecated_add_core_fns (&win32_elf_core_fns);
 }
 
 void

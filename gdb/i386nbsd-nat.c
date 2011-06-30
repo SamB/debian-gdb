@@ -1,12 +1,12 @@
 /* Native-dependent code for NetBSD/i386.
 
-   Copyright (C) 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdbcore.h"
@@ -33,6 +31,7 @@
 #include <machine/frame.h>
 #include <machine/pcb.h>
 
+#include "nbsd-nat.h"
 #include "bsd-kvm.h"
 
 static int
@@ -79,9 +78,13 @@ void _initialize_i386nbsd_nat (void);
 void
 _initialize_i386nbsd_nat (void)
 {
-  /* We've got nothing to add to the common *BSD/i386 target.  */
-  add_target (i386bsd_target ());
+  struct target_ops *t;
 
+  /* Add some extra features to the common *BSD/i386 target.  */
+  t = i386bsd_target ();
+  t->to_pid_to_exec_file = nbsd_pid_to_exec_file;
+  add_target (t);
+ 
   /* Support debugging kernel virtual memory images.  */
   bsd_kvm_add_target (i386nbsd_supply_pcb);
 }

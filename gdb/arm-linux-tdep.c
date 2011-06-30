@@ -1,13 +1,13 @@
 /* GNU/Linux on ARM target support.
 
-   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "target.h"
@@ -74,29 +72,6 @@ static const char arm_linux_thumb_le_breakpoint[] = {0x01, 0xde};
 #define ARM_LINUX_JB_ELEMENT_SIZE	INT_REGISTER_SIZE
 #define ARM_LINUX_JB_PC			21
 
-/* Extract from an array REGBUF containing the (raw) register state
-   a function return value of type TYPE, and copy that, in virtual format,
-   into VALBUF.  */
-/* FIXME rearnsha/2002-02-23: This function shouldn't be necessary.
-   The ARM generic one should be able to handle the model used by
-   linux and the low-level formatting of the registers should be
-   hidden behind the regcache abstraction.  */
-static void
-arm_linux_extract_return_value (struct type *type,
-				gdb_byte regbuf[],
-				gdb_byte *valbuf)
-{
-  /* ScottB: This needs to be looked at to handle the different
-     floating point emulators on ARM GNU/Linux.  Right now the code
-     assumes that fetch inferior registers does the right thing for
-     GDB.  I suspect this won't handle NWFPE registers correctly, nor
-     will the default ARM version (arm_extract_return_value()).  */
-
-  int regnum = ((TYPE_CODE_FLT == TYPE_CODE (type))
-		? ARM_F0_REGNUM : ARM_A1_REGNUM);
-  memcpy (valbuf, &regbuf[DEPRECATED_REGISTER_BYTE (regnum)], TYPE_LENGTH (type));
-}
-   	  
 /*
    Dynamic Linking on ARM GNU/Linux
    --------------------------------
@@ -416,7 +391,7 @@ arm_linux_supply_gregset (const struct regset *regset,
       reg_pc = extract_unsigned_integer (gregs
 					 + INT_REGISTER_SIZE * ARM_PC_REGNUM,
 					 INT_REGISTER_SIZE);
-      reg_pc = ADDR_BITS_REMOVE (reg_pc);
+      reg_pc = gdbarch_addr_bits_remove (current_gdbarch, reg_pc);
       store_unsigned_integer (pc_buf, INT_REGISTER_SIZE, reg_pc);
       regcache_raw_supply (regcache, ARM_PC_REGNUM, pc_buf);
     }
@@ -628,8 +603,8 @@ arm_linux_init_abi (struct gdbarch_info info,
   set_solib_svr4_fetch_link_map_offsets
     (gdbarch, svr4_ilp32_fetch_link_map_offsets);
 
-  /* The following override shouldn't be needed.  */
-  set_gdbarch_deprecated_extract_return_value (gdbarch, arm_linux_extract_return_value);
+  /* Single stepping.  */
+  set_gdbarch_software_single_step (gdbarch, arm_software_single_step);
 
   /* Shared library handling.  */
   set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);

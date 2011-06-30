@@ -1,12 +1,12 @@
 /* Native-dependent code for OpenBSD/mips64.
 
-   Copyright (C) 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "inferior.h"
@@ -79,7 +77,7 @@ mips64obsd_collect_gregset (const struct regcache *regcache,
    for all registers.  */
 
 static void
-mips64obsd_fetch_inferior_registers (int regnum)
+mips64obsd_fetch_inferior_registers (struct regcache *regcache, int regnum)
 {
   struct reg regs;
 
@@ -87,14 +85,14 @@ mips64obsd_fetch_inferior_registers (int regnum)
 	      (PTRACE_TYPE_ARG3) &regs, 0) == -1)
     perror_with_name (_("Couldn't get registers"));
 
-  mips64obsd_supply_gregset (current_regcache, &regs);
+  mips64obsd_supply_gregset (regcache, &regs);
 }
 
 /* Store register REGNUM back into the inferior.  If REGNUM is -1, do
    this for all registers.  */
 
 static void
-mips64obsd_store_inferior_registers (int regnum)
+mips64obsd_store_inferior_registers (struct regcache *regcache, int regnum)
 {
   struct reg regs;
 
@@ -102,7 +100,7 @@ mips64obsd_store_inferior_registers (int regnum)
 	      (PTRACE_TYPE_ARG3) &regs, 0) == -1)
     perror_with_name (_("Couldn't get registers"));
 
-  mips64obsd_collect_gregset (current_regcache, &regs, regnum);
+  mips64obsd_collect_gregset (regcache, &regs, regnum);
 
   if (ptrace (PT_SETREGS, PIDGET (inferior_ptid),
 	      (PTRACE_TYPE_ARG3) &regs, 0) == -1)

@@ -1,6 +1,6 @@
 /* Generic BFD library interface and support routines.
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
    Written by Cygnus Support.
 
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,7 +18,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 /*
 SECTION
@@ -139,7 +140,7 @@ CODE_FRAGMENT
 .  {* Stuff only useful for archives.  *}
 .  void *arelt_data;
 .  struct bfd *my_archive;      {* The containing archive BFD.  *}
-.  struct bfd *next;            {* The next BFD in the archive.  *}
+.  struct bfd *archive_next;    {* The next BFD in the archive.  *}
 .  struct bfd *archive_head;    {* The first BFD in the archive.  *}
 .  bfd_boolean has_armap;
 .
@@ -202,11 +203,12 @@ CODE_FRAGMENT
 .
 */
 
-#include "bfd.h"
-#include "bfdver.h"
 #include "sysdep.h"
 #include <stdarg.h>
+#include "bfd.h"
+#include "bfdver.h"
 #include "libiberty.h"
+#include "demangle.h"
 #include "safe-ctype.h"
 #include "bfdlink.h"
 #include "libbfd.h"
@@ -1018,7 +1020,7 @@ void
 _bfd_set_gp_value (bfd *abfd, bfd_vma v)
 {
   if (! abfd)
-    BFD_FAIL ();
+    abort ();
   if (abfd->format != bfd_object)
     return;
 
@@ -1352,11 +1354,10 @@ bfd_record_phdr (bfd *abfd,
 
   amt = sizeof (struct elf_segment_map);
   amt += ((bfd_size_type) count - 1) * sizeof (asection *);
-  m = bfd_alloc (abfd, amt);
+  m = bfd_zalloc (abfd, amt);
   if (m == NULL)
     return FALSE;
 
-  m->next = NULL;
   m->p_type = type;
   m->p_flags = flags;
   m->p_paddr = at;
@@ -1365,8 +1366,6 @@ bfd_record_phdr (bfd *abfd,
   m->includes_filehdr = includes_filehdr;
   m->includes_phdrs = includes_phdrs;
   m->count = count;
-  m->p_align_valid = FALSE;
-  m->p_align = 0;
   if (count > 0)
     memcpy (m->sections, secs, count * sizeof (asection *));
 
@@ -1391,6 +1390,15 @@ bfd_fprintf_vma (bfd *abfd, void *stream, bfd_vma value)
 {
   if (bfd_get_flavour (abfd) == bfd_target_elf_flavour)
     get_elf_backend_data (abfd)->elf_backend_fprintf_vma (abfd, stream, value);
+#ifdef BFD64
+  /* fprintf_vma() on a 64-bit enabled host will always print a 64-bit
+     value, but really we want to display the address in the target's
+     address size.  Since we do not have a field in the bfd structure
+     to tell us this, we take a guess, based on the target's name.  */
+  else if (strstr (bfd_get_target (abfd), "64") == NULL
+	   && strcmp (bfd_get_target (abfd), "mmo") != 0)
+    fprintf ((FILE *) stream, "%08lx", (unsigned long) (value & 0xffffffff));
+#endif
   else
     fprintf_vma ((FILE *) stream, value);
 }
@@ -1695,4 +1703,86 @@ bfd_emul_set_commonpagesize (const char *emul, bfd_vma size)
     bfd_elf_set_pagesize (target, size,
 			  offsetof (struct elf_backend_data,
 				    commonpagesize), target);
+}
+
+/*
+FUNCTION
+	bfd_demangle
+
+SYNOPSIS
+	char *bfd_demangle (bfd *, const char *, int);
+
+DESCRIPTION
+	Wrapper around cplus_demangle.  Strips leading underscores and
+	other such chars that would otherwise confuse the demangler.
+	If passed a g++ v3 ABI mangled name, returns a buffer allocated
+	with malloc holding the demangled name.  Returns NULL otherwise
+	and on memory alloc failure.
+*/
+
+char *
+bfd_demangle (bfd *abfd, const char *name, int options)
+{
+  char *res, *alloc;
+  const char *pre, *suf;
+  size_t pre_len;
+
+  if (abfd != NULL
+      && *name != '\0'
+      && bfd_get_symbol_leading_char (abfd) == *name)
+    ++name;
+
+  /* This is a hack for better error reporting on XCOFF, PowerPC64-ELF
+     or the MS PE format.  These formats have a number of leading '.'s
+     on at least some symbols, so we remove all dots to avoid
+     confusing the demangler.  */
+  pre = name;
+  while (*name == '.' || *name == '$')
+    ++name;
+  pre_len = name - pre;
+
+  /* Strip off @plt and suchlike too.  */
+  alloc = NULL;
+  suf = strchr (name, '@');
+  if (suf != NULL)
+    {
+      alloc = bfd_malloc (suf - name + 1);
+      if (alloc == NULL)
+	return NULL;
+      memcpy (alloc, name, suf - name);
+      alloc[suf - name] = '\0';
+      name = alloc;
+    }
+
+  res = cplus_demangle (name, options);
+
+  if (alloc != NULL)
+    free (alloc);
+
+  if (res == NULL)
+    return NULL;
+
+  /* Put back any prefix or suffix.  */
+  if (pre_len != 0 || suf != NULL)
+    {
+      size_t len;
+      size_t suf_len;
+      char *final;
+
+      len = strlen (res);
+      if (suf == NULL)
+	suf = res + len;
+      suf_len = strlen (suf) + 1;
+      final = bfd_malloc (pre_len + len + suf_len);
+      if (final != NULL)
+	{
+	  memcpy (final, pre, pre_len);
+	  memcpy (final + pre_len, res, len);
+	  memcpy (final + pre_len + len, suf, suf_len);
+	}
+      free (res);
+      res = final;
+    }
+
+  return res;
 }

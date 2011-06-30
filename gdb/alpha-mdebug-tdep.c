@@ -1,12 +1,12 @@
 /* Target-dependent mdebug code for the ALPHA architecture.
-   Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003
-   Free Software Foundation, Inc.
+   Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+   2003, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "frame.h"
@@ -246,7 +244,8 @@ alpha_mdebug_frame_this_id (struct frame_info *next_frame,
   struct alpha_mdebug_unwind_cache *info
     = alpha_mdebug_frame_unwind_cache (next_frame, this_prologue_cache);
 
-  *this_id = frame_id_build (info->vfp, frame_func_unwind (next_frame));
+  *this_id = frame_id_build (info->vfp,
+			     frame_func_unwind (next_frame, NORMAL_FRAME));
 }
 
 /* Retrieve the value of REGNUM in FRAME.  Don't give up!  */
@@ -294,8 +293,12 @@ alpha_mdebug_frame_prev_register (struct frame_info *next_frame,
     }
 
   /* Otherwise assume the next frame has the same register value.  */
-  frame_register (next_frame, regnum, optimizedp, lvalp, addrp,
-  		  realnump, bufferp);
+  *optimizedp = 0;
+  *lvalp = lval_register;
+  *addrp = 0;
+  *realnump = regnum;
+  if (bufferp)
+    frame_unwind_register (next_frame, *realnump, bufferp);
 }
 
 static const struct frame_unwind alpha_mdebug_frame_unwind = {
@@ -307,7 +310,7 @@ static const struct frame_unwind alpha_mdebug_frame_unwind = {
 const struct frame_unwind *
 alpha_mdebug_frame_sniffer (struct frame_info *next_frame)
 {
-  CORE_ADDR pc = frame_pc_unwind (next_frame);
+  CORE_ADDR pc = frame_unwind_address_in_block (next_frame, NORMAL_FRAME);
   struct mdebug_extra_func_info *proc_desc;
 
   /* If this PC does not map to a PDR, then clearly this isn't an
@@ -364,7 +367,7 @@ static const struct frame_base alpha_mdebug_frame_base = {
 static const struct frame_base *
 alpha_mdebug_frame_base_sniffer (struct frame_info *next_frame)
 {
-  CORE_ADDR pc = frame_pc_unwind (next_frame);
+  CORE_ADDR pc = frame_unwind_address_in_block (next_frame, NORMAL_FRAME);
   struct mdebug_extra_func_info *proc_desc;
 
   /* If this PC does not map to a PDR, then clearly this isn't an

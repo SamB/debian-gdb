@@ -1,21 +1,20 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 1993, 1994, 1995, 1998, 1999, 2000, 2001, 2004
+   Copyright 1993, 1994, 1995, 1998, 1999, 2000, 2001, 2004, 2007
    Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
- 
+
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
    Please email any bugs, comments, and/or additions to this file to:
    bug-gdb@prep.ai.mit.edu  */
@@ -334,6 +333,29 @@ char char_array_arg1[], char_array_arg2[];
 	  !strcmp (char_array_arg2, char_array_val2));
 }
 
+#ifdef PROTOTYPES
+int t_double_int (double double_arg1, int int_arg2)
+#else
+int t_double_int (double_arg1, int_arg2)
+double double_arg1;
+int int_arg2;
+#endif
+{
+  return ((double_arg1 - int_arg2) < DELTA
+	  && (double_arg1 - int_arg2) > -DELTA);
+}
+
+#ifdef PROTOTYPES
+int t_int_double (int int_arg1, double double_arg2)
+#else
+int t_int_double (int_arg1, double_arg2)
+int int_arg1;
+double double_arg2;
+#endif
+{
+  return ((int_arg1 - double_arg2) < DELTA
+	  && (int_arg1 - double_arg2) > -DELTA);
+}
 
 /* This used to simply compare the function pointer arguments with
    known values for func_val1 and func_val2.  Doing so is valid ANSI

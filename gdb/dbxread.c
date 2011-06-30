@@ -7,7 +7,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This module provides three functions: dbx_symfile_init,
    which initializes to read a symbol file; dbx_new_init, which 
@@ -1828,7 +1826,8 @@ read_dbx_symtab (struct objfile *objfile)
 		function_outside_compilation_unit_complaint (name);
 		xfree (name);
 	      }
-	    nlist.n_value += ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+	    nlist.n_value += ANOFFSET (objfile->section_offsets, 
+				       SECT_OFF_TEXT (objfile));
 	    /* Kludges for ELF/STABS with Sun ACC */
 	    last_function_name = namestring;
 #ifdef SOFUN_ADDRESS_MAYBE_MISSING
@@ -1838,7 +1837,9 @@ read_dbx_symtab (struct objfile *objfile)
 					   SECT_OFF_TEXT (objfile)))
 	      {
 		CORE_ADDR minsym_valu = 
-		  find_stab_function_addr (namestring, pst->filename, objfile);
+		  find_stab_function_addr (namestring, 
+					   pst ? pst->filename : NULL, 
+					   objfile);
 		/* find_stab_function_addr will return 0 if the minimal
 		   symbol wasn't found.  (Unfortunately, this might also
 		   be a valid address.)  Anyway, if it *does* return 0,
@@ -1893,7 +1894,8 @@ read_dbx_symtab (struct objfile *objfile)
 		function_outside_compilation_unit_complaint (name);
 		xfree (name);
 	      }
-	    nlist.n_value += ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+	    nlist.n_value += ANOFFSET (objfile->section_offsets, 
+				       SECT_OFF_TEXT (objfile));
 	    /* Kludges for ELF/STABS with Sun ACC */
 	    last_function_name = namestring;
 #ifdef SOFUN_ADDRESS_MAYBE_MISSING
@@ -1903,7 +1905,9 @@ read_dbx_symtab (struct objfile *objfile)
 					   SECT_OFF_TEXT (objfile)))
 	      {
 		CORE_ADDR minsym_valu = 
-		  find_stab_function_addr (namestring, pst->filename, objfile);
+		  find_stab_function_addr (namestring, 
+					   pst ? pst->filename : NULL, 
+					   objfile);
 		/* find_stab_function_addr will return 0 if the minimal
 		   symbol wasn't found.  (Unfortunately, this might also
 		   be a valid address.)  Anyway, if it *does* return 0,
@@ -2148,11 +2152,13 @@ start_psymtab (struct objfile *objfile, char *filename, CORE_ADDR textlow,
   STRING_OFFSET (result) = string_table_offset;
   FILE_STRING_OFFSET (result) = file_string_table_offset;
 
+#ifdef HAVE_ELF
   /* If we're handling an ELF file, drag some section-relocation info
      for this source file out of the ELF symbol table, to compensate for
      Sun brain death.  This replaces the section_offsets in this psymtab,
      if successful.  */
   elfstab_offset_sections (objfile, result);
+#endif
 
   /* Deduce the source language from the filename for this psymtab. */
   psymtab_language = deduce_language_from_filename (filename);
@@ -2608,8 +2614,6 @@ read_ofile_symtab (struct partial_symtab *pst)
 	}
     }
 
-  current_objfile = NULL;
-
   /* In a Solaris elf file, this variable, which comes from the
      value of the N_SO symbol, will still be 0.  Luckily, text_offset,
      which comes from pst->textlow is correct. */
@@ -2625,6 +2629,8 @@ read_ofile_symtab (struct partial_symtab *pst)
   pst->symtab = end_symtab (text_offset + text_size, objfile, SECT_OFF_TEXT (objfile));
 
   end_stabs ();
+
+  current_objfile = NULL;
 }
 
 
@@ -2738,7 +2744,7 @@ process_one_symbol (int type, int desc, CORE_ADDR valu, char *name,
 
       /* Relocate for dynamic loading.  */
       valu += ANOFFSET (section_offsets, SECT_OFF_TEXT (objfile));
-      valu = SMASH_TEXT_ADDRESS (valu);
+      valu = gdbarch_smash_text_address (current_gdbarch, valu);
       last_function_start = valu;
 
       goto define_a_symbol;
@@ -3505,6 +3511,8 @@ static struct sym_fns aout_sym_fns =
   dbx_symfile_read,		/* sym_read: read a symbol file into symtab */
   dbx_symfile_finish,		/* sym_finish: finished with file, cleanup */
   default_symfile_offsets,	/* sym_offsets: parse user's offsets to internal form */
+  default_symfile_segments,	/* sym_segments: Get segment information from
+				   a file.  */
   NULL				/* next: pointer to next struct sym_fns */
 };
 

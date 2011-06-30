@@ -1,13 +1,13 @@
 /* Target-machine dependent code for Renesas H8/300, for GDB.
 
-   Copyright (C) 1988, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998,
-   1999, 2000, 2001, 2002, 2003, 2005 Free Software Foundation, Inc.
+   Copyright (C) 1988, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999,
+   2000, 2001, 2002, 2003, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /*
    Contributed by Steve Chamberlain
@@ -62,8 +60,8 @@ enum gdb_regnum
 
 #define H8300_MAX_NUM_REGS 18
 
-#define E_PSEUDO_CCR_REGNUM (NUM_REGS)
-#define E_PSEUDO_EXR_REGNUM (NUM_REGS+1)
+#define E_PSEUDO_CCR_REGNUM (gdbarch_num_regs (current_gdbarch))
+#define E_PSEUDO_EXR_REGNUM (gdbarch_num_regs (current_gdbarch)+1)
 
 struct h8300_frame_cache
 {
@@ -134,7 +132,7 @@ h8300_init_frame_cache (struct h8300_frame_cache *cache)
 
   /* Saved registers.  We initialize these to -1 since zero is a valid
      offset (that's where %fp is supposed to be stored).  */
-  for (i = 0; i < NUM_REGS; i++)
+  for (i = 0; i < gdbarch_num_regs (current_gdbarch); i++)
     cache->saved_regs[i] = -1;
 }
 
@@ -447,7 +445,7 @@ h8300_frame_cache (struct frame_info *next_frame, void **this_cache)
 
   cache->saved_regs[E_PC_REGNUM] = -BINWORD;
 
-  cache->pc = frame_func_unwind (next_frame);
+  cache->pc = frame_func_unwind (next_frame, NORMAL_FRAME);
   current_pc = frame_pc_unwind (next_frame);
   if (cache->pc != 0)
     h8300_analyze_prologue (cache->pc, current_pc, cache);
@@ -475,7 +473,7 @@ h8300_frame_cache (struct frame_info *next_frame, void **this_cache)
 
   /* Adjust all the saved registers such that they contain addresses
      instead of offsets.  */
-  for (i = 0; i < NUM_REGS; i++)
+  for (i = 0; i < gdbarch_num_regs (current_gdbarch); i++)
     if (cache->saved_regs[i] != -1)
       cache->saved_regs[i] = cache->base - cache->saved_regs[i];
 
@@ -518,7 +516,8 @@ h8300_frame_prev_register (struct frame_info *next_frame, void **this_cache,
       return;
     }
 
-  if (regnum < NUM_REGS && cache->saved_regs[regnum] != -1)
+  if (regnum < gdbarch_num_regs (current_gdbarch)
+      && cache->saved_regs[regnum] != -1)
     {
       *optimizedp = 0;
       *lvalp = lval_memory;
@@ -529,8 +528,12 @@ h8300_frame_prev_register (struct frame_info *next_frame, void **this_cache,
       return;
     }
 
-  frame_register_unwind (next_frame, regnum,
-			 optimizedp, lvalp, addrp, realnump, valuep);
+  *optimizedp = 0;
+  *lvalp = lval_register;
+  *addrp = 0;
+  *realnump = regnum;
+  if (valuep)
+    frame_unwind_register (next_frame, *realnump, valuep);
 }
 
 static const struct frame_unwind h8300_frame_unwind = {
@@ -1118,7 +1121,8 @@ h8300_print_registers_info (struct gdbarch *gdbarch, struct ui_file *file,
 static struct type *
 h8300_register_type (struct gdbarch *gdbarch, int regno)
 {
-  if (regno < 0 || regno >= NUM_REGS + NUM_PSEUDO_REGS)
+  if (regno < 0 || regno >= gdbarch_num_regs (current_gdbarch)
+			    + gdbarch_num_pseudo_regs (current_gdbarch))
     internal_error (__FILE__, __LINE__,
 		    "h8300_register_type: illegal register number %d", regno);
   else

@@ -1,22 +1,21 @@
 # MIPS DSP ASE simulator testsuite utility functions.
-# Copyright (C) 2005 Free Software Foundation, Inc.
+# Copyright (C) 2005, 2007 Free Software Foundation, Inc.
 # Contributed by MIPS Technologies, Inc.  Written by Chao-ying Fu.
 #
 # This file is part of the GNU simulators.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2, or (at your option)
-# any later version.
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
-# You should have received a copy of the GNU General Public License along
-# with this program; if not, write to the Free Software Foundation, Inc.,
-# 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 # $4, $5, $6, $7, $ac0, $ac1, $ac2, $ac3 are used as temps by the macros
 # defined here.
@@ -184,6 +183,34 @@
 	dsp_assert	$5, $6
 	li	$4, \crout
 	rddsp	$5
+	dsp_assert	$4, $5
+	.endm
+
+	# Set dsp control register <= crin
+	# Set acc <= {hiin, loin}
+	# (inst acc, s, t)
+	# Check if {hiou, loou} == acc
+	# Check if (crout & 0x80000) == (dsp control register & 0x80000)
+	.macro dspckacc_astio inst, acc, hiin, loin, hiou, loou, s, t, crin, crout
+	li	$4, \crin
+	wrdsp	$4
+	li	$4, \hiin
+	mthi	$4, \acc
+	li	$4, \loin
+	mtlo	$4, \acc
+	li	$4, \s
+	li	$5, \t
+	\inst	\acc, $4, $5
+	li	$4, \hiou
+	mfhi	$5, \acc
+	dsp_assert	$4, $5
+	li	$4, \loou
+	mflo	$5, \acc
+	dsp_assert	$4, $5
+	li	$4, \crout
+	and	$4, $4, 0x80000
+	rddsp	$5
+	and	$5, $5, 0x80000
 	dsp_assert	$4, $5
 	.endm
 
@@ -403,5 +430,14 @@
 	li	$5, 0
 1:
 	li	$6, \r
+	dsp_assert	$5, $6
+	.endm
+
+	# Check if tou == (inst tin, s)
+	.macro dspck_tsimm inst, tou, tin, s, sa
+	li	$4, \s
+	li	$5, \tin
+	\inst	$5, $4, \sa
+	li	$6, \tou
 	dsp_assert	$5, $6
 	.endm

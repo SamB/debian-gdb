@@ -1,7 +1,7 @@
 /* Support for printing Fortran types for GDB, the GNU debugger.
 
-   Copyright (C) 1986, 1988, 1989, 1991, 1993, 1994, 1995, 1996, 1998,
-   2000, 2001, 2002, 2003, 2006 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1988, 1989, 1991, 1993, 1994, 1995, 1996, 1998, 2000,
+   2001, 2002, 2003, 2006, 2007 Free Software Foundation, Inc.
 
    Contributed by Motorola.  Adapted from the C version by Farooq Butt
    (fmbutt@engage.sps.mot.com).
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_obstack.h"
@@ -73,7 +71,6 @@ f_print_type (struct type *type, char *varstring, struct ui_file *stream,
        (code == TYPE_CODE_PTR || code == TYPE_CODE_FUNC
 	|| code == TYPE_CODE_METHOD
 	|| code == TYPE_CODE_ARRAY
-	|| code == TYPE_CODE_MEMBER
 	|| code == TYPE_CODE_REF)))
     fputs_filtered (" ", stream);
   f_type_print_varspec_prefix (type, stream, show, 0);
@@ -138,7 +135,6 @@ f_type_print_varspec_prefix (struct type *type, struct ui_file *stream,
     case TYPE_CODE_STRING:
     case TYPE_CODE_BITSTRING:
     case TYPE_CODE_METHOD:
-    case TYPE_CODE_MEMBER:
     case TYPE_CODE_REF:
     case TYPE_CODE_COMPLEX:
     case TYPE_CODE_TYPEDEF:
@@ -250,7 +246,6 @@ f_type_print_varspec_suffix (struct type *type, struct ui_file *stream,
     case TYPE_CODE_STRING:
     case TYPE_CODE_BITSTRING:
     case TYPE_CODE_METHOD:
-    case TYPE_CODE_MEMBER:
     case TYPE_CODE_COMPLEX:
     case TYPE_CODE_TYPEDEF:
       /* These types do not need a suffix.  They are listed so that

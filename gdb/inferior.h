@@ -1,15 +1,15 @@
 /* Variables that describe the inferior process running under GDB:
    Where it is, why it stopped, and how to step it.
 
-   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1998, 1999, 2000, 2001, 2003, 2004, 2005, 2006
+   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
+   1998, 1999, 2000, 2001, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (INFERIOR_H)
 #define INFERIOR_H 1
@@ -124,20 +122,7 @@ extern int target_executing;
    redisplay the prompt until the execution is actually over. */
 extern int sync_execution;
 
-/* This is only valid when inferior_ptid is non-zero.
-
-   If this is 0, then exec events should be noticed and responded to
-   by the debugger (i.e., be reported to the user).
-
-   If this is > 0, then that many subsequent exec events should be
-   ignored (i.e., not be reported to the user).
- */
-extern int inferior_ignoring_startup_exec_events;
-
-/* This is only valid when inferior_ignoring_startup_exec_events is
-   zero.
-
-   Some targets (stupidly) report more than one exec event per actual
+/* Some targets (stupidly) report more than one exec event per actual
    call to an event() system call.  If only the last such exec event
    need actually be noticed and responded to by the debugger (i.e.,
    be reported to the user), then this is the number of "leading"
@@ -158,8 +143,6 @@ extern void proceed (CORE_ADDR, enum target_signal, int);
    over such function.  */
 extern int step_stop_if_no_debug;
 
-extern void kill_inferior (void);
-
 extern void generic_mourn_inferior (void);
 
 extern void terminal_save_ours (void);
@@ -173,10 +156,6 @@ extern CORE_ADDR read_pc_pid (ptid_t);
 extern void write_pc (CORE_ADDR);
 
 extern void write_pc_pid (CORE_ADDR, ptid_t);
-
-extern void generic_target_write_pc (CORE_ADDR, ptid_t);
-
-extern CORE_ADDR read_sp (void);
 
 extern CORE_ADDR unsigned_pointer_to_address (struct type *type,
 					      const gdb_byte *buf);
@@ -209,10 +188,6 @@ extern void default_print_registers_info (struct gdbarch *gdbarch,
 					  struct frame_info *frame,
 					  int regnum, int all);
 
-extern void store_inferior_registers (int);
-
-extern void fetch_inferior_registers (int);
-
 extern void child_terminal_info (char *, int);
 
 extern void term_info (char *, int);
@@ -224,25 +199,6 @@ extern void terminal_inferior (void);
 extern void terminal_init_inferior (void);
 
 extern void terminal_init_inferior_with_pgrp (int pgrp);
-
-/* From infptrace.c or infttrace.c */
-
-extern int attach (int);
-
-extern void detach (int);
-
-/* PTRACE method of waiting for inferior process.  */
-int ptrace_wait (ptid_t, int *);
-
-extern void child_resume (ptid_t, int, enum target_signal);
-
-#ifndef PTRACE_ARG3_TYPE
-#define PTRACE_ARG3_TYPE PTRACE_TYPE_ARG3
-#endif
-
-extern int call_ptrace (int, int, PTRACE_ARG3_TYPE, int);
-
-extern void pre_fork_inferior (void);
 
 /* From procfs.c */
 
@@ -380,10 +336,12 @@ extern enum step_over_calls_kind step_over_calls;
 
 extern int step_multi;
 
-/* Nonzero means expecting a trap and caller will handle it
-   themselves.  It is used when running in the shell before the child
-   program has been exec'd; and when running some kinds of remote
-   stuff (FIXME?).  */
+/* Anything but NO_STOP_QUIETLY means we expect a trap and the caller
+   will handle it themselves.  STOP_QUIETLY is used when running in
+   the shell before the child program has been exec'd and when running
+   through shared library loading.  STOP_QUIETLY_REMOTE is used when
+   setting up a remote connection; it is like STOP_QUIETLY_NO_SIGSTOP
+   except that there is no need to hide a signal.  */
 
 /* It is also used after attach, due to attaching to a process. This
    is a bit trickier.  When doing an attach, the kernel stops the
@@ -407,6 +365,7 @@ enum stop_kind
   {
     NO_STOP_QUIETLY = 0,
     STOP_QUIETLY,
+    STOP_QUIETLY_REMOTE,
     STOP_QUIETLY_NO_SIGSTOP
   };
 
@@ -429,7 +388,7 @@ extern struct regcache *stop_registers;
 
 extern int attach_flag;
 
-/* Possible values for CALL_DUMMY_LOCATION.  */
+/* Possible values for gdbarch_call_dummy_location.  */
 #define ON_STACK 1
 #define AT_ENTRY_POINT 4
 #define AT_SYMBOL 5

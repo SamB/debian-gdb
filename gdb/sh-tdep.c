@@ -1,13 +1,13 @@
 /* Target-dependent code for Renesas Super-H, for GDB.
 
-   Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+   2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /*
    Contributed by Steve Chamberlain
@@ -56,7 +54,7 @@
 /* registers numbers shared with the simulator */
 #include "gdb/sim-sh.h"
 
-static void (*sh_show_regs) (void);
+static void (*sh_show_regs) (struct frame_info *);
 
 #define SH_NUM_REGS 67
 
@@ -389,6 +387,24 @@ sh_breakpoint_from_pc (CORE_ADDR *pcptr, int *lenptr)
   /* 0xc3c3 is trapa #c3, and it works in big and little endian modes */
   static unsigned char breakpoint[] = { 0xc3, 0xc3 };
 
+  /* For remote stub targets, trapa #20 is used.  */
+  if (strcmp (target_shortname, "remote") == 0)
+    {
+      static unsigned char big_remote_breakpoint[] = { 0xc3, 0x20 };
+      static unsigned char little_remote_breakpoint[] = { 0x20, 0xc3 };
+
+      if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+	{
+	  *lenptr = sizeof (big_remote_breakpoint);
+	  return big_remote_breakpoint;
+	}
+      else
+	{
+	  *lenptr = sizeof (little_remote_breakpoint);
+	  return little_remote_breakpoint;
+	}
+    }
+
   *lenptr = sizeof (breakpoint);
   return breakpoint;
 }
@@ -484,13 +500,13 @@ sh_breakpoint_from_pc (CORE_ADDR *pcptr, int *lenptr)
 static int
 gdb_print_insn_sh (bfd_vma memaddr, disassemble_info * info)
 {
-  info->endian = TARGET_BYTE_ORDER;
+  info->endian = gdbarch_byte_order (current_gdbarch);
   return print_insn_sh (memaddr, info);
 }
 
 static CORE_ADDR
 sh_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
-		     struct sh_frame_cache *cache)
+		     struct sh_frame_cache *cache, ULONGEST fpscr)
 {
   ULONGEST inst;
   CORE_ADDR opc;
@@ -597,7 +613,7 @@ sh_analyze_prologue (CORE_ADDR pc, CORE_ADDR current_pc,
 	}
       else if (IS_FPUSH (inst))
 	{
-	  if (read_register (FPSCR_REGNUM) & FPSCR_SZ)
+	  if (fpscr & FPSCR_SZ)
 	    {
 	      cache->sp_offset += 8;
 	    }
@@ -710,7 +726,7 @@ sh_skip_prologue (CORE_ADDR start_pc)
     return max (pc, start_pc);
 
   cache.sp_offset = -4;
-  pc = sh_analyze_prologue (start_pc, (CORE_ADDR) -1, &cache);
+  pc = sh_analyze_prologue (start_pc, (CORE_ADDR) -1, &cache, 0);
   if (!cache.uses_fp)
     return start_pc;
 
@@ -797,18 +813,6 @@ sh_use_struct_convention (int gcc_p, struct type *type)
   return 1;
 }
 
-/* Extract from an array REGBUF containing the (raw) register state
-   the address in which a function should return its structure value,
-   as a CORE_ADDR (or an expression that can be used as one).  */
-static CORE_ADDR
-sh_extract_struct_value_address (struct regcache *regcache)
-{
-  ULONGEST addr;
-
-  regcache_cooked_read_unsigned (regcache, STRUCT_RETURN_REGNUM, &addr);
-  return addr;
-}
-
 static CORE_ADDR
 sh_frame_align (struct gdbarch *ignore, CORE_ADDR sp)
 {
@@ -877,7 +881,7 @@ sh_justify_value_in_reg (struct value *val, int len)
   if (len < 4)
     {
       /* value gets right-justified in the register or stack word */
-      if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+      if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
 	memcpy (valbuf + (4 - len), (char *) value_contents (val), len);
       else
 	memcpy (valbuf, (char *) value_contents (val), len);
@@ -950,7 +954,7 @@ sh_next_flt_argreg (int len)
       /* Also mark the next register as used. */
       flt_argreg_array[argreg + 1] = 1;
     }
-  else if (TARGET_BYTE_ORDER == BFD_ENDIAN_LITTLE)
+  else if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_LITTLE)
     {
       /* In little endian, gcc passes floats like this: f5, f4, f7, f6, ... */
       if (!flt_argreg_array[argreg + 1])
@@ -1088,7 +1092,7 @@ sh_push_dummy_call_fpu (struct gdbarch *gdbarch,
 		 register, increments the val and len values accordingly
 		 and then proceeds as normal by writing the second 32 bits
 		 into the next register. */
-	      if (TARGET_BYTE_ORDER == BFD_ENDIAN_LITTLE
+	      if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_LITTLE
 	          && TYPE_LENGTH (type) == 2 * reg_size)
 	        {
 		  regcache_cooked_write_unsigned (regcache, flt_argreg + 1,
@@ -1116,7 +1120,8 @@ sh_push_dummy_call_fpu (struct gdbarch *gdbarch,
   regcache_cooked_write_unsigned (regcache, PR_REGNUM, bp_addr);
 
   /* Update stack pointer.  */
-  regcache_cooked_write_unsigned (regcache, SP_REGNUM, sp);
+  regcache_cooked_write_unsigned (regcache,
+				  gdbarch_sp_regnum (current_gdbarch), sp);
 
   return sp;
 }
@@ -1186,7 +1191,8 @@ sh_push_dummy_call_nofpu (struct gdbarch *gdbarch,
   regcache_cooked_write_unsigned (regcache, PR_REGNUM, bp_addr);
 
   /* Update stack pointer.  */
-  regcache_cooked_write_unsigned (regcache, SP_REGNUM, sp);
+  regcache_cooked_write_unsigned (regcache,
+				  gdbarch_sp_regnum (current_gdbarch), sp);
 
   return sp;
 }
@@ -1227,9 +1233,9 @@ sh_extract_return_value_fpu (struct type *type, struct regcache *regcache,
   if (sh_treat_as_flt_p (type))
     {
       int len = TYPE_LENGTH (type);
-      int i, regnum = FP0_REGNUM;
+      int i, regnum = gdbarch_fp0_regnum (current_gdbarch);
       for (i = 0; i < len; i += 4)
-	if (TARGET_BYTE_ORDER == BFD_ENDIAN_LITTLE)
+	if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_LITTLE)
 	  regcache_raw_read (regcache, regnum++, (char *) valbuf + len - 4 - i);
 	else
 	  regcache_raw_read (regcache, regnum++, (char *) valbuf + i);
@@ -1271,9 +1277,9 @@ sh_store_return_value_fpu (struct type *type, struct regcache *regcache,
   if (sh_treat_as_flt_p (type))
     {
       int len = TYPE_LENGTH (type);
-      int i, regnum = FP0_REGNUM;
+      int i, regnum = gdbarch_fp0_regnum (current_gdbarch);
       for (i = 0; i < len; i += 4)
-	if (TARGET_BYTE_ORDER == BFD_ENDIAN_LITTLE)
+	if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_LITTLE)
 	  regcache_raw_write (regcache, regnum++,
 			      (char *) valbuf + len - 4 - i);
 	else
@@ -1314,507 +1320,705 @@ sh_return_value_fpu (struct gdbarch *gdbarch, struct type *type,
 /* Print the registers in a form similar to the E7000 */
 
 static void
-sh_generic_show_regs (void)
+sh_generic_show_regs (struct frame_info *frame)
 {
-  printf_filtered ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
-		   paddr (read_register (PC_REGNUM)),
-		   (long) read_register (SR_REGNUM),
-		   (long) read_register (PR_REGNUM),
-		   (long) read_register (MACH_REGNUM));
+  printf_filtered
+    ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
+     paddr (get_frame_register_unsigned (frame,
+					 gdbarch_pc_regnum (current_gdbarch))),
+     (long) get_frame_register_unsigned (frame, SR_REGNUM),
+     (long) get_frame_register_unsigned (frame, PR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACH_REGNUM));
 
-  printf_filtered (
-	"     GBR %08lx      VBR %08lx                       MACL %08lx\n",
-		   (long) read_register (GBR_REGNUM),
-		   (long) read_register (VBR_REGNUM),
-		   (long) read_register (MACL_REGNUM));
+  printf_filtered
+    ("     GBR %08lx      VBR %08lx                       MACL %08lx\n",
+     (long) get_frame_register_unsigned (frame, GBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, VBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACL_REGNUM));
 
   printf_filtered
     ("R0-R7    %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-     (long) read_register (0), (long) read_register (1),
-     (long) read_register (2), (long) read_register (3),
-     (long) read_register (4), (long) read_register (5),
-     (long) read_register (6), (long) read_register (7));
-  printf_filtered ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (8), (long) read_register (9),
-		   (long) read_register (10), (long) read_register (11),
-		   (long) read_register (12), (long) read_register (13),
-		   (long) read_register (14), (long) read_register (15));
+     (long) get_frame_register_unsigned (frame, 0),
+     (long) get_frame_register_unsigned (frame, 1),
+     (long) get_frame_register_unsigned (frame, 2),
+     (long) get_frame_register_unsigned (frame, 3),
+     (long) get_frame_register_unsigned (frame, 4),
+     (long) get_frame_register_unsigned (frame, 5),
+     (long) get_frame_register_unsigned (frame, 6),
+     (long) get_frame_register_unsigned (frame, 7));
+  printf_filtered
+    ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, 8),
+     (long) get_frame_register_unsigned (frame, 9),
+     (long) get_frame_register_unsigned (frame, 10),
+     (long) get_frame_register_unsigned (frame, 11),
+     (long) get_frame_register_unsigned (frame, 12),
+     (long) get_frame_register_unsigned (frame, 13),
+     (long) get_frame_register_unsigned (frame, 14),
+     (long) get_frame_register_unsigned (frame, 15));
 }
 
 static void
-sh3_show_regs (void)
+sh3_show_regs (struct frame_info *frame)
 {
-  printf_filtered ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
-		   paddr (read_register (PC_REGNUM)),
-		   (long) read_register (SR_REGNUM),
-		   (long) read_register (PR_REGNUM),
-		   (long) read_register (MACH_REGNUM));
+  printf_filtered
+    ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
+     paddr (get_frame_register_unsigned (frame,
+					 gdbarch_pc_regnum (current_gdbarch))),
+     (long) get_frame_register_unsigned (frame, SR_REGNUM),
+     (long) get_frame_register_unsigned (frame, PR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACH_REGNUM));
 
-  printf_filtered (
-	"     GBR %08lx      VBR %08lx                       MACL %08lx\n",
-		   (long) read_register (GBR_REGNUM),
-		   (long) read_register (VBR_REGNUM),
-		   (long) read_register (MACL_REGNUM));
-  printf_filtered ("     SSR %08lx      SPC %08lx\n",
-		   (long) read_register (SSR_REGNUM),
-		   (long) read_register (SPC_REGNUM));
+  printf_filtered
+    ("     GBR %08lx      VBR %08lx                       MACL %08lx\n",
+     (long) get_frame_register_unsigned (frame, GBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, VBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACL_REGNUM));
+  printf_filtered
+    ("     SSR %08lx      SPC %08lx\n",
+     (long) get_frame_register_unsigned (frame, SSR_REGNUM),
+     (long) get_frame_register_unsigned (frame, SPC_REGNUM));
 
   printf_filtered
     ("R0-R7    %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-     (long) read_register (0), (long) read_register (1),
-     (long) read_register (2), (long) read_register (3),
-     (long) read_register (4), (long) read_register (5),
-     (long) read_register (6), (long) read_register (7));
-  printf_filtered ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (8), (long) read_register (9),
-		   (long) read_register (10), (long) read_register (11),
-		   (long) read_register (12), (long) read_register (13),
-		   (long) read_register (14), (long) read_register (15));
+     (long) get_frame_register_unsigned (frame, 0),
+     (long) get_frame_register_unsigned (frame, 1),
+     (long) get_frame_register_unsigned (frame, 2),
+     (long) get_frame_register_unsigned (frame, 3),
+     (long) get_frame_register_unsigned (frame, 4),
+     (long) get_frame_register_unsigned (frame, 5),
+     (long) get_frame_register_unsigned (frame, 6),
+     (long) get_frame_register_unsigned (frame, 7));
+  printf_filtered
+    ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, 8),
+     (long) get_frame_register_unsigned (frame, 9),
+     (long) get_frame_register_unsigned (frame, 10),
+     (long) get_frame_register_unsigned (frame, 11),
+     (long) get_frame_register_unsigned (frame, 12),
+     (long) get_frame_register_unsigned (frame, 13),
+     (long) get_frame_register_unsigned (frame, 14),
+     (long) get_frame_register_unsigned (frame, 15));
 }
 
-
 static void
-sh2e_show_regs (void)
+sh2e_show_regs (struct frame_info *frame)
 {
-  printf_filtered ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
-		   paddr (read_register (PC_REGNUM)),
-		   (long) read_register (SR_REGNUM),
-		   (long) read_register (PR_REGNUM),
-		   (long) read_register (MACH_REGNUM));
+  printf_filtered
+    ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
+     paddr (get_frame_register_unsigned (frame,
+					 gdbarch_pc_regnum (current_gdbarch))),
+     (long) get_frame_register_unsigned (frame, SR_REGNUM),
+     (long) get_frame_register_unsigned (frame, PR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACH_REGNUM));
 
-  printf_filtered (
-	"     GBR %08lx      VBR %08lx                       MACL %08lx\n",
-		   (long) read_register (GBR_REGNUM),
-		   (long) read_register (VBR_REGNUM),
-		   (long) read_register (MACL_REGNUM));
-  printf_filtered (
-	"     SSR %08lx      SPC %08lx     FPUL %08lx    FPSCR %08lx\n",
-		   (long) read_register (SSR_REGNUM),
-		   (long) read_register (SPC_REGNUM),
-		   (long) read_register (FPUL_REGNUM),
-		   (long) read_register (FPSCR_REGNUM));
+  printf_filtered
+    ("     GBR %08lx      VBR %08lx                       MACL %08lx\n",
+     (long) get_frame_register_unsigned (frame, GBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, VBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACL_REGNUM));
+  printf_filtered
+    ("     SSR %08lx      SPC %08lx     FPUL %08lx    FPSCR %08lx\n",
+     (long) get_frame_register_unsigned (frame, SSR_REGNUM),
+     (long) get_frame_register_unsigned (frame, SPC_REGNUM),
+     (long) get_frame_register_unsigned (frame, FPUL_REGNUM),
+     (long) get_frame_register_unsigned (frame, FPSCR_REGNUM));
 
   printf_filtered
     ("R0-R7    %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-     (long) read_register (0), (long) read_register (1),
-     (long) read_register (2), (long) read_register (3),
-     (long) read_register (4), (long) read_register (5),
-     (long) read_register (6), (long) read_register (7));
-  printf_filtered ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (8), (long) read_register (9),
-		   (long) read_register (10), (long) read_register (11),
-		   (long) read_register (12), (long) read_register (13),
-		   (long) read_register (14), (long) read_register (15));
+     (long) get_frame_register_unsigned (frame, 0),
+     (long) get_frame_register_unsigned (frame, 1),
+     (long) get_frame_register_unsigned (frame, 2),
+     (long) get_frame_register_unsigned (frame, 3),
+     (long) get_frame_register_unsigned (frame, 4),
+     (long) get_frame_register_unsigned (frame, 5),
+     (long) get_frame_register_unsigned (frame, 6),
+     (long) get_frame_register_unsigned (frame, 7));
+  printf_filtered
+    ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, 8),
+     (long) get_frame_register_unsigned (frame, 9),
+     (long) get_frame_register_unsigned (frame, 10),
+     (long) get_frame_register_unsigned (frame, 11),
+     (long) get_frame_register_unsigned (frame, 12),
+     (long) get_frame_register_unsigned (frame, 13),
+     (long) get_frame_register_unsigned (frame, 14),
+     (long) get_frame_register_unsigned (frame, 15));
 
-  printf_filtered ("FP0-FP7  %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (FP0_REGNUM + 0),
-		   (long) read_register (FP0_REGNUM + 1),
-		   (long) read_register (FP0_REGNUM + 2),
-		   (long) read_register (FP0_REGNUM + 3),
-		   (long) read_register (FP0_REGNUM + 4),
-		   (long) read_register (FP0_REGNUM + 5),
-		   (long) read_register (FP0_REGNUM + 6),
-		   (long) read_register (FP0_REGNUM + 7));
-  printf_filtered ("FP8-FP15 %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (FP0_REGNUM + 8),
-		   (long) read_register (FP0_REGNUM + 9),
-		   (long) read_register (FP0_REGNUM + 10),
-		   (long) read_register (FP0_REGNUM + 11),
-		   (long) read_register (FP0_REGNUM + 12),
-		   (long) read_register (FP0_REGNUM + 13),
-		   (long) read_register (FP0_REGNUM + 14),
-		   (long) read_register (FP0_REGNUM + 15));
+  printf_filtered
+    ("FP0-FP7  %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 0),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 1),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 2),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 3),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 4),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 5),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 6),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 7));
+  printf_filtered
+    ("FP8-FP15 %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 8),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 9),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 10),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 11),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 12),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 13),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 14),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 15));
 }
 
 static void
-sh2a_show_regs (void)
+sh2a_show_regs (struct frame_info *frame)
 {
-  int pr = read_register (FPSCR_REGNUM) & 0x80000;
-  printf_filtered ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
-		   paddr (read_register (PC_REGNUM)),
-		   (long) read_register (SR_REGNUM),
-		   (long) read_register (PR_REGNUM),
-		   (long) read_register (MACH_REGNUM));
+  int pr = get_frame_register_unsigned (frame, FPSCR_REGNUM) & 0x80000;
 
-  printf_filtered (
-	"     GBR %08lx      VBR %08lx      TBR %08lx     MACL %08lx\n",
-		   (long) read_register (GBR_REGNUM),
-		   (long) read_register (VBR_REGNUM),
-		   (long) read_register (TBR_REGNUM),
-		   (long) read_register (MACL_REGNUM));
-  printf_filtered (
-	"     SSR %08lx      SPC %08lx     FPUL %08lx    FPSCR %08lx\n",
-		   (long) read_register (SSR_REGNUM),
-		   (long) read_register (SPC_REGNUM),
-		   (long) read_register (FPUL_REGNUM),
-		   (long) read_register (FPSCR_REGNUM));
+  printf_filtered
+    ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
+     paddr (get_frame_register_unsigned (frame,
+					 gdbarch_pc_regnum (current_gdbarch))),
+     (long) get_frame_register_unsigned (frame, SR_REGNUM),
+     (long) get_frame_register_unsigned (frame, PR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACH_REGNUM));
 
-  printf_filtered ("R0-R7    %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (0), (long) read_register (1),
-		   (long) read_register (2), (long) read_register (3),
-		   (long) read_register (4), (long) read_register (5),
-		   (long) read_register (6), (long) read_register (7));
-  printf_filtered ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (8), (long) read_register (9),
-		   (long) read_register (10), (long) read_register (11),
-		   (long) read_register (12), (long) read_register (13),
-		   (long) read_register (14), (long) read_register (15));
-
-  printf_filtered (
-	(pr ? "DR0-DR6  %08lx%08lx  %08lx%08lx  %08lx%08lx  %08lx%08lx\n"
-	    : "FP0-FP7  %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n"),
-		   (long) read_register (FP0_REGNUM + 0),
-		   (long) read_register (FP0_REGNUM + 1),
-		   (long) read_register (FP0_REGNUM + 2),
-		   (long) read_register (FP0_REGNUM + 3),
-		   (long) read_register (FP0_REGNUM + 4),
-		   (long) read_register (FP0_REGNUM + 5),
-		   (long) read_register (FP0_REGNUM + 6),
-		   (long) read_register (FP0_REGNUM + 7));
-  printf_filtered (
-	(pr ? "DR8-DR14 %08lx%08lx  %08lx%08lx  %08lx%08lx  %08lx%08lx\n"
-	    : "FP8-FP15 %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n"),
-		   (long) read_register (FP0_REGNUM + 8),
-		   (long) read_register (FP0_REGNUM + 9),
-		   (long) read_register (FP0_REGNUM + 10),
-		   (long) read_register (FP0_REGNUM + 11),
-		   (long) read_register (FP0_REGNUM + 12),
-		   (long) read_register (FP0_REGNUM + 13),
-		   (long) read_register (FP0_REGNUM + 14),
-		   (long) read_register (FP0_REGNUM + 15));
-  printf_filtered ("BANK=%-3d\n", (int) read_register (BANK_REGNUM));
-  printf_filtered (
-	"R0b-R7b  %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (R0_BANK0_REGNUM + 0),
-		   (long) read_register (R0_BANK0_REGNUM + 1),
-		   (long) read_register (R0_BANK0_REGNUM + 2),
-		   (long) read_register (R0_BANK0_REGNUM + 3),
-		   (long) read_register (R0_BANK0_REGNUM + 4),
-		   (long) read_register (R0_BANK0_REGNUM + 5),
-		   (long) read_register (R0_BANK0_REGNUM + 6),
-		   (long) read_register (R0_BANK0_REGNUM + 7));
-  printf_filtered ("R8b-R14b %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (R0_BANK0_REGNUM + 8),
-		   (long) read_register (R0_BANK0_REGNUM + 9),
-		   (long) read_register (R0_BANK0_REGNUM + 10),
-		   (long) read_register (R0_BANK0_REGNUM + 11),
-		   (long) read_register (R0_BANK0_REGNUM + 12),
-		   (long) read_register (R0_BANK0_REGNUM + 13),
-		   (long) read_register (R0_BANK0_REGNUM + 14));
-  printf_filtered ("MACHb=%08lx IVNb=%08lx PRb=%08lx GBRb=%08lx MACLb=%08lx\n",
-		   (long) read_register (R0_BANK0_REGNUM + 15),
-		   (long) read_register (R0_BANK0_REGNUM + 16),
-		   (long) read_register (R0_BANK0_REGNUM + 17),
-		   (long) read_register (R0_BANK0_REGNUM + 18),
-		   (long) read_register (R0_BANK0_REGNUM + 19));
-}
-
-static void
-sh2a_nofpu_show_regs (void)
-{
-  int pr = read_register (FPSCR_REGNUM) & 0x80000;
-  printf_filtered ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
-		   paddr (read_register (PC_REGNUM)),
-		   (long) read_register (SR_REGNUM),
-		   (long) read_register (PR_REGNUM),
-		   (long) read_register (MACH_REGNUM));
-
-  printf_filtered (
-	"     GBR %08lx      VBR %08lx      TBR %08lx     MACL %08lx\n",
-		   (long) read_register (GBR_REGNUM),
-		   (long) read_register (VBR_REGNUM),
-		   (long) read_register (TBR_REGNUM),
-		   (long) read_register (MACL_REGNUM));
-  printf_filtered (
-	"     SSR %08lx      SPC %08lx     FPUL %08lx    FPSCR %08lx\n",
-		   (long) read_register (SSR_REGNUM),
-		   (long) read_register (SPC_REGNUM),
-		   (long) read_register (FPUL_REGNUM),
-		   (long) read_register (FPSCR_REGNUM));
-
-  printf_filtered ("R0-R7    %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (0), (long) read_register (1),
-		   (long) read_register (2), (long) read_register (3),
-		   (long) read_register (4), (long) read_register (5),
-		   (long) read_register (6), (long) read_register (7));
-  printf_filtered ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (8), (long) read_register (9),
-		   (long) read_register (10), (long) read_register (11),
-		   (long) read_register (12), (long) read_register (13),
-		   (long) read_register (14), (long) read_register (15));
-
-  printf_filtered ("BANK=%-3d\n", (int) read_register (BANK_REGNUM));
-  printf_filtered (
-	"R0b-R7b  %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (R0_BANK0_REGNUM + 0),
-		   (long) read_register (R0_BANK0_REGNUM + 1),
-		   (long) read_register (R0_BANK0_REGNUM + 2),
-		   (long) read_register (R0_BANK0_REGNUM + 3),
-		   (long) read_register (R0_BANK0_REGNUM + 4),
-		   (long) read_register (R0_BANK0_REGNUM + 5),
-		   (long) read_register (R0_BANK0_REGNUM + 6),
-		   (long) read_register (R0_BANK0_REGNUM + 7));
-  printf_filtered ("R8b-R14b %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (R0_BANK0_REGNUM + 8),
-		   (long) read_register (R0_BANK0_REGNUM + 9),
-		   (long) read_register (R0_BANK0_REGNUM + 10),
-		   (long) read_register (R0_BANK0_REGNUM + 11),
-		   (long) read_register (R0_BANK0_REGNUM + 12),
-		   (long) read_register (R0_BANK0_REGNUM + 13),
-		   (long) read_register (R0_BANK0_REGNUM + 14));
-  printf_filtered ("MACHb=%08lx IVNb=%08lx PRb=%08lx GBRb=%08lx MACLb=%08lx\n",
-		   (long) read_register (R0_BANK0_REGNUM + 15),
-		   (long) read_register (R0_BANK0_REGNUM + 16),
-		   (long) read_register (R0_BANK0_REGNUM + 17),
-		   (long) read_register (R0_BANK0_REGNUM + 18),
-		   (long) read_register (R0_BANK0_REGNUM + 19));
-}
-
-static void
-sh3e_show_regs (void)
-{
-  printf_filtered ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
-		   paddr (read_register (PC_REGNUM)),
-		   (long) read_register (SR_REGNUM),
-		   (long) read_register (PR_REGNUM),
-		   (long) read_register (MACH_REGNUM));
-
-  printf_filtered (
-	"     GBR %08lx      VBR %08lx                       MACL %08lx\n",
-		   (long) read_register (GBR_REGNUM),
-		   (long) read_register (VBR_REGNUM),
-		   (long) read_register (MACL_REGNUM));
-  printf_filtered (
-	"     SSR %08lx      SPC %08lx     FPUL %08lx    FPSCR %08lx\n",
-		   (long) read_register (SSR_REGNUM),
-		   (long) read_register (SPC_REGNUM),
-		   (long) read_register (FPUL_REGNUM),
-		   (long) read_register (FPSCR_REGNUM));
+  printf_filtered
+    ("     GBR %08lx      VBR %08lx      TBR %08lx     MACL %08lx\n",
+     (long) get_frame_register_unsigned (frame, GBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, VBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, TBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACL_REGNUM));
+  printf_filtered
+    ("     SSR %08lx      SPC %08lx     FPUL %08lx    FPSCR %08lx\n",
+     (long) get_frame_register_unsigned (frame, SSR_REGNUM),
+     (long) get_frame_register_unsigned (frame, SPC_REGNUM),
+     (long) get_frame_register_unsigned (frame, FPUL_REGNUM),
+     (long) get_frame_register_unsigned (frame, FPSCR_REGNUM));
 
   printf_filtered
     ("R0-R7    %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-     (long) read_register (0), (long) read_register (1),
-     (long) read_register (2), (long) read_register (3),
-     (long) read_register (4), (long) read_register (5),
-     (long) read_register (6), (long) read_register (7));
-  printf_filtered ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (8), (long) read_register (9),
-		   (long) read_register (10), (long) read_register (11),
-		   (long) read_register (12), (long) read_register (13),
-		   (long) read_register (14), (long) read_register (15));
+     (long) get_frame_register_unsigned (frame, 0),
+     (long) get_frame_register_unsigned (frame, 1),
+     (long) get_frame_register_unsigned (frame, 2),
+     (long) get_frame_register_unsigned (frame, 3),
+     (long) get_frame_register_unsigned (frame, 4),
+     (long) get_frame_register_unsigned (frame, 5),
+     (long) get_frame_register_unsigned (frame, 6),
+     (long) get_frame_register_unsigned (frame, 7));
+  printf_filtered
+    ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, 8),
+     (long) get_frame_register_unsigned (frame, 9),
+     (long) get_frame_register_unsigned (frame, 10),
+     (long) get_frame_register_unsigned (frame, 11),
+     (long) get_frame_register_unsigned (frame, 12),
+     (long) get_frame_register_unsigned (frame, 13),
+     (long) get_frame_register_unsigned (frame, 14),
+     (long) get_frame_register_unsigned (frame, 15));
 
-  printf_filtered ("FP0-FP7  %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (FP0_REGNUM + 0),
-		   (long) read_register (FP0_REGNUM + 1),
-		   (long) read_register (FP0_REGNUM + 2),
-		   (long) read_register (FP0_REGNUM + 3),
-		   (long) read_register (FP0_REGNUM + 4),
-		   (long) read_register (FP0_REGNUM + 5),
-		   (long) read_register (FP0_REGNUM + 6),
-		   (long) read_register (FP0_REGNUM + 7));
-  printf_filtered ("FP8-FP15 %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (FP0_REGNUM + 8),
-		   (long) read_register (FP0_REGNUM + 9),
-		   (long) read_register (FP0_REGNUM + 10),
-		   (long) read_register (FP0_REGNUM + 11),
-		   (long) read_register (FP0_REGNUM + 12),
-		   (long) read_register (FP0_REGNUM + 13),
-		   (long) read_register (FP0_REGNUM + 14),
-		   (long) read_register (FP0_REGNUM + 15));
+  printf_filtered
+    (pr ? "DR0-DR6  %08lx%08lx  %08lx%08lx  %08lx%08lx  %08lx%08lx\n"
+	: "FP0-FP7  %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 0),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 1),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 2),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 3),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 4),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 5),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 6),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 7));
+  printf_filtered
+    (pr ? "DR8-DR14 %08lx%08lx  %08lx%08lx  %08lx%08lx  %08lx%08lx\n"
+	: "FP8-FP15 %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 8),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 9),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 10),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 11),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 12),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 13),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 14),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 15));
+  printf_filtered
+    ("BANK=%-3d\n", (int) get_frame_register_unsigned (frame, BANK_REGNUM));
+  printf_filtered
+    ("R0b-R7b  %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 0),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 1),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 2),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 3),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 4),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 5),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 6),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 7));
+  printf_filtered
+    ("R8b-R14b %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 8),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 9),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 10),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 11),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 12),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 13),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 14));
+  printf_filtered
+    ("MACHb=%08lx IVNb=%08lx PRb=%08lx GBRb=%08lx MACLb=%08lx\n",
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 15),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 16),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 17),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 18),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 19));
 }
 
 static void
-sh3_dsp_show_regs (void)
+sh2a_nofpu_show_regs (struct frame_info *frame)
 {
-  printf_filtered ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
-		   paddr (read_register (PC_REGNUM)),
-		   (long) read_register (SR_REGNUM),
-		   (long) read_register (PR_REGNUM),
-		   (long) read_register (MACH_REGNUM));
+  int pr = get_frame_register_unsigned (frame, FPSCR_REGNUM) & 0x80000;
 
-  printf_filtered (
-	"     GBR %08lx      VBR %08lx                       MACL %08lx\n",
-		   (long) read_register (GBR_REGNUM),
-		   (long) read_register (VBR_REGNUM),
-		   (long) read_register (MACL_REGNUM));
+  printf_filtered
+    ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
+     paddr (get_frame_register_unsigned (frame,
+					 gdbarch_pc_regnum (current_gdbarch))),
+     (long) get_frame_register_unsigned (frame, SR_REGNUM),
+     (long) get_frame_register_unsigned (frame, PR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACH_REGNUM));
 
-  printf_filtered ("     SSR %08lx      SPC %08lx      DSR %08lx\n",
-		   (long) read_register (SSR_REGNUM),
-		   (long) read_register (SPC_REGNUM),
-		   (long) read_register (DSR_REGNUM));
+  printf_filtered
+    ("     GBR %08lx      VBR %08lx      TBR %08lx     MACL %08lx\n",
+     (long) get_frame_register_unsigned (frame, GBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, VBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, TBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACL_REGNUM));
+  printf_filtered
+    ("     SSR %08lx      SPC %08lx     FPUL %08lx    FPSCR %08lx\n",
+     (long) get_frame_register_unsigned (frame, SSR_REGNUM),
+     (long) get_frame_register_unsigned (frame, SPC_REGNUM),
+     (long) get_frame_register_unsigned (frame, FPUL_REGNUM),
+     (long) get_frame_register_unsigned (frame, FPSCR_REGNUM));
 
   printf_filtered
     ("R0-R7    %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-     (long) read_register (0), (long) read_register (1),
-     (long) read_register (2), (long) read_register (3),
-     (long) read_register (4), (long) read_register (5),
-     (long) read_register (6), (long) read_register (7));
-  printf_filtered ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (8), (long) read_register (9),
-		   (long) read_register (10), (long) read_register (11),
-		   (long) read_register (12), (long) read_register (13),
-		   (long) read_register (14), (long) read_register (15));
+     (long) get_frame_register_unsigned (frame, 0),
+     (long) get_frame_register_unsigned (frame, 1),
+     (long) get_frame_register_unsigned (frame, 2),
+     (long) get_frame_register_unsigned (frame, 3),
+     (long) get_frame_register_unsigned (frame, 4),
+     (long) get_frame_register_unsigned (frame, 5),
+     (long) get_frame_register_unsigned (frame, 6),
+     (long) get_frame_register_unsigned (frame, 7));
+  printf_filtered
+    ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, 8),
+     (long) get_frame_register_unsigned (frame, 9),
+     (long) get_frame_register_unsigned (frame, 10),
+     (long) get_frame_register_unsigned (frame, 11),
+     (long) get_frame_register_unsigned (frame, 12),
+     (long) get_frame_register_unsigned (frame, 13),
+     (long) get_frame_register_unsigned (frame, 14),
+     (long) get_frame_register_unsigned (frame, 15));
+
+  printf_filtered
+    ("BANK=%-3d\n", (int) get_frame_register_unsigned (frame, BANK_REGNUM));
+  printf_filtered
+    ("R0b-R7b  %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 0),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 1),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 2),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 3),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 4),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 5),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 6),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 7));
+  printf_filtered
+    ("R8b-R14b %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 8),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 9),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 10),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 11),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 12),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 13),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 14));
+  printf_filtered
+    ("MACHb=%08lx IVNb=%08lx PRb=%08lx GBRb=%08lx MACLb=%08lx\n",
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 15),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 16),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 17),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 18),
+     (long) get_frame_register_unsigned (frame, R0_BANK0_REGNUM + 19));
+}
+
+static void
+sh3e_show_regs (struct frame_info *frame)
+{
+  printf_filtered
+    ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
+     paddr (get_frame_register_unsigned (frame,
+					 gdbarch_pc_regnum (current_gdbarch))),
+     (long) get_frame_register_unsigned (frame, SR_REGNUM),
+     (long) get_frame_register_unsigned (frame, PR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACH_REGNUM));
+
+  printf_filtered
+    ("     GBR %08lx      VBR %08lx                       MACL %08lx\n",
+     (long) get_frame_register_unsigned (frame, GBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, VBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACL_REGNUM));
+  printf_filtered
+    ("     SSR %08lx      SPC %08lx     FPUL %08lx    FPSCR %08lx\n",
+     (long) get_frame_register_unsigned (frame, SSR_REGNUM),
+     (long) get_frame_register_unsigned (frame, SPC_REGNUM),
+     (long) get_frame_register_unsigned (frame, FPUL_REGNUM),
+     (long) get_frame_register_unsigned (frame, FPSCR_REGNUM));
+
+  printf_filtered
+    ("R0-R7    %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, 0),
+     (long) get_frame_register_unsigned (frame, 1),
+     (long) get_frame_register_unsigned (frame, 2),
+     (long) get_frame_register_unsigned (frame, 3),
+     (long) get_frame_register_unsigned (frame, 4),
+     (long) get_frame_register_unsigned (frame, 5),
+     (long) get_frame_register_unsigned (frame, 6),
+     (long) get_frame_register_unsigned (frame, 7));
+  printf_filtered
+    ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, 8),
+     (long) get_frame_register_unsigned (frame, 9),
+     (long) get_frame_register_unsigned (frame, 10),
+     (long) get_frame_register_unsigned (frame, 11),
+     (long) get_frame_register_unsigned (frame, 12),
+     (long) get_frame_register_unsigned (frame, 13),
+     (long) get_frame_register_unsigned (frame, 14),
+     (long) get_frame_register_unsigned (frame, 15));
+
+  printf_filtered
+    ("FP0-FP7  %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 0),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 1),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 2),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 3),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 4),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 5),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 6),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 7));
+  printf_filtered
+    ("FP8-FP15 %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 8),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 9),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 10),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 11),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 12),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 13),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 14),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 15));
+}
+
+static void
+sh3_dsp_show_regs (struct frame_info *frame)
+{
+  printf_filtered
+    ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
+     paddr (get_frame_register_unsigned (frame,
+					 gdbarch_pc_regnum (current_gdbarch))),
+     (long) get_frame_register_unsigned (frame, SR_REGNUM),
+     (long) get_frame_register_unsigned (frame, PR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACH_REGNUM));
+
+  printf_filtered
+    ("     GBR %08lx      VBR %08lx                       MACL %08lx\n",
+     (long) get_frame_register_unsigned (frame, GBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, VBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACL_REGNUM));
+
+  printf_filtered
+    ("     SSR %08lx      SPC %08lx      DSR %08lx\n",
+     (long) get_frame_register_unsigned (frame, SSR_REGNUM),
+     (long) get_frame_register_unsigned (frame, SPC_REGNUM),
+     (long) get_frame_register_unsigned (frame, DSR_REGNUM));
+
+  printf_filtered
+    ("R0-R7    %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, 0),
+     (long) get_frame_register_unsigned (frame, 1),
+     (long) get_frame_register_unsigned (frame, 2),
+     (long) get_frame_register_unsigned (frame, 3),
+     (long) get_frame_register_unsigned (frame, 4),
+     (long) get_frame_register_unsigned (frame, 5),
+     (long) get_frame_register_unsigned (frame, 6),
+     (long) get_frame_register_unsigned (frame, 7));
+  printf_filtered
+    ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, 8),
+     (long) get_frame_register_unsigned (frame, 9),
+     (long) get_frame_register_unsigned (frame, 10),
+     (long) get_frame_register_unsigned (frame, 11),
+     (long) get_frame_register_unsigned (frame, 12),
+     (long) get_frame_register_unsigned (frame, 13),
+     (long) get_frame_register_unsigned (frame, 14),
+     (long) get_frame_register_unsigned (frame, 15));
 
   printf_filtered
     ("A0G=%02lx A0=%08lx M0=%08lx X0=%08lx Y0=%08lx RS=%08lx MOD=%08lx\n",
-     (long) read_register (A0G_REGNUM) & 0xff,
-     (long) read_register (A0_REGNUM), (long) read_register (M0_REGNUM),
-     (long) read_register (X0_REGNUM), (long) read_register (Y0_REGNUM),
-     (long) read_register (RS_REGNUM), (long) read_register (MOD_REGNUM));
-  printf_filtered ("A1G=%02lx A1=%08lx M1=%08lx X1=%08lx Y1=%08lx RE=%08lx\n",
-		   (long) read_register (A1G_REGNUM) & 0xff,
-		   (long) read_register (A1_REGNUM),
-		   (long) read_register (M1_REGNUM),
-		   (long) read_register (X1_REGNUM),
-		   (long) read_register (Y1_REGNUM),
-		   (long) read_register (RE_REGNUM));
+     (long) get_frame_register_unsigned (frame, A0G_REGNUM) & 0xff,
+     (long) get_frame_register_unsigned (frame, A0_REGNUM),
+     (long) get_frame_register_unsigned (frame, M0_REGNUM),
+     (long) get_frame_register_unsigned (frame, X0_REGNUM),
+     (long) get_frame_register_unsigned (frame, Y0_REGNUM),
+     (long) get_frame_register_unsigned (frame, RS_REGNUM),
+     (long) get_frame_register_unsigned (frame, MOD_REGNUM));
+  printf_filtered
+    ("A1G=%02lx A1=%08lx M1=%08lx X1=%08lx Y1=%08lx RE=%08lx\n",
+     (long) get_frame_register_unsigned (frame, A1G_REGNUM) & 0xff,
+     (long) get_frame_register_unsigned (frame, A1_REGNUM),
+     (long) get_frame_register_unsigned (frame, M1_REGNUM),
+     (long) get_frame_register_unsigned (frame, X1_REGNUM),
+     (long) get_frame_register_unsigned (frame, Y1_REGNUM),
+     (long) get_frame_register_unsigned (frame, RE_REGNUM));
 }
 
 static void
-sh4_show_regs (void)
+sh4_show_regs (struct frame_info *frame)
 {
-  int pr = read_register (FPSCR_REGNUM) & 0x80000;
-  printf_filtered ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
-		   paddr (read_register (PC_REGNUM)),
-		   (long) read_register (SR_REGNUM),
-		   (long) read_register (PR_REGNUM),
-		   (long) read_register (MACH_REGNUM));
+  int pr = get_frame_register_unsigned (frame, FPSCR_REGNUM) & 0x80000;
 
-  printf_filtered (
-	"     GBR %08lx      VBR %08lx                       MACL %08lx\n",
-		   (long) read_register (GBR_REGNUM),
-		   (long) read_register (VBR_REGNUM),
-		   (long) read_register (MACL_REGNUM));
-  printf_filtered (
-	"     SSR %08lx      SPC %08lx     FPUL %08lx    FPSCR %08lx\n",
-		   (long) read_register (SSR_REGNUM),
-		   (long) read_register (SPC_REGNUM),
-		   (long) read_register (FPUL_REGNUM),
-		   (long) read_register (FPSCR_REGNUM));
+  printf_filtered
+    ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
+     paddr (get_frame_register_unsigned (frame,
+					 gdbarch_pc_regnum (current_gdbarch))),
+     (long) get_frame_register_unsigned (frame, SR_REGNUM),
+     (long) get_frame_register_unsigned (frame, PR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACH_REGNUM));
 
-  printf_filtered ("R0-R7    %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-     		   (long) read_register (0), (long) read_register (1),
-     		   (long) read_register (2), (long) read_register (3),
-     		   (long) read_register (4), (long) read_register (5),
-     		   (long) read_register (6), (long) read_register (7));
-  printf_filtered ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (8), (long) read_register (9),
-		   (long) read_register (10), (long) read_register (11),
-		   (long) read_register (12), (long) read_register (13),
-		   (long) read_register (14), (long) read_register (15));
-
-  printf_filtered (
-	(pr ? "DR0-DR6  %08lx%08lx  %08lx%08lx  %08lx%08lx  %08lx%08lx\n"
-	    : "FP0-FP7  %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n"),
-		   (long) read_register (FP0_REGNUM + 0),
-		   (long) read_register (FP0_REGNUM + 1),
-		   (long) read_register (FP0_REGNUM + 2),
-		   (long) read_register (FP0_REGNUM + 3),
-		   (long) read_register (FP0_REGNUM + 4),
-		   (long) read_register (FP0_REGNUM + 5),
-		   (long) read_register (FP0_REGNUM + 6),
-		   (long) read_register (FP0_REGNUM + 7));
-  printf_filtered (
-	(pr ? "DR8-DR14 %08lx%08lx  %08lx%08lx  %08lx%08lx  %08lx%08lx\n"
-	    : "FP8-FP15 %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n"),
-		   (long) read_register (FP0_REGNUM + 8),
-		   (long) read_register (FP0_REGNUM + 9),
-		   (long) read_register (FP0_REGNUM + 10),
-		   (long) read_register (FP0_REGNUM + 11),
-		   (long) read_register (FP0_REGNUM + 12),
-		   (long) read_register (FP0_REGNUM + 13),
-		   (long) read_register (FP0_REGNUM + 14),
-		   (long) read_register (FP0_REGNUM + 15));
-}
-
-static void
-sh4_nofpu_show_regs (void)
-{
-  printf_filtered ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
-		   paddr (read_register (PC_REGNUM)),
-		   (long) read_register (SR_REGNUM),
-		   (long) read_register (PR_REGNUM),
-		   (long) read_register (MACH_REGNUM));
-
-  printf_filtered (
-	"     GBR %08lx      VBR %08lx                       MACL %08lx\n",
-		   (long) read_register (GBR_REGNUM),
-		   (long) read_register (VBR_REGNUM),
-		   (long) read_register (MACL_REGNUM));
-  printf_filtered (
-	"     SSR %08lx      SPC %08lx     FPUL %08lx    FPSCR %08lx\n",
-		   (long) read_register (SSR_REGNUM),
-		   (long) read_register (SPC_REGNUM),
-		   (long) read_register (FPUL_REGNUM),
-		   (long) read_register (FPSCR_REGNUM));
-
-  printf_filtered ("R0-R7    %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-     		   (long) read_register (0), (long) read_register (1),
-     		   (long) read_register (2), (long) read_register (3),
-     		   (long) read_register (4), (long) read_register (5),
-     		   (long) read_register (6), (long) read_register (7));
-  printf_filtered ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (8), (long) read_register (9),
-		   (long) read_register (10), (long) read_register (11),
-		   (long) read_register (12), (long) read_register (13),
-		   (long) read_register (14), (long) read_register (15));
-}
-
-static void
-sh_dsp_show_regs (void)
-{
-
-  printf_filtered ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
-		   paddr (read_register (PC_REGNUM)),
-		   (long) read_register (SR_REGNUM),
-		   (long) read_register (PR_REGNUM),
-		   (long) read_register (MACH_REGNUM));
-
-  printf_filtered (
-	"     GBR %08lx      VBR %08lx      DSR %08lx     MACL %08lx\n",
-		   (long) read_register (GBR_REGNUM),
-		   (long) read_register (VBR_REGNUM),
-		   (long) read_register (DSR_REGNUM),
-		   (long) read_register (MACL_REGNUM));
+  printf_filtered
+    ("     GBR %08lx      VBR %08lx                       MACL %08lx\n",
+     (long) get_frame_register_unsigned (frame, GBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, VBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACL_REGNUM));
+  printf_filtered
+    ("     SSR %08lx      SPC %08lx     FPUL %08lx    FPSCR %08lx\n",
+     (long) get_frame_register_unsigned (frame, SSR_REGNUM),
+     (long) get_frame_register_unsigned (frame, SPC_REGNUM),
+     (long) get_frame_register_unsigned (frame, FPUL_REGNUM),
+     (long) get_frame_register_unsigned (frame, FPSCR_REGNUM));
 
   printf_filtered
     ("R0-R7    %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-     (long) read_register (0), (long) read_register (1),
-     (long) read_register (2), (long) read_register (3),
-     (long) read_register (4), (long) read_register (5),
-     (long) read_register (6), (long) read_register (7));
-  printf_filtered ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-		   (long) read_register (8), (long) read_register (9),
-		   (long) read_register (10), (long) read_register (11),
-		   (long) read_register (12), (long) read_register (13),
-		   (long) read_register (14), (long) read_register (15));
+     (long) get_frame_register_unsigned (frame, 0),
+     (long) get_frame_register_unsigned (frame, 1),
+     (long) get_frame_register_unsigned (frame, 2),
+     (long) get_frame_register_unsigned (frame, 3),
+     (long) get_frame_register_unsigned (frame, 4),
+     (long) get_frame_register_unsigned (frame, 5),
+     (long) get_frame_register_unsigned (frame, 6),
+     (long) get_frame_register_unsigned (frame, 7));
+  printf_filtered
+    ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, 8),
+     (long) get_frame_register_unsigned (frame, 9),
+     (long) get_frame_register_unsigned (frame, 10),
+     (long) get_frame_register_unsigned (frame, 11),
+     (long) get_frame_register_unsigned (frame, 12),
+     (long) get_frame_register_unsigned (frame, 13),
+     (long) get_frame_register_unsigned (frame, 14),
+     (long) get_frame_register_unsigned (frame, 15));
+
+  printf_filtered
+    (pr ? "DR0-DR6  %08lx%08lx  %08lx%08lx  %08lx%08lx  %08lx%08lx\n"
+	: "FP0-FP7  %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 0),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 1),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 2),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 3),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 4),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 5),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 6),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 7));
+  printf_filtered
+    (pr ? "DR8-DR14 %08lx%08lx  %08lx%08lx  %08lx%08lx  %08lx%08lx\n"
+	: "FP8-FP15 %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 8),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 9),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 10),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 11),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 12),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 13),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 14),
+     (long) get_frame_register_unsigned
+	      (frame, gdbarch_fp0_regnum (current_gdbarch) + 15));
+}
+
+static void
+sh4_nofpu_show_regs (struct frame_info *frame)
+{
+  printf_filtered
+    ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
+     paddr (get_frame_register_unsigned (frame,
+					 gdbarch_pc_regnum (current_gdbarch))),
+     (long) get_frame_register_unsigned (frame, SR_REGNUM),
+     (long) get_frame_register_unsigned (frame, PR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACH_REGNUM));
+
+  printf_filtered
+    ("     GBR %08lx      VBR %08lx                       MACL %08lx\n",
+     (long) get_frame_register_unsigned (frame, GBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, VBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACL_REGNUM));
+  printf_filtered
+    ("     SSR %08lx      SPC %08lx     FPUL %08lx    FPSCR %08lx\n",
+     (long) get_frame_register_unsigned (frame, SSR_REGNUM),
+     (long) get_frame_register_unsigned (frame, SPC_REGNUM),
+     (long) get_frame_register_unsigned (frame, FPUL_REGNUM),
+     (long) get_frame_register_unsigned (frame, FPSCR_REGNUM));
+
+  printf_filtered
+    ("R0-R7    %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, 0),
+     (long) get_frame_register_unsigned (frame, 1),
+     (long) get_frame_register_unsigned (frame, 2),
+     (long) get_frame_register_unsigned (frame, 3),
+     (long) get_frame_register_unsigned (frame, 4),
+     (long) get_frame_register_unsigned (frame, 5),
+     (long) get_frame_register_unsigned (frame, 6),
+     (long) get_frame_register_unsigned (frame, 7));
+  printf_filtered
+    ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, 8),
+     (long) get_frame_register_unsigned (frame, 9),
+     (long) get_frame_register_unsigned (frame, 10),
+     (long) get_frame_register_unsigned (frame, 11),
+     (long) get_frame_register_unsigned (frame, 12),
+     (long) get_frame_register_unsigned (frame, 13),
+     (long) get_frame_register_unsigned (frame, 14),
+     (long) get_frame_register_unsigned (frame, 15));
+}
+
+static void
+sh_dsp_show_regs (struct frame_info *frame)
+{
+  printf_filtered
+    ("      PC %s       SR %08lx       PR %08lx     MACH %08lx\n",
+     paddr (get_frame_register_unsigned (frame,
+					 gdbarch_pc_regnum (current_gdbarch))),
+     (long) get_frame_register_unsigned (frame, SR_REGNUM),
+     (long) get_frame_register_unsigned (frame, PR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACH_REGNUM));
+
+  printf_filtered
+    ("     GBR %08lx      VBR %08lx      DSR %08lx     MACL %08lx\n",
+     (long) get_frame_register_unsigned (frame, GBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, VBR_REGNUM),
+     (long) get_frame_register_unsigned (frame, DSR_REGNUM),
+     (long) get_frame_register_unsigned (frame, MACL_REGNUM));
+
+  printf_filtered
+    ("R0-R7    %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, 0),
+     (long) get_frame_register_unsigned (frame, 1),
+     (long) get_frame_register_unsigned (frame, 2),
+     (long) get_frame_register_unsigned (frame, 3),
+     (long) get_frame_register_unsigned (frame, 4),
+     (long) get_frame_register_unsigned (frame, 5),
+     (long) get_frame_register_unsigned (frame, 6),
+     (long) get_frame_register_unsigned (frame, 7));
+  printf_filtered
+    ("R8-R15   %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+     (long) get_frame_register_unsigned (frame, 8),
+     (long) get_frame_register_unsigned (frame, 9),
+     (long) get_frame_register_unsigned (frame, 10),
+     (long) get_frame_register_unsigned (frame, 11),
+     (long) get_frame_register_unsigned (frame, 12),
+     (long) get_frame_register_unsigned (frame, 13),
+     (long) get_frame_register_unsigned (frame, 14),
+     (long) get_frame_register_unsigned (frame, 15));
 
   printf_filtered
     ("A0G=%02lx A0=%08lx M0=%08lx X0=%08lx Y0=%08lx RS=%08lx MOD=%08lx\n",
-     (long) read_register (A0G_REGNUM) & 0xff,
-     (long) read_register (A0_REGNUM), (long) read_register (M0_REGNUM),
-     (long) read_register (X0_REGNUM), (long) read_register (Y0_REGNUM),
-     (long) read_register (RS_REGNUM), (long) read_register (MOD_REGNUM));
+     (long) get_frame_register_unsigned (frame, A0G_REGNUM) & 0xff,
+     (long) get_frame_register_unsigned (frame, A0_REGNUM),
+     (long) get_frame_register_unsigned (frame, M0_REGNUM),
+     (long) get_frame_register_unsigned (frame, X0_REGNUM),
+     (long) get_frame_register_unsigned (frame, Y0_REGNUM),
+     (long) get_frame_register_unsigned (frame, RS_REGNUM),
+     (long) get_frame_register_unsigned (frame, MOD_REGNUM));
   printf_filtered ("A1G=%02lx A1=%08lx M1=%08lx X1=%08lx Y1=%08lx RE=%08lx\n",
-		   (long) read_register (A1G_REGNUM) & 0xff,
-		   (long) read_register (A1_REGNUM),
-		   (long) read_register (M1_REGNUM),
-		   (long) read_register (X1_REGNUM),
-		   (long) read_register (Y1_REGNUM),
-		   (long) read_register (RE_REGNUM));
+     (long) get_frame_register_unsigned (frame, A1G_REGNUM) & 0xff,
+     (long) get_frame_register_unsigned (frame, A1_REGNUM),
+     (long) get_frame_register_unsigned (frame, M1_REGNUM),
+     (long) get_frame_register_unsigned (frame, X1_REGNUM),
+     (long) get_frame_register_unsigned (frame, Y1_REGNUM),
+     (long) get_frame_register_unsigned (frame, RE_REGNUM));
 }
 
 static void
 sh_show_regs_command (char *args, int from_tty)
 {
   if (sh_show_regs)
-    (*sh_show_regs) ();
+    (*sh_show_regs) (get_current_frame ());
 }
 
 static struct type *
 sh_sh2a_register_type (struct gdbarch *gdbarch, int reg_nr)
 {
-  if ((reg_nr >= FP0_REGNUM
+  if ((reg_nr >= gdbarch_fp0_regnum (current_gdbarch)
        && (reg_nr <= FP_LAST_REGNUM)) || (reg_nr == FPUL_REGNUM))
     return builtin_type_float;
   else if (reg_nr >= DR0_REGNUM && reg_nr <= DR_LAST_REGNUM)
@@ -1828,7 +2032,7 @@ sh_sh2a_register_type (struct gdbarch *gdbarch, int reg_nr)
 static struct type *
 sh_sh3e_register_type (struct gdbarch *gdbarch, int reg_nr)
 {
-  if ((reg_nr >= FP0_REGNUM
+  if ((reg_nr >= gdbarch_fp0_regnum (current_gdbarch)
        && (reg_nr <= FP_LAST_REGNUM)) || (reg_nr == FPUL_REGNUM))
     return builtin_type_float;
   else
@@ -1847,7 +2051,7 @@ sh_sh4_build_float_register_type (int high)
 static struct type *
 sh_sh4_register_type (struct gdbarch *gdbarch, int reg_nr)
 {
-  if ((reg_nr >= FP0_REGNUM
+  if ((reg_nr >= gdbarch_fp0_regnum (current_gdbarch)
        && (reg_nr <= FP_LAST_REGNUM)) || (reg_nr == FPUL_REGNUM))
     return builtin_type_float;
   else if (reg_nr >= DR0_REGNUM && reg_nr <= DR_LAST_REGNUM)
@@ -1872,8 +2076,8 @@ int
 sh_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 			struct reggroup *reggroup)
 {
-  if (REGISTER_NAME (regnum) == NULL
-      || *REGISTER_NAME (regnum) == '\0')
+  if (gdbarch_register_name (current_gdbarch, regnum) == NULL
+      || *gdbarch_register_name (current_gdbarch, regnum) == '\0')
     return 0;
 
   if (reggroup == float_reggroup
@@ -1967,7 +2171,8 @@ fv_reg_base_num (int fv_regnum)
 {
   int fp_regnum;
 
-  fp_regnum = FP0_REGNUM + (fv_regnum - FV0_REGNUM) * 4;
+  fp_regnum = gdbarch_fp0_regnum (current_gdbarch)
+	      + (fv_regnum - FV0_REGNUM) * 4;
   return fp_regnum;
 }
 
@@ -1977,7 +2182,8 @@ dr_reg_base_num (int dr_regnum)
 {
   int fp_regnum;
 
-  fp_regnum = FP0_REGNUM + (dr_regnum - DR0_REGNUM) * 2;
+  fp_regnum = gdbarch_fp0_regnum (current_gdbarch)
+	      + (dr_regnum - DR0_REGNUM) * 2;
   return fp_regnum;
 }
 
@@ -2004,7 +2210,7 @@ sh_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
 					     base_regnum) * portion));
       /* We must pay attention to the endiannes. */
       sh_register_convert_to_virtual (reg_nr,
-				      gdbarch_register_type (gdbarch, reg_nr),
+				      register_type (gdbarch, reg_nr),
 				      temp_buffer, buffer);
     }
   else if (reg_nr >= FV0_REGNUM && reg_nr <= FV_LAST_REGNUM)
@@ -2037,14 +2243,14 @@ sh_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
 
       regcache_raw_write (regcache, BANK_REGNUM, buffer);
       for (bregnum = R0_BANK0_REGNUM; bregnum < MACLB_REGNUM; ++bregnum)
-        set_register_cached (bregnum, 0);
+        regcache_invalidate (regcache, bregnum);
     }
   else if (reg_nr >= DR0_REGNUM && reg_nr <= DR_LAST_REGNUM)
     {
       base_regnum = dr_reg_base_num (reg_nr);
 
       /* We must pay attention to the endiannes. */
-      sh_register_convert_to_raw (gdbarch_register_type (gdbarch, reg_nr),
+      sh_register_convert_to_raw (register_type (gdbarch, reg_nr),
 				  reg_nr, buffer, temp_buffer);
 
       /* Write the real regs for which this one is an alias.  */
@@ -2127,11 +2333,11 @@ sh_dwarf2_frame_init_reg (struct gdbarch *gdbarch, int regnum,
 			  struct frame_info *next_frame)
 {
   /* Mark the PC as the destination for the return address.  */
-  if (regnum == PC_REGNUM)
+  if (regnum == gdbarch_pc_regnum (current_gdbarch))
     reg->how = DWARF2_FRAME_REG_RA;
 
   /* Mark the stack pointer as the call frame address.  */
-  else if (regnum == SP_REGNUM)
+  else if (regnum == gdbarch_sp_regnum (current_gdbarch))
     reg->how = DWARF2_FRAME_REG_CFA;
 
   /* The above was taken from the default init_reg in dwarf2-frame.c
@@ -2215,10 +2421,14 @@ sh_frame_cache (struct frame_info *next_frame, void **this_cache)
   if (cache->base == 0)
     return cache;
 
-  cache->pc = frame_func_unwind (next_frame);
+  cache->pc = frame_func_unwind (next_frame, NORMAL_FRAME);
   current_pc = frame_pc_unwind (next_frame);
   if (cache->pc != 0)
-    sh_analyze_prologue (cache->pc, current_pc, cache);
+    {
+      ULONGEST fpscr;
+      fpscr = frame_unwind_register_unsigned (next_frame, FPSCR_REGNUM);
+      sh_analyze_prologue (cache->pc, current_pc, cache, fpscr);
+    }
 
   if (!cache->uses_fp)
     {
@@ -2229,7 +2439,8 @@ sh_frame_cache (struct frame_info *next_frame, void **this_cache)
          setup yet.  Try to reconstruct the base address for the stack
          frame by looking at the stack pointer.  For truly "frameless"
          functions this might work too.  */
-      cache->base = frame_unwind_register_unsigned (next_frame, SP_REGNUM);
+      cache->base = frame_unwind_register_unsigned
+		    (next_frame, gdbarch_sp_regnum (current_gdbarch));
     }
 
   /* Now that we have the base address for the stack frame we can
@@ -2255,7 +2466,7 @@ sh_frame_prev_register (struct frame_info *next_frame, void **this_cache,
 
   gdb_assert (regnum >= 0);
 
-  if (regnum == SP_REGNUM && cache->saved_sp)
+  if (regnum == gdbarch_sp_regnum (current_gdbarch) && cache->saved_sp)
     {
       *optimizedp = 0;
       *lvalp = not_lval;
@@ -2272,7 +2483,7 @@ sh_frame_prev_register (struct frame_info *next_frame, void **this_cache,
   /* The PC of the previous frame is stored in the PR register of
      the current frame.  Frob regnum so that we pull the value from
      the correct place.  */
-  if (regnum == PC_REGNUM)
+  if (regnum == gdbarch_pc_regnum (current_gdbarch))
     regnum = PR_REGNUM;
 
   if (regnum < SH_NUM_REGS && cache->saved_regs[regnum] != -1)
@@ -2326,13 +2537,15 @@ sh_frame_sniffer (struct frame_info *next_frame)
 static CORE_ADDR
 sh_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
-  return frame_unwind_register_unsigned (next_frame, SP_REGNUM);
+  return frame_unwind_register_unsigned (next_frame,
+					 gdbarch_sp_regnum (current_gdbarch));
 }
 
 static CORE_ADDR
 sh_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
-  return frame_unwind_register_unsigned (next_frame, PC_REGNUM);
+  return frame_unwind_register_unsigned (next_frame,
+					 gdbarch_pc_regnum (current_gdbarch));
 }
 
 static struct frame_id
@@ -2523,11 +2736,7 @@ sh_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_print_insn (gdbarch, gdb_print_insn_sh);
   set_gdbarch_register_sim_regno (gdbarch, legacy_register_sim_regno);
 
-  set_gdbarch_write_pc (gdbarch, generic_target_write_pc);
-
   set_gdbarch_return_value (gdbarch, sh_return_value_nofpu);
-  set_gdbarch_deprecated_extract_struct_value_address (gdbarch,
-					    sh_extract_struct_value_address);
 
   set_gdbarch_skip_prologue (gdbarch, sh_skip_prologue);
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);

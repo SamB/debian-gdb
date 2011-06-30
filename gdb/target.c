@@ -1,7 +1,7 @@
 /* Select target systems and architectures at runtime for GDB.
 
-   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include <errno.h>
@@ -40,6 +38,7 @@
 #include "gdb_assert.h"
 #include "gdbcore.h"
 #include "exceptions.h"
+#include "target-descriptions.h"
 
 static void target_info (char *, int);
 
@@ -105,11 +104,11 @@ static void debug_to_resume (ptid_t, int, enum target_signal);
 
 static ptid_t debug_to_wait (ptid_t, struct target_waitstatus *);
 
-static void debug_to_fetch_registers (int);
+static void debug_to_fetch_registers (struct regcache *, int);
 
-static void debug_to_store_registers (int);
+static void debug_to_store_registers (struct regcache *, int);
 
-static void debug_to_prepare_to_store (void);
+static void debug_to_prepare_to_store (struct regcache *);
 
 static void debug_to_files_info (struct target_ops *);
 
@@ -378,7 +377,7 @@ update_current_target (void)
 {
   struct target_ops *t;
 
-  /* First, reset curren'ts contents.  */
+  /* First, reset current's contents.  */
   memset (&current_target, 0, sizeof (current_target));
 
 #define INHERIT(FIELD, TARGET) \
@@ -412,6 +411,7 @@ update_current_target (void)
       INHERIT (to_remove_watchpoint, t);
       INHERIT (to_stopped_data_address, t);
       INHERIT (to_stopped_by_watchpoint, t);
+      INHERIT (to_have_steppable_watchpoint, t);
       INHERIT (to_have_continuable_watchpoint, t);
       INHERIT (to_region_ok_for_hw_watchpoint, t);
       INHERIT (to_terminal_init, t);
@@ -464,6 +464,7 @@ update_current_target (void)
       INHERIT (to_find_memory_regions, t);
       INHERIT (to_make_corefile_notes, t);
       INHERIT (to_get_thread_local_address, t);
+      /* Do not inherit to_read_description.  */
       INHERIT (to_magic, t);
       /* Do not inherit to_memory_map.  */
       /* Do not inherit to_flash_erase.  */
@@ -500,13 +501,13 @@ update_current_target (void)
 	    (ptid_t (*) (ptid_t, struct target_waitstatus *))
 	    noprocess);
   de_fault (to_fetch_registers,
-	    (void (*) (int))
+	    (void (*) (struct regcache *, int))
 	    target_ignore);
   de_fault (to_store_registers,
-	    (void (*) (int))
+	    (void (*) (struct regcache *, int))
 	    noprocess);
   de_fault (to_prepare_to_store,
-	    (void (*) (void))
+	    (void (*) (struct regcache *))
 	    noprocess);
   de_fault (deprecated_xfer_memory,
 	    (int (*) (CORE_ADDR, gdb_byte *, int, int, struct mem_attrib *, struct target_ops *))
@@ -641,6 +642,7 @@ update_current_target (void)
   de_fault (to_async,
 	    (void (*) (void (*) (enum inferior_event_type, void*), void*))
 	    tcomplain);
+  current_target.to_read_description = NULL;
 #undef de_fault
 
   /* Finally, position the target-stack beneath the squashed
@@ -915,6 +917,8 @@ target_read_string (CORE_ADDR memaddr, char **string, int len, int *errnop)
   char *bufptr;
   unsigned int nbytes_read = 0;
 
+  gdb_assert (string);
+
   /* Small for testing.  */
   buffer_allocated = 4;
   buffer = xmalloc (buffer_allocated);
@@ -964,10 +968,9 @@ target_read_string (CORE_ADDR memaddr, char **string, int len, int *errnop)
       nbytes_read += tlen;
     }
 done:
+  *string = buffer;
   if (errnop != NULL)
     *errnop = errcode;
-  if (string != NULL)
-    *string = buffer;
   return nbytes_read;
 }
 
@@ -1013,9 +1016,18 @@ memory_xfer_partial (struct target_ops *ops, void *readbuf, const void *writebuf
 	return xfer_memory (memaddr, readbuf, len, 0, NULL, ops);
     }
 
+  /* Likewise for accesses to unmapped overlay sections.  */
+  if (readbuf != NULL && overlay_debugging)
+    {
+      asection *section = find_pc_overlay (memaddr);
+      if (pc_in_unmapped_range (memaddr, section))
+	return xfer_memory (memaddr, readbuf, len, 0, NULL, ops);
+    }
+
   /* Try GDB's internal data cache.  */
   region = lookup_mem_region (memaddr);
-  if (memaddr + len < region->hi)
+  /* region->hi == 0 means there's no upper bound.  */
+  if (memaddr + len < region->hi || region->hi == 0)
     reg_len = len;
   else
     reg_len = region->hi - memaddr;
@@ -1037,6 +1049,9 @@ memory_xfer_partial (struct target_ops *ops, void *readbuf, const void *writebuf
       if (writebuf != NULL)
 	error (_("Writing to flash memory forbidden in this context"));
       break;
+
+    case MEM_NONE:
+      return -1;
     }
 
   if (region->attrib.cache)
@@ -1072,8 +1087,13 @@ memory_xfer_partial (struct target_ops *ops, void *readbuf, const void *writebuf
   do
     {
       res = ops->to_xfer_partial (ops, TARGET_OBJECT_MEMORY, NULL,
-				  readbuf, writebuf, memaddr, len);
+				  readbuf, writebuf, memaddr, reg_len);
       if (res > 0)
+	return res;
+
+      /* We want to continue past core files to executables, but not
+	 past a running target's memory.  */
+      if (ops->to_has_all_memory)
 	return res;
 
       ops = ops->beneath;
@@ -1245,7 +1265,8 @@ target_flash_erase (ULONGEST address, LONGEST length)
 	  if (targetdebug)
 	    fprintf_unfiltered (gdb_stdlog, "target_flash_erase (%s, %s)\n",
                                 paddr (address), phex (length, 0));
-	  return t->to_flash_erase (t, address, length);
+	  t->to_flash_erase (t, address, length);
+	  return;
 	}
 
   tcomplain ();
@@ -1261,7 +1282,8 @@ target_flash_done (void)
 	{
 	  if (targetdebug)
 	    fprintf_unfiltered (gdb_stdlog, "target_flash_done\n");
-	  return t->to_flash_done (t);
+	  t->to_flash_done (t);
+	  return;
 	}
 
   tcomplain ();
@@ -1598,6 +1620,8 @@ void
 target_pre_inferior (int from_tty)
 {
   invalidate_target_mem_regions ();
+
+  target_clear_description ();
 }
 
 /* This is to be called by the open routine before it does
@@ -1683,6 +1707,27 @@ target_follow_fork (int follow_child)
   /* Some target returned a fork event, but did not know how to follow it.  */
   internal_error (__FILE__, __LINE__,
 		  "could not find a target to follow fork");
+}
+
+/* Look for a target which can describe architectural features, starting
+   from TARGET.  If we find one, return its description.  */
+
+const struct target_desc *
+target_read_description (struct target_ops *target)
+{
+  struct target_ops *t;
+
+  for (t = target; t != NULL; t = t->beneath)
+    if (t->to_read_description != NULL)
+      {
+	const struct target_desc *tdesc;
+
+	tdesc = t->to_read_description (t);
+	if (tdesc)
+	  return tdesc;
+      }
+
+  return NULL;
 }
 
 /* Look through the list of possible targets for a target that can
@@ -1937,19 +1982,12 @@ generic_mourn_inferior (void)
     deprecated_detach_hook ();
 }
 
-/* Helper function for child_wait and the Lynx derivatives of child_wait.
+/* Helper function for child_wait and the derivatives of child_wait.
    HOSTSTATUS is the waitstatus from wait() or the equivalent; store our
    translation of that in OURSTATUS.  */
 void
 store_waitstatus (struct target_waitstatus *ourstatus, int hoststatus)
 {
-#ifdef CHILD_SPECIAL_WAITSTATUS
-  /* CHILD_SPECIAL_WAITSTATUS should return nonzero and set *OURSTATUS
-     if it wants to deal with hoststatus.  */
-  if (CHILD_SPECIAL_WAITSTATUS (ourstatus, hoststatus))
-    return;
-#endif
-
   if (WIFEXITED (hoststatus))
     {
       ourstatus->kind = TARGET_WAITKIND_EXITED;
@@ -2124,53 +2162,57 @@ debug_to_wait (ptid_t ptid, struct target_waitstatus *status)
 }
 
 static void
-debug_print_register (const char * func, int regno)
+debug_print_register (const char * func,
+		      struct regcache *regcache, int regno)
 {
   fprintf_unfiltered (gdb_stdlog, "%s ", func);
-  if (regno >= 0 && regno < NUM_REGS + NUM_PSEUDO_REGS
-      && REGISTER_NAME (regno) != NULL && REGISTER_NAME (regno)[0] != '\0')
-    fprintf_unfiltered (gdb_stdlog, "(%s)", REGISTER_NAME (regno));
+  if (regno >= 0 && regno < gdbarch_num_regs (current_gdbarch)
+			    + gdbarch_num_pseudo_regs (current_gdbarch)
+      && gdbarch_register_name (current_gdbarch, regno) != NULL
+      && gdbarch_register_name (current_gdbarch, regno)[0] != '\0')
+    fprintf_unfiltered (gdb_stdlog, "(%s)", gdbarch_register_name
+					      (current_gdbarch, regno));
   else
     fprintf_unfiltered (gdb_stdlog, "(%d)", regno);
   if (regno >= 0)
     {
-      int i;
+      int i, size = register_size (current_gdbarch, regno);
       unsigned char buf[MAX_REGISTER_SIZE];
-      deprecated_read_register_gen (regno, buf);
+      regcache_cooked_read (regcache, regno, buf);
       fprintf_unfiltered (gdb_stdlog, " = ");
-      for (i = 0; i < register_size (current_gdbarch, regno); i++)
+      for (i = 0; i < size; i++)
 	{
 	  fprintf_unfiltered (gdb_stdlog, "%02x", buf[i]);
 	}
-      if (register_size (current_gdbarch, regno) <= sizeof (LONGEST))
+      if (size <= sizeof (LONGEST))
 	{
+	  ULONGEST val = extract_unsigned_integer (buf, size);
 	  fprintf_unfiltered (gdb_stdlog, " 0x%s %s",
-			      paddr_nz (read_register (regno)),
-			      paddr_d (read_register (regno)));
+			      paddr_nz (val), paddr_d (val));
 	}
     }
   fprintf_unfiltered (gdb_stdlog, "\n");
 }
 
 static void
-debug_to_fetch_registers (int regno)
+debug_to_fetch_registers (struct regcache *regcache, int regno)
 {
-  debug_target.to_fetch_registers (regno);
-  debug_print_register ("target_fetch_registers", regno);
+  debug_target.to_fetch_registers (regcache, regno);
+  debug_print_register ("target_fetch_registers", regcache, regno);
 }
 
 static void
-debug_to_store_registers (int regno)
+debug_to_store_registers (struct regcache *regcache, int regno)
 {
-  debug_target.to_store_registers (regno);
-  debug_print_register ("target_store_registers", regno);
+  debug_target.to_store_registers (regcache, regno);
+  debug_print_register ("target_store_registers", regcache, regno);
   fprintf_unfiltered (gdb_stdlog, "\n");
 }
 
 static void
-debug_to_prepare_to_store (void)
+debug_to_prepare_to_store (struct regcache *regcache)
 {
-  debug_target.to_prepare_to_store ();
+  debug_target.to_prepare_to_store (regcache);
 
   fprintf_unfiltered (gdb_stdlog, "target_prepare_to_store ()\n");
 }
@@ -2356,10 +2398,10 @@ debug_to_remove_watchpoint (CORE_ADDR addr, int len, int type)
 {
   int retval;
 
-  retval = debug_target.to_insert_watchpoint (addr, len, type);
+  retval = debug_target.to_remove_watchpoint (addr, len, type);
 
   fprintf_unfiltered (gdb_stdlog,
-		      "target_insert_watchpoint (0x%lx, %d, %d) = %ld\n",
+		      "target_remove_watchpoint (0x%lx, %d, %d) = %ld\n",
 		      (unsigned long) addr, len, type, (unsigned long) retval);
   return retval;
 }
@@ -2739,6 +2781,21 @@ do_monitor_command (char *cmd,
   target_rcmd (cmd, gdb_stdtarg);
 }
 
+/* Print the name of each layers of our target stack.  */
+
+static void
+maintenance_print_target_stack (char *cmd, int from_tty)
+{
+  struct target_ops *t;
+
+  printf_filtered (_("The current target stack is:\n"));
+
+  for (t = target_stack; t != NULL; t = t->beneath)
+    {
+      printf_filtered ("  - %s (%s)\n", t->to_shortname, t->to_longname);
+    }
+}
+
 void
 initialize_targets (void)
 {
@@ -2771,6 +2828,10 @@ result in significant performance improvement for remote targets."),
 
   add_com ("monitor", class_obscure, do_monitor_command,
 	   _("Send a command to the remote monitor (remote targets only)."));
+
+  add_cmd ("target-stack", class_maintenance, maintenance_print_target_stack,
+           _("Print the name of each layer of the internal target stack."),
+           &maintenanceprintlist);
 
   target_dcache = dcache_init ();
 }

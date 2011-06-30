@@ -1,6 +1,6 @@
 /* nto-tdep.c - general QNX Neutrino target functionality.
 
-   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007 Free Software Foundation, Inc.
 
    Contributed by QNX Software Systems Ltd.
 
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "gdb_stat.h"
 #include "gdb_string.h"
@@ -33,6 +31,9 @@
 #include "elf-bfd.h"
 #include "solib-svr4.h"
 #include "gdbcore.h"
+#include "objfiles.h"
+
+#include <string.h>
 
 #ifdef __CYGWIN__
 #include <sys/cygwin.h>
@@ -105,21 +106,24 @@ nto_find_and_open_solib (char *solib, unsigned o_flags, char **temp_pathname)
 #define PATH_FMT "%s/lib:%s/usr/lib:%s/usr/photon/lib:%s/usr/photon/dll:%s/lib/dll"
 
   nto_root = nto_target ();
-  if (strcmp (TARGET_ARCHITECTURE->arch_name, "i386") == 0)
+  if (strcmp (gdbarch_bfd_arch_info (current_gdbarch)->arch_name, "i386") == 0)
     {
       arch = "x86";
       endian = "";
     }
-  else if (strcmp (TARGET_ARCHITECTURE->arch_name, "rs6000") == 0
-	   || strcmp (TARGET_ARCHITECTURE->arch_name, "powerpc") == 0)
+  else if (strcmp (gdbarch_bfd_arch_info (current_gdbarch)->arch_name,
+		   "rs6000") == 0
+	   || strcmp (gdbarch_bfd_arch_info (current_gdbarch)->arch_name,
+		   "powerpc") == 0)
     {
       arch = "ppc";
       endian = "be";
     }
   else
     {
-      arch = TARGET_ARCHITECTURE->arch_name;
-      endian = TARGET_BYTE_ORDER == BFD_ENDIAN_BIG ? "be" : "le";
+      arch = gdbarch_bfd_arch_info (current_gdbarch)->arch_name;
+      endian = gdbarch_byte_order (current_gdbarch)
+	       == BFD_ENDIAN_BIG ? "be" : "le";
     }
 
   /* In case nto_root is short, add strlen(solib)
@@ -164,21 +168,24 @@ nto_init_solib_absolute_prefix (void)
   const char *arch;
 
   nto_root = nto_target ();
-  if (strcmp (TARGET_ARCHITECTURE->arch_name, "i386") == 0)
+  if (strcmp (gdbarch_bfd_arch_info (current_gdbarch)->arch_name, "i386") == 0)
     {
       arch = "x86";
       endian = "";
     }
-  else if (strcmp (TARGET_ARCHITECTURE->arch_name, "rs6000") == 0
-	   || strcmp (TARGET_ARCHITECTURE->arch_name, "powerpc") == 0)
+  else if (strcmp (gdbarch_bfd_arch_info (current_gdbarch)->arch_name,
+		   "rs6000") == 0
+	   || strcmp (gdbarch_bfd_arch_info (current_gdbarch)->arch_name,
+		   "powerpc") == 0)
     {
       arch = "ppc";
       endian = "be";
     }
   else
     {
-      arch = TARGET_ARCHITECTURE->arch_name;
-      endian = TARGET_BYTE_ORDER == BFD_ENDIAN_BIG ? "be" : "le";
+      arch = gdbarch_bfd_arch_info (current_gdbarch)->arch_name;
+      endian = gdbarch_byte_order (current_gdbarch)
+	       == BFD_ENDIAN_BIG ? "be" : "le";
     }
 
   sprintf (arch_path, "%s/%s%s", nto_root, arch, endian);
@@ -265,12 +272,12 @@ LM_ADDR (struct so_list *so)
 static CORE_ADDR
 nto_truncate_ptr (CORE_ADDR addr)
 {
-  if (TARGET_PTR_BIT == sizeof (CORE_ADDR) * 8)
+  if (gdbarch_ptr_bit (current_gdbarch) == sizeof (CORE_ADDR) * 8)
     /* We don't need to truncate anything, and the bit twiddling below
        will fail due to overflow problems.  */
     return addr;
   else
-    return addr & (((CORE_ADDR) 1 << TARGET_PTR_BIT) - 1);
+    return addr & (((CORE_ADDR) 1 << gdbarch_ptr_bit (current_gdbarch)) - 1);
 }
 
 Elf_Internal_Phdr *
@@ -336,7 +343,7 @@ nto_generic_supply_altregset (const struct regset *regset,
 }
 
 void
-nto_dummy_supply_regset (char *regs)
+nto_dummy_supply_regset (struct regcache *regcache, char *regs)
 {
   /* Do nothing.  */
 }

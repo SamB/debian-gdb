@@ -1,6 +1,6 @@
 /* Output generating routines for GDB.
 
-   Copyright (C) 1999, 2000, 2001, 2002, 2004, 2005
+   Copyright (C) 1999, 2000, 2001, 2002, 2004, 2005, 2007
    Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions.
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "gdb_string.h"
@@ -493,12 +491,17 @@ ui_out_field_core_addr (struct ui_out *uiout,
 			CORE_ADDR address)
 {
   char addstr[20];
+  int addr_bit = gdbarch_addr_bit (current_gdbarch);
+
+  /* Truncate address to match deprecated_print_address_numeric().  */
+  if (addr_bit < (sizeof (CORE_ADDR) * HOST_CHAR_BIT))
+    address &= ((CORE_ADDR) 1 << addr_bit) - 1;
 
   /* FIXME: cagney/2002-05-03: Need local_address_string() function
      that returns the language localized string formatted to a width
-     based on TARGET_ADDR_BIT.  */
+     based on gdbarch_addr_bit.  */
   /* deprecated_print_address_numeric (address, 1, local_stream); */
-  if (TARGET_ADDR_BIT <= 32)
+  if (addr_bit <= 32)
     strcpy (addstr, hex_string_custom (address, 8));
   else
     strcpy (addstr, hex_string_custom (address, 16));
@@ -1031,15 +1034,20 @@ append_header_to_list (struct ui_out *uiout,
   temphdr = XMALLOC (struct ui_out_hdr);
   temphdr->width = width;
   temphdr->alignment = alignment;
-  /* we have to copy the column title as the original may be an automatic */
+  /* We have to copy the column title as the original may be an
+     automatic.  */
   if (colhdr != NULL)
     temphdr->colhdr = xstrdup (colhdr);
   else
     temphdr->colhdr = NULL;
+
   if (col_name != NULL)
+    temphdr->col_name = xstrdup (col_name);
+  else if (colhdr != NULL)
     temphdr->col_name = xstrdup (colhdr);
   else
-    temphdr->col_name = xstrdup (colhdr);
+    temphdr->col_name = NULL;
+
   temphdr->next = NULL;
   if (uiout->table.header_first == NULL)
     {

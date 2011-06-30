@@ -1,12 +1,12 @@
 /* Target-dependent code for the HP PA-RISC architecture.
 
-   Copyright (C) 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -15,9 +15,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifndef HPPA_TDEP_H
 #define HPPA_TDEP_H
@@ -26,12 +24,7 @@ struct trad_frame_saved_reg;
 struct objfile;
 struct so_list;
 
-/* Register numbers of various important registers.
-   Note that some of these values are "real" register numbers,
-   and correspond to the general registers of the machine,
-   and some are "phony" register numbers which are too large
-   to be actual register numbers as far as the user is concerned
-   but do serve to get the desired values when passed to read_register.  */
+/* Register numbers of various important registers.  */
 
 enum hppa_regnum
 {
@@ -64,6 +57,7 @@ enum hppa_regnum
   HPPA_PID3_REGNUM = 56,	/* Protection ID */
   HPPA_CCR_REGNUM = 54,		/* Coprocessor Configuration Register */
   HPPA_TR0_REGNUM = 57,		/* Temporary Registers (cr24 -> cr31) */
+  HPPA_CR26_REGNUM = 59,
   HPPA_CR27_REGNUM = 60,	/* Base register for thread-local storage, cr27 */
   HPPA_FP0_REGNUM = 64,		/* First floating-point.  */
   HPPA_FP4_REGNUM = 72,
@@ -238,8 +232,8 @@ extern void
 				   enum lval_type *lvalp, CORE_ADDR *addrp,
 				   int *realnump, gdb_byte *valuep);
 
-extern CORE_ADDR hppa_read_pc (ptid_t ptid);
-extern void hppa_write_pc (CORE_ADDR pc, ptid_t ptid);
+extern CORE_ADDR hppa_read_pc (struct regcache *regcache);
+extern void hppa_write_pc (struct regcache *regcache, CORE_ADDR pc);
 extern CORE_ADDR hppa_unwind_pc (struct gdbarch *gdbarch,
 				 struct frame_info *next_frame);
 
@@ -251,6 +245,6 @@ extern struct hppa_objfile_private *
 hppa_init_objfile_priv_data (struct objfile *objfile);
 
 extern int hppa_in_solib_call_trampoline (CORE_ADDR pc, char *name);
-extern CORE_ADDR hppa_skip_trampoline_code (CORE_ADDR pc);
+extern CORE_ADDR hppa_skip_trampoline_code (struct frame_info *, CORE_ADDR pc);
 
 #endif  /* hppa-tdep.h */

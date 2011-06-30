@@ -1,26 +1,24 @@
 /* Target-dependent code for Motorola 68HC11 & 68HC12
 
-   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005 Free Software
-   Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    Contributed by Stephane Carrez, stcarrez@nerim.fr
 
-This file is part of GDB.
+   This file is part of GDB.
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor,
-Boston, MA 02110-1301, USA.  */
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 
 #include "defs.h"
@@ -81,12 +79,7 @@ enum insn_return_kind {
 };
 
   
-/* Register numbers of various important registers.
-   Note that some of these values are "real" register numbers,
-   and correspond to the general registers of the machine,
-   and some are "phony" register numbers which are too large
-   to be actual register numbers as far as the user is concerned
-   but do serve to get the desired values when passed to read_register.  */
+/* Register numbers of various important registers.  */
 
 #define HARD_X_REGNUM 	0
 #define HARD_D_REGNUM	1
@@ -101,7 +94,7 @@ enum insn_return_kind {
 /* 68HC12 page number register.
    Note: to keep a compatibility with gcc register naming, we must
    not have to rename FP and other soft registers.  The page register
-   is a real hard register and must therefore be counted by NUM_REGS.
+   is a real hard register and must therefore be counted by gdbarch_num_regs.
    For this it has the same number as Z register (which is not used).  */
 #define HARD_PAGE_REGNUM 8
 #define M68HC11_LAST_HARD_REG (HARD_PAGE_REGNUM)
@@ -798,7 +791,7 @@ m68hc11_frame_unwind_cache (struct frame_info *next_frame,
   (*this_prologue_cache) = info;
   info->saved_regs = trad_frame_alloc_saved_regs (next_frame);
 
-  info->pc = frame_func_unwind (next_frame);
+  info->pc = frame_func_unwind (next_frame, NORMAL_FRAME);
 
   info->size = 0;
   info->return_kind = m68hc11_get_return_insn (info->pc);
@@ -861,7 +854,10 @@ m68hc11_frame_unwind_cache (struct frame_info *next_frame,
 
   /* Adjust all the saved registers so that they contain addresses and not
      offsets.  */
-  for (i = 0; i < NUM_REGS + NUM_PSEUDO_REGS - 1; i++)
+  for (i = 0;
+       i < gdbarch_num_regs (current_gdbarch)
+	   + gdbarch_num_pseudo_regs (current_gdbarch) - 1;
+       i++)
     if (trad_frame_addr_p (info->saved_regs, i))
       {
         info->saved_regs[i].addr += this_base;
@@ -889,7 +885,7 @@ m68hc11_frame_this_id (struct frame_info *next_frame,
   struct frame_id id;
 
   /* The FUNC is easy.  */
-  func = frame_func_unwind (next_frame);
+  func = frame_func_unwind (next_frame, NORMAL_FRAME);
 
   /* Hopefully the prologue analysis either correctly determined the
      frame's base (which is the SP from the previous frame), or set
@@ -1352,7 +1348,7 @@ m68hc11_elf_make_msymbol_special (asymbol *sym, struct minimal_symbol *msym)
 static int
 gdb_print_insn_m68hc11 (bfd_vma memaddr, disassemble_info *info)
 {
-  if (TARGET_ARCHITECTURE->arch == bfd_arch_m68hc11)
+  if (gdbarch_bfd_arch_info (current_gdbarch)->arch == bfd_arch_m68hc11)
     return print_insn_m68hc11 (memaddr, info);
   else
     return print_insn_m68hc12 (memaddr, info);
@@ -1503,8 +1499,6 @@ m68hc11_gdbarch_init (struct gdbarch_info info,
 
   /* Set register info.  */
   set_gdbarch_fp0_regnum (gdbarch, -1);
-
-  set_gdbarch_write_pc (gdbarch, generic_target_write_pc);
 
   set_gdbarch_sp_regnum (gdbarch, HARD_SP_REGNUM);
   set_gdbarch_register_name (gdbarch, m68hc11_register_name);

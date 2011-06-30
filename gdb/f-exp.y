@@ -1,6 +1,6 @@
 /* YACC parser for Fortran expressions, for GDB.
    Copyright (C) 1986, 1989, 1990, 1991, 1993, 1994, 1995, 1996, 2000, 2001,
-   2002, 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    Contributed by Motorola.  Adapted from the C parser by Farooq Butt
    (fmbutt@engage.sps.mot.com).
@@ -766,23 +766,24 @@ parse_number (p, len, parsed_float, putithere)
      target int size is different to the target long size.
      
      In the expression below, we could have tested
-     (n >> TARGET_INT_BIT)
+     (n >> gdbarch_int_bit (current_gdbarch))
      to see if it was zero,
      but too many compilers warn about that, when ints and longs
      are the same size.  So we shift it twice, with fewer bits
      each time, for the same result.  */
   
-  if ((TARGET_INT_BIT != TARGET_LONG_BIT 
-       && ((n >> 2) >> (TARGET_INT_BIT-2)))   /* Avoid shift warning */
+  if ((gdbarch_int_bit (current_gdbarch) != gdbarch_long_bit (current_gdbarch)
+       && ((n >> 2)
+	   >> (gdbarch_int_bit (current_gdbarch)-2))) /* Avoid shift warning */
       || long_p)
     {
-      high_bit = ((ULONGEST)1) << (TARGET_LONG_BIT-1);
+      high_bit = ((ULONGEST)1) << (gdbarch_long_bit (current_gdbarch)-1);
       unsigned_type = builtin_type_unsigned_long;
       signed_type = builtin_type_long;
     }
   else 
     {
-      high_bit = ((ULONGEST)1) << (TARGET_INT_BIT-1);
+      high_bit = ((ULONGEST)1) << (gdbarch_int_bit (current_gdbarch)-1);
       unsigned_type = builtin_type_unsigned_int;
       signed_type = builtin_type_int;
     }    

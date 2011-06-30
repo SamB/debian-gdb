@@ -1,13 +1,13 @@
 /* Generate a core file for the inferior process.
 
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -16,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "elf-bfd.h"
@@ -88,14 +86,15 @@ gcore_command (char *args, int from_tty)
   /* Create the note section.  */
   if (note_data != NULL && note_size != 0)
     {
-      note_sec = bfd_make_section_anyway (obfd, "note0");
+      note_sec = bfd_make_section_anyway_with_flags (obfd, "note0",
+						     SEC_HAS_CONTENTS
+						     | SEC_READONLY
+						     | SEC_ALLOC);
       if (note_sec == NULL)
 	error (_("Failed to create 'note' section for corefile: %s"),
 	       bfd_errmsg (bfd_get_error ()));
 
       bfd_set_section_vma (obfd, note_sec, 0);
-      bfd_set_section_flags (obfd, note_sec,
-			     SEC_HAS_CONTENTS | SEC_READONLY | SEC_ALLOC);
       bfd_set_section_alignment (obfd, note_sec, 0);
       bfd_set_section_size (obfd, note_sec, note_size);
     }
@@ -125,12 +124,11 @@ default_gcore_mach (void)
 #if 1	/* See if this even matters...  */
   return 0;
 #else
-#ifdef TARGET_ARCHITECTURE
-  const struct bfd_arch_info *bfdarch = TARGET_ARCHITECTURE;
+
+  const struct bfd_arch_info *bfdarch = gdbarch_bfd_arch_info (current_gdbarch);
 
   if (bfdarch != NULL)
     return bfdarch->mach;
-#endif /* TARGET_ARCHITECTURE */
   if (exec_bfd == NULL)
     error (_("Can't find default bfd machine type (need execfile)."));
 
@@ -141,12 +139,11 @@ default_gcore_mach (void)
 static enum bfd_architecture
 default_gcore_arch (void)
 {
-#ifdef TARGET_ARCHITECTURE
-  const struct bfd_arch_info * bfdarch = TARGET_ARCHITECTURE;
+  const struct bfd_arch_info * bfdarch = gdbarch_bfd_arch_info
+					 (current_gdbarch);
 
   if (bfdarch != NULL)
     return bfdarch->arch;
-#endif
   if (exec_bfd == NULL)
     error (_("Can't find bfd architecture for corefile (need execfile)."));
 
@@ -187,8 +184,8 @@ derive_stack_segment (bfd_vma *bottom, bfd_vma *top)
   /* Save frame pointer of TOS frame.  */
   *top = get_frame_base (fi);
   /* If current stack pointer is more "inner", use that instead.  */
-  if (INNER_THAN (read_sp (), *top))
-    *top = read_sp ();
+  if (gdbarch_inner_than (current_gdbarch, get_frame_sp (fi), *top))
+    *top = get_frame_sp (fi);
 
   /* Find prev-most frame.  */
   while ((tmp_fi = get_prev_frame (fi)) != NULL)
@@ -361,6 +358,7 @@ gcore_create_callback (CORE_ADDR vaddr, unsigned long size,
 	      && !(bfd_get_file_flags (abfd) & BFD_IN_MEMORY))
 	    {
 	      flags &= ~SEC_LOAD;
+	      flags |= SEC_NEVER_LOAD;
 	      goto keep;	/* break out of two nested for loops */
 	    }
 	}
@@ -374,7 +372,7 @@ gcore_create_callback (CORE_ADDR vaddr, unsigned long size,
   else
     flags |= SEC_DATA;
 
-  osec = bfd_make_section_anyway (obfd, "load");
+  osec = bfd_make_section_anyway_with_flags (obfd, "load", flags);
   if (osec == NULL)
     {
       warning (_("Couldn't make gcore segment: %s"),
@@ -391,7 +389,6 @@ gcore_create_callback (CORE_ADDR vaddr, unsigned long size,
   bfd_set_section_size (obfd, osec, size);
   bfd_set_section_vma (obfd, osec, vaddr);
   bfd_section_lma (obfd, osec) = 0; /* ??? bfd_set_section_lma?  */
-  bfd_set_section_flags (obfd, osec, flags);
   return 0;
 }
 

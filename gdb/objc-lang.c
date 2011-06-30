@@ -1,6 +1,6 @@
 /* Objective-C language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    Contributed by Apple Computer, Inc.
    Written by Michael Snyder.
@@ -9,7 +9,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -18,9 +18,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "symtab.h"
@@ -461,7 +459,7 @@ objc_create_fundamental_type (struct objfile *objfile, int typeid)
 	   the type reconstruction work, this should probably become
 	   an error.  */
 	type = init_type (TYPE_CODE_INT,
-			  TARGET_INT_BIT / TARGET_CHAR_BIT,
+			  gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			  0, "<?type?>", objfile);
         warning (_("internal error: no C/C++ fundamental type %d"), typeid);
 	break;
@@ -487,77 +485,82 @@ objc_create_fundamental_type (struct objfile *objfile, int typeid)
 	break;
       case FT_SHORT:
 	type = init_type (TYPE_CODE_INT,
-			  TARGET_SHORT_BIT / TARGET_CHAR_BIT,
+			  gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			  0, "short", objfile);
 	break;
       case FT_SIGNED_SHORT:
 	type = init_type (TYPE_CODE_INT,
-			  TARGET_SHORT_BIT / TARGET_CHAR_BIT,
+			  gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			  0, "short", objfile);	/* FIXME-fnf */
 	break;
       case FT_UNSIGNED_SHORT:
 	type = init_type (TYPE_CODE_INT,
-			  TARGET_SHORT_BIT / TARGET_CHAR_BIT,
+			  gdbarch_short_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			  TYPE_FLAG_UNSIGNED, "unsigned short", objfile);
 	break;
       case FT_INTEGER:
 	type = init_type (TYPE_CODE_INT,
-			  TARGET_INT_BIT / TARGET_CHAR_BIT,
+			  gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			  0, "int", objfile);
 	break;
       case FT_SIGNED_INTEGER:
 	type = init_type (TYPE_CODE_INT,
-			  TARGET_INT_BIT / TARGET_CHAR_BIT,
+			  gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			  0, "int", objfile); /* FIXME -fnf */
 	break;
       case FT_UNSIGNED_INTEGER:
 	type = init_type (TYPE_CODE_INT,
-			  TARGET_INT_BIT / TARGET_CHAR_BIT,
+			  gdbarch_int_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			  TYPE_FLAG_UNSIGNED, "unsigned int", objfile);
 	break;
       case FT_LONG:
 	type = init_type (TYPE_CODE_INT,
-			  TARGET_LONG_BIT / TARGET_CHAR_BIT,
+			  gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			  0, "long", objfile);
 	break;
       case FT_SIGNED_LONG:
 	type = init_type (TYPE_CODE_INT,
-			  TARGET_LONG_BIT / TARGET_CHAR_BIT,
+			  gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			  0, "long", objfile); /* FIXME -fnf */
 	break;
       case FT_UNSIGNED_LONG:
 	type = init_type (TYPE_CODE_INT,
-			  TARGET_LONG_BIT / TARGET_CHAR_BIT,
+			  gdbarch_long_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			  TYPE_FLAG_UNSIGNED, "unsigned long", objfile);
 	break;
       case FT_LONG_LONG:
 	type = init_type (TYPE_CODE_INT,
-			  TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
+			  gdbarch_long_long_bit (current_gdbarch)
+			    / TARGET_CHAR_BIT,
 			  0, "long long", objfile);
 	break;
       case FT_SIGNED_LONG_LONG:
 	type = init_type (TYPE_CODE_INT,
-			  TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
+			  gdbarch_long_long_bit (current_gdbarch)
+			    / TARGET_CHAR_BIT,
 			  0, "signed long long", objfile);
 	break;
       case FT_UNSIGNED_LONG_LONG:
 	type = init_type (TYPE_CODE_INT,
-			  TARGET_LONG_LONG_BIT / TARGET_CHAR_BIT,
+			  gdbarch_long_long_bit (current_gdbarch)
+			    / TARGET_CHAR_BIT,
 			  TYPE_FLAG_UNSIGNED, "unsigned long long", objfile);
 	break;
       case FT_FLOAT:
 	type = init_type (TYPE_CODE_FLT,
-			  TARGET_FLOAT_BIT / TARGET_CHAR_BIT,
+			  gdbarch_float_bit (current_gdbarch) / TARGET_CHAR_BIT,
 			  0, "float", objfile);
 	break;
       case FT_DBL_PREC_FLOAT:
 	type = init_type (TYPE_CODE_FLT,
-			  TARGET_DOUBLE_BIT / TARGET_CHAR_BIT,
+			  gdbarch_double_bit (current_gdbarch)
+			    / TARGET_CHAR_BIT,
 			  0, "double", objfile);
 	break;
       case FT_EXT_PREC_FLOAT:
 	type = init_type (TYPE_CODE_FLT,
-			  TARGET_LONG_DOUBLE_BIT / TARGET_CHAR_BIT,
+			  gdbarch_long_double_bit (current_gdbarch)
+			    / TARGET_CHAR_BIT,
 			  0, "long double", objfile);
 	break;
       }
@@ -571,12 +574,13 @@ objc_create_fundamental_type (struct objfile *objfile, int typeid)
    for the user since they are only interested in stepping into the
    method function anyway.  */
 static CORE_ADDR 
-objc_skip_trampoline (CORE_ADDR stop_pc)
+objc_skip_trampoline (struct frame_info *frame, CORE_ADDR stop_pc)
 {
   CORE_ADDR real_stop_pc;
   CORE_ADDR method_stop_pc;
   
-  real_stop_pc = SKIP_TRAMPOLINE_CODE (stop_pc);
+  real_stop_pc = gdbarch_skip_trampoline_code
+		   (current_gdbarch, frame, stop_pc);
 
   if (real_stop_pc != 0)
     find_objc_msgcall (real_stop_pc, &method_stop_pc);
@@ -585,7 +589,8 @@ objc_skip_trampoline (CORE_ADDR stop_pc)
 
   if (method_stop_pc)
     {
-      real_stop_pc = SKIP_TRAMPOLINE_CODE (method_stop_pc);
+      real_stop_pc = gdbarch_skip_trampoline_code
+		       (current_gdbarch, frame, method_stop_pc);
       if (real_stop_pc == 0)
 	real_stop_pc = method_stop_pc;
     }
@@ -631,32 +636,10 @@ static const struct op_print objc_op_print_tab[] =
     {NULL, OP_NULL, PREC_NULL, 0}
 };
 
-struct type ** const (objc_builtin_types[]) = 
-{
-  &builtin_type_int,
-  &builtin_type_long,
-  &builtin_type_short,
-  &builtin_type_char,
-  &builtin_type_float,
-  &builtin_type_double,
-  &builtin_type_void,
-  &builtin_type_long_long,
-  &builtin_type_signed_char,
-  &builtin_type_unsigned_char,
-  &builtin_type_unsigned_short,
-  &builtin_type_unsigned_int,
-  &builtin_type_unsigned_long,
-  &builtin_type_unsigned_long_long,
-  &builtin_type_long_double,
-  &builtin_type_complex,
-  &builtin_type_double_complex,
-  0
-};
-
 const struct language_defn objc_language_defn = {
   "objective-c",		/* Language name */
   language_objc,
-  objc_builtin_types,
+  NULL,
   range_check_off,
   type_check_off,
   case_sensitive_on,
@@ -681,9 +664,9 @@ const struct language_defn objc_language_defn = {
   objc_op_print_tab,		/* Expression operators for printing */
   1,				/* C-style arrays */
   0,				/* String lower bound */
-  &builtin_type_char,		/* Type of string elements */
+  NULL,
   default_word_break_characters,
-  NULL, /* FIXME: la_language_arch_info.  */
+  c_language_arch_info,
   default_print_array_index,
   LANG_MAGIC
 };
@@ -1647,7 +1630,7 @@ find_objc_msgsend (void)
  * The old function "pc_off_limits" used to do a lot of other things
  * in addition, such as detecting shared library jump stubs and
  * returning the address of the shlib function that would be called.
- * That functionality has been moved into the SKIP_TRAMPOLINE_CODE and
+ * That functionality has been moved into the gdbarch_skip_trampoline_code and
  * IN_SOLIB_TRAMPOLINE macros, which are resolved in the target-
  * dependent modules.  
  */
@@ -1844,7 +1827,8 @@ find_implementation (CORE_ADDR object, CORE_ADDR sel)
 }
 
 #define OBJC_FETCH_POINTER_ARGUMENT(argi) \
-  FETCH_POINTER_ARGUMENT (get_current_frame (), argi, builtin_type_void_func_ptr)
+  gdbarch_fetch_pointer_argument (current_gdbarch, get_current_frame (), \
+				  argi, builtin_type_void_func_ptr)
 
 static int
 resolve_msgsend (CORE_ADDR pc, CORE_ADDR *new_pc)

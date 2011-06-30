@@ -1,6 +1,6 @@
 /* bfd back-end for HP PA-RISC SOM objects.
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    Contributed by the Center for Software Science at the
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -24,8 +24,8 @@
    02110-1301, USA.  */
 
 #include "alloca-conf.h"
-#include "bfd.h"
 #include "sysdep.h"
+#include "bfd.h"
 
 #if defined (HOST_HPPAHPUX) || defined (HOST_HPPABSD) || defined (HOST_HPPAOSF) || defined(HOST_HPPAMPEIX)
 
@@ -1622,6 +1622,22 @@ som_bfd_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
       BFD_ASSERT ((int) som_hppa_howto_table[(int) code].type == (int) code);
       return &som_hppa_howto_table[(int) code];
     }
+
+  return NULL;
+}
+
+static reloc_howto_type *
+som_bfd_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
+			   const char *r_name)
+{
+  unsigned int i;
+
+  for (i = 0;
+       i < sizeof (som_hppa_howto_table) / sizeof (som_hppa_howto_table[0]);
+       i++)
+    if (som_hppa_howto_table[i].name != NULL
+	&& strcasecmp (som_hppa_howto_table[i].name, r_name) == 0)
+      return &som_hppa_howto_table[i];
 
   return NULL;
 }
@@ -5752,7 +5768,7 @@ som_bfd_prep_for_ar_write (bfd *abfd,
       if (curr_bfd->format != bfd_object
 	  || curr_bfd->xvec->flavour != bfd_target_som_flavour)
 	{
-	  curr_bfd = curr_bfd->next;
+	  curr_bfd = curr_bfd->archive_next;
 	  continue;
 	}
 
@@ -5797,7 +5813,7 @@ som_bfd_prep_for_ar_write (bfd *abfd,
 	    (*stringsize)++;
 	}
 
-      curr_bfd = curr_bfd->next;
+      curr_bfd = curr_bfd->archive_next;
     }
   return TRUE;
 }
@@ -5906,7 +5922,7 @@ som_bfd_ar_write_symbol_stuff (bfd *abfd,
       if (curr_bfd->format != bfd_object
 	  || curr_bfd->xvec->flavour != bfd_target_som_flavour)
 	{
-	  curr_bfd = curr_bfd->next;
+	  curr_bfd = curr_bfd->archive_next;
 	  continue;
 	}
 
@@ -6022,7 +6038,7 @@ som_bfd_ar_write_symbol_stuff (bfd *abfd,
 	 linker requires objects begin on an even boundary.  So round
 	 up the current offset as necessary.  */
       curr_som_offset = (curr_som_offset + 0x1) &~ (unsigned) 1;
-      curr_bfd = curr_bfd->next;
+      curr_bfd = curr_bfd->archive_next;
       som_index++;
     }
 
@@ -6128,7 +6144,7 @@ som_write_armap (bfd *abfd,
       if (curr_bfd->format == bfd_object
 	  && curr_bfd->xvec->flavour == bfd_target_som_flavour)
 	lst.module_count++;
-      curr_bfd = curr_bfd->next;
+      curr_bfd = curr_bfd->archive_next;
     }
   lst.module_limit = lst.module_count;
   lst.dir_loc = lst_size;

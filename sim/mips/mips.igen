@@ -72,6 +72,7 @@
 :model:::mips3d:mips3d:			// mips3d.igen
 :model:::mdmx:mdmx:			// mdmx.igen
 :model:::dsp:dsp:			// dsp.igen
+:model:::dsp2:dsp2:			// dsp2.igen
 :model:::smartmips:smartmips:		// smartmips.igen
 
 //  Vendor Extensions
@@ -176,28 +177,17 @@
 *vr4100:
 *vr5000:
 *r3900:
-{
-  /* For historical simulator compatibility (until documentation is
-     found that makes these operations unpredictable on some of these
-     architectures), this check never returns true.  */
-  return 0;
-}
-
-:function:::int:not_word_value:unsigned_word value
 *mips32:
 *mips32r2:
-{
-  /* On MIPS32, since registers are 32-bits, there's no check to be done.  */
-  return 0;
-}
-
-:function:::int:not_word_value:unsigned_word value
 *mips64:
 *mips64r2:
 {
-  return ((value >> 32) != (value & 0x80000000 ? 0xFFFFFFFF : 0));
+#if WITH_TARGET_WORD_BITSIZE == 64
+  return value != (((value & 0xffffffff) ^ 0x80000000) - 0x80000000);
+#else
+  return 0;
+#endif
 }
-
 
 // Helper:
 //
@@ -1956,8 +1946,18 @@
   DELAY_SLOT (temp);
 }
 
+000000,5.RS,00000,5.RD,10000,001001:SPECIAL:32::JALR_HB
+"jalr.hb r<RS>":RD == 31
+"jalr.hb r<RD>, r<RS>"
+*mips32r2:
+*mips64r2:
+{
+  address_word temp = GPR[RS];
+  GPR[RD] = CIA + 8;
+  DELAY_SLOT (temp);
+}
 
-000000,5.RS,000000000000000,001000:SPECIAL:32::JR
+000000,5.RS,0000000000,00000,001000:SPECIAL:32::JR
 "jr r<RS>"
 *mipsI:
 *mipsII:
@@ -1975,6 +1975,13 @@
   DELAY_SLOT (GPR[RS]);
 }
 
+000000,5.RS,0000000000,10000,001000:SPECIAL:32::JR_HB
+"jr.hb r<RS>"
+*mips32r2:
+*mips64r2:
+{
+  DELAY_SLOT (GPR[RS]);
+}
 
 :function:::unsigned_word:do_load:unsigned access, address_word base, address_word offset
 {
@@ -2424,9 +2431,7 @@
 011100,5.RS,5.RT,00000,00000,000000:SPECIAL2:32::MADD
 "madd r<RS>, r<RT>"
 *mips32:
-*mips32r2:
 *mips64:
-*mips64r2:
 *vr5500:
 {
   signed64 temp;
@@ -2442,13 +2447,32 @@
 }
 
 
+011100,5.RS,5.RT,000,2.AC,00000,000000:SPECIAL2:32::MADD
+"madd r<RS>, r<RT>":AC == 0
+"madd ac<AC>, r<RS>, r<RT>"
+*mips32r2:
+*mips64r2:
+*dsp2:
+{
+  signed64 temp;
+  if (AC == 0)
+    check_mult_hilo (SD_, HIHISTORY, LOHISTORY);
+  if (NotWordValue (GPR[RS]) || NotWordValue (GPR[RT]))
+    Unpredictable ();
+  TRACE_ALU_INPUT2 (GPR[RS], GPR[RT]);
+  temp = (U8_4 (VL4_8 (DSPHI(AC)), VL4_8 (DSPLO(AC)))
+	  + ((signed64) EXTEND32 (GPR[RT]) * (signed64) EXTEND32 (GPR[RS])));
+  DSPLO(AC) = EXTEND32 (temp);
+  DSPHI(AC) = EXTEND32 (VH4_8 (temp));
+  if (AC == 0)
+    TRACE_ALU_RESULT2 (HI, LO);
+}
+
 
 011100,5.RS,5.RT,00000,00000,000001:SPECIAL2:32::MADDU
 "maddu r<RS>, r<RT>"
 *mips32:
-*mips32r2:
 *mips64:
-*mips64r2:
 *vr5500:
 {
   unsigned64 temp;
@@ -2462,6 +2486,30 @@
   LO = EXTEND32 (temp);
   HI = EXTEND32 (VH4_8 (temp));
   TRACE_ALU_RESULT2 (HI, LO);
+}
+
+
+011100,5.RS,5.RT,000,2.AC,00000,000001:SPECIAL2:32::MADDU
+"maddu r<RS>, r<RT>":AC == 0
+"maddu ac<AC>, r<RS>, r<RT>"
+*mips32r2:
+*mips64r2:
+*dsp2:
+{
+  unsigned64 temp;
+  if (AC == 0)
+    check_mult_hilo (SD_, HIHISTORY, LOHISTORY);
+  if (NotWordValue (GPR[RS]) || NotWordValue (GPR[RT]))
+    Unpredictable ();
+  TRACE_ALU_INPUT2 (GPR[RS], GPR[RT]);
+  temp = (U8_4 (VL4_8 (DSPHI(AC)), VL4_8 (DSPLO(AC)))
+	  + ((unsigned64) VL4_8 (GPR[RS]) * (unsigned64) VL4_8 (GPR[RT])));
+  if (AC == 0)
+    ACX += U8_4 (VL4_8 (HI), VL4_8 (LO)) < temp;  /* SmartMIPS */
+  DSPLO(AC) = EXTEND32 (temp);
+  DSPHI(AC) = EXTEND32 (VH4_8 (temp));
+  if (AC == 0)
+    TRACE_ALU_RESULT2 (HI, LO);
 }
 
 
@@ -2483,10 +2531,25 @@
 *vr4100:
 *vr5000:
 *r3900:
+*mips32:
+*mips64:
 {
   do_mfhi (SD_, RD);
 }
 
+
+000000,000,2.AC,00000,5.RD,00000,010000:SPECIAL:32::MFHI
+"mfhi r<RD>":AC == 0
+"mfhi r<RD>, ac<AC>"
+*mips32r2:
+*mips64r2:
+*dsp:
+{
+  if (AC == 0)
+    do_mfhi (SD_, RD);
+  else
+    GPR[RD] = DSPHI(AC);
+}
 
 
 :function:::void:do_mflo:int rd
@@ -2507,10 +2570,25 @@
 *vr4100:
 *vr5000:
 *r3900:
+*mips32:
+*mips64:
 {
   do_mflo (SD_, RD);
 }
 
+
+000000,000,2.AC,00000,5.RD,00000,010010:SPECIAL:32::MFLO
+"mflo r<RD>":AC == 0
+"mflo r<RD>, ac<AC>"
+*mips32r2:
+*mips64r2:
+*dsp:
+{
+  if (AC == 0)
+    do_mflo (SD_, RD);
+  else
+    GPR[RD] = DSPLO(AC);
+}
 
 
 000000,5.RS,5.RT,5.RD,00000,001011:SPECIAL:32::MOVN
@@ -2554,9 +2632,7 @@
 011100,5.RS,5.RT,00000,00000,000100:SPECIAL2:32::MSUB
 "msub r<RS>, r<RT>"
 *mips32:
-*mips32r2:
 *mips64:
-*mips64r2:
 *vr5500:
 {
   signed64 temp;
@@ -2572,13 +2648,32 @@
 }
 
 
+011100,5.RS,5.RT,000,2.AC,00000,000100:SPECIAL2:32::MSUB
+"msub r<RS>, r<RT>":AC == 0
+"msub ac<AC>, r<RS>, r<RT>"
+*mips32r2:
+*mips64r2:
+*dsp2:
+{
+  signed64 temp;
+  if (AC == 0)
+    check_mult_hilo (SD_, HIHISTORY, LOHISTORY);
+  if (NotWordValue (GPR[RS]) || NotWordValue (GPR[RT]))
+    Unpredictable ();
+  TRACE_ALU_INPUT2 (GPR[RS], GPR[RT]);
+  temp = (U8_4 (VL4_8 (DSPHI(AC)), VL4_8 (DSPLO(AC)))
+	  - ((signed64) EXTEND32 (GPR[RT]) * (signed64) EXTEND32 (GPR[RS])));
+  DSPLO(AC) = EXTEND32 (temp);
+  DSPHI(AC) = EXTEND32 (VH4_8 (temp));
+  if (AC == 0)
+    TRACE_ALU_RESULT2 (HI, LO);
+}
+
 
 011100,5.RS,5.RT,00000,00000,000101:SPECIAL2:32::MSUBU
 "msubu r<RS>, r<RT>"
 *mips32:
-*mips32r2:
 *mips64:
-*mips64r2:
 *vr5500:
 {
   unsigned64 temp;
@@ -2594,6 +2689,27 @@
 }
 
 
+011100,5.RS,5.RT,000,2.AC,00000,000101:SPECIAL2:32::MSUBU
+"msubu r<RS>, r<RT>":AC == 0
+"msubu ac<AC>, r<RS>, r<RT>"
+*mips32r2:
+*mips64r2:
+*dsp2:
+{
+  unsigned64 temp;
+  if (AC == 0)
+    check_mult_hilo (SD_, HIHISTORY, LOHISTORY);
+  if (NotWordValue (GPR[RS]) || NotWordValue (GPR[RT]))
+    Unpredictable ();
+  TRACE_ALU_INPUT2 (GPR[RS], GPR[RT]);
+  temp = (U8_4 (VL4_8 (DSPHI(AC)), VL4_8 (DSPLO(AC)))
+          - ((unsigned64) VL4_8 (GPR[RS]) * (unsigned64) VL4_8 (GPR[RT])));
+  DSPLO(AC) = EXTEND32 (temp);
+  DSPHI(AC) = EXTEND32 (VH4_8 (temp));
+  if (AC == 0)
+    TRACE_ALU_RESULT2 (HI, LO);
+}
+
 
 000000,5.RS,000000000000000,010001:SPECIAL:32::MTHI
 "mthi r<RS>"
@@ -2605,11 +2721,25 @@
 *vr4100:
 *vr5000:
 *r3900:
+*mips32:
+*mips64:
 {
   check_mt_hilo (SD_, HIHISTORY);
   HI = GPR[RS];
 }
 
+
+000000,5.RS,00000,000,2.AC,00000,010001:SPECIAL:32::MTHI
+"mthi r<RS>":AC == 0
+"mthi r<RS>, ac<AC>"
+*mips32r2:
+*mips64r2:
+*dsp:
+{
+  if (AC == 0)
+    check_mt_hilo (SD_, HIHISTORY);
+  DSPHI(AC) = GPR[RS];
+}
 
 
 000000,5.RS,000000000000000,010011:SPECIAL:32::MTLO
@@ -2622,11 +2752,25 @@
 *vr4100:
 *vr5000:
 *r3900:
+*mips32:
+*mips64:
 {
   check_mt_hilo (SD_, LOHISTORY);
   LO = GPR[RS];
 }
 
+
+000000,5.RS,00000,000,2.AC,00000,010011:SPECIAL:32::MTLO
+"mtlo r<RS>":AC == 0
+"mtlo r<RS>, ac<AC>"
+*mips32r2:
+*mips64r2:
+*dsp:
+{
+  if (AC == 0)
+    check_mt_hilo (SD_, LOHISTORY);
+  DSPLO(AC) = GPR[RS];
+}
 
 
 011100,5.RS,5.RT,5.RD,00000,000010:SPECIAL2:32::MUL
@@ -2674,12 +2818,35 @@
 *mipsIV:
 *mipsV:
 *mips32:
-*mips32r2:
 *mips64:
-*mips64r2:
 *vr4100:
 {
   do_mult (SD_, RS, RT, 0);
+}
+
+
+000000,5.RS,5.RT,000,2.AC,00000,011000:SPECIAL:32::MULT
+"mult r<RS>, r<RT>":AC == 0
+"mult ac<AC>, r<RS>, r<RT>"
+*mips32r2:
+*mips64r2:
+*dsp2:
+{
+  signed64 prod;
+  if (AC == 0)
+    check_mult_hilo (SD_, HIHISTORY, LOHISTORY);
+  if (NotWordValue (GPR[RS]) || NotWordValue (GPR[RT]))
+    Unpredictable ();
+  TRACE_ALU_INPUT2 (GPR[RS], GPR[RT]);
+  prod = ((signed64)(signed32) GPR[RS])
+	  * ((signed64)(signed32) GPR[RT]);
+  DSPLO(AC) = EXTEND32 (VL4_8 (prod));
+  DSPHI(AC) = EXTEND32 (VH4_8 (prod));
+  if (AC == 0)
+    {
+      ACX = 0;  /* SmartMIPS */
+      TRACE_ALU_RESULT2 (HI, LO);
+    }
 }
 
 
@@ -2717,13 +2884,34 @@
 *mipsIV:
 *mipsV:
 *mips32:
-*mips32r2:
 *mips64:
-*mips64r2:
 *vr4100:
 {
   do_multu (SD_, RS, RT, 0);
 }
+
+
+000000,5.RS,5.RT,000,2.AC,00000,011001:SPECIAL:32::MULTU
+"multu r<RS>, r<RT>":AC == 0
+"multu r<RS>, r<RT>"
+*mips32r2:
+*mips64r2:
+*dsp2:
+{
+  unsigned64 prod;
+  if (AC == 0)
+    check_mult_hilo (SD_, HIHISTORY, LOHISTORY);
+  if (NotWordValue (GPR[RS]) || NotWordValue (GPR[RT]))
+    Unpredictable ();
+  TRACE_ALU_INPUT2 (GPR[RS], GPR[RT]);
+  prod = ((unsigned64)(unsigned32) GPR[RS])
+          * ((unsigned64)(unsigned32) GPR[RT]);
+  DSPLO(AC) = EXTEND32 (VL4_8 (prod));
+  DSPHI(AC) = EXTEND32 (VH4_8 (prod));
+  if (AC == 0)
+    TRACE_ALU_RESULT2 (HI, LO);
+}
+
 
 000000,5.RS,5.RT,5.RD,00000,011001:SPECIAL:32::MULTU
 "multu r<RS>, r<RT>":RD == 0
@@ -4122,6 +4310,7 @@
 010011,5.RS,5.FT,5.FS,5.FD,011,110:COP1X:64,f::ALNV.PS
 "alnv.ps f<FD>, f<FS>, f<FT>, r<RS>"
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 {
@@ -4241,6 +4430,7 @@
 *mipsIII:
 *mipsIV:
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 *vr4100:
@@ -4400,6 +4590,7 @@
 *mipsIII:
 *mipsIV:
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 *vr4100:
@@ -4418,6 +4609,7 @@
 010001,10,000,5.FT,5.FS,5.FD,100110:COP1:64,f::CVT.PS.S
 "cvt.ps.s f<FD>, f<FS>, f<FT>"
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 {
@@ -4458,6 +4650,7 @@
 010001,10,110,00000,5.FS,5.FD,101000:COP1:64,f::CVT.S.PL
 "cvt.s.pl f<FD>, f<FS>"
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 {
@@ -4470,6 +4663,7 @@
 010001,10,110,00000,5.FS,5.FD,100000:COP1:64,f::CVT.S.PU
 "cvt.s.pu f<FD>, f<FS>"
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 {
@@ -4608,6 +4802,7 @@
 *mipsIII:
 *mipsIV:
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 *vr4100:
@@ -4673,6 +4868,7 @@
 "ldxc1 f<FD>, r<INDEX>(r<BASE>)"
 *mipsIV:
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 *vr5000:
@@ -4686,6 +4882,7 @@
 010011,5.BASE,5.INDEX,5.0,5.FD,000101:COP1X:64,f::LUXC1
 "luxc1 f<FD>, r<INDEX>(r<BASE>)"
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 {
@@ -4725,6 +4922,7 @@
 "lwxc1 f<FD>, r<INDEX>(r<BASE>)"
 *mipsIV:
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 *vr5000:
@@ -4740,6 +4938,7 @@
 "madd.%s<FMT> f<FD>, f<FR>, f<FS>, f<FT>"
 *mipsIV:
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 *vr5000:
@@ -4904,6 +5103,7 @@
 "msub.%s<FMT> f<FD>, f<FR>, f<FS>, f<FT>"
 *mipsIV:
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 *vr5000:
@@ -4996,6 +5196,7 @@
 "nmadd.%s<FMT> f<FD>, f<FR>, f<FS>, f<FT>"
 *mipsIV:
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 *vr5000:
@@ -5013,6 +5214,7 @@
 "nmsub.%s<FMT> f<FD>, f<FR>, f<FS>, f<FT>"
 *mipsIV:
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 *vr5000:
@@ -5029,6 +5231,7 @@
 010001,10,110,5.FT,5.FS,5.FD,101100:COP1:64,f::PLL.PS
 "pll.ps f<FD>, f<FS>, f<FT>"
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 {
@@ -5042,6 +5245,7 @@
 010001,10,110,5.FT,5.FS,5.FD,101101:COP1:64,f::PLU.PS
 "plu.ps f<FD>, f<FS>, f<FT>"
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 {
@@ -5056,6 +5260,7 @@
 "prefx <HINT>, r<INDEX>(r<BASE>)"
 *mipsIV:
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 *vr5000:
@@ -5075,6 +5280,7 @@
 010001,10,110,5.FT,5.FS,5.FD,101110:COP1:64,f::PUL.PS
 "pul.ps f<FD>, f<FS>, f<FT>"
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 {
@@ -5088,6 +5294,7 @@
 010001,10,110,5.FT,5.FS,5.FD,101111:COP1:64,f::PUU.PS
 "puu.ps f<FD>, f<FS>, f<FT>"
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 {
@@ -5102,6 +5309,7 @@
 "recip.%s<FMT> f<FD>, f<FS>"
 *mipsIV:
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 *vr5000:
@@ -5117,6 +5325,7 @@
 *mipsIII:
 *mipsIV:
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 *vr4100:
@@ -5155,6 +5364,7 @@
 "rsqrt.%s<FMT> f<FD>, f<FS>"
 *mipsIV:
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 *vr5000:
@@ -5318,6 +5528,7 @@
 "swxc1 f<FS>, r<INDEX>(r<BASE>)"
 *mipsIV:
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 *vr5000:
@@ -5360,6 +5571,7 @@
 *mipsIII:
 *mipsIV:
 *mipsV:
+*mips32r2:
 *mips64:
 *mips64r2:
 *vr4100:
@@ -5688,5 +5900,6 @@
 :include:::tx.igen
 :include:::vr.igen
 :include:::dsp.igen
+:include:::dsp2.igen
 :include:::smartmips.igen
 

@@ -309,7 +309,7 @@ ac_includes_default="\
 # include <unistd.h>
 #endif"
 
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA CPP EGREP RDYNAMIC GDBSERVER_DEPFILES GDBSERVER_LIBS USE_THREAD_DB LIBOBJS LTLIBOBJS'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA CPP EGREP RDYNAMIC GDBSERVER_DEPFILES GDBSERVER_LIBS USE_THREAD_DB srv_xmlbuiltin srv_xmlfiles srv_xmltarget LIBOBJS LTLIBOBJS'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -2939,7 +2939,11 @@ done
 
 
 
-for ac_header in sgtty.h termio.h termios.h sys/reg.h string.h 		 proc_service.h sys/procfs.h thread_db.h linux/elf.h 		 stdlib.h unistd.h 		 terminal.h sys/ioctl.h netinet/in.h sys/socket.h netdb.h 		 netinet/tcp.h arpa/inet.h sys/wait.h
+
+
+
+
+for ac_header in sgtty.h termio.h termios.h sys/reg.h string.h 		 proc_service.h sys/procfs.h thread_db.h linux/elf.h 		 stdlib.h unistd.h  		 errno.h fcntl.h signal.h sys/file.h malloc.h 		 sys/ioctl.h netinet/in.h sys/socket.h netdb.h 		 netinet/tcp.h arpa/inet.h sys/wait.h
 do
 as_ac_Header=`echo "ac_cv_header_$ac_header" | $as_tr_sh`
 if eval "test \"\${$as_ac_Header+set}\" = set"; then
@@ -3089,6 +3093,124 @@ fi
 done
 
 
+have_errno=no
+echo "$as_me:$LINENO: checking for errno" >&5
+echo $ECHO_N "checking for errno... $ECHO_C" >&6
+cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+
+#if HAVE_ERRNO_H
+#include <errno.h>
+#endif
+int
+main ()
+{
+static int x; x = errno;
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest.$ac_objext conftest$ac_exeext
+if { (eval echo "$as_me:$LINENO: \"$ac_link\"") >&5
+  (eval $ac_link) 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } &&
+	 { ac_try='test -z "$ac_c_werror_flag"
+			 || test ! -s conftest.err'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; } &&
+	 { ac_try='test -s conftest$ac_exeext'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  echo "$as_me:$LINENO: result: yes - in errno.h" >&5
+echo "${ECHO_T}yes - in errno.h" >&6;
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_ERRNO 1
+_ACEOF
+ have_errno=yes
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+fi
+rm -f conftest.err conftest.$ac_objext \
+      conftest$ac_exeext conftest.$ac_ext
+if test $have_errno = no; then
+cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+
+#if HAVE_ERRNO_H
+#include <errno.h>
+#endif
+int
+main ()
+{
+extern int errno; static int x; x = errno;
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest.$ac_objext conftest$ac_exeext
+if { (eval echo "$as_me:$LINENO: \"$ac_link\"") >&5
+  (eval $ac_link) 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } &&
+	 { ac_try='test -z "$ac_c_werror_flag"
+			 || test ! -s conftest.err'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; } &&
+	 { ac_try='test -s conftest$ac_exeext'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  echo "$as_me:$LINENO: result: yes - must define" >&5
+echo "${ECHO_T}yes - must define" >&6;
+cat >>confdefs.h <<\_ACEOF
+#define HAVE_ERRNO 1
+_ACEOF
+
+cat >>confdefs.h <<\_ACEOF
+#define MUST_DEFINE_ERRNO 1
+_ACEOF
+
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6
+fi
+rm -f conftest.err conftest.$ac_objext \
+      conftest$ac_exeext conftest.$ac_ext
+fi
+
 echo "$as_me:$LINENO: checking whether strerror is declared" >&5
 echo $ECHO_N "checking whether strerror is declared... $ECHO_C" >&6
 if test "${ac_cv_have_decl_strerror+set}" = set; then
@@ -3155,6 +3277,76 @@ _ACEOF
 else
   cat >>confdefs.h <<_ACEOF
 #define HAVE_DECL_STRERROR 0
+_ACEOF
+
+
+fi
+echo "$as_me:$LINENO: checking whether perror is declared" >&5
+echo $ECHO_N "checking whether perror is declared... $ECHO_C" >&6
+if test "${ac_cv_have_decl_perror+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+$ac_includes_default
+int
+main ()
+{
+#ifndef perror
+  char *p = (char *) perror;
+#endif
+
+  ;
+  return 0;
+}
+_ACEOF
+rm -f conftest.$ac_objext
+if { (eval echo "$as_me:$LINENO: \"$ac_compile\"") >&5
+  (eval $ac_compile) 2>conftest.er1
+  ac_status=$?
+  grep -v '^ *+' conftest.er1 >conftest.err
+  rm -f conftest.er1
+  cat conftest.err >&5
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); } &&
+	 { ac_try='test -z "$ac_c_werror_flag"
+			 || test ! -s conftest.err'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; } &&
+	 { ac_try='test -s conftest.$ac_objext'
+  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  echo "$as_me:$LINENO: \$? = $ac_status" >&5
+  (exit $ac_status); }; }; then
+  ac_cv_have_decl_perror=yes
+else
+  echo "$as_me: failed program was:" >&5
+sed 's/^/| /' conftest.$ac_ext >&5
+
+ac_cv_have_decl_perror=no
+fi
+rm -f conftest.err conftest.$ac_objext conftest.$ac_ext
+fi
+echo "$as_me:$LINENO: result: $ac_cv_have_decl_perror" >&5
+echo "${ECHO_T}$ac_cv_have_decl_perror" >&6
+if test $ac_cv_have_decl_perror = yes; then
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_DECL_PERROR 1
+_ACEOF
+
+
+else
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_DECL_PERROR 0
 _ACEOF
 
 
@@ -3230,10 +3422,54 @@ _ACEOF
 
 fi
 
+
+# Check for various supplementary target information (beyond the
+# triplet) which might affect the choices in configure.srv.
+case "${target}" in
+  arm*-*-linux*)
+    echo "$as_me:$LINENO: checking if iWMMXt is selected" >&5
+echo $ECHO_N "checking if iWMMXt is selected... $ECHO_C" >&6
+if test "${gdb_cv_arm_iwmmxt+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  save_CPPFLAGS="$CPPFLAGS"
+		   CPPFLAGS="$CPPFLAGS $CFLAGS"
+		   cat >conftest.$ac_ext <<_ACEOF
+/* confdefs.h.  */
+_ACEOF
+cat confdefs.h >>conftest.$ac_ext
+cat >>conftest.$ac_ext <<_ACEOF
+/* end confdefs.h.  */
+
+#ifdef __IWMMXT__
+got it
+#endif
+
+_ACEOF
+if (eval "$ac_cpp conftest.$ac_ext") 2>&5 |
+  $EGREP "got it" >/dev/null 2>&1; then
+  gdb_cv_arm_iwmmxt=yes
+else
+  gdb_cv_arm_iwmmxt=no
+fi
+rm -f conftest*
+
+		   CPPFLAGS="$save_CPPFLAGS"
+fi
+echo "$as_me:$LINENO: result: $gdb_cv_arm_iwmmxt" >&5
+echo "${ECHO_T}$gdb_cv_arm_iwmmxt" >&6
+    ;;
+esac
+
 . ${srcdir}/configure.srv
 
-if test "${srv_mingw}" = "yes"; then
+if test "${srv_mingwce}" = "yes"; then
+  LIBS="$LIBS -lws2"
+elif test "${srv_mingw}" = "yes"; then
   LIBS="$LIBS -lwsock32"
+fi
+
+if test "${srv_mingw}" = "yes"; then
 
 cat >>confdefs.h <<\_ACEOF
 #define USE_WIN32API 1
@@ -3977,8 +4213,27 @@ _ACEOF
   fi
 fi
 
+if test "$srv_xmltarget" != ""; then
+  srv_xmltarget="\$(XML_DIR)/$srv_xmltarget"
+  srv_xmlbuiltin="xml-builtin.o"
+
+cat >>confdefs.h <<\_ACEOF
+#define USE_XML 1
+_ACEOF
+
+
+  tmp_xmlfiles=$srv_xmlfiles
+  srv_xmlfiles="target.xml"
+  for f in $tmp_xmlfiles; do
+    srv_xmlfiles="$srv_xmlfiles \$(XML_DIR)/$f"
+  done
+fi
+
 GDBSERVER_DEPFILES="$srv_regobj $srv_tgtobj $srv_thread_depfiles"
 GDBSERVER_LIBS="$srv_libs"
+
+
+
 
 
 
@@ -4630,6 +4885,9 @@ s,@RDYNAMIC@,$RDYNAMIC,;t t
 s,@GDBSERVER_DEPFILES@,$GDBSERVER_DEPFILES,;t t
 s,@GDBSERVER_LIBS@,$GDBSERVER_LIBS,;t t
 s,@USE_THREAD_DB@,$USE_THREAD_DB,;t t
+s,@srv_xmlbuiltin@,$srv_xmlbuiltin,;t t
+s,@srv_xmlfiles@,$srv_xmlfiles,;t t
+s,@srv_xmltarget@,$srv_xmltarget,;t t
 s,@LIBOBJS@,$LIBOBJS,;t t
 s,@LTLIBOBJS@,$LTLIBOBJS,;t t
 CEOF

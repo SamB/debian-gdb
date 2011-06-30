@@ -1,14 +1,14 @@
 /* Core dump and executable file functions below target vector, for GDB.
 
-   Copyright (C) 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2003, 2004, 2005, 2006
+   Copyright (C) 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 1999, 2000, 2001, 2003, 2004, 2005, 2006, 2007
    Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +17,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "arch-utils.h"
@@ -82,7 +80,7 @@ static void core_close (int);
 
 static void core_close_cleanup (void *ignore);
 
-static void get_core_registers (int);
+static void get_core_registers (struct regcache *, int);
 
 static void add_to_thread_list (bfd *, asection *, void *);
 
@@ -375,11 +373,10 @@ core_open (char *filename, int from_tty)
   if (ontop)
     {
       /* Fetch all registers from core file.  */
-      target_fetch_registers (-1);
+      target_fetch_registers (get_current_regcache (), -1);
 
       /* Now, set up the frame cache, and print the top of stack.  */
-      flush_cached_frames ();
-      select_frame (get_current_frame ());
+      reinit_frame_cache ();
       print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC);
     }
   else
@@ -418,7 +415,8 @@ core_detach (char *args, int from_tty)
    have a section by the appropriate name.  Otherwise, just do nothing.  */
 
 static void
-get_core_register_section (char *name,
+get_core_register_section (struct regcache *regcache,
+			   char *name,
 			   int which,
 			   char *human_name,
 			   int required)
@@ -465,12 +463,12 @@ get_core_register_section (char *name,
 	  return;
 	}
 
-      regset->supply_regset (regset, current_regcache, -1, contents, size);
+      regset->supply_regset (regset, regcache, -1, contents, size);
       return;
     }
 
   gdb_assert (core_vec);
-  core_vec->core_read_registers (contents, size, which,
+  core_vec->core_read_registers (regcache, contents, size, which,
 				 ((CORE_ADDR)
 				  bfd_section_vma (core_bfd, section)));
 }
@@ -483,9 +481,9 @@ get_core_register_section (char *name,
 /* We just get all the registers, so we don't use regno.  */
 
 static void
-get_core_registers (int regno)
+get_core_registers (struct regcache *regcache, int regno)
 {
-  int status;
+  int i;
 
   if (!(core_gdbarch && gdbarch_regset_from_core_section_p (core_gdbarch))
       && (core_vec == NULL || core_vec->core_read_registers == NULL))
@@ -495,11 +493,17 @@ get_core_registers (int regno)
       return;
     }
 
-  get_core_register_section (".reg", 0, "general-purpose", 1);
-  get_core_register_section (".reg2", 2, "floating-point", 0);
-  get_core_register_section (".reg-xfp", 3, "extended floating-point", 0);
+  get_core_register_section (regcache,
+			     ".reg", 0, "general-purpose", 1);
+  get_core_register_section (regcache,
+			     ".reg2", 2, "floating-point", 0);
+  get_core_register_section (regcache,
+			     ".reg-xfp", 3, "extended floating-point", 0);
 
-  deprecated_registers_fetched ();
+  /* Supply dummy value for all registers not found in the core.  */
+  for (i = 0; i < gdbarch_num_regs (current_gdbarch); i++)
+    if (!regcache_valid_p (regcache, i))
+      regcache_raw_supply (regcache, i, NULL);
 }
 
 static void
@@ -517,11 +521,11 @@ core_xfer_partial (struct target_ops *ops, enum target_object object,
     {
     case TARGET_OBJECT_MEMORY:
       if (readbuf)
-	return (*ops->deprecated_xfer_memory) (offset, readbuf, len,
-					       0/*write*/, NULL, ops);
+	return (*ops->deprecated_xfer_memory) (offset, readbuf,
+					       len, 0/*write*/, NULL, ops);
       if (writebuf)
-	return (*ops->deprecated_xfer_memory) (offset, readbuf, len,
-					       1/*write*/, NULL, ops);
+	return (*ops->deprecated_xfer_memory) (offset, (gdb_byte *) writebuf,
+					       len, 1/*write*/, NULL, ops);
       return -1;
 
     case TARGET_OBJECT_AUXV:
@@ -587,6 +591,18 @@ core_xfer_partial (struct target_ops *ops, enum target_object object,
 	  return size;
 	}
       return -1;
+
+    case TARGET_OBJECT_LIBRARIES:
+      if (core_gdbarch
+	  && gdbarch_core_xfer_shared_libraries_p (core_gdbarch))
+	{
+	  if (writebuf)
+	    return -1;
+	  return
+	    gdbarch_core_xfer_shared_libraries (core_gdbarch,
+						readbuf, offset, len);
+	}
+      /* FALL THROUGH */
 
     default:
       if (ops->beneath != NULL)

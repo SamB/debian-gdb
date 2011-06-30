@@ -1,6 +1,6 @@
 /* Frame unwinder for frames with libunwind frame information.
 
-   Copyright (C) 2003, 2006 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2006, 2007 Free Software Foundation, Inc.
 
    Contributed by Jeff Johnston.
 
@@ -8,7 +8,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,14 +17,13 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifdef HAVE_LIBUNWIND_H
 
 struct frame_info;
 struct frame_id;
+struct regcache;
 struct gdbarch;
 
 #ifndef LIBUNWIND_FRAME_H
@@ -52,6 +51,7 @@ void libunwind_frame_prev_register (struct frame_info *next_frame, void **this_c
 				    int regnum, int *optimizedp,
 				    enum lval_type *lvalp, CORE_ADDR *addrp,
 				    int *realnump, gdb_byte *valuep);
+void libunwind_frame_dealloc_cache (struct frame_info *self, void *cache);
 CORE_ADDR libunwind_frame_base_address (struct frame_info *next_frame, void **this_cache);
 
 int libunwind_is_initialized (void);
@@ -62,7 +62,9 @@ int libunwind_search_unwind_table (void *as, long ip, void *di,
 unw_word_t libunwind_find_dyn_list (unw_addr_space_t, unw_dyn_info_t *,
 				    void *);
 
-int libunwind_get_reg_special (struct gdbarch *gdbarch, int regnum, void *buf);
+int libunwind_get_reg_special (struct gdbarch *gdbarch,
+			       struct regcache *regcache,
+			       int regnum, void *buf);
 
 #endif /* libunwind-frame.h */
 

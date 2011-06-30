@@ -1,7 +1,7 @@
 /* Source-language-related definitions for GDB.
 
-   Copyright (C) 1991, 1992, 1993, 1994, 1995, 1998, 1999, 2000, 2003,
-   2004 Free Software Foundation, Inc.
+   Copyright (C) 1991, 1992, 1993, 1994, 1995, 1998, 1999, 2000, 2003, 2004,
+   2007 Free Software Foundation, Inc.
 
    Contributed by the Department of Computer Science at the State University
    of New York at Buffalo.
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if !defined (LANGUAGE_H)
 #define LANGUAGE_H 1
@@ -29,6 +27,7 @@
 /* Forward decls for prototypes */
 struct value;
 struct objfile;
+struct frame_info;
 struct expression;
 struct ui_file;
 
@@ -221,7 +220,7 @@ struct language_defn
        If that PC falls in a trampoline belonging to this language,
        return the address of the first pc in the real function, or 0
        if it isn't a language tramp for this language.  */
-    CORE_ADDR (*skip_trampoline) (CORE_ADDR pc);
+    CORE_ADDR (*skip_trampoline) (struct frame_info *, CORE_ADDR);
 
     /* Now come some hooks for lookup_symbol.  */
 
@@ -453,7 +452,7 @@ extern enum language get_frame_language (void);	/* In stack.c */
 
 /* Check for a language-specific trampoline. */
 
-extern CORE_ADDR skip_language_trampoline (CORE_ADDR pc);
+extern CORE_ADDR skip_language_trampoline (struct frame_info *, CORE_ADDR pc);
 
 /* Return demangled language symbol, or NULL.  */
 extern char *language_demangle (const struct language_defn *current_language, 

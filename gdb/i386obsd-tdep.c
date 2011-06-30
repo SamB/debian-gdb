@@ -1,14 +1,13 @@
 /* Target-dependent code for OpenBSD/i386.
 
-   Copyright (C) 1988, 1989, 1991, 1992, 1994, 1996, 2000, 2001, 2002,
-   2003, 2004, 2005, 2006
-   Free Software Foundation, Inc.
+   Copyright (C) 1988, 1989, 1991, 1992, 1994, 1996, 2000, 2001, 2002, 2003,
+   2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -17,9 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
 #include "arch-utils.h"
@@ -354,7 +351,9 @@ i386obsd_trapframe_cache(struct frame_info *next_frame, void **this_cache)
   cache = trad_frame_cache_zalloc (next_frame);
   *this_cache = cache;
 
-  func = frame_func_unwind (next_frame);
+  /* NORMAL_FRAME matches the type in i386obsd_trapframe_unwind, but
+     SIGTRAMP_FRAME might be more appropriate.  */
+  func = frame_func_unwind (next_frame, NORMAL_FRAME);
   sp = frame_unwind_register_unsigned (next_frame, I386_ESP_REGNUM);
 
   find_pc_partial_function (func, &name, NULL, NULL);

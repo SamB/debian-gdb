@@ -1,20 +1,20 @@
 /* Print mips instructions for GDB, the GNU debugger, or for objdump.
    Copyright 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2005
+   2000, 2001, 2002, 2003, 2005, 2007
    Free Software Foundation, Inc.
    Contributed by Nobuyuki Hikichi(hikichi@sra.co.jp).
 
-   This file is part of GDB, GAS, and the GNU binutils.
+   This file is part of the GNU opcodes library.
 
-   This program is free software; you can redistribute it and/or modify
+   This library is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
-   (at your option) any later version.
+   the Free Software Foundation; either version 3, or (at your option)
+   any later version.
 
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
+   It is distributed in the hope that it will be useful, but WITHOUT
+   ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+   or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+   License for more details.
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
@@ -400,8 +400,8 @@ const struct mips_arch_choice mips_arch_choices[] =
     mips_hwr_names_numeric },
 
   { "mips32r2",	1, bfd_mach_mipsisa32r2, CPU_MIPS32R2,
-    (ISA_MIPS32R2 | INSN_MIPS16 | INSN_SMARTMIPS | INSN_DSP | INSN_MIPS3D
-     | INSN_MT),
+    (ISA_MIPS32R2 | INSN_MIPS16 | INSN_SMARTMIPS | INSN_DSP | INSN_DSPR2
+     | INSN_MIPS3D | INSN_MT),
     mips_cp0_names_mips3264r2,
     mips_cp0sel_names_mips3264r2, ARRAY_SIZE (mips_cp0sel_names_mips3264r2),
     mips_hwr_names_mips3264r2 },
@@ -414,8 +414,8 @@ const struct mips_arch_choice mips_arch_choices[] =
     mips_hwr_names_numeric },
 
   { "mips64r2",	1, bfd_mach_mipsisa64r2, CPU_MIPS64R2,
-    (ISA_MIPS64R2 | INSN_MIPS16 | INSN_MIPS3D | INSN_DSP | INSN_DSP64
-     | INSN_MT | INSN_MDMX),
+    (ISA_MIPS64R2 | INSN_MIPS16 | INSN_MIPS3D | INSN_DSP | INSN_DSPR2
+     | INSN_DSP64 | INSN_MT | INSN_MDMX),
     mips_cp0_names_mips3264r2,
     mips_cp0sel_names_mips3264r2, ARRAY_SIZE (mips_cp0sel_names_mips3264r2),
     mips_hwr_names_mips3264r2 },
@@ -853,6 +853,11 @@ print_insn_args (const char *d,
 				     *d);
 	      return;
 	    }
+	  break;
+
+	case '2':
+	  (*info->fprintf_func) (info->stream, "0x%lx",
+				 (l >> OP_SH_BP) & OP_MASK_BP);
 	  break;
 
 	case '3':

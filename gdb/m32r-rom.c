@@ -1,7 +1,7 @@
 /* Remote debugging interface to m32r and mon2000 ROM monitors for GDB, 
    the GNU debugger.
 
-   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2004, 2005
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2004, 2005, 2007
    Free Software Foundation, Inc.
 
    Adapted by Michael Snyder of Cygnus Support.
@@ -10,7 +10,7 @@
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,9 +19,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* This module defines communication with the Renesas m32r monitor */
 
@@ -210,7 +208,8 @@ static char *m32r_regnames[] =
 };
 
 static void
-m32r_supply_register (char *regname, int regnamelen, char *val, int vallen)
+m32r_supply_register (struct regcache *regcache, char *regname,
+		      int regnamelen, char *val, int vallen)
 {
   int regno;
   int num_regs = sizeof (m32r_regnames) / sizeof (m32r_regnames[0]);
@@ -224,14 +223,14 @@ m32r_supply_register (char *regname, int regnamelen, char *val, int vallen)
 
   if (regno == ACCL_REGNUM)
     {				/* special handling for 64-bit acc reg */
-      monitor_supply_register (ACCH_REGNUM, val);
+      monitor_supply_register (regcache, ACCH_REGNUM, val);
       val = strchr (val, ':');	/* skip past ':' to get 2nd word */
       if (val != NULL)
-	monitor_supply_register (ACCL_REGNUM, val + 1);
+	monitor_supply_register (regcache, ACCL_REGNUM, val + 1);
     }
   else
     {
-      monitor_supply_register (regno, val);
+      monitor_supply_register (regcache, regno, val);
       if (regno == PSW_REGNUM)
 	{
 	  unsigned long psw = strtoul (val, NULL, 16);
@@ -239,45 +238,47 @@ m32r_supply_register (char *regname, int regnamelen, char *val, int vallen)
 
 #ifdef SM_REGNUM
 	  /* Stack mode bit */
-	  monitor_supply_register (SM_REGNUM, (psw & 0x80) ? one : zero);
+	  monitor_supply_register (regcache, SM_REGNUM, (psw & 0x80) ? one : zero);
 #endif
 #ifdef BSM_REGNUM
 	  /* Backup stack mode bit */
-	  monitor_supply_register (BSM_REGNUM, (psw & 0x8000) ? one : zero);
+	  monitor_supply_register (regcache, BSM_REGNUM, (psw & 0x8000) ? one : zero);
 #endif
 #ifdef IE_REGNUM
 	  /* Interrupt enable bit */
-	  monitor_supply_register (IE_REGNUM, (psw & 0x40) ? one : zero);
+	  monitor_supply_register (regcache, IE_REGNUM, (psw & 0x40) ? one : zero);
 #endif
 #ifdef BIE_REGNUM
 	  /* Backup interrupt enable bit */
-	  monitor_supply_register (BIE_REGNUM, (psw & 0x4000) ? one : zero);
+	  monitor_supply_register (regcache, BIE_REGNUM, (psw & 0x4000) ? one : zero);
 #endif
 #ifdef COND_REGNUM
 	  /* Condition bit (carry etc.) */
-	  monitor_supply_register (COND_REGNUM, (psw & 0x1) ? one : zero);
+	  monitor_supply_register (regcache, COND_REGNUM, (psw & 0x1) ? one : zero);
 #endif
 #ifdef CBR_REGNUM
-	  monitor_supply_register (CBR_REGNUM, (psw & 0x1) ? one : zero);
+	  monitor_supply_register (regcache, CBR_REGNUM, (psw & 0x1) ? one : zero);
 #endif
 #ifdef BPC_REGNUM
-	  monitor_supply_register (BPC_REGNUM, zero);	/* KLUDGE:   (???????) */
+	  monitor_supply_register (regcache, BPC_REGNUM, zero);	/* KLUDGE:   (???????) */
 #endif
 #ifdef BCARRY_REGNUM
-	  monitor_supply_register (BCARRY_REGNUM, zero);	/* KLUDGE: (??????) */
+	  monitor_supply_register (regcache, BCARRY_REGNUM, zero);	/* KLUDGE: (??????) */
 #endif
 	}
 
       if (regno == SPI_REGNUM || regno == SPU_REGNUM)
 	{			/* special handling for stack pointer (spu or spi) */
 	  ULONGEST stackmode, psw;
-	  regcache_cooked_read_unsigned (current_regcache, PSW_REGNUM, &psw);
+	  regcache_cooked_read_unsigned (regcache, PSW_REGNUM, &psw);
 	  stackmode = psw & 0x80;
 
 	  if (regno == SPI_REGNUM && !stackmode)	/* SP == SPI */
-	    monitor_supply_register (SP_REGNUM, val);
+	    monitor_supply_register (regcache,
+				     gdbarch_sp_regnum (current_gdbarch), val);
 	  else if (regno == SPU_REGNUM && stackmode)	/* SP == SPU */
-	    monitor_supply_register (SP_REGNUM, val);
+	    monitor_supply_register (regcache,
+				     gdbarch_sp_regnum (current_gdbarch), val);
 	}
     }
 }
