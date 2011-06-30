@@ -2,7 +2,7 @@
 
    Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
    1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008,
-   2009 Free Software Foundation, Inc.
+   2009, 2010 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -432,7 +432,7 @@ captured_main (void *data)
       {"statistics", no_argument, 0, OPT_STATISTICS},
       {"write", no_argument, &write_files, 1},
       {"args", no_argument, &set_args, 1},
-     {"l", required_argument, 0, 'l'},
+      {"l", required_argument, 0, 'l'},
       {"return-child-result", no_argument, &return_child_result, 1},
       {0, no_argument, 0, 0}
     };
@@ -631,54 +631,6 @@ extern int gdbtk_test (char *);
 	use_windows = 0;
       }
 
-    if (set_args)
-      {
-	/* The remaining options are the command-line options for the
-	   inferior.  The first one is the sym/exec file, and the rest
-	   are arguments.  */
-	if (optind >= argc)
-	  {
-	    fprintf_unfiltered (gdb_stderr,
-				_("%s: `--args' specified but no program specified\n"),
-				argv[0]);
-	    exit (1);
-	  }
-	symarg = argv[optind];
-	execarg = argv[optind];
-	++optind;
-	set_inferior_args_vector (argc - optind, &argv[optind]);
-      }
-    else
-      {
-	/* OK, that's all the options.  */
-
-	/* The first argument, if specified, is the name of the
-	   executable.  */
-	if (optind < argc)
-	  {
-	    symarg = argv[optind];
-	    execarg = argv[optind];
-	    optind++;
-	  }
-
-	/* If the user hasn't already specified a PID or the name of a
-	   core file, then a second optional argument is allowed.  If
-	   present, this argument should be interpreted as either a
-	   PID or a core file, whichever works.  */
-	if (pidarg == NULL && corearg == NULL && optind < argc)
-	  {
-	    pid_or_core_arg = argv[optind];
-	    optind++;
-	  }
-
-	/* Any argument left on the command line is unexpected and
-	   will be ignored.  Inform the user.  */
-	if (optind < argc)
-	  fprintf_unfiltered (gdb_stderr, _("\
-Excess command line arguments ignored. (%s%s)\n"),
-			      argv[optind],
-			      (optind == argc - 1) ? "" : " ...");
-      }
     if (batch)
       quiet = 1;
   }
@@ -686,6 +638,57 @@ Excess command line arguments ignored. (%s%s)\n"),
   /* Initialize all files.  Give the interpreter a chance to take
      control of the console via the deprecated_init_ui_hook ().  */
   gdb_init (argv[0]);
+
+  /* Now that gdb_init has created the initial inferior, we're in position
+     to set args for that inferior.  */
+  if (set_args)
+    {
+      /* The remaining options are the command-line options for the
+	 inferior.  The first one is the sym/exec file, and the rest
+	 are arguments.  */
+      if (optind >= argc)
+	{
+	  fprintf_unfiltered (gdb_stderr,
+			      _("%s: `--args' specified but no program specified\n"),
+			      argv[0]);
+	  exit (1);
+	}
+      symarg = argv[optind];
+      execarg = argv[optind];
+      ++optind;
+      set_inferior_args_vector (argc - optind, &argv[optind]);
+    }
+  else
+    {
+      /* OK, that's all the options.  */
+
+      /* The first argument, if specified, is the name of the
+	 executable.  */
+      if (optind < argc)
+	{
+	  symarg = argv[optind];
+	  execarg = argv[optind];
+	  optind++;
+	}
+
+      /* If the user hasn't already specified a PID or the name of a
+	 core file, then a second optional argument is allowed.  If
+	 present, this argument should be interpreted as either a
+	 PID or a core file, whichever works.  */
+      if (pidarg == NULL && corearg == NULL && optind < argc)
+	{
+	  pid_or_core_arg = argv[optind];
+	  optind++;
+	}
+
+      /* Any argument left on the command line is unexpected and
+	 will be ignored.  Inform the user.  */
+      if (optind < argc)
+	fprintf_unfiltered (gdb_stderr, _("\
+Excess command line arguments ignored. (%s%s)\n"),
+			    argv[optind],
+			    (optind == argc - 1) ? "" : " ...");
+    }
 
   /* Lookup gdbinit files. Note that the gdbinit file name may be overriden
      during file initialization, so get_init_files should be called after
@@ -840,7 +843,7 @@ Can't attach to process and specify a core file at the same time."));
     }
 
   if (ttyarg != NULL)
-    catch_command_errors (tty_command, ttyarg, !batch, RETURN_MASK_ALL);
+    set_inferior_io_terminal (ttyarg);
 
   /* Error messages should no longer be distinguished with extra output. */
   error_pre_print = NULL;

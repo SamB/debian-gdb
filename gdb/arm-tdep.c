@@ -1,7 +1,7 @@
 /* Common target dependent code for GDB on ARM systems.
 
    Copyright (C) 1988, 1989, 1991, 1992, 1993, 1995, 1996, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -275,25 +275,14 @@ arm_compare_mapping_symbols (const struct arm_mapping_symbol *lhs,
   return lhs->value < rhs->value;
 }
 
-/* Determine if the program counter specified in MEMADDR is in a Thumb
-   function.  This function should be called for addresses unrelated to
-   any executing frame; otherwise, prefer arm_frame_is_thumb.  */
+/* Search for the mapping symbol covering MEMADDR.  If one is found,
+   return its type.  Otherwise, return 0.  If START is non-NULL,
+   set *START to the location of the mapping symbol.  */
 
-static int
-arm_pc_is_thumb (CORE_ADDR memaddr)
+static char
+arm_find_mapping_symbol (CORE_ADDR memaddr, CORE_ADDR *start)
 {
   struct obj_section *sec;
-  struct minimal_symbol *sym;
-
-  /* If bit 0 of the address is set, assume this is a Thumb address.  */
-  if (IS_THUMB_ADDR (memaddr))
-    return 1;
-
-  /* If the user wants to override the symbol table, let him.  */
-  if (strcmp (arm_force_mode_string, "arm") == 0)
-    return 0;
-  if (strcmp (arm_force_mode_string, "thumb") == 0)
-    return 1;
 
   /* If there are mapping symbols, consult them.  */
   sec = find_pc_section (memaddr);
@@ -324,17 +313,52 @@ arm_pc_is_thumb (CORE_ADDR memaddr)
 		{
 		  map_sym = VEC_index (arm_mapping_symbol_s, map, idx);
 		  if (map_sym->value == map_key.value)
-		    return map_sym->type == 't';
+		    {
+		      if (start)
+			*start = map_sym->value + obj_section_addr (sec);
+		      return map_sym->type;
+		    }
 		}
 
 	      if (idx > 0)
 		{
 		  map_sym = VEC_index (arm_mapping_symbol_s, map, idx - 1);
-		  return map_sym->type == 't';
+		  if (start)
+		    *start = map_sym->value + obj_section_addr (sec);
+		  return map_sym->type;
 		}
 	    }
 	}
     }
+
+  return 0;
+}
+
+/* Determine if the program counter specified in MEMADDR is in a Thumb
+   function.  This function should be called for addresses unrelated to
+   any executing frame; otherwise, prefer arm_frame_is_thumb.  */
+
+static int
+arm_pc_is_thumb (CORE_ADDR memaddr)
+{
+  struct obj_section *sec;
+  struct minimal_symbol *sym;
+  char type;
+
+  /* If bit 0 of the address is set, assume this is a Thumb address.  */
+  if (IS_THUMB_ADDR (memaddr))
+    return 1;
+
+  /* If the user wants to override the symbol table, let him.  */
+  if (strcmp (arm_force_mode_string, "arm") == 0)
+    return 0;
+  if (strcmp (arm_force_mode_string, "thumb") == 0)
+    return 1;
+
+  /* If there are mapping symbols, consult them.  */
+  type = arm_find_mapping_symbol (memaddr, NULL);
+  if (type)
+    return type == 't';
 
   /* Thumb functions have a "special" bit set in minimal symbols.  */
   sym = lookup_minimal_symbol_by_pc (memaddr);
@@ -610,14 +634,14 @@ arm_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
       if ((inst & 0xfffff000) == 0xe24dd000)	/* sub sp, sp, #nn */
 	continue;
 
-      if ((inst & 0xffffc000) == 0xe54b0000 ||	/* strb r(0123),[r11,#-nn] */
-	  (inst & 0xffffc0f0) == 0xe14b00b0 ||	/* strh r(0123),[r11,#-nn] */
-	  (inst & 0xffffc000) == 0xe50b0000)	/* str  r(0123),[r11,#-nn] */
+      if ((inst & 0xffffc000) == 0xe54b0000	/* strb r(0123),[r11,#-nn] */
+	  || (inst & 0xffffc0f0) == 0xe14b00b0	/* strh r(0123),[r11,#-nn] */
+	  || (inst & 0xffffc000) == 0xe50b0000)	/* str  r(0123),[r11,#-nn] */
 	continue;
 
-      if ((inst & 0xffffc000) == 0xe5cd0000 ||	/* strb r(0123),[sp,#nn] */
-	  (inst & 0xffffc0f0) == 0xe1cd00b0 ||	/* strh r(0123),[sp,#nn] */
-	  (inst & 0xffffc000) == 0xe58d0000)	/* str  r(0123),[sp,#nn] */
+      if ((inst & 0xffffc000) == 0xe5cd0000	/* strb r(0123),[sp,#nn] */
+	  || (inst & 0xffffc0f0) == 0xe1cd00b0	/* strh r(0123),[sp,#nn] */
+	  || (inst & 0xffffc000) == 0xe58d0000)	/* str  r(0123),[sp,#nn] */
 	continue;
 
       /* Un-recognized instruction; stop scanning.  */
@@ -917,16 +941,16 @@ arm_scan_prologue (struct frame_info *this_frame,
 		pv_area_store (stack, regs[ARM_SP_REGNUM], 4, regs[regno]);
 	      }
 	}
-      else if ((insn & 0xffffc000) == 0xe54b0000 ||	/* strb rx,[r11,#-n] */
-	       (insn & 0xffffc0f0) == 0xe14b00b0 ||	/* strh rx,[r11,#-n] */
-	       (insn & 0xffffc000) == 0xe50b0000)	/* str  rx,[r11,#-n] */
+      else if ((insn & 0xffffc000) == 0xe54b0000	/* strb rx,[r11,#-n] */
+	       || (insn & 0xffffc0f0) == 0xe14b00b0	/* strh rx,[r11,#-n] */
+	       || (insn & 0xffffc000) == 0xe50b0000)	/* str  rx,[r11,#-n] */
 	{
 	  /* No need to add this to saved_regs -- it's just an arg reg.  */
 	  continue;
 	}
-      else if ((insn & 0xffffc000) == 0xe5cd0000 ||	/* strb rx,[sp,#n] */
-	       (insn & 0xffffc0f0) == 0xe1cd00b0 ||	/* strh rx,[sp,#n] */
-	       (insn & 0xffffc000) == 0xe58d0000)	/* str  rx,[sp,#n] */
+      else if ((insn & 0xffffc000) == 0xe5cd0000	/* strb rx,[sp,#n] */
+	       || (insn & 0xffffc0f0) == 0xe1cd00b0	/* strh rx,[sp,#n] */
+	       || (insn & 0xffffc000) == 0xe58d0000)	/* str  rx,[sp,#n] */
 	{
 	  /* No need to add this to saved_regs -- it's just an arg reg.  */
 	  continue;
@@ -2173,11 +2197,13 @@ condition_true (unsigned long cond, unsigned long status_reg)
     case INST_LT:
       return (((status_reg & FLAG_N) == 0) != ((status_reg & FLAG_V) == 0));
     case INST_GT:
-      return (((status_reg & FLAG_Z) == 0) &&
-	      (((status_reg & FLAG_N) == 0) == ((status_reg & FLAG_V) == 0)));
+      return (((status_reg & FLAG_Z) == 0)
+	      && (((status_reg & FLAG_N) == 0)
+		  == ((status_reg & FLAG_V) == 0)));
     case INST_LE:
-      return (((status_reg & FLAG_Z) != 0) ||
-	      (((status_reg & FLAG_N) == 0) != ((status_reg & FLAG_V) == 0)));
+      return (((status_reg & FLAG_Z) != 0)
+	      || (((status_reg & FLAG_N) == 0)
+		  != ((status_reg & FLAG_V) == 0)));
     }
   return 1;
 }
@@ -2254,17 +2280,50 @@ bitcount (unsigned long val)
   return nbits;
 }
 
+/* Return the size in bytes of the complete Thumb instruction whose
+   first halfword is INST1.  */
+
+static int
+thumb_insn_size (unsigned short inst1)
+{
+  if ((inst1 & 0xe000) == 0xe000 && (inst1 & 0x1800) != 0)
+    return 4;
+  else
+    return 2;
+}
+
+static int
+thumb_advance_itstate (unsigned int itstate)
+{
+  /* Preserve IT[7:5], the first three bits of the condition.  Shift
+     the upcoming condition flags left by one bit.  */
+  itstate = (itstate & 0xe0) | ((itstate << 1) & 0x1f);
+
+  /* If we have finished the IT block, clear the state.  */
+  if ((itstate & 0x0f) == 0)
+    itstate = 0;
+
+  return itstate;
+}
+
+/* Find the next PC after the current instruction executes.  In some
+   cases we can not statically determine the answer (see the IT state
+   handling in this function); in that case, a breakpoint may be
+   inserted in addition to the returned PC, which will be used to set
+   another breakpoint by our caller.  */
+
 static CORE_ADDR
 thumb_get_next_pc (struct frame_info *frame, CORE_ADDR pc)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
+  struct address_space *aspace = get_frame_address_space (frame);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   enum bfd_endian byte_order_for_code = gdbarch_byte_order_for_code (gdbarch);
   unsigned long pc_val = ((unsigned long) pc) + 4;	/* PC after prefetch */
   unsigned short inst1;
   CORE_ADDR nextpc = pc + 2;		/* default is next instruction */
   unsigned long offset;
-  ULONGEST status, it;
+  ULONGEST status, itstate;
 
   inst1 = read_memory_unsigned_integer (pc, 2, byte_order_for_code);
 
@@ -2277,18 +2336,100 @@ thumb_get_next_pc (struct frame_info *frame, CORE_ADDR pc)
      block is active.  These bits read as zero on earlier
      processors.  */
   status = get_frame_register_unsigned (frame, ARM_PS_REGNUM);
-  it = ((status >> 8) & 0xfc) | ((status >> 25) & 0x3);
+  itstate = ((status >> 8) & 0xfc) | ((status >> 25) & 0x3);
 
-  /* On GNU/Linux, where this routine is used, we use an undefined
-     instruction as a breakpoint.  Unlike BKPT, IT can disable execution
-     of the undefined instruction.  So we might miss the breakpoint!  */
-  if (((inst1 & 0xff00) == 0xbf00 && (inst1 & 0x000f) != 0) || (it & 0x0f))
-    error (_("Stepping through Thumb-2 IT blocks is not yet supported"));
+  /* If-Then handling.  On GNU/Linux, where this routine is used, we
+     use an undefined instruction as a breakpoint.  Unlike BKPT, IT
+     can disable execution of the undefined instruction.  So we might
+     miss the breakpoint if we set it on a skipped conditional
+     instruction.  Because conditional instructions can change the
+     flags, affecting the execution of further instructions, we may
+     need to set two breakpoints.  */
 
-  if (it & 0x0f)
+  if (gdbarch_tdep (gdbarch)->thumb2_breakpoint != NULL)
+    {
+      if ((inst1 & 0xff00) == 0xbf00 && (inst1 & 0x000f) != 0)
+	{
+	  /* An IT instruction.  Because this instruction does not
+	     modify the flags, we can accurately predict the next
+	     executed instruction.  */
+	  itstate = inst1 & 0x00ff;
+	  pc += thumb_insn_size (inst1);
+
+	  while (itstate != 0 && ! condition_true (itstate >> 4, status))
+	    {
+	      inst1 = read_memory_unsigned_integer (pc, 2, byte_order_for_code);
+	      pc += thumb_insn_size (inst1);
+	      itstate = thumb_advance_itstate (itstate);
+	    }
+
+	  return pc;
+	}
+      else if (itstate != 0)
+	{
+	  /* We are in a conditional block.  Check the condition.  */
+	  if (! condition_true (itstate >> 4, status))
+	    {
+	      /* Advance to the next executed instruction.  */
+	      pc += thumb_insn_size (inst1);
+	      itstate = thumb_advance_itstate (itstate);
+
+	      while (itstate != 0 && ! condition_true (itstate >> 4, status))
+		{
+		  inst1 = read_memory_unsigned_integer (pc, 2, byte_order_for_code);
+		  pc += thumb_insn_size (inst1);
+		  itstate = thumb_advance_itstate (itstate);
+		}
+
+	      return pc;
+	    }
+	  else if ((itstate & 0x0f) == 0x08)
+	    {
+	      /* This is the last instruction of the conditional
+		 block, and it is executed.  We can handle it normally
+		 because the following instruction is not conditional,
+		 and we must handle it normally because it is
+		 permitted to branch.  Fall through.  */
+	    }
+	  else
+	    {
+	      int cond_negated;
+
+	      /* There are conditional instructions after this one.
+		 If this instruction modifies the flags, then we can
+		 not predict what the next executed instruction will
+		 be.  Fortunately, this instruction is architecturally
+		 forbidden to branch; we know it will fall through.
+		 Start by skipping past it.  */
+	      pc += thumb_insn_size (inst1);
+	      itstate = thumb_advance_itstate (itstate);
+
+	      /* Set a breakpoint on the following instruction.  */
+	      gdb_assert ((itstate & 0x0f) != 0);
+	      insert_single_step_breakpoint (gdbarch, aspace, pc);
+	      cond_negated = (itstate >> 4) & 1;
+
+	      /* Skip all following instructions with the same
+		 condition.  If there is a later instruction in the IT
+		 block with the opposite condition, set the other
+		 breakpoint there.  If not, then set a breakpoint on
+		 the instruction after the IT block.  */
+	      do
+		{
+		  inst1 = read_memory_unsigned_integer (pc, 2, byte_order_for_code);
+		  pc += thumb_insn_size (inst1);
+		  itstate = thumb_advance_itstate (itstate);
+		}
+	      while (itstate != 0 && ((itstate >> 4) & 1) == cond_negated);
+
+	      return pc;
+	    }
+	}
+    }
+  else if (itstate & 0x0f)
     {
       /* We are in a conditional block.  Check the condition.  */
-      int cond = it >> 4;
+      int cond = itstate >> 4;
 
       if (! condition_true (cond, status))
 	{
@@ -2299,6 +2440,8 @@ thumb_get_next_pc (struct frame_info *frame, CORE_ADDR pc)
 	  else
 	    return pc + 2;
 	}
+
+      /* Otherwise, handle the instruction normally.  */
     }
 
   if ((inst1 & 0xff00) == 0xbd00)	/* pop {rlist, pc} */
@@ -2360,7 +2503,7 @@ thumb_get_next_pc (struct frame_info *frame, CORE_ADDR pc)
 	      nextpc = get_frame_register_unsigned (frame, ARM_LR_REGNUM);
 	      nextpc -= inst2 & 0x00ff;
 	    }
-	  else if ((inst2 & 0xd000) == 0xc000 && (inst1 & 0x0380) != 0x0380)
+	  else if ((inst2 & 0xd000) == 0x8000 && (inst1 & 0x0380) != 0x0380)
 	    {
 	      /* Conditional branch.  */
 	      if (condition_true (bits (inst1, 6, 9), status))
@@ -2790,15 +2933,202 @@ int
 arm_software_single_step (struct frame_info *frame)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
+  struct address_space *aspace = get_frame_address_space (frame);
 
   /* NOTE: This may insert the wrong breakpoint instruction when
      single-stepping over a mode-changing instruction, if the
      CPSR heuristics are used.  */
 
   CORE_ADDR next_pc = arm_get_next_pc (frame, get_frame_pc (frame));
-  insert_single_step_breakpoint (gdbarch, next_pc);
+  insert_single_step_breakpoint (gdbarch, aspace, next_pc);
 
   return 1;
+}
+
+/* Given BUF, which is OLD_LEN bytes ending at ENDADDR, expand
+   the buffer to be NEW_LEN bytes ending at ENDADDR.  Return
+   NULL if an error occurs.  BUF is freed.  */
+
+static gdb_byte *
+extend_buffer_earlier (gdb_byte *buf, CORE_ADDR endaddr,
+		       int old_len, int new_len)
+{
+  gdb_byte *new_buf, *middle;
+  int bytes_to_read = new_len - old_len;
+
+  new_buf = xmalloc (new_len);
+  memcpy (new_buf + bytes_to_read, buf, old_len);
+  xfree (buf);
+  if (target_read_memory (endaddr - new_len, new_buf, bytes_to_read) != 0)
+    {
+      xfree (new_buf);
+      return NULL;
+    }
+  return new_buf;
+}
+
+/* An IT block is at most the 2-byte IT instruction followed by
+   four 4-byte instructions.  The furthest back we must search to
+   find an IT block that affects the current instruction is thus
+   2 + 3 * 4 == 14 bytes.  */
+#define MAX_IT_BLOCK_PREFIX 14
+
+/* Use a quick scan if there are more than this many bytes of
+   code.  */
+#define IT_SCAN_THRESHOLD 32
+
+/* Adjust a breakpoint's address to move breakpoints out of IT blocks.
+   A breakpoint in an IT block may not be hit, depending on the
+   condition flags.  */
+static CORE_ADDR
+arm_adjust_breakpoint_address (struct gdbarch *gdbarch, CORE_ADDR bpaddr)
+{
+  gdb_byte *buf;
+  char map_type;
+  CORE_ADDR boundary, func_start;
+  int buf_len, buf2_len;
+  enum bfd_endian order = gdbarch_byte_order_for_code (gdbarch);
+  int i, any, last_it, last_it_count;
+
+  /* If we are using BKPT breakpoints, none of this is necessary.  */
+  if (gdbarch_tdep (gdbarch)->thumb2_breakpoint == NULL)
+    return bpaddr;
+
+  /* ARM mode does not have this problem.  */
+  if (!arm_pc_is_thumb (bpaddr))
+    return bpaddr;
+
+  /* We are setting a breakpoint in Thumb code that could potentially
+     contain an IT block.  The first step is to find how much Thumb
+     code there is; we do not need to read outside of known Thumb
+     sequences.  */
+  map_type = arm_find_mapping_symbol (bpaddr, &boundary);
+  if (map_type == 0)
+    /* Thumb-2 code must have mapping symbols to have a chance.  */
+    return bpaddr;
+
+  bpaddr = gdbarch_addr_bits_remove (gdbarch, bpaddr);
+
+  if (find_pc_partial_function (bpaddr, NULL, &func_start, NULL)
+      && func_start > boundary)
+    boundary = func_start;
+
+  /* Search for a candidate IT instruction.  We have to do some fancy
+     footwork to distinguish a real IT instruction from the second
+     half of a 32-bit instruction, but there is no need for that if
+     there's no candidate.  */
+  buf_len = min (bpaddr - boundary, MAX_IT_BLOCK_PREFIX);
+  if (buf_len == 0)
+    /* No room for an IT instruction.  */
+    return bpaddr;
+
+  buf = xmalloc (buf_len);
+  if (target_read_memory (bpaddr - buf_len, buf, buf_len) != 0)
+    return bpaddr;
+  any = 0;
+  for (i = 0; i < buf_len; i += 2)
+    {
+      unsigned short inst1 = extract_unsigned_integer (&buf[i], 2, order);
+      if ((inst1 & 0xff00) == 0xbf00 && (inst1 & 0x000f) != 0)
+	{
+	  any = 1;
+	  break;
+	}
+    }
+  if (any == 0)
+    {
+      xfree (buf);
+      return bpaddr;
+    }
+
+  /* OK, the code bytes before this instruction contain at least one
+     halfword which resembles an IT instruction.  We know that it's
+     Thumb code, but there are still two possibilities.  Either the
+     halfword really is an IT instruction, or it is the second half of
+     a 32-bit Thumb instruction.  The only way we can tell is to
+     scan forwards from a known instruction boundary.  */
+  if (bpaddr - boundary > IT_SCAN_THRESHOLD)
+    {
+      int definite;
+
+      /* There's a lot of code before this instruction.  Start with an
+	 optimistic search; it's easy to recognize halfwords that can
+	 not be the start of a 32-bit instruction, and use that to
+	 lock on to the instruction boundaries.  */
+      buf = extend_buffer_earlier (buf, bpaddr, buf_len, IT_SCAN_THRESHOLD);
+      if (buf == NULL)
+	return bpaddr;
+      buf_len = IT_SCAN_THRESHOLD;
+
+      definite = 0;
+      for (i = 0; i < buf_len - sizeof (buf) && ! definite; i += 2)
+	{
+	  unsigned short inst1 = extract_unsigned_integer (&buf[i], 2, order);
+	  if (thumb_insn_size (inst1) == 2)
+	    {
+	      definite = 1;
+	      break;
+	    }
+	}
+
+      /* At this point, if DEFINITE, BUF[I] is the first place we
+	 are sure that we know the instruction boundaries, and it is far
+	 enough from BPADDR that we could not miss an IT instruction
+	 affecting BPADDR.  If ! DEFINITE, give up - start from a
+	 known boundary.  */
+      if (! definite)
+	{
+	  buf = extend_buffer_earlier (buf, bpaddr, buf_len, bpaddr - boundary);
+	  if (buf == NULL)
+	    return bpaddr;
+	  buf_len = bpaddr - boundary;
+	  i = 0;
+	}
+    }
+  else
+    {
+      buf = extend_buffer_earlier (buf, bpaddr, buf_len, bpaddr - boundary);
+      if (buf == NULL)
+	return bpaddr;
+      buf_len = bpaddr - boundary;
+      i = 0;
+    }
+
+  /* Scan forwards.  Find the last IT instruction before BPADDR.  */
+  last_it = -1;
+  last_it_count = 0;
+  while (i < buf_len)
+    {
+      unsigned short inst1 = extract_unsigned_integer (&buf[i], 2, order);
+      last_it_count--;
+      if ((inst1 & 0xff00) == 0xbf00 && (inst1 & 0x000f) != 0)
+	{
+	  last_it = i;
+	  if (inst1 & 0x0001)
+	    last_it_count = 4;
+	  else if (inst1 & 0x0002)
+	    last_it_count = 3;
+	  else if (inst1 & 0x0004)
+	    last_it_count = 2;
+	  else
+	    last_it_count = 1;
+	}
+      i += thumb_insn_size (inst1);
+    }
+
+  xfree (buf);
+
+  if (last_it == -1)
+    /* There wasn't really an IT instruction after all.  */
+    return bpaddr;
+
+  if (last_it_count < 1)
+    /* It was too far away.  */
+    return bpaddr;
+
+  /* This really is a trouble spot.  Move the breakpoint to the IT
+     instruction.  */
+  return bpaddr - buf_len + last_it;
 }
 
 /* ARM displaced stepping support.
@@ -4746,10 +5076,29 @@ static const unsigned char *
 arm_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr, int *lenptr)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  enum bfd_endian byte_order_for_code = gdbarch_byte_order_for_code (gdbarch);
 
   if (arm_pc_is_thumb (*pcptr))
     {
       *pcptr = UNMAKE_THUMB_ADDR (*pcptr);
+
+      /* If we have a separate 32-bit breakpoint instruction for Thumb-2,
+	 check whether we are replacing a 32-bit instruction.  */
+      if (tdep->thumb2_breakpoint != NULL)
+	{
+	  gdb_byte buf[2];
+	  if (target_read_memory (*pcptr, buf, 2) == 0)
+	    {
+	      unsigned short inst1;
+	      inst1 = extract_unsigned_integer (buf, 2, byte_order_for_code);
+	      if ((inst1 & 0xe000) == 0xe000 && (inst1 & 0x1800) != 0)
+		{
+		  *lenptr = tdep->thumb2_breakpoint_size;
+		  return tdep->thumb2_breakpoint;
+		}
+	    }
+	}
+
       *lenptr = tdep->thumb_breakpoint_size;
       return tdep->thumb_breakpoint;
     }
@@ -4758,6 +5107,20 @@ arm_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr, int *lenptr)
       *lenptr = tdep->arm_breakpoint_size;
       return tdep->arm_breakpoint;
     }
+}
+
+static void
+arm_remote_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
+			       int *kindptr)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
+  arm_breakpoint_from_pc (gdbarch, pcptr, kindptr);
+
+  if (arm_pc_is_thumb (*pcptr) && *kindptr == 4)
+    /* The documented magic value for a 32-bit Thumb-2 breakpoint, so
+       that this is not confused with a 32-bit ARM breakpoint.  */
+    *kindptr = 3;
 }
 
 /* Extract from an array REGBUF containing the (raw) register state a
@@ -5152,8 +5515,10 @@ arm_skip_stub (struct frame_info *frame, CORE_ADDR pc)
   /* If PC is in a Thumb call or return stub, return the address of the
      target PC, which is in a register.  The thunk functions are called
      _call_via_xx, where x is the register name.  The possible names
-     are r0-r9, sl, fp, ip, sp, and lr.  */
-  if (strncmp (name, "_call_via_", 10) == 0)
+     are r0-r9, sl, fp, ip, sp, and lr.  ARM RealView has similar
+     functions, named __ARM_call_via_r[0-7].  */
+  if (strncmp (name, "_call_via_", 10) == 0
+      || strncmp (name, "__ARM_call_via_", strlen ("__ARM_call_via_")) == 0)
     {
       /* Use the name suffix to determine which register contains the
          target PC.  */
@@ -5404,11 +5769,11 @@ set_disassembly_style (void)
 static int
 coff_sym_is_thumb (int val)
 {
-  return (val == C_THUMBEXT ||
-	  val == C_THUMBSTAT ||
-	  val == C_THUMBEXTFUNC ||
-	  val == C_THUMBSTATFUNC ||
-	  val == C_THUMBLABEL);
+  return (val == C_THUMBEXT
+	  || val == C_THUMBSTAT
+	  || val == C_THUMBEXTFUNC
+	  || val == C_THUMBSTATFUNC
+	  || val == C_THUMBLABEL);
 }
 
 /* arm_coff_make_msymbol_special()
@@ -6086,6 +6451,8 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* Breakpoint manipulation.  */
   set_gdbarch_breakpoint_from_pc (gdbarch, arm_breakpoint_from_pc);
+  set_gdbarch_remote_breakpoint_from_pc (gdbarch,
+					 arm_remote_breakpoint_from_pc);
 
   /* Information about registers, etc.  */
   set_gdbarch_deprecated_fp_regnum (gdbarch, ARM_FP_REGNUM);	/* ??? */
@@ -6116,6 +6483,10 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_coff_make_msymbol_special (gdbarch,
 					 arm_coff_make_msymbol_special);
   set_gdbarch_record_special_symbol (gdbarch, arm_record_special_symbol);
+
+  /* Thumb-2 IT block support.  */
+  set_gdbarch_adjust_breakpoint_address (gdbarch,
+					 arm_adjust_breakpoint_address);
 
   /* Virtual tables.  */
   set_gdbarch_vbit_in_delta (gdbarch, 1);

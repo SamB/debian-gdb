@@ -1,6 +1,6 @@
 /* Target description support for GDB.
 
-   Copyright (C) 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 
    Contributed by CodeSourcery.
 
@@ -175,6 +175,10 @@ const char *tdesc_register_name (struct gdbarch *gdbarch, int regno);
    from an architecture-provided pseudo_register_type method.  */
 
 struct type *tdesc_register_type (struct gdbarch *gdbarch, int regno);
+
+/* Return the type associated with ID, from the target description. */
+
+struct type *tdesc_find_type (struct gdbarch *gdbarch, const char *id);
 
 /* Check whether REGNUM is a member of REGGROUP using the target
    description.  Return -1 if the target description does not

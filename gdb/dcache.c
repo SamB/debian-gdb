@@ -1,7 +1,7 @@
 /* Caching code for GDB, the GNU debugger.
 
    Copyright (C) 1992, 1993, 1995, 1996, 1998, 1999, 2000, 2001, 2003, 2007,
-   2008, 2009 Free Software Foundation, Inc.
+   2008, 2009, 2010 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -41,9 +41,9 @@
    of data, such as when performing a backtrace.
 
    The cache is a splay tree along with a linked list for replacement.
-   Each block caches a LINE_SIZE area of memory.  Wtihin each line we remember
-   the address of the line (which must be a multiple of LINE_SIZE) and the
-   actual data block.
+   Each block caches a LINE_SIZE area of memory.  Within each line we
+   remember the address of the line (which must be a multiple of
+   LINE_SIZE) and the actual data block.
 
    Lines are only allocated as needed, so DCACHE_SIZE really specifies the
    *maximum* number of lines in the cache.
@@ -117,8 +117,6 @@ typedef void (block_func) (struct dcache_block *block, void *param);
 
 static struct dcache_block *dcache_hit (DCACHE *dcache, CORE_ADDR addr);
 
-static int dcache_write_line (DCACHE *dcache, struct dcache_block *db);
-
 static int dcache_read_line (DCACHE *dcache, struct dcache_block *db);
 
 static struct dcache_block *dcache_alloc (DCACHE *dcache, CORE_ADDR addr);
@@ -138,9 +136,12 @@ show_dcache_enabled_p (struct ui_file *file, int from_tty,
 
 static DCACHE *last_cache; /* Used by info dcache */
 
-/* Append BLOCK to circular block list starting at BLIST.
-   The block is appended for the least-recently-allocated list's sake:
-   BLIST points to the oldest block.  */
+/* Add BLOCK to circular block list BLIST, behind the block at *BLIST.
+   *BLIST is not updated (unless it was previously NULL of course).
+   This is for the least-recently-allocated list's sake:
+   BLIST points to the oldest block.
+   ??? This makes for poor cache usage of the free list,
+   but is it measurable?  */
 
 static void
 append_block (struct dcache_block **blist, struct dcache_block *block)
@@ -206,7 +207,9 @@ for_each_block (struct dcache_block **blist, block_func *func, void *param)
   while (*blist && db != *blist);
 }
 
-/* BLOCK_FUNC function for dcache_invalidate.  */
+/* BLOCK_FUNC function for dcache_invalidate.
+   This doesn't remove the block from the oldest list on purpose.
+   dcache_invalidate will do it later.  */
 
 static void
 invalidate_block (struct dcache_block *block, void *param)
@@ -246,7 +249,7 @@ dcache_invalidate_line (DCACHE *dcache, CORE_ADDR addr)
 }
 
 /* If addr is present in the dcache, return the address of the block
-   containing it.  */
+   containing it.  Otherwise return NULL.  */
 
 static struct dcache_block *
 dcache_hit (DCACHE *dcache, CORE_ADDR addr)
@@ -264,7 +267,9 @@ dcache_hit (DCACHE *dcache, CORE_ADDR addr)
   return db;
 }
 
-/* Fill a cache line from target memory.  */
+/* Fill a cache line from target memory.
+   The result is 1 for success, 0 if the (entire) cache line
+   wasn't readable.  */
 
 static int
 dcache_read_line (DCACHE *dcache, struct dcache_block *db)
@@ -351,7 +356,7 @@ dcache_alloc (DCACHE *dcache, CORE_ADDR addr)
   return db;
 }
 
-/* Using the data cache DCACHE return the contents of the byte at
+/* Using the data cache DCACHE, store in *PTR the contents of the byte at
    address ADDR in the remote machine.  
 
    Returns 1 for success, 0 for error.  */
@@ -406,7 +411,7 @@ dcache_splay_tree_compare (splay_tree_key a, splay_tree_key b)
     return -1;
 }
 
-/* Initialize the data cache.  */
+/* Allocate and initialize a data cache.  */
 
 DCACHE *
 dcache_init (void)
@@ -455,7 +460,11 @@ dcache_free (DCACHE *dcache)
    to or from debugger address MYADDR.  Write to inferior if SHOULD_WRITE is
    nonzero. 
 
-   The meaning of the result is the same as for target_write.  */
+   Return the number of bytes actually transfered, or -1 if the
+   transfer is not supported or otherwise fails.  Return of a non-negative
+   value less than LEN indicates that no further transfer is possible.
+   NOTE: This is different than the to_xfer_partial interface, in which
+   positive values less than LEN mean further transfers may be possible.  */
 
 int
 dcache_xfer_memory (struct target_ops *ops, DCACHE *dcache,

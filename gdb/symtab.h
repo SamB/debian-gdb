@@ -1,7 +1,7 @@
 /* Symbol table definitions for GDB.
 
    Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008, 2009
+   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -32,6 +32,7 @@ struct block;
 struct blockvector;
 struct axs_value;
 struct agent_expr;
+struct program_space;
 
 /* Some of the structures in this file are space critical.
    The space-critical structures are:
@@ -184,16 +185,17 @@ extern void symbol_init_language_specific (struct general_symbol_info *symbol,
 /* Set just the linkage name of a symbol; do not try to demangle
    it.  Used for constructs which do not have a mangled name,
    e.g. struct tags.  Unlike SYMBOL_SET_NAMES, linkage_name must
-   be terminated and already on the objfile's obstack.  */
+   be terminated and either already on the objfile's obstack or
+   permanently allocated.  */
 #define SYMBOL_SET_LINKAGE_NAME(symbol,linkage_name) \
   (symbol)->ginfo.name = (linkage_name)
 
 /* Set the linkage and natural names of a symbol, by demangling
    the linkage name.  */
-#define SYMBOL_SET_NAMES(symbol,linkage_name,len,objfile) \
-  symbol_set_names (&(symbol)->ginfo, linkage_name, len, objfile)
+#define SYMBOL_SET_NAMES(symbol,linkage_name,len,copy_name,objfile)	\
+  symbol_set_names (&(symbol)->ginfo, linkage_name, len, copy_name, objfile)
 extern void symbol_set_names (struct general_symbol_info *symbol,
-			      const char *linkage_name, int len,
+			      const char *linkage_name, int len, int copy_name,
 			      struct objfile *objfile);
 
 /* Now come lots of name accessor macros.  Short version as to when to
@@ -552,7 +554,8 @@ struct symbol
   struct type *type;
 
   /* The symbol table containing this symbol.  This is the file
-     associated with LINE.  */
+     associated with LINE.  It can be NULL during symbols read-in but it is
+     never NULL during normal operation.  */
   struct symtab *symtab;
 
   /* Domain code.  */
@@ -823,6 +826,7 @@ struct symtab
 
 #define BLOCKVECTOR(symtab)	(symtab)->blockvector
 #define LINETABLE(symtab)	(symtab)->linetable
+#define SYMTAB_PSPACE(symtab)	(symtab)->objfile->pspace
 
 
 /* Each source file that has not been fully read in is represented by
@@ -1119,6 +1123,11 @@ extern void prim_record_minimal_symbol (const char *, CORE_ADDR,
 					enum minimal_symbol_type,
 					struct objfile *);
 
+extern struct minimal_symbol *prim_record_minimal_symbol_full
+  (const char *, int, int, CORE_ADDR,
+   enum minimal_symbol_type,
+   int section, asection * bfd_section, struct objfile *);
+
 extern struct minimal_symbol *prim_record_minimal_symbol_and_info
   (const char *, CORE_ADDR,
    enum minimal_symbol_type,
@@ -1150,6 +1159,10 @@ extern struct minimal_symbol *lookup_minimal_symbol_by_pc_name
 
 extern struct minimal_symbol *lookup_minimal_symbol_by_pc (CORE_ADDR);
 
+extern struct minimal_symbol *
+    lookup_minimal_symbol_and_objfile (const char *,
+				       struct objfile **);
+
 extern struct minimal_symbol
   *lookup_minimal_symbol_by_pc_section (CORE_ADDR, struct obj_section *);
 
@@ -1170,6 +1183,9 @@ extern void msymbols_sort (struct objfile *objfile);
 
 struct symtab_and_line
 {
+  /* The program space of this sal.  */
+  struct program_space *pspace;
+
   struct symtab *symtab;
   struct obj_section *section;
   /* Line number.  Line numbers start at 1 and proceed through symtab->nlines.

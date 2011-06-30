@@ -1,6 +1,6 @@
 /* YACC parser for C expressions, for GDB.
    Copyright (C) 1986, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2003, 2004, 2006, 2007, 2008, 2009
+   1998, 1999, 2000, 2003, 2004, 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -157,6 +157,7 @@ void yyerror (char *);
 %{
 /* YYSTYPE gets defined by %union */
 static int parse_number (char *, int, int, YYSTYPE *);
+static struct stoken operator_stoken (const char *);
 %}
 
 %type <voidval> exp exp1 type_exp start variable qualified_name lcurly
@@ -199,9 +200,13 @@ static int parse_number (char *, int, int, YYSTYPE *);
 
 %token <ssym> NAME_OR_INT 
 
+%token OPERATOR
 %token STRUCT CLASS UNION ENUM SIZEOF UNSIGNED COLONCOLON
 %token TEMPLATE
 %token ERROR
+%token NEW DELETE
+%type <sval> operator
+%token REINTERPRET_CAST DYNAMIC_CAST STATIC_CAST CONST_CAST
 
 /* Special type cases, put in to allow the parser to distinguish different
    legal basetypes.  */
@@ -401,6 +406,18 @@ arglist	:	arglist ',' exp   %prec ABOVE_COMMA
 			{ arglist_len++; }
 	;
 
+exp     :       exp '(' nonempty_typelist ')' const_or_volatile
+			{ int i;
+			  write_exp_elt_opcode (TYPE_INSTANCE);
+			  write_exp_elt_longcst ((LONGEST) $<ivec>3[0]);
+			  for (i = 0; i < $<ivec>3[0]; ++i)
+			    write_exp_elt_type ($<tvec>3[i + 1]);
+			  write_exp_elt_longcst((LONGEST) $<ivec>3[0]);
+			  write_exp_elt_opcode (TYPE_INSTANCE);
+			  free ($3);
+			}
+	;
+
 rcurly	:	'}'
 			{ $$ = end_arglist () - 1; }
 	;
@@ -575,6 +592,32 @@ exp	:	SIZEOF '(' type ')'	%prec UNARY
 			  write_exp_elt_opcode (OP_LONG); }
 	;
 
+exp	:	REINTERPRET_CAST '<' type '>' '(' exp ')' %prec UNARY
+			{ write_exp_elt_opcode (UNOP_REINTERPRET_CAST);
+			  write_exp_elt_type ($3);
+			  write_exp_elt_opcode (UNOP_REINTERPRET_CAST); }
+	;
+
+exp	:	STATIC_CAST '<' type '>' '(' exp ')' %prec UNARY
+			{ write_exp_elt_opcode (UNOP_CAST);
+			  write_exp_elt_type ($3);
+			  write_exp_elt_opcode (UNOP_CAST); }
+	;
+
+exp	:	DYNAMIC_CAST '<' type '>' '(' exp ')' %prec UNARY
+			{ write_exp_elt_opcode (UNOP_DYNAMIC_CAST);
+			  write_exp_elt_type ($3);
+			  write_exp_elt_opcode (UNOP_DYNAMIC_CAST); }
+	;
+
+exp	:	CONST_CAST '<' type '>' '(' exp ')' %prec UNARY
+			{ /* We could do more error checking here, but
+			     it doesn't seem worthwhile.  */
+			  write_exp_elt_opcode (UNOP_CAST);
+			  write_exp_elt_type ($3);
+			  write_exp_elt_opcode (UNOP_CAST); }
+	;
+
 string_exp:
 		STRING
 			{
@@ -703,6 +746,7 @@ variable:	block COLONCOLON name
 qualified_name:	typebase COLONCOLON name
 			{
 			  struct type *type = $1;
+			  CHECK_TYPEDEF (type);
 			  if (TYPE_CODE (type) != TYPE_CODE_STRUCT
 			      && TYPE_CODE (type) != TYPE_CODE_UNION
 			      && TYPE_CODE (type) != TYPE_CODE_NAMESPACE)
@@ -718,6 +762,7 @@ qualified_name:	typebase COLONCOLON name
 			{
 			  struct type *type = $1;
 			  struct stoken tmp_token;
+			  CHECK_TYPEDEF (type);
 			  if (TYPE_CODE (type) != TYPE_CODE_STRUCT
 			      && TYPE_CODE (type) != TYPE_CODE_UNION
 			      && TYPE_CODE (type) != TYPE_CODE_NAMESPACE)
@@ -775,9 +820,9 @@ variable:	name_not_typename
 			    {
 			      if (symbol_read_needs_frame (sym))
 				{
-				  if (innermost_block == 0 ||
-				      contained_in (block_found, 
-						    innermost_block))
+				  if (innermost_block == 0
+				      || contained_in (block_found, 
+						       innermost_block))
 				    innermost_block = block_found;
 				}
 
@@ -794,8 +839,9 @@ variable:	name_not_typename
 			      /* C++: it hangs off of `this'.  Must
 			         not inadvertently convert from a method call
 				 to data ref.  */
-			      if (innermost_block == 0 || 
-				  contained_in (block_found, innermost_block))
+			      if (innermost_block == 0
+				  || contained_in (block_found,
+						   innermost_block))
 				innermost_block = block_found;
 			      write_exp_elt_opcode (OP_THIS);
 			      write_exp_elt_opcode (OP_THIS);
@@ -1117,10 +1163,130 @@ const_or_volatile_noopt:  	const_and_volatile
 			{ push_type (tp_volatile); }
 	;
 
+operator:	OPERATOR NEW
+			{ $$ = operator_stoken (" new"); }
+	|	OPERATOR DELETE
+			{ $$ = operator_stoken (" delete"); }
+	|	OPERATOR NEW '[' ']'
+			{ $$ = operator_stoken (" new[]"); }
+	|	OPERATOR DELETE '[' ']'
+			{ $$ = operator_stoken (" delete[]"); }
+	|	OPERATOR '+'
+			{ $$ = operator_stoken ("+"); }
+	|	OPERATOR '-'
+			{ $$ = operator_stoken ("-"); }
+	|	OPERATOR '*'
+			{ $$ = operator_stoken ("*"); }
+	|	OPERATOR '/'
+			{ $$ = operator_stoken ("/"); }
+	|	OPERATOR '%'
+			{ $$ = operator_stoken ("%"); }
+	|	OPERATOR '^'
+			{ $$ = operator_stoken ("^"); }
+	|	OPERATOR '&'
+			{ $$ = operator_stoken ("&"); }
+	|	OPERATOR '|'
+			{ $$ = operator_stoken ("|"); }
+	|	OPERATOR '~'
+			{ $$ = operator_stoken ("~"); }
+	|	OPERATOR '!'
+			{ $$ = operator_stoken ("!"); }
+	|	OPERATOR '='
+			{ $$ = operator_stoken ("="); }
+	|	OPERATOR '<'
+			{ $$ = operator_stoken ("<"); }
+	|	OPERATOR '>'
+			{ $$ = operator_stoken (">"); }
+	|	OPERATOR ASSIGN_MODIFY
+			{ const char *op = "unknown";
+			  switch ($2)
+			    {
+			    case BINOP_RSH:
+			      op = ">>=";
+			      break;
+			    case BINOP_LSH:
+			      op = "<<=";
+			      break;
+			    case BINOP_ADD:
+			      op = "+=";
+			      break;
+			    case BINOP_SUB:
+			      op = "-=";
+			      break;
+			    case BINOP_MUL:
+			      op = "*=";
+			      break;
+			    case BINOP_DIV:
+			      op = "/=";
+			      break;
+			    case BINOP_REM:
+			      op = "%=";
+			      break;
+			    case BINOP_BITWISE_IOR:
+			      op = "|=";
+			      break;
+			    case BINOP_BITWISE_AND:
+			      op = "&=";
+			      break;
+			    case BINOP_BITWISE_XOR:
+			      op = "^=";
+			      break;
+			    default:
+			      break;
+			    }
+
+			  $$ = operator_stoken (op);
+			}
+	|	OPERATOR LSH
+			{ $$ = operator_stoken ("<<"); }
+	|	OPERATOR RSH
+			{ $$ = operator_stoken (">>"); }
+	|	OPERATOR EQUAL
+			{ $$ = operator_stoken ("=="); }
+	|	OPERATOR NOTEQUAL
+			{ $$ = operator_stoken ("!="); }
+	|	OPERATOR LEQ
+			{ $$ = operator_stoken ("<="); }
+	|	OPERATOR GEQ
+			{ $$ = operator_stoken (">="); }
+	|	OPERATOR ANDAND
+			{ $$ = operator_stoken ("&&"); }
+	|	OPERATOR OROR
+			{ $$ = operator_stoken ("||"); }
+	|	OPERATOR INCREMENT
+			{ $$ = operator_stoken ("++"); }
+	|	OPERATOR DECREMENT
+			{ $$ = operator_stoken ("--"); }
+	|	OPERATOR ','
+			{ $$ = operator_stoken (","); }
+	|	OPERATOR ARROW_STAR
+			{ $$ = operator_stoken ("->*"); }
+	|	OPERATOR ARROW
+			{ $$ = operator_stoken ("->"); }
+	|	OPERATOR '(' ')'
+			{ $$ = operator_stoken ("()"); }
+	|	OPERATOR '[' ']'
+			{ $$ = operator_stoken ("[]"); }
+	|	OPERATOR ptype
+			{ char *name;
+			  long length;
+			  struct ui_file *buf = mem_fileopen ();
+
+			  c_print_type ($2, NULL, buf, -1, 0);
+			  name = ui_file_xstrdup (buf, &length);
+			  ui_file_delete (buf);
+			  $$ = operator_stoken (name);
+			  free (name);
+			}
+	;
+
+
+
 name	:	NAME { $$ = $1.stoken; }
 	|	BLOCKNAME { $$ = $1.stoken; }
 	|	TYPENAME { $$ = $1.stoken; }
 	|	NAME_OR_INT  { $$ = $1.stoken; }
+	|	operator { $$ = $1; }
 	;
 
 name_not_typename :	NAME
@@ -1135,6 +1301,23 @@ name_not_typename :	NAME
 	;
 
 %%
+
+/* Returns a stoken of the operator name given by OP (which does not
+   include the string "operator").  */ 
+static struct stoken
+operator_stoken (const char *op)
+{
+  static const char *operator_string = "operator";
+  struct stoken st = { NULL, 0 };
+  st.length = strlen (operator_string) + strlen (op);
+  st.ptr = malloc (st.length + 1);
+  strcpy (st.ptr, operator_string);
+  strcat (st.ptr, op);
+
+  /* The toplevel (c_parse) will free the memory allocated here.  */
+  make_cleanup (free, st.ptr);
+  return st;
+};
 
 /* Take care of parsing a number (anything that starts with a digit).
    Set yylval and return the token type; update lexptr.
@@ -1251,6 +1434,16 @@ parse_number (char *p, int len, int parsed_float, YYSTYPE *putithere)
 	  {
 	    p += 2;
 	    base = 16;
+	    len -= 2;
+	  }
+	break;
+
+      case 'b':
+      case 'B':
+	if (len >= 3)
+	  {
+	    p += 2;
+	    base = 2;
 	    len -= 2;
 	  }
 	break;
@@ -1714,6 +1907,9 @@ static const struct token ident_tokens[] =
     {"long", LONG, OP_NULL, 0},
     {"true", TRUEKEYWORD, OP_NULL, 1},
     {"int", INT_KEYWORD, OP_NULL, 0},
+    {"new", NEW, OP_NULL, 1},
+    {"delete", DELETE, OP_NULL, 1},
+    {"operator", OPERATOR, OP_NULL, 1},
 
     {"and", ANDAND, BINOP_END, 1},
     {"and_eq", ASSIGN_MODIFY, BINOP_BITWISE_AND, 1},
@@ -1725,7 +1921,12 @@ static const struct token ident_tokens[] =
     {"or", OROR, BINOP_END, 1},
     {"or_eq", ASSIGN_MODIFY, BINOP_BITWISE_IOR, 1},
     {"xor", '^', OP_NULL, 1},
-    {"xor_eq", ASSIGN_MODIFY, BINOP_BITWISE_XOR, 1}
+    {"xor_eq", ASSIGN_MODIFY, BINOP_BITWISE_XOR, 1},
+
+    {"const_cast", CONST_CAST, OP_NULL, 1 },
+    {"dynamic_cast", DYNAMIC_CAST, OP_NULL, 1 },
+    {"static_cast", STATIC_CAST, OP_NULL, 1 },
+    {"reinterpret_cast", REINTERPRET_CAST, OP_NULL, 1 }
   };
 
 /* When we find that lexptr (the global var defined in parse.c) is
@@ -1803,6 +2004,16 @@ scan_macro_cleanup (void *dummy)
   obstack_free (&expansion_obstack, NULL);
 }
 
+/* Return true iff the token represents a C++ cast operator.  */
+
+static int
+is_cast_operator (const char *token, int len)
+{
+  return (! strncmp (token, "dynamic_cast", len)
+	  || ! strncmp (token, "static_cast", len)
+	  || ! strncmp (token, "reinterpret_cast", len)
+	  || ! strncmp (token, "const_cast", len));
+}
 
 /* The scope used for macro expansion.  */
 static struct macro_scope *expression_macro_scope;
@@ -2066,16 +2277,19 @@ yylex (void)
 	 FIXME: This mishandles `print $a<4&&$a>3'.  */
 
       if (c == '<')
-	{ 
-               /* Scan ahead to get rest of the template specification.  Note
-                  that we look ahead only when the '<' adjoins non-whitespace
-                  characters; for comparison expressions, e.g. "a < b > c",
-                  there must be spaces before the '<', etc. */
+	{
+	  if (! is_cast_operator (tokstart, namelen))
+	    {
+	      /* Scan ahead to get rest of the template specification.  Note
+		 that we look ahead only when the '<' adjoins non-whitespace
+		 characters; for comparison expressions, e.g. "a < b > c",
+		 there must be spaces before the '<', etc. */
                
-               char * p = find_template_name_end (tokstart + namelen);
-               if (p)
-                 namelen = p - tokstart;
-               break;
+	      char * p = find_template_name_end (tokstart + namelen);
+	      if (p)
+		namelen = p - tokstart;
+	    }
+	  break;
 	}
       c = tokstart[++namelen];
     }
@@ -2089,6 +2303,24 @@ yylex (void)
       && ! scanning_macro_expansion ())
     {
       return 0;
+    }
+
+  /* For the same reason (breakpoint conditions), "thread N"
+     terminates the expression.  "thread" could be an identifier, but
+     an identifier is never followed by a number without intervening
+     punctuation.  "task" is similar.  Handle abbreviations of these,
+     similarly to breakpoint.c:find_condition_and_thread.  */
+  if (namelen >= 1
+      && (strncmp (tokstart, "thread", namelen) == 0
+	  || strncmp (tokstart, "task", namelen) == 0)
+      && (tokstart[namelen] == ' ' || tokstart[namelen] == '\t')
+      && ! scanning_macro_expansion ())
+    {
+      char *p = tokstart + namelen + 1;
+      while (*p == ' ' || *p == '\t')
+	p++;
+      if (*p >= '0' && *p <= '9')
+	return 0;
     }
 
   lexptr += namelen;
@@ -2172,9 +2404,9 @@ yylex (void)
     /* Input names that aren't symbols but ARE valid hex numbers,
        when the input radix permits them, can be names or numbers
        depending on the parse.  Note we support radixes > 16 here.  */
-    if (!sym && 
-        ((tokstart[0] >= 'a' && tokstart[0] < 'a' + input_radix - 10) ||
-         (tokstart[0] >= 'A' && tokstart[0] < 'A' + input_radix - 10)))
+    if (!sym 
+        && ((tokstart[0] >= 'a' && tokstart[0] < 'a' + input_radix - 10)
+	    || (tokstart[0] >= 'A' && tokstart[0] < 'A' + input_radix - 10)))
       {
  	YYSTYPE newlval;	/* Its value is ignored.  */
 	hextype = parse_number (tokstart, namelen, 0, &newlval);
@@ -2217,6 +2449,9 @@ c_parse (void)
   obstack_init (&expansion_obstack);
   gdb_assert (! macro_original_text);
   make_cleanup (scan_macro_cleanup, 0);
+
+  make_cleanup_restore_integer (&yydebug);
+  yydebug = parser_debug;
 
   /* Initialize some state used by the lexer.  */
   last_was_structop = 0;
