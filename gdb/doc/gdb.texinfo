@@ -7398,6 +7398,20 @@ On HP-UX systems, if you refer to a function or variable name that
 begins with a dollar sign, @value{GDBN} searches for a user or system
 name first, before it searches for a convenience variable.
 
+@cindex convenience functions
+@value{GDBN} also supplies some @dfn{convenience functions}.  These
+have a syntax similar to convenience variables.  A convenience
+function can be used in an expression just like an ordinary function;
+however, a convenience function is implemented internally to
+@value{GDBN}.
+
+@table @code
+@item help function
+@kindex help function
+@cindex show all convenience functions
+Print a list of all convenience functions.
+@end table
+
 @node Registers
 @section Registers
 
@@ -18032,6 +18046,7 @@ situation, a Python @code{KeyboardInterrupt} exception is thrown.
 * Threads In Python::           Accessing inferior threads from Python.
 * Commands In Python::          Implementing new commands in Python.
 * Parameters In Python::        Adding new @value{GDBN} parameters.
+* Functions In Python::         Writing new convenience functions.
 * Objfiles in Python::          Object files.
 @end menu
 
@@ -18058,22 +18073,22 @@ command as having originated from the user invoking it interactively.
 It must be a boolean value.  If omitted, it defaults to @code{False}.
 @end defun
 
-@findex gdb.get_current_objfile
-@defun get_current_objfile
+@findex gdb.current_objfile
+@defun current_objfile
 When auto-loading a Python script (@pxref{Auto-loading}), @var{GDBN}
 sets the ``current objfile'' to the corresponding objfile.  This
 function returns the current objfile.  If there is no current objfile,
 this function returns @code{None}.
 @end defun
 
-@findex gdb.get_objfiles
-@defun get_objfiles
+@findex gdb.objfiles
+@defun objfiles
 Return a sequence of all the objfiles current known to @var{GDBN}.
 @xref{Objfiles in Python}.
 @end defun
 
-@findex gdb.get_parameter
-@defun get_parameter parameter
+@findex gdb.parameter
+@defun parameter
 Return the value of a @value{GDBN} parameter.  @var{parameter} is a
 string naming the parameter to look up; @var{parameter} may contain
 spaces if the parameter has a multi-part name.  For example,
@@ -18082,6 +18097,41 @@ spaces if the parameter has a multi-part name.  For example,
 If the named parameter does not exist, this function throws a
 @code{RuntimeError}.  Otherwise, the parameter's value is converted to
 a Python value of the appropriate type, and returned.
+@end defun
+
+@findex gdb.history
+@defun history number
+Return a value from @value{GDBN}'s value history (@pxref{Value
+History}).  @var{number} indicates which history element to return.
+If @var{number} is less than or equal to zero, then @value{GDBN} will
+take the absolute value of @var{number} and count backward from the
+last element to find the value to return.  If there is no such element
+in the value history, an exception will be raised.
+
+The return value is always an instance of @code{gdb.Value}
+(@pxref{Values From Inferior}).
+@end defun
+
+@findex gdb.parse_and_eval
+@defun parse_and_eval expression
+Parse @var{expression} as an expression in the current language,
+evaluate it, and return the result as a @code{gdb.Value}.
+@var{expression} must be a string.
+@end defun
+
+@findex gdb.post_event
+@defun post_event event
+Put @var{event}, a callable object taking no arguments, into
+@value{GDBN}'s internal event queue.  This callable will be invoked at
+some later point, during @value{GDBN}'s event processing.  Events
+posted using @code{post_event} will be run in the order in which they
+were posted; however, there is no way to know when they will be
+processed relative to other events inside @value{GDBN}.
+
+@value{GDBN} is not thread-safe.  If your Python program uses multiple
+threads, you must be careful to only call @value{GDBN}-specific
+functions in the main @value{GDBN} thread.  @code{post_event} ensures
+this.
 @end defun
 
 @findex gdb.write
@@ -18142,7 +18192,7 @@ for the @samp{-gdb.py} file both in the directory associated with the
 application and the directory associated with the separate debug file.
 
 When reading a @samp{-gdb.py} file, @var{GDBN} sets the ``current
-objfile''.  This is available via the @code{gdb.get_current_objfile}
+objfile''.  This is available via the @code{gdb.current_objfile}
 function.  This can be useful for registering objfile-specific
 pretty-printers.
 
@@ -18225,7 +18275,7 @@ The result @code{bar} will be a @code{gdb.Value} object holding the
 value pointed to by @code{foo}.
 @end defmethod
 
-@defmethod Value string @r{[}encoding@r{]}
+@defmethod Value string @r{[}encoding @r{[}errors@r{]}@r{]}
 If this @code{gdb.Value} represents a string, then this method
 converts the contents to a Python string.  Otherwise, this method will
 throw an exception.
@@ -18241,8 +18291,13 @@ by a zero of the appropriate width.
 If the optional @var{encoding} argument is given, it must be a string
 naming the encoding of the string in the @code{gdb.Value}.  The Python
 codec machinery will be used to convert the string.  If @var{encoding}
-is not given, then the @code{target-charset} (@pxref{Character Sets})
-will be used.
+is not given, or if @var{encoding} is the empty string, then either
+the @code{target-charset} (@pxref{Character Sets}) will be used, or a
+language-specific encoding will be used, if the current language is
+able to supply one.
+
+The optional @var{errors} argument is the same as the corresponding
+argument to Python's @code{string.decode} method.
 @end defmethod
 
 @defmethod Value type
@@ -18562,7 +18617,11 @@ When printing from the CLI, if the @code{to_string} method exists,
 then @value{GDBN} will prepend its result to the values returned by
 @code{children}.
 
-This method must return a string.
+If this method returns a string, it is printed verbatim.  Otherwise,
+the result is converted to a @code{gdb.Value}, following the usual
+algorithm.  Then @value{GDBN} prints this value; this may possibly
+result in a call to another pretty-printer.  If the result is not
+convertible to @code{gdb.Value}, an exception is raised.
 @end defop
 
 @subsubsection Selecting Pretty-Printers
@@ -18604,9 +18663,28 @@ class StdStringPrinter:
 
     def to_string(self):
         return self.val['_M_dataplus']['_M_p']
+@end smallexample
 
-obj = gdb.get_current_objfile()
-obj.pretty_printers['^std::basic_string<char.*>$'] = StdStringPrinter
+We recommend that you put your core pretty-printers into a versioned
+python package, and then restrict your auto-loaded code to idempotent
+behavior -- for example, just @code{import}s of your printer modules,
+followed by a call to a register pretty-printers with the current
+objfile.  This approach will scale more nicely to multiple inferiors,
+potentially using different library versions.
+
+For example, in addition to the above, this code might appear in
+@code{gdb.libstdcxx.v6}:
+
+@smallexample
+def register_printers (objfile):
+    objfile.pretty_printers['^std::basic_string<char.*>$'] = StdStringPrinter
+@end smallexample
+
+And then the corresponding contents of the auto-load file would be:
+
+@smallexample
+import gdb.libstdcxx.v6
+gdb.libstdcxx.v6.register_printers (gdb.current_objfile ())
 @end smallexample
 
 @node Threads In Python
@@ -18616,15 +18694,15 @@ Python scripts can access information about the inferior's threads
 using some functions provided by @value{GDBN}.  Like all of
 @value{GDBN}'s Python additions, these are in the @code{gdb} module:
 
-@findex gdb.get_threads
-@defun get_threads
+@findex gdb.threads
+@defun threads
 This function returns a tuple holding all the thread IDs which are
 valid when the function is called.  If there are no valid threads,
 this will return @code{None}.
 @end defun
 
-@findex gdb.get_current_thread
-@defun get_current_thread
+@findex gdb.current_thread
+@defun current_thread
 This function returns the thread ID of the selected thread.  If there
 is no selected thread, this will return @code{None}.
 @end defun
@@ -18633,7 +18711,7 @@ is no selected thread, this will return @code{None}.
 @defun switch_to_thread id
 This changes @value{GDBN}'s currently selected thread to the thread
 given by @var{id}.  @var{id} must be a valid thread ID as returned by
-@code{get_threads}.  If @var{id} is invalid, this function throws an
+@code{threads}.  If @var{id} is invalid, this function throws an
 exception.
 @end defun
 
@@ -18982,6 +19060,43 @@ The value is a string, which must be one of a collection string
 constants provided when the parameter is created.
 @end table
 
+@node Functions In Python
+@subsubsection Writing new convenience functions
+
+@cindex writing convenience functions
+@cindex convenience functions in python
+@cindex python convenience functions
+@tindex gdb.Function
+@tindex Function
+You can implement new convenience functions (@pxref{Convenience Vars})
+in Python.  A convenience function is an instance of a subclass of the
+class @code{gdb.Function}.
+
+@defmethod Function __init__ name
+The initializer for @code{Function} registers the new function with
+@value{GDBN}.  The @var{name} argument is the name of the function.
+This must be a string.  The function is made visible to the user as a
+convenience variable, of ``internal function'' type, whose name is the
+same as @var{name}.
+
+The documentation for the new function is taken from the documentation
+string for the new class.
+@end defmethod
+
+@defmethod Function invoke @var{*args}
+When a convenience function is evaluated, its arguments are converted
+to instances of @code{gdb.Value}, and then the function's
+@code{invoke} method is called.  Note that @value{GDBN} does not
+predetermine the arity of convenience functions.  Instead, all
+available arguments are passed to @code{invoke}, following the
+standard Python calling convention.  In particular, a convenience
+function can have default values for parameters without ill effect.
+
+The return value of this method is used as its value in the enclosing
+expression.  If an ordinary Python value is returned, it is converted
+to a @code{gdb.Value} following the usual rules.
+@end defmethod
+
 @node Objfiles in Python
 @subsubsection Objfiles in Python
 
@@ -18998,9 +19113,9 @@ files.  @var{GDBN} calls these symbol-containing files
 Each objfile is represented by an instance of the @code{gdb.Objfile}
 class.
 
-@defmethod Objfile get_filename
-Return the file name of the objfile as a string.
-@end defmethod
+@defivar Objfile filename
+The file name of the objfile as a string.
+@end defivar
 
 @defivar Objfile pretty_printers
 The @code{pretty_printers} attribute is used to look up

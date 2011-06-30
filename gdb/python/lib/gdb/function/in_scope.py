@@ -27,16 +27,16 @@ Receives as argument a list of names separated by whitespace."""
     def invoke (self, var):
 	vars = set (var.string().split())
 	found = set ()
-	block = gdb.get_block_for_pc (gdb.get_selected_frame ().get_pc ())
+	block = gdb.block_for_pc (gdb.selected_frame ().pc ())
 	while block:
 	    for sym in block:
 		if (sym.is_argument () or sym.is_constant ()
 		      or sym.is_function () or sym.is_variable ()):
-		    sym_name = sym.get_print_name ()
+		    sym_name = sym.name
 		    if sym_name in vars:
 			found.add (sym_name)
 
-	    block = block.get_superblock ()
+	    block = block.superblock
 
 	return vars == found
 

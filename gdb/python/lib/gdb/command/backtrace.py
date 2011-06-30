@@ -26,12 +26,12 @@ class FrameWrapper:
         self.frame = frame;
 
     def write_symbol (self, stream, sym, block):
-        if len (sym.get_linkage_name ()):
-            nsym, is_field_of_this = gdb.lookup_symbol (sym.get_linkage_name (), block, gdb.SYMBOL_VAR_DOMAIN)
-            if nsym.get_class () != gdb.SYMBOL_LOC_REGISTER:
+        if len (sym.linkage_name):
+            nsym, is_field_of_this = gdb.lookup_symbol (sym.linkage_name, block, gdb.SYMBOL_VAR_DOMAIN)
+            if nsym.addr_class != gdb.SYMBOL_LOC_REGISTER:
                 sym = nsym
 
-        stream.write (sym.get_print_name () + "=")
+        stream.write (sym.print_name + "=")
         try:
             val = self.frame.read_var_value (sym)
             if val != None:
@@ -49,10 +49,10 @@ class FrameWrapper:
             return
 
         first = True
-        block = func.get_value ()
+        block = func.value
 
         for sym in block:
-            if sym.is_argument ():
+            if sym.is_argument:
                 continue;
 
             self.write_symbol (stream, sym, block)
@@ -63,10 +63,10 @@ class FrameWrapper:
             return
 
         first = True
-        block = func.get_value ()
+        block = func.value
 
         for sym in block:
-            if not sym.is_argument ():
+            if not sym.is_argument:
                 continue;
 
             if not first:
@@ -78,30 +78,30 @@ class FrameWrapper:
     # FIXME: this should probably just be a method on gdb.Frame.
     # But then we need stream wrappers.
     def describe (self, stream, full):
-        if self.frame.get_type () == gdb.DUMMY_FRAME:
+        if self.frame.type () == gdb.DUMMY_FRAME:
             stream.write (" <function called from gdb>\n")
-        elif self.frame.get_type () == gdb.SIGTRAMP_FRAME:
+        elif self.frame.type () == gdb.SIGTRAMP_FRAME:
             stream.write (" <signal handler called>\n")
         else:
             sal = self.frame.find_sal ()
-            pc = self.frame.get_pc ()
-            name = self.frame.get_name ()
+            pc = self.frame.pc ()
+            name = self.frame.name ()
             if not name:
                 name = "??"
-            if pc != sal.get_pc () or not sal.symtab:
+            if pc != sal.pc or not sal.symtab:
                 stream.write (" 0x%08x in" % pc)
             stream.write (" " + name + " (")
 
-            func = gdb.find_pc_function (self.frame.get_address_in_block ())
+            func = gdb.find_pc_function (self.frame.address_in_block ())
             self.print_frame_args (stream, func)
 
             stream.write (")")
 
-            if sal.symtab and sal.symtab.get_filename ():
-                stream.write (" at " + sal.symtab.get_filename ())
-                stream.write (":" + str (sal.get_line ()))
+            if sal.symtab and sal.symtab.filename:
+                stream.write (" at " + sal.symtab.filename)
+                stream.write (":" + str (sal.line))
 
-            if not self.frame.get_name () or (not sal.symtab or not sal.symtab.get_filename ()):
+            if not self.frame.name () or (not sal.symtab or not sal.symtab.filename):
                 lib = gdb.solib_address (pc)
                 if lib:
                     stream.write (" from " + lib)
@@ -111,7 +111,7 @@ class FrameWrapper:
             if full:
                 self.print_frame_locals (stream, func)
 
-    def __getattribute__ (self, name):
+    def __getattr__ (self, name):
         return getattr (self.frame, name)
 
 class ReverseBacktraceParameter (gdb.Parameter):
@@ -175,7 +175,7 @@ Use of the 'raw' qualifier avoids any filtering by loadable modules.
         # FIXME: provide option to start at selected frame
         # However, should still number as if starting from current
         iter = itertools.imap (FrameWrapper,
-                               FrameIterator (gdb.get_current_frame ()))
+                               FrameIterator (gdb.current_frame ()))
         if filter:
             iter = gdb.backtrace.create_frame_filter (iter)
 
