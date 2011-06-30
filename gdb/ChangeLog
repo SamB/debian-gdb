@@ -1,3 +1,30 @@
+2005-12-01  Joel Brobecker  <brobecker@adacore.com>
+
+	* version.in: Set version to 6.4 for the release.
+
+2005-11-25  Frederic Riss  <frederic.riss@st.com>
+
+	* dwarf2-frame.c (execute_cfa_program): Don't access past the
+	allocated dwarf2_frame_state.initial.regs.
+
+2005-11-22  Joel Brobecker  <brobecker@adacore.com>
+
+	* top.c (print_gdb_version): Update copyright year.
+
+2005-11-22  Joel Brobecker  <brobecker@adacore.com>
+
+	* version.in: Bump version number to 6.3.91 now that the first
+	release candidate (6.3.90) has been made.
+
+2005-11-22  Joel Brobecker  <brobecker@adacore.com>
+
+	* README: Update last updated date and author.
+
+2005-11-20  Mark Kettenis  <kettenis@gnu.org>
+
+	* inf-ptrace.c (inf_ptrace_xfer_partial): Use PIOD_WRITE_I instead
+	of PIOD_WRITE_D.
+
 2005-11-18  Andrew Stubbs  <andrew.stubbs@st.com>
 
 	* mi/mi-main.c (mi_load_progress): Ensure the use of the correct mi

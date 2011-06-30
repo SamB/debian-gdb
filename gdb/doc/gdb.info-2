@@ -9,7 +9,7 @@ END-INFO-DIR-ENTRY
    This file documents the GNU debugger GDB.
 
    This is the Ninth Edition, of `Debugging with GDB: the GNU
-Source-Level Debugger' for GDB Version 6.3.90_20051119.
+Source-Level Debugger' for GDB Version 6.4.
 
    Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
 1998,
@@ -327,16 +327,64 @@ File: gdb.info,  Node: Fortran,  Next: Pascal,  Prev: Objective-C,  Up: Supporte
 12.4.3 Fortran
 --------------
 
+GDB can be used to debug programs written in Fortran, but it currently
+supports only the features of Fortran 77 language.
+
+   Some Fortran compilers (GNU Fortran 77 and Fortran 95 compilers
+among them) append an underscore to the names of variables and
+functions.  When you debug programs compiled by those compilers, you
+will need to refer to variables and functions with a trailing
+underscore.
+
+* Menu:
+
+* Fortran Operators::           Fortran operators and expressions
+* Fortran Defaults::            Default settings for Fortran
+* Special Fortran commands::    Special GDB commands for Fortran
+
+
+File: gdb.info,  Node: Fortran Operators,  Next: Fortran Defaults,  Up: Fortran
+
+12.4.3.1 Fortran operators and expressions
+..........................................
+
+Operators must be defined on values of specific types.  For instance,
+`+' is defined on numbers, but not on characters or other non-
+arithmetic types.  Operators are often defined on groups of types.
+
+`**'
+     The exponentiation operator. It raises the first operand to the
+     power of the second one.
+
+`:'
+     The range operator.  Normally used in the form of array(low:high)
+     to represent a section of array.
+
+
+File: gdb.info,  Node: Fortran Defaults,  Next: Special Fortran commands,  Prev: Fortran Operators,  Up: Fortran
+
+12.4.3.2 Fortran Defaults
+.........................
+
+Fortran symbols are usually case-insensitive, so GDB by default uses
+case-insensitive matches for Fortran symbols.  You can change that with
+the `set case-insensitive' command, see *Note Symbols::, for the
+details.
+
+
+File: gdb.info,  Node: Special Fortran commands,  Prev: Fortran Defaults,  Up: Fortran
+
+12.4.3.3 Special Fortran commands
+.................................
+
+GDB had some commands to support Fortran specific feature, such as
+common block displaying.
+
 `info common [COMMON-NAME]'
      This command prints the values contained in the Fortran `COMMON'
      block whose name is COMMON-NAME.  With no argument, the names of
      all `COMMON' blocks visible at current program location are
      printed.
-
-   Fortran symbols are usually case-insensitive, so GDB by default uses
-case-insensitive matches for Fortran symbols.  You can change that with
-the `set case-insensitive' command, see *Note Symbols::, for the
-details.
 
 
 File: gdb.info,  Node: Pascal,  Next: Modula-2,  Prev: Fortran,  Up: Supported languages
@@ -4322,7 +4370,7 @@ executable file without downloading, use the GDB commands `file' or
       the conditions.
      There is absolutely no warranty for GDB; type "show warranty"
      for details.
-     GDB 6.3.90_20051119, Copyright 1992 Free Software Foundation, Inc...
+     GDB 6.4, Copyright 1992 Free Software Foundation, Inc...
      (gdb) target hms
      Connected to remote H8/300 HMS system.
      (gdb) load t.x
@@ -7673,681 +7721,5 @@ is deleted.
      body=[bkpt={number="1",type="breakpoint",disp="keep",enabled="y",
      addr="0x00010734",func="callee4",
      file="../../../devo/gdb/testsuite/gdb.mi/basics.c",line="8",times="1"}]}
-     (gdb)
-
-
-File: gdb.info,  Node: GDB/MI Data Manipulation,  Next: GDB/MI Program Control,  Prev: GDB/MI Breakpoint Table Commands,  Up: GDB/MI
-
-24.6 GDB/MI Data Manipulation
-=============================
-
-This section describes the GDB/MI commands that manipulate data:
-examine memory and registers, evaluate expressions, etc.
-
-The `-data-disassemble' Command
--------------------------------
-
-Synopsis
-........
-
-      -data-disassemble
-         [ -s START-ADDR -e END-ADDR ]
-       | [ -f FILENAME -l LINENUM [ -n LINES ] ]
-       -- MODE
-
-Where:
-
-`START-ADDR'
-     is the beginning address (or `$pc')
-
-`END-ADDR'
-     is the end address
-
-`FILENAME'
-     is the name of the file to disassemble
-
-`LINENUM'
-     is the line number to disassemble around
-
-`LINES'
-     is the the number of disassembly lines to be produced.  If it is
-     -1, the whole function will be disassembled, in case no END-ADDR is
-     specified.  If END-ADDR is specified as a non-zero value, and
-     LINES is lower than the number of disassembly lines between
-     START-ADDR and END-ADDR, only LINES lines are displayed; if LINES
-     is higher than the number of lines between START-ADDR and
-     END-ADDR, only the lines up to END-ADDR are displayed.
-
-`MODE'
-     is either 0 (meaning only disassembly) or 1 (meaning mixed source
-     and disassembly).
-
-Result
-......
-
-The output for each instruction is composed of four fields:
-
-   * Address
-
-   * Func-name
-
-   * Offset
-
-   * Instruction
-
-   Note that whatever included in the instruction field, is not
-manipulated directely by GDB/MI, i.e. it is not possible to adjust its
-format.
-
-GDB Command
-...........
-
-There's no direct mapping from this command to the CLI.
-
-Example
-.......
-
-Disassemble from the current value of `$pc' to `$pc + 20':
-
-     (gdb)
-     -data-disassemble -s $pc -e "$pc + 20" -- 0
-     ^done,
-     asm_insns=[
-     {address="0x000107c0",func-name="main",offset="4",
-     inst="mov  2, %o0"},
-     {address="0x000107c4",func-name="main",offset="8",
-     inst="sethi  %hi(0x11800), %o2"},
-     {address="0x000107c8",func-name="main",offset="12",
-     inst="or  %o2, 0x140, %o1\t! 0x11940 <_lib_version+8>"},
-     {address="0x000107cc",func-name="main",offset="16",
-     inst="sethi  %hi(0x11800), %o2"},
-     {address="0x000107d0",func-name="main",offset="20",
-     inst="or  %o2, 0x168, %o4\t! 0x11968 <_lib_version+48>"}]
-     (gdb)
-
-   Disassemble the whole `main' function.  Line 32 is part of `main'.
-
-     -data-disassemble -f basics.c -l 32 -- 0
-     ^done,asm_insns=[
-     {address="0x000107bc",func-name="main",offset="0",
-     inst="save  %sp, -112, %sp"},
-     {address="0x000107c0",func-name="main",offset="4",
-     inst="mov   2, %o0"},
-     {address="0x000107c4",func-name="main",offset="8",
-     inst="sethi %hi(0x11800), %o2"},
-     [...]
-     {address="0x0001081c",func-name="main",offset="96",inst="ret "},
-     {address="0x00010820",func-name="main",offset="100",inst="restore "}]
-     (gdb)
-
-   Disassemble 3 instructions from the start of `main':
-
-     (gdb)
-     -data-disassemble -f basics.c -l 32 -n 3 -- 0
-     ^done,asm_insns=[
-     {address="0x000107bc",func-name="main",offset="0",
-     inst="save  %sp, -112, %sp"},
-     {address="0x000107c0",func-name="main",offset="4",
-     inst="mov  2, %o0"},
-     {address="0x000107c4",func-name="main",offset="8",
-     inst="sethi  %hi(0x11800), %o2"}]
-     (gdb)
-
-   Disassemble 3 instructions from the start of `main' in mixed mode:
-
-     (gdb)
-     -data-disassemble -f basics.c -l 32 -n 3 -- 1
-     ^done,asm_insns=[
-     src_and_asm_line={line="31",
-     file="/kwikemart/marge/ezannoni/flathead-dev/devo/gdb/ \
-       testsuite/gdb.mi/basics.c",line_asm_insn=[
-     {address="0x000107bc",func-name="main",offset="0",
-     inst="save  %sp, -112, %sp"}]},
-     src_and_asm_line={line="32",
-     file="/kwikemart/marge/ezannoni/flathead-dev/devo/gdb/ \
-       testsuite/gdb.mi/basics.c",line_asm_insn=[
-     {address="0x000107c0",func-name="main",offset="4",
-     inst="mov  2, %o0"},
-     {address="0x000107c4",func-name="main",offset="8",
-     inst="sethi  %hi(0x11800), %o2"}]}]
-     (gdb)
-
-The `-data-evaluate-expression' Command
----------------------------------------
-
-Synopsis
-........
-
-      -data-evaluate-expression EXPR
-
-   Evaluate EXPR as an expression.  The expression could contain an
-inferior function call.  The function call will execute synchronously.
-If the expression contains spaces, it must be enclosed in double quotes.
-
-GDB Command
-...........
-
-The corresponding GDB commands are `print', `output', and `call'.  In
-`gdbtk' only, there's a corresponding `gdb_eval' command.
-
-Example
-.......
-
-In the following example, the numbers that precede the commands are the
-"tokens" described in *Note GDB/MI Command Syntax: GDB/MI Command
-Syntax.  Notice how GDB/MI returns the same tokens in its output.
-
-     211-data-evaluate-expression A
-     211^done,value="1"
-     (gdb)
-     311-data-evaluate-expression &A
-     311^done,value="0xefffeb7c"
-     (gdb)
-     411-data-evaluate-expression A+3
-     411^done,value="4"
-     (gdb)
-     511-data-evaluate-expression "A + 3"
-     511^done,value="4"
-     (gdb)
-
-The `-data-list-changed-registers' Command
-------------------------------------------
-
-Synopsis
-........
-
-      -data-list-changed-registers
-
-   Display a list of the registers that have changed.
-
-GDB Command
-...........
-
-GDB doesn't have a direct analog for this command; `gdbtk' has the
-corresponding command `gdb_changed_register_list'.
-
-Example
-.......
-
-On a PPC MBX board:
-
-     (gdb)
-     -exec-continue
-     ^running
-
-     (gdb)
-     *stopped,reason="breakpoint-hit",bkptno="1",frame={func="main",
-     args=[],file="try.c",fullname="/home/foo/bar/devo/myproject/try.c",line="5"}
-     (gdb)
-     -data-list-changed-registers
-     ^done,changed-registers=["0","1","2","4","5","6","7","8","9",
-     "10","11","13","14","15","16","17","18","19","20","21","22","23",
-     "24","25","26","27","28","30","31","64","65","66","67","69"]
-     (gdb)
-
-The `-data-list-register-names' Command
----------------------------------------
-
-Synopsis
-........
-
-      -data-list-register-names [ ( REGNO )+ ]
-
-   Show a list of register names for the current target.  If no
-arguments are given, it shows a list of the names of all the registers.
-If integer numbers are given as arguments, it will print a list of the
-names of the registers corresponding to the arguments.  To ensure
-consistency between a register name and its number, the output list may
-include empty register names.
-
-GDB Command
-...........
-
-GDB does not have a command which corresponds to
-`-data-list-register-names'.  In `gdbtk' there is a corresponding
-command `gdb_regnames'.
-
-Example
-.......
-
-For the PPC MBX board:
-     (gdb)
-     -data-list-register-names
-     ^done,register-names=["r0","r1","r2","r3","r4","r5","r6","r7",
-     "r8","r9","r10","r11","r12","r13","r14","r15","r16","r17","r18",
-     "r19","r20","r21","r22","r23","r24","r25","r26","r27","r28","r29",
-     "r30","r31","f0","f1","f2","f3","f4","f5","f6","f7","f8","f9",
-     "f10","f11","f12","f13","f14","f15","f16","f17","f18","f19","f20",
-     "f21","f22","f23","f24","f25","f26","f27","f28","f29","f30","f31",
-     "", "pc","ps","cr","lr","ctr","xer"]
-     (gdb)
-     -data-list-register-names 1 2 3
-     ^done,register-names=["r1","r2","r3"]
-     (gdb)
-
-The `-data-list-register-values' Command
-----------------------------------------
-
-Synopsis
-........
-
-      -data-list-register-values FMT [ ( REGNO )*]
-
-   Display the registers' contents.  FMT is the format according to
-which the registers' contents are to be returned, followed by an
-optional list of numbers specifying the registers to display.  A
-missing list of numbers indicates that the contents of all the
-registers must be returned.
-
-   Allowed formats for FMT are:
-
-`x'
-     Hexadecimal
-
-`o'
-     Octal
-
-`t'
-     Binary
-
-`d'
-     Decimal
-
-`r'
-     Raw
-
-`N'
-     Natural
-
-GDB Command
-...........
-
-The corresponding GDB commands are `info reg', `info all-reg', and (in
-`gdbtk') `gdb_fetch_registers'.
-
-Example
-.......
-
-For a PPC MBX board (note: line breaks are for readability only, they
-don't appear in the actual output):
-
-     (gdb)
-     -data-list-register-values r 64 65
-     ^done,register-values=[{number="64",value="0xfe00a300"},
-     {number="65",value="0x00029002"}]
-     (gdb)
-     -data-list-register-values x
-     ^done,register-values=[{number="0",value="0xfe0043c8"},
-     {number="1",value="0x3fff88"},{number="2",value="0xfffffffe"},
-     {number="3",value="0x0"},{number="4",value="0xa"},
-     {number="5",value="0x3fff68"},{number="6",value="0x3fff58"},
-     {number="7",value="0xfe011e98"},{number="8",value="0x2"},
-     {number="9",value="0xfa202820"},{number="10",value="0xfa202808"},
-     {number="11",value="0x1"},{number="12",value="0x0"},
-     {number="13",value="0x4544"},{number="14",value="0xffdfffff"},
-     {number="15",value="0xffffffff"},{number="16",value="0xfffffeff"},
-     {number="17",value="0xefffffed"},{number="18",value="0xfffffffe"},
-     {number="19",value="0xffffffff"},{number="20",value="0xffffffff"},
-     {number="21",value="0xffffffff"},{number="22",value="0xfffffff7"},
-     {number="23",value="0xffffffff"},{number="24",value="0xffffffff"},
-     {number="25",value="0xffffffff"},{number="26",value="0xfffffffb"},
-     {number="27",value="0xffffffff"},{number="28",value="0xf7bfffff"},
-     {number="29",value="0x0"},{number="30",value="0xfe010000"},
-     {number="31",value="0x0"},{number="32",value="0x0"},
-     {number="33",value="0x0"},{number="34",value="0x0"},
-     {number="35",value="0x0"},{number="36",value="0x0"},
-     {number="37",value="0x0"},{number="38",value="0x0"},
-     {number="39",value="0x0"},{number="40",value="0x0"},
-     {number="41",value="0x0"},{number="42",value="0x0"},
-     {number="43",value="0x0"},{number="44",value="0x0"},
-     {number="45",value="0x0"},{number="46",value="0x0"},
-     {number="47",value="0x0"},{number="48",value="0x0"},
-     {number="49",value="0x0"},{number="50",value="0x0"},
-     {number="51",value="0x0"},{number="52",value="0x0"},
-     {number="53",value="0x0"},{number="54",value="0x0"},
-     {number="55",value="0x0"},{number="56",value="0x0"},
-     {number="57",value="0x0"},{number="58",value="0x0"},
-     {number="59",value="0x0"},{number="60",value="0x0"},
-     {number="61",value="0x0"},{number="62",value="0x0"},
-     {number="63",value="0x0"},{number="64",value="0xfe00a300"},
-     {number="65",value="0x29002"},{number="66",value="0x202f04b5"},
-     {number="67",value="0xfe0043b0"},{number="68",value="0xfe00b3e4"},
-     {number="69",value="0x20002b03"}]
-     (gdb)
-
-The `-data-read-memory' Command
--------------------------------
-
-Synopsis
-........
-
-      -data-read-memory [ -o BYTE-OFFSET ]
-        ADDRESS WORD-FORMAT WORD-SIZE
-        NR-ROWS NR-COLS [ ASCHAR ]
-
-where:
-
-`ADDRESS'
-     An expression specifying the address of the first memory word to be
-     read.  Complex expressions containing embedded white space should
-     be quoted using the C convention.
-
-`WORD-FORMAT'
-     The format to be used to print the memory words.  The notation is
-     the same as for GDB's `print' command (*note Output formats:
-     Output Formats.).
-
-`WORD-SIZE'
-     The size of each memory word in bytes.
-
-`NR-ROWS'
-     The number of rows in the output table.
-
-`NR-COLS'
-     The number of columns in the output table.
-
-`ASCHAR'
-     If present, indicates that each row should include an ASCII dump.
-     The value of ASCHAR is used as a padding character when a byte is
-     not a member of the printable ASCII character set (printable ASCII
-     characters are those whose code is between 32 and 126,
-     inclusively).
-
-`BYTE-OFFSET'
-     An offset to add to the ADDRESS before fetching memory.
-
-   This command displays memory contents as a table of NR-ROWS by
-NR-COLS words, each word being WORD-SIZE bytes.  In total, `NR-ROWS *
-NR-COLS * WORD-SIZE' bytes are read (returned as `total-bytes').
-Should less than the requested number of bytes be returned by the
-target, the missing words are identified using `N/A'.  The number of
-bytes read from the target is returned in `nr-bytes' and the starting
-address used to read memory in `addr'.
-
-   The address of the next/previous row or page is available in
-`next-row' and `prev-row', `next-page' and `prev-page'.
-
-GDB Command
-...........
-
-The corresponding GDB command is `x'.  `gdbtk' has `gdb_get_mem' memory
-read command.
-
-Example
-.......
-
-Read six bytes of memory starting at `bytes+6' but then offset by `-6'
-bytes.  Format as three rows of two columns.  One byte per word.
-Display each word in hex.
-
-     (gdb)
-     9-data-read-memory -o -6 -- bytes+6 x 1 3 2
-     9^done,addr="0x00001390",nr-bytes="6",total-bytes="6",
-     next-row="0x00001396",prev-row="0x0000138e",next-page="0x00001396",
-     prev-page="0x0000138a",memory=[
-     {addr="0x00001390",data=["0x00","0x01"]},
-     {addr="0x00001392",data=["0x02","0x03"]},
-     {addr="0x00001394",data=["0x04","0x05"]}]
-     (gdb)
-
-   Read two bytes of memory starting at address `shorts + 64' and
-display as a single word formatted in decimal.
-
-     (gdb)
-     5-data-read-memory shorts+64 d 2 1 1
-     5^done,addr="0x00001510",nr-bytes="2",total-bytes="2",
-     next-row="0x00001512",prev-row="0x0000150e",
-     next-page="0x00001512",prev-page="0x0000150e",memory=[
-     {addr="0x00001510",data=["128"]}]
-     (gdb)
-
-   Read thirty two bytes of memory starting at `bytes+16' and format as
-eight rows of four columns.  Include a string encoding with `x' used as
-the non-printable character.
-
-     (gdb)
-     4-data-read-memory bytes+16 x 1 8 4 x
-     4^done,addr="0x000013a0",nr-bytes="32",total-bytes="32",
-     next-row="0x000013c0",prev-row="0x0000139c",
-     next-page="0x000013c0",prev-page="0x00001380",memory=[
-     {addr="0x000013a0",data=["0x10","0x11","0x12","0x13"],ascii="xxxx"},
-     {addr="0x000013a4",data=["0x14","0x15","0x16","0x17"],ascii="xxxx"},
-     {addr="0x000013a8",data=["0x18","0x19","0x1a","0x1b"],ascii="xxxx"},
-     {addr="0x000013ac",data=["0x1c","0x1d","0x1e","0x1f"],ascii="xxxx"},
-     {addr="0x000013b0",data=["0x20","0x21","0x22","0x23"],ascii=" !\"#"},
-     {addr="0x000013b4",data=["0x24","0x25","0x26","0x27"],ascii="$%&'"},
-     {addr="0x000013b8",data=["0x28","0x29","0x2a","0x2b"],ascii="()*+"},
-     {addr="0x000013bc",data=["0x2c","0x2d","0x2e","0x2f"],ascii=",-./"}]
-     (gdb)
-
-The `-display-delete' Command
------------------------------
-
-Synopsis
-........
-
-      -display-delete NUMBER
-
-   Delete the display NUMBER.
-
-GDB Command
-...........
-
-The corresponding GDB command is `delete display'.
-
-Example
-.......
-
-N.A.
-
-The `-display-disable' Command
-------------------------------
-
-Synopsis
-........
-
-      -display-disable NUMBER
-
-   Disable display NUMBER.
-
-GDB Command
-...........
-
-The corresponding GDB command is `disable display'.
-
-Example
-.......
-
-N.A.
-
-The `-display-enable' Command
------------------------------
-
-Synopsis
-........
-
-      -display-enable NUMBER
-
-   Enable display NUMBER.
-
-GDB Command
-...........
-
-The corresponding GDB command is `enable display'.
-
-Example
-.......
-
-N.A.
-
-The `-display-insert' Command
------------------------------
-
-Synopsis
-........
-
-      -display-insert EXPRESSION
-
-   Display EXPRESSION every time the program stops.
-
-GDB Command
-...........
-
-The corresponding GDB command is `display'.
-
-Example
-.......
-
-N.A.
-
-The `-display-list' Command
----------------------------
-
-Synopsis
-........
-
-      -display-list
-
-   List the displays.  Do not show the current values.
-
-GDB Command
-...........
-
-The corresponding GDB command is `info display'.
-
-Example
-.......
-
-N.A.
-
-The `-environment-cd' Command
------------------------------
-
-Synopsis
-........
-
-      -environment-cd PATHDIR
-
-   Set GDB's working directory.
-
-GDB Command
-...........
-
-The corresponding GDB command is `cd'.
-
-Example
-.......
-
-     (gdb)
-     -environment-cd /kwikemart/marge/ezannoni/flathead-dev/devo/gdb
-     ^done
-     (gdb)
-
-The `-environment-directory' Command
-------------------------------------
-
-Synopsis
-........
-
-      -environment-directory [ -r ] [ PATHDIR ]+
-
-   Add directories PATHDIR to beginning of search path for source files.
-If the `-r' option is used, the search path is reset to the default
-search path.  If directories PATHDIR are supplied in addition to the
-`-r' option, the search path is first reset and then addition occurs as
-normal.  Multiple directories may be specified, separated by blanks.
-Specifying multiple directories in a single command results in the
-directories added to the beginning of the search path in the same order
-they were presented in the command.  If blanks are needed as part of a
-directory name, double-quotes should be used around the name.  In the
-command output, the path will show up separated by the system
-directory-separator character.  The directory-seperator character must
-not be used in any directory name.  If no directories are specified,
-the current search path is displayed.
-
-GDB Command
-...........
-
-The corresponding GDB command is `dir'.
-
-Example
-.......
-
-     (gdb)
-     -environment-directory /kwikemart/marge/ezannoni/flathead-dev/devo/gdb
-     ^done,source-path="/kwikemart/marge/ezannoni/flathead-dev/devo/gdb:$cdir:$cwd"
-     (gdb)
-     -environment-directory ""
-     ^done,source-path="/kwikemart/marge/ezannoni/flathead-dev/devo/gdb:$cdir:$cwd"
-     (gdb)
-     -environment-directory -r /home/jjohnstn/src/gdb /usr/src
-     ^done,source-path="/home/jjohnstn/src/gdb:/usr/src:$cdir:$cwd"
-     (gdb)
-     -environment-directory -r
-     ^done,source-path="$cdir:$cwd"
-     (gdb)
-
-The `-environment-path' Command
--------------------------------
-
-Synopsis
-........
-
-      -environment-path [ -r ] [ PATHDIR ]+
-
-   Add directories PATHDIR to beginning of search path for object files.
-If the `-r' option is used, the search path is reset to the original
-search path that existed at gdb start-up.  If directories PATHDIR are
-supplied in addition to the `-r' option, the search path is first reset
-and then addition occurs as normal.  Multiple directories may be
-specified, separated by blanks.  Specifying multiple directories in a
-single command results in the directories added to the beginning of the
-search path in the same order they were presented in the command.  If
-blanks are needed as part of a directory name, double-quotes should be
-used around the name.  In the command output, the path will show up
-separated by the system directory-separator character.  The
-directory-seperator character must not be used in any directory name.
-If no directories are specified, the current path is displayed.
-
-GDB Command
-...........
-
-The corresponding GDB command is `path'.
-
-Example
-.......
-
-     (gdb)
-     -environment-path
-     ^done,path="/usr/bin"
-     (gdb)
-     -environment-path /kwikemart/marge/ezannoni/flathead-dev/ppc-eabi/gdb /bin
-     ^done,path="/kwikemart/marge/ezannoni/flathead-dev/ppc-eabi/gdb:/bin:/usr/bin"
-     (gdb)
-     -environment-path -r /usr/local/bin
-     ^done,path="/usr/local/bin:/usr/bin"
-     (gdb)
-
-The `-environment-pwd' Command
-------------------------------
-
-Synopsis
-........
-
-      -environment-pwd
-
-   Show the current working directory.
-
-GDB command
-...........
-
-The corresponding GDB command is `pwd'.
-
-Example
-.......
-
-     (gdb)
-     -environment-pwd
-     ^done,cwd="/kwikemart/marge/ezannoni/flathead-dev/devo/gdb"
      (gdb)
 
