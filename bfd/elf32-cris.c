@@ -1,6 +1,6 @@
 /* CRIS-specific support for 32-bit ELF.
    Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
-   2010  Free Software Foundation, Inc.
+   2010, 2011 Free Software Foundation, Inc.
    Contributed by Axis Communications AB.
    Written by Hans-Peter Nilsson, based on elf32-fr30.c
    PIC and shlib bits based primarily on elf32-m68k.c and elf32-i386.c.
@@ -580,7 +580,7 @@ cris_elf_grok_prstatus (abfd, note)
 	elf_tdata (abfd)->core_signal = bfd_get_16 (abfd, note->descdata + 12);
 
 	/* pr_pid */
-	elf_tdata (abfd)->core_pid = bfd_get_32 (abfd, note->descdata + 22);
+	elf_tdata (abfd)->core_lwpid = bfd_get_32 (abfd, note->descdata + 22);
 
 	/* pr_reg */
 	offset = 70;
@@ -599,7 +599,7 @@ cris_elf_grok_prstatus (abfd, note)
 	elf_tdata (abfd)->core_signal = bfd_get_16 (abfd, note->descdata + 12);
 
 	/* pr_pid */
-	elf_tdata (abfd)->core_pid = bfd_get_32 (abfd, note->descdata + 22);
+	elf_tdata (abfd)->core_lwpid = bfd_get_32 (abfd, note->descdata + 22);
 
 	/* pr_reg */
 	offset = 70;
@@ -1181,15 +1181,8 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	}
 
       if (sec != NULL && elf_discarded_section (sec))
-	{
-	  /* For relocs against symbols from removed linkonce sections,
-	     or sections discarded by a linker script, we just want the
-	     section contents zeroed.  Avoid any special processing.  */
-	  _bfd_clear_contents (howto, input_bfd, contents + rel->r_offset);
-	  rel->r_info = 0;
-	  rel->r_addend = 0;
-	  continue;
-	}
+	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
+					 rel, relend, howto, contents);
 
       if (info->relocatable)
 	continue;
@@ -1493,7 +1486,7 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	case R_CRIS_16:
 	case R_CRIS_32:
 	  if (info->shared
-	      && r_symndx != 0
+	      && r_symndx != STN_UNDEF
 	      && (input_section->flags & SEC_ALLOC) != 0
 	      && ((r_type != R_CRIS_8_PCREL
 		   && r_type != R_CRIS_16_PCREL
@@ -2740,9 +2733,6 @@ elf_cris_adjust_gotplt_to_got (h, p)
 {
   struct bfd_link_info *info = (struct bfd_link_info *) p;
 
-  if (h->root.root.type == bfd_link_hash_warning)
-    h = (struct elf_cris_link_hash_entry *) h->root.root.u.i.link;
-
   /* If nobody wanted a GOTPLT with this symbol, we're done.  */
   if (h->gotplt_refcount <= 0)
     return TRUE;
@@ -3963,9 +3953,6 @@ elf_cris_discard_excess_dso_dynamics (h, inf)
   struct elf_cris_pcrel_relocs_copied *s;
   struct bfd_link_info *info = (struct bfd_link_info *) inf;
 
-  if (h->root.root.type == bfd_link_hash_warning)
-    h = (struct elf_cris_link_hash_entry *) h->root.root.u.i.link;
-
   /* If a symbol has been forced local or we have found a regular
      definition for the symbolic link case, then we won't be needing
      any relocs.  */
@@ -4020,9 +4007,6 @@ elf_cris_discard_excess_program_dynamics (h, inf)
      PTR inf;
 {
   struct bfd_link_info *info = (struct bfd_link_info *) inf;
-
-  if (h->root.root.type == bfd_link_hash_warning)
-    h = (struct elf_cris_link_hash_entry *) h->root.root.u.i.link;
 
   /* If we're not creating a shared library and have a symbol which is
      referred to by .got references, but the symbol is defined locally,
@@ -4364,6 +4348,7 @@ elf_cris_got_elt_size (bfd *abfd ATTRIBUTE_UNUSED,
 }
 
 #define ELF_ARCH		bfd_arch_cris
+#define ELF_TARGET_ID		CRIS_ELF_DATA
 #define ELF_MACHINE_CODE	EM_CRIS
 #define ELF_MAXPAGESIZE		0x2000
 

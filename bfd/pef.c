@@ -1,6 +1,6 @@
 /* PEF support for BFD.
-   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
-   Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
+   2009, 2011  Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -516,8 +516,8 @@ bfd_pef_scan (abfd, header, mdata)
   bfd_pef_convert_architecture (header->architecture, &cputype, &cpusubtype);
   if (cputype == bfd_arch_unknown)
     {
-      fprintf (stderr, "bfd_pef_scan: unknown architecture 0x%lx\n",
-	       header->architecture);
+      (*_bfd_error_handler) (_("bfd_pef_scan: unknown architecture 0x%lx"),
+			       header->architecture);
       return -1;
     }
   bfd_set_arch_mach (abfd, cputype, cpusubtype);
@@ -1015,6 +1015,7 @@ const bfd_target pef_vec =
   0,				/* Symbol_leading_char.  */
   ' ',				/* AR_pad_char.  */
   16,				/* AR_max_namelen.  */
+  0,				/* match priority.  */
   bfd_getb64, bfd_getb_signed_64, bfd_putb64,
   bfd_getb32, bfd_getb_signed_32, bfd_putb32,
   bfd_getb16, bfd_getb_signed_16, bfd_putb16,	/* Data.  */
@@ -1167,6 +1168,7 @@ const bfd_target pef_xlib_vec =
   0,				/* Symbol_leading_char.  */
   ' ',				/* AR_pad_char.  */
   16,				/* AR_max_namelen.  */
+  0,				/* match priority.  */
   bfd_getb64, bfd_getb_signed_64, bfd_putb64,
   bfd_getb32, bfd_getb_signed_32, bfd_putb32,
   bfd_getb16, bfd_getb_signed_16, bfd_putb16,	/* Data.  */

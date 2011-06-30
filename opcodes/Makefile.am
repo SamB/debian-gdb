@@ -206,6 +206,10 @@ TARGET_LIBOPCODES_CFILES = \
 	tic6x-dis.c \
 	tic80-dis.c \
 	tic80-opc.c \
+	tilegx-dis.c \
+	tilegx-opc.c \
+	tilepro-dis.c \
+	tilepro-opc.c \
 	v850-dis.c \
 	v850-opc.c \
 	vax-dis.c \
@@ -287,6 +291,7 @@ EXTRA_libopcodes_la_SOURCES = $(LIBOPCODES_CFILES)
 # should be removed if everything else starts using libtool.  FIXME.
 
 noinst_LIBRARIES = libopcodes.a
+libopcodes_a_SOURCES =
 
 stamp-lib: libopcodes.la
 	libtooldir=`$(LIBTOOL) --config | sed -n -e 's/^objdir=//p'`; \
@@ -305,9 +310,10 @@ po/POTFILES.in: @MAINT@ Makefile
 	  && mv tmp $(srcdir)/po/POTFILES.in
 
 CLEANFILES = \
-	stamp-ip2k stamp-m32c stamp-m32r stamp-fr30 stamp-frv \
-	stamp-openrisc stamp-iq2000 stamp-mep stamp-mt stamp-xstormy16 stamp-xc16x\
-	libopcodes.a stamp-lib dep.sed DEP DEPA DEP1 DEP2
+	stamp-fr30 stamp-frv stamp-ip2k stamp-iq2000 stamp-lm32 \
+	stamp-m32c stamp-m32r stamp-mep stamp-mt \
+	stamp-openrisc stamp-xc16x stamp-xstormy16 \
+	libopcodes.a stamp-lib
 
 
 CGENDIR = @cgendir@
@@ -452,11 +458,11 @@ stamp-xstormy16: $(CGENDEPS) $(CPUDIR)/xstormy16.cpu $(CPUDIR)/xstormy16.opc
 		archfile=$(CPUDIR)/xstormy16.cpu opcfile=$(CPUDIR)/xstormy16.opc extrafiles=
 
 MOSTLYCLEANFILES = i386-gen$(EXEEXT_FOR_BUILD) ia64-gen$(EXEEXT_FOR_BUILD) \
-	s390-mkopc$(EXEEXT_FOR_BUILD) z8kgen$(EXEEXT_FOR_BUILD) \
+	s390-mkopc$(EXEEXT_FOR_BUILD) s390-opc.tab z8kgen$(EXEEXT_FOR_BUILD) \
 	opc2c$(EXEEXT_FOR_BUILD)
 
 MAINTAINERCLEANFILES = $(srcdir)/i386-tbl.h $(srcdir)/i386-init.h \
-	$(srcdir)/ia64-asmtab.c s390-opc.tab $(srcdir)/z8k-opc.h \
+	$(srcdir)/ia64-asmtab.c $(srcdir)/z8k-opc.h \
 	$(srcdir)/rx-decode.c
 
 i386-gen$(EXEEXT_FOR_BUILD): i386-gen.o $(BUILD_LIB_DEPS)

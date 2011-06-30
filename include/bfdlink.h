@@ -1,6 +1,7 @@
 /* bfdlink.h -- header file for BFD link routines
    Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004, 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
+   2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Written by Steve Chamberlain and Ian Lance Taylor, Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -90,7 +91,9 @@ struct bfd_link_hash_entry
   struct bfd_hash_entry root;
 
   /* Type of this entry.  */
-  enum bfd_link_hash_type type;
+  ENUM_BITFIELD (bfd_link_hash_type) type : 8;
+
+  unsigned int non_ir_ref : 1;
 
   /* A union of information depending upon the type.  */
   union
@@ -120,7 +123,6 @@ struct bfd_link_hash_entry
 	     undefined symbol list.  */
 	  struct bfd_link_hash_entry *next;
 	  bfd *abfd;		/* BFD symbol was found in.  */
-	  bfd *weak;		/* BFD weak symbol was found in.  */
 	} undef;
       /* bfd_link_hash_defined, bfd_link_hash_defweak.  */
       struct
@@ -351,6 +353,10 @@ struct bfd_link_info
      --dynamic-list command line options.  */
   unsigned int dynamic: 1;
 
+  /* FALSE if .eh_frame unwind info should be generated for PLT and other
+     linker created sections, TRUE if it should be omitted.  */
+  unsigned int no_ld_generated_unwind_info: 1;
+
   /* Non-NULL if .note.gnu.build-id section should be created.  */
   char *emit_note_gnu_build_id;
 
@@ -481,33 +487,26 @@ struct bfd_link_callbacks
   /* A function which is called when an object is added from an
      archive.  ABFD is the archive element being added.  NAME is the
      name of the symbol which caused the archive element to be pulled
-     in.  */
+     in.  This function may set *SUBSBFD to point to an alternative
+     BFD from which symbols should in fact be added in place of the
+     original BFD's symbols.  */
   bfd_boolean (*add_archive_element)
-    (struct bfd_link_info *, bfd *abfd, const char *name);
+    (struct bfd_link_info *, bfd *abfd, const char *name, bfd **subsbfd);
   /* A function which is called when a symbol is found with multiple
-     definitions.  NAME is the symbol which is defined multiple times.
-     OBFD is the old BFD, OSEC is the old section, OVAL is the old
-     value, NBFD is the new BFD, NSEC is the new section, and NVAL is
-     the new value.  OBFD may be NULL.  OSEC and NSEC may be
-     bfd_com_section or bfd_ind_section.  */
+     definitions.  H is the symbol which is defined multiple times.
+     NBFD is the new BFD, NSEC is the new section, and NVAL is the new
+     value.  NSEC may be bfd_com_section or bfd_ind_section.  */
   bfd_boolean (*multiple_definition)
-    (struct bfd_link_info *, const char *name,
-     bfd *obfd, asection *osec, bfd_vma oval,
+    (struct bfd_link_info *, struct bfd_link_hash_entry *h,
      bfd *nbfd, asection *nsec, bfd_vma nval);
   /* A function which is called when a common symbol is defined
-     multiple times.  NAME is the symbol appearing multiple times.
-     OBFD is the BFD of the existing symbol; it may be NULL if this is
-     not known.  OTYPE is the type of the existing symbol, which may
-     be bfd_link_hash_defined, bfd_link_hash_defweak,
-     bfd_link_hash_common, or bfd_link_hash_indirect.  If OTYPE is
-     bfd_link_hash_common, OSIZE is the size of the existing symbol.
+     multiple times.  H is the symbol appearing multiple times.
      NBFD is the BFD of the new symbol.  NTYPE is the type of the new
      symbol, one of bfd_link_hash_defined, bfd_link_hash_common, or
      bfd_link_hash_indirect.  If NTYPE is bfd_link_hash_common, NSIZE
      is the size of the new symbol.  */
   bfd_boolean (*multiple_common)
-    (struct bfd_link_info *, const char *name,
-     bfd *obfd, enum bfd_link_hash_type otype, bfd_vma osize,
+    (struct bfd_link_info *, struct bfd_link_hash_entry *h,
      bfd *nbfd, enum bfd_link_hash_type ntype, bfd_vma nsize);
   /* A function which is called to add a symbol to a set.  ENTRY is
      the link hash table entry for the set itself (e.g.,
@@ -576,12 +575,15 @@ struct bfd_link_callbacks
     (struct bfd_link_info *, const char *name,
      bfd *abfd, asection *section, bfd_vma address);
   /* A function which is called when a symbol in notice_hash is
-     defined or referenced.  NAME is the symbol.  ABFD, SECTION and
-     ADDRESS are the value of the symbol.  If SECTION is
-     bfd_und_section, this is a reference.  */
+     defined or referenced.  H is the symbol.  ABFD, SECTION and
+     ADDRESS are the (new) value of the symbol.  If SECTION is
+     bfd_und_section, this is a reference.  FLAGS are the symbol
+     BSF_* flags.  STRING is the name of the symbol to indirect to if
+     the sym is indirect, or the warning string if a warning sym.  */
   bfd_boolean (*notice)
-    (struct bfd_link_info *, const char *name,
-     bfd *abfd, asection *section, bfd_vma address);
+    (struct bfd_link_info *, struct bfd_link_hash_entry *h,
+     bfd *abfd, asection *section, bfd_vma address, flagword flags,
+     const char *string);
   /* Error or warning link info message.  */
   void (*einfo)
     (const char *fmt, ...);

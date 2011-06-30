@@ -1,5 +1,6 @@
 /* 32-bit ELF support for S+core.
-   Copyright 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+   Copyright 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by
    Brain.lin (brain.lin@sunplusct.com)
    Mei Ligang (ligang@sunnorth.com.cn)
@@ -1036,9 +1037,6 @@ static bfd_boolean
 score_elf_sort_hash_table_f (struct score_elf_link_hash_entry *h, void *data)
 {
   struct score_elf_hash_sort_data *hsd = data;
-
-  if (h->root.root.type == bfd_link_hash_warning)
-    h = (struct score_elf_link_hash_entry *) h->root.root.u.i.link;
 
   /* Symbols without dynamic symbol table entries aren't interesting at all.  */
   if (h->root.dynindx == -1)
@@ -2126,7 +2124,7 @@ score_elf_final_link_relocate (reloc_howto_type *howto,
                && h != NULL
                && h->root.def_dynamic
                && !h->root.def_regular))
-           && r_symndx != 0
+           && r_symndx != STN_UNDEF
            && (input_section->flags & SEC_ALLOC) != 0)
         {
           /* If we're creating a shared library, or this relocation is against a symbol
@@ -2139,8 +2137,8 @@ score_elf_final_link_relocate (reloc_howto_type *howto,
                                                     input_section))
             return bfd_reloc_undefined;
         }
-      else if (r_symndx == 0)
-        /* r_symndx will be zero only for relocs against symbols
+      else if (r_symndx == STN_UNDEF)
+        /* r_symndx will be STN_UNDEF (zero) only for relocs against symbols
            from removed linkonce sections, or sections discarded by
            a linker script.  */
         value = 0;
@@ -2675,15 +2673,8 @@ s3_bfd_score_elf_relocate_section (bfd *output_bfd,
         }
 
       if (sec != NULL && elf_discarded_section (sec))
-        {
-          /* For relocs against symbols from removed linkonce sections,
-             or sections discarded by a linker script, we just want the
-             section contents zeroed.  Avoid any special processing.  */
-          _bfd_clear_contents (howto, input_bfd, contents + rel->r_offset);
-          rel->r_info = 0;
-          rel->r_addend = 0;
-          continue;
-        }
+	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
+					 rel, relend, howto, contents);
 
       if (info->relocatable)
         {
@@ -3917,7 +3908,7 @@ s3_bfd_score_elf_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
       elf_tdata (abfd)->core_signal = score_bfd_get_16 (abfd, note->descdata + 12);
 
       /* pr_pid */
-      elf_tdata (abfd)->core_pid = score_bfd_get_32 (abfd, note->descdata + 24);
+      elf_tdata (abfd)->core_lwpid = score_bfd_get_32 (abfd, note->descdata + 24);
 
       /* pr_reg */
       offset = 72;

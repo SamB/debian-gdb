@@ -1,6 +1,6 @@
 /* Xilinx MicroBlaze-specific support for 32-bit ELF
 
-   Copyright 2009, 2010 Free Software Foundation, Inc.
+   Copyright 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -824,7 +824,7 @@ microblaze_elf_relocate_section (bfd *output_bfd,
 	    }
 
 	  /* Sanity check the address.  */
-	  if (offset > bfd_get_section_limit (output_bfd, input_section))
+	  if (offset > bfd_get_section_limit (input_bfd, input_section))
 	    {
 	      r = bfd_reloc_outofrange;
 	      goto check_reloc;
@@ -1067,10 +1067,10 @@ microblaze_elf_relocate_section (bfd *output_bfd,
 	    case (int) R_MICROBLAZE_64:
 	    case (int) R_MICROBLAZE_32:
 	      {
-		/* r_symndx will be zero only for relocs against symbols
+		/* r_symndx will be STN_UNDEF (zero) only for relocs against symbols
 		   from removed linkonce sections, or sections discarded by
 		   a linker script.  */
-		if (r_symndx == 0 || (input_section->flags & SEC_ALLOC) == 0)
+		if (r_symndx == STN_UNDEF || (input_section->flags & SEC_ALLOC) == 0)
 		  {
 		    relocation += addend;
 		    if (r_type == R_MICROBLAZE_32)
@@ -2060,7 +2060,7 @@ microblaze_elf_check_relocs (bfd * abfd,
 		    const char *name;
 		    bfd *dynobj;
 		    unsigned int strndx = elf_elfheader (abfd)->e_shstrndx;
-		    unsigned int shnam = elf_section_data (sec)->rel_hdr.sh_name;
+		    unsigned int shnam = _bfd_elf_single_rel_hdr (sec)->sh_name;
 
 		    name = bfd_elf_string_from_elf_section (abfd, strndx, shnam);
 		    if (name == NULL)
@@ -2381,12 +2381,6 @@ allocate_dynrelocs (struct elf_link_hash_entry *h, void * dat)
 
   if (h->root.type == bfd_link_hash_indirect)
     return TRUE;
-
-  if (h->root.type == bfd_link_hash_warning)
-    /* When warning symbols are created, they **replace** the "real"
-       entry in the hash table, thus we never get to see the real
-       symbol in a hash traversal.  So look at it now.  */
-    h = (struct elf_link_hash_entry *) h->root.u.i.link;
 
   info = (struct bfd_link_info *) dat;
   htab = elf32_mb_hash_table (info);
@@ -3026,6 +3020,7 @@ microblaze_elf_add_symbol_hook (bfd *abfd,
 #define TARGET_BIG_NAME		"elf32-microblaze"
 
 #define ELF_ARCH		bfd_arch_microblaze
+#define ELF_TARGET_ID		MICROBLAZE_ELF_DATA
 #define ELF_MACHINE_CODE	EM_MICROBLAZE
 #define ELF_MACHINE_ALT1	EM_MICROBLAZE_OLD
 #define ELF_MAXPAGESIZE		0x4   		/* 4k, if we ever have 'em.  */

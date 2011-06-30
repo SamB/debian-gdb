@@ -1,5 +1,6 @@
 /* SPARC-specific support for ELF
-   Copyright 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+   Copyright 2005, 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -1343,7 +1344,7 @@ _bfd_sparc_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
   sreloc = NULL;
 
   if (ABI_64_P (abfd))
-    num_relocs = NUM_SHDR_ENTRIES (& elf_section_data (sec)->rel_hdr);
+    num_relocs = NUM_SHDR_ENTRIES (_bfd_elf_single_rel_hdr (sec));
   else
     num_relocs = sec->reloc_count;
 
@@ -2145,12 +2146,6 @@ allocate_dynrelocs (struct elf_link_hash_entry *h, PTR inf)
   if (h->root.type == bfd_link_hash_indirect)
     return TRUE;
 
-  if (h->root.type == bfd_link_hash_warning)
-    /* When warning symbols are created, they **replace** the "real"
-       entry in the hash table, thus we never get to see the real
-       symbol in a hash traversal.  So look at it now.  */
-    h = (struct elf_link_hash_entry *) h->root.u.i.link;
-
   info = (struct bfd_link_info *) inf;
   htab = _bfd_sparc_elf_hash_table (info);
   BFD_ASSERT (htab != NULL);
@@ -2425,9 +2420,6 @@ readonly_dynrelocs (struct elf_link_hash_entry *h, PTR inf)
 {
   struct _bfd_sparc_elf_link_hash_entry *eh;
   struct _bfd_sparc_elf_dyn_relocs *p;
-
-  if (h->root.type == bfd_link_hash_warning)
-    h = (struct elf_link_hash_entry *) h->root.u.i.link;
 
   eh = (struct _bfd_sparc_elf_link_hash_entry *) h;
   for (p = eh->dyn_relocs; p != NULL; p = p->next)
@@ -2743,6 +2735,7 @@ _bfd_sparc_elf_size_dynamic_sections (bfd *output_bfd,
 		entry->isym.st_info = ELF_ST_INFO (app_regs [reg].bind,
 						   STT_REGISTER);
 		entry->isym.st_shndx = app_regs [reg].shndx;
+		entry->isym.st_target_internal = 0;
 		entry->next = NULL;
 		entry->input_bfd = output_bfd;
 		entry->input_indx = -1;
@@ -2819,11 +2812,16 @@ static bfd_vma
 tpoff (struct bfd_link_info *info, bfd_vma address)
 {
   struct elf_link_hash_table *htab = elf_hash_table (info);
+  const struct elf_backend_data *bed = get_elf_backend_data (info->output_bfd);
+  bfd_vma static_tls_size;
 
   /* If tls_sec is NULL, we should have signalled an error already.  */
   if (htab->tls_sec == NULL)
     return 0;
-  return address - htab->tls_size - htab->tls_sec->vma;
+
+  /* Consider special static TLS alignment requirements.  */
+  static_tls_size = BFD_ALIGN (htab->tls_size, bed->static_tls_alignment);
+  return address - static_tls_size - htab->tls_sec->vma;
 }
 
 /* Return the relocation value for a %gdop relocation.  */
@@ -2884,7 +2882,7 @@ _bfd_sparc_elf_relocate_section (bfd *output_bfd,
 
   rel = relocs;
   if (ABI_64_P (output_bfd))
-    num_relocs = NUM_SHDR_ENTRIES (& elf_section_data (input_section)->rel_hdr);
+    num_relocs = NUM_SHDR_ENTRIES (_bfd_elf_single_rel_hdr (input_section));
   else
     num_relocs = input_section->reloc_count;
   relend = relocs + num_relocs;
@@ -2959,16 +2957,8 @@ _bfd_sparc_elf_relocate_section (bfd *output_bfd,
 	}
 
       if (sec != NULL && elf_discarded_section (sec))
-	{
-	  /* For relocs against symbols from removed linkonce
-	     sections, or sections discarded by a linker script, we
-	     just want the section contents zeroed.  Avoid any
-	     special processing.  */
-	  _bfd_clear_contents (howto, input_bfd, contents + rel->r_offset);
-	  rel->r_info = 0;
-	  rel->r_addend = 0;
-	  continue;
-	}
+	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
+					 rel, relend, howto, contents);
 
       if (info->relocatable)
 	continue;

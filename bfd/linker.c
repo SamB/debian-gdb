@@ -1,6 +1,6 @@
 /* linker.c -- BFD linker routines
    Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004, 2005, 2006, 2007, 2008, 2009
+   2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Written by Steve Chamberlain and Ian Lance Taylor, Cygnus Support
 
@@ -223,7 +223,10 @@ SUBSUBSECTION
 	archive and decide which elements of the archive should be
 	included in the link.  For each such element it must call the
 	<<add_archive_element>> linker callback, and it must add the
-	symbols from the object file to the linker hash table.
+	symbols from the object file to the linker hash table.  (The
+	callback may in fact indicate that a replacement BFD should be
+	used, in which case the symbols from that BFD should be added
+	to the linker hash table instead.)
 
 @findex _bfd_generic_link_add_archive_symbols
 	In most cases the work of looking through the symbols in the
@@ -243,9 +246,13 @@ SUBSUBSECTION
 	element should be included in the link.  If the element is to
 	be included, the <<add_archive_element>> linker callback
 	routine must be called with the element as an argument, and
-	the elements symbols must be added to the linker hash table
+	the element's symbols must be added to the linker hash table
 	just as though the element had itself been passed to the
-	<<_bfd_link_add_symbols>> function.
+	<<_bfd_link_add_symbols>> function.  The <<add_archive_element>>
+	callback has the option to indicate that it would like to
+	replace the element archive with a substitute BFD, in which
+	case it is the symbols of that substitute BFD that must be
+	added to the linker hash table instead.
 
 	When the a.out <<_bfd_link_add_symbols>> function receives an
 	archive, it calls <<_bfd_generic_link_add_archive_symbols>>
@@ -257,7 +264,8 @@ SUBSUBSECTION
 	symbol) it calls the <<add_archive_element>> callback and then
 	<<aout_link_check_archive_element>> calls
 	<<aout_link_add_symbols>> to actually add the symbols to the
-	linker hash table.
+	linker hash table - possibly those of a substitute BFD, if the
+	<<add_archive_element>> callback avails itself of that option.
 
 	The ECOFF back end is unusual in that it does not normally
 	call <<_bfd_generic_link_add_archive_symbols>>, because ECOFF
@@ -457,10 +465,8 @@ _bfd_link_hash_newfunc (struct bfd_hash_entry *entry,
       struct bfd_link_hash_entry *h = (struct bfd_link_hash_entry *) entry;
 
       /* Initialize the local fields.  */
-      h->type = bfd_link_hash_new;
-      memset (&h->u.undef.next, 0,
-	      (sizeof (struct bfd_link_hash_entry)
-	       - offsetof (struct bfd_link_hash_entry, u.undef.next)));
+      memset ((char *) &h->root + sizeof (h->root), 0,
+	      sizeof (*h) - sizeof (h->root));
     }
 
   return entry;
@@ -598,21 +604,32 @@ bfd_wrapped_link_hash_lookup (bfd *abfd,
   return bfd_link_hash_lookup (info->hash, string, create, copy, follow);
 }
 
-/* Traverse a generic link hash table.  The only reason this is not a
-   macro is to do better type checking.  This code presumes that an
-   argument passed as a struct bfd_hash_entry * may be caught as a
-   struct bfd_link_hash_entry * with no explicit cast required on the
-   call.  */
+/* Traverse a generic link hash table.  Differs from bfd_hash_traverse
+   in the treatment of warning symbols.  When warning symbols are
+   created they replace the real symbol, so you don't get to see the
+   real symbol in a bfd_hash_travere.  This traversal calls func with
+   the real symbol.  */
 
 void
 bfd_link_hash_traverse
-  (struct bfd_link_hash_table *table,
+  (struct bfd_link_hash_table *htab,
    bfd_boolean (*func) (struct bfd_link_hash_entry *, void *),
    void *info)
 {
-  bfd_hash_traverse (&table->table,
-		     (bfd_boolean (*) (struct bfd_hash_entry *, void *)) func,
-		     info);
+  unsigned int i;
+
+  htab->table.frozen = 1;
+  for (i = 0; i < htab->table.size; i++)
+    {
+      struct bfd_link_hash_entry *p;
+
+      p = (struct bfd_link_hash_entry *) htab->table.table[i];
+      for (; p != NULL; p = (struct bfd_link_hash_entry *) p->root.next)
+	if (!(*func) (p->type == bfd_link_hash_warning ? p->u.i.link : p, info))
+	  goto out;
+    }
+ out:
+  htab->table.frozen = 0;
 }
 
 /* Add a symbol to the linker hash table undefs list.  */
@@ -957,8 +974,10 @@ archive_hash_table_init
    included.  CHECKFN should set *PNEEDED to TRUE if the object file
    should be included, and must also call the bfd_link_info
    add_archive_element callback function and handle adding the symbols
-   to the global hash table.  CHECKFN should only return FALSE if some
-   sort of error occurs.
+   to the global hash table.  CHECKFN must notice if the callback
+   indicates a substitute BFD, and arrange to add those symbols instead
+   if it does so.  CHECKFN should only return FALSE if some sort of
+   error occurs.
 
    For some formats, such as a.out, it is possible to look through an
    object file but not actually include it in the link.  The
@@ -1213,10 +1232,17 @@ generic_link_check_archive_element (bfd *abfd,
 	{
 	  bfd_size_type symcount;
 	  asymbol **symbols;
+	  bfd *oldbfd = abfd;
 
 	  /* This object file defines this symbol, so pull it in.  */
-	  if (! (*info->callbacks->add_archive_element) (info, abfd,
-							 bfd_asymbol_name (p)))
+	  if (!(*info->callbacks
+		->add_archive_element) (info, abfd, bfd_asymbol_name (p),
+					&abfd))
+	    return FALSE;
+	  /* Potentially, the add_archive_element hook may have set a
+	     substitute BFD for us.  */
+	  if (abfd != oldbfd
+	      && !bfd_generic_link_read_symbols (abfd))
 	    return FALSE;
 	  symcount = _bfd_generic_link_get_symcount (abfd);
 	  symbols = _bfd_generic_link_get_symbols (abfd);
@@ -1241,9 +1267,13 @@ generic_link_check_archive_element (bfd *abfd,
 	      /* This symbol was created as undefined from outside
 		 BFD.  We assume that we should link in the object
 		 file.  This is for the -u option in the linker.  */
-	      if (! (*info->callbacks->add_archive_element)
-		  (info, abfd, bfd_asymbol_name (p)))
+	      if (!(*info->callbacks
+		    ->add_archive_element) (info, abfd, bfd_asymbol_name (p),
+					    &abfd))
 		return FALSE;
+	      /* Potentially, the add_archive_element hook may have set a
+		 substitute BFD for us.  But no symbols are going to get
+		 registered by anything we're returning to from here.  */
 	      *pneeded = TRUE;
 	      return TRUE;
 	    }
@@ -1275,7 +1305,7 @@ generic_link_check_archive_element (bfd *abfd,
 	  else
 	    h->u.c.p->section = bfd_make_section_old_way (symbfd,
 							  p->section->name);
-	  h->u.c.p->section->flags = SEC_ALLOC;
+	  h->u.c.p->section->flags |= SEC_ALLOC;
 	}
       else
 	{
@@ -1547,6 +1577,8 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
   struct bfd_link_hash_entry *h;
   bfd_boolean cycle;
 
+  BFD_ASSERT (section != NULL);
+
   if (bfd_is_ind_section (section)
       || (flags & BSF_INDIRECT) != 0)
     row = INDR_ROW;
@@ -1588,8 +1620,8 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
       || (info->notice_hash != NULL
 	  && bfd_hash_lookup (info->notice_hash, name, FALSE, FALSE) != NULL))
     {
-      if (! (*info->callbacks->notice) (info, h->root.string, abfd, section,
-					value))
+      if (! (*info->callbacks->notice) (info, h,
+					abfd, section, value, flags, string))
 	return FALSE;
     }
 
@@ -1622,7 +1654,6 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 	  /* Make a new weak undefined symbol.  */
 	  h->type = bfd_link_hash_undefweak;
 	  h->u.undef.abfd = abfd;
-	  h->u.undef.weak = abfd;
 	  break;
 
 	case CDEF:
@@ -1630,9 +1661,7 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 	     previously common.  */
 	  BFD_ASSERT (h->type == bfd_link_hash_common);
 	  if (! ((*info->callbacks->multiple_common)
-		 (info, h->root.string,
-		  h->u.c.p->section->owner, bfd_link_hash_common, h->u.c.size,
-		  abfd, bfd_link_hash_defined, 0)))
+		 (info, h, abfd, bfd_link_hash_defined, 0)))
 	    return FALSE;
 	  /* Fall through.  */
 	case DEF:
@@ -1737,13 +1766,13 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 	  if (section == bfd_com_section_ptr)
 	    {
 	      h->u.c.p->section = bfd_make_section_old_way (abfd, "COMMON");
-	      h->u.c.p->section->flags = SEC_ALLOC;
+	      h->u.c.p->section->flags |= SEC_ALLOC;
 	    }
 	  else if (section->owner != abfd)
 	    {
 	      h->u.c.p->section = bfd_make_section_old_way (abfd,
 							    section->name);
-	      h->u.c.p->section->flags = SEC_ALLOC;
+	      h->u.c.p->section->flags |= SEC_ALLOC;
 	    }
 	  else
 	    h->u.c.p->section = section;
@@ -1761,9 +1790,7 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 	     two sizes, and use the section required by the larger symbol.  */
 	  BFD_ASSERT (h->type == bfd_link_hash_common);
 	  if (! ((*info->callbacks->multiple_common)
-		 (info, h->root.string,
-		  h->u.c.p->section->owner, bfd_link_hash_common, h->u.c.size,
-		  abfd, bfd_link_hash_common, value)))
+		 (info, h, abfd, bfd_link_hash_common, value)))
 	    return FALSE;
 	  if (value > h->u.c.size)
 	    {
@@ -1786,13 +1813,13 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 		{
 		  h->u.c.p->section
 		    = bfd_make_section_old_way (abfd, "COMMON");
-		  h->u.c.p->section->flags = SEC_ALLOC;
+		  h->u.c.p->section->flags |= SEC_ALLOC;
 		}
 	      else if (section->owner != abfd)
 		{
 		  h->u.c.p->section
 		    = bfd_make_section_old_way (abfd, section->name);
-		  h->u.c.p->section->flags = SEC_ALLOC;
+		  h->u.c.p->section->flags |= SEC_ALLOC;
 		}
 	      else
 		h->u.c.p->section = section;
@@ -1800,23 +1827,11 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 	  break;
 
 	case CREF:
-	  {
-	    bfd *obfd;
-
-	    /* We have found a common definition for a symbol which
-	       was already defined.  FIXME: It would nice if we could
-	       report the BFD which defined an indirect symbol, but we
-	       don't have anywhere to store the information.  */
-	    if (h->type == bfd_link_hash_defined
-		|| h->type == bfd_link_hash_defweak)
-	      obfd = h->u.def.section->owner;
-	    else
-	      obfd = NULL;
-	    if (! ((*info->callbacks->multiple_common)
-		   (info, h->root.string, obfd, h->type, 0,
-		    abfd, bfd_link_hash_common, value)))
-	      return FALSE;
-	  }
+	  /* We have found a common definition for a symbol which
+	     was already defined.  */
+	  if (! ((*info->callbacks->multiple_common)
+		 (info, h, abfd, bfd_link_hash_common, value)))
+	    return FALSE;
 	  break;
 
 	case MIND:
@@ -1827,47 +1842,16 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 	  /* Fall through.  */
 	case MDEF:
 	  /* Handle a multiple definition.  */
-	  if (!info->allow_multiple_definition)
-	    {
-	      asection *msec = NULL;
-	      bfd_vma mval = 0;
-
-	      switch (h->type)
-		{
-		case bfd_link_hash_defined:
-		  msec = h->u.def.section;
-		  mval = h->u.def.value;
-		  break;
-	        case bfd_link_hash_indirect:
-		  msec = bfd_ind_section_ptr;
-		  mval = 0;
-		  break;
-		default:
-		  abort ();
-		}
-
-	      /* Ignore a redefinition of an absolute symbol to the
-		 same value; it's harmless.  */
-	      if (h->type == bfd_link_hash_defined
-		  && bfd_is_abs_section (msec)
-		  && bfd_is_abs_section (section)
-		  && value == mval)
-		break;
-
-	      if (! ((*info->callbacks->multiple_definition)
-		     (info, h->root.string, msec->owner, msec, mval,
-		      abfd, section, value)))
-		return FALSE;
-	    }
+	  if (! ((*info->callbacks->multiple_definition)
+		 (info, h, abfd, section, value)))
+	    return FALSE;
 	  break;
 
 	case CIND:
 	  /* Create an indirect symbol from an existing common symbol.  */
 	  BFD_ASSERT (h->type == bfd_link_hash_common);
 	  if (! ((*info->callbacks->multiple_common)
-		 (info, h->root.string,
-		  h->u.c.p->section->owner, bfd_link_hash_common, h->u.c.size,
-		  abfd, bfd_link_hash_indirect, 0)))
+		 (info, h, abfd, bfd_link_hash_indirect, 0)))
 	    return FALSE;
 	  /* Fall through.  */
 	case IND:
@@ -2468,9 +2452,6 @@ _bfd_generic_link_write_global_symbol (struct generic_link_hash_entry *h,
   struct generic_write_global_symbol_info *wginfo =
       (struct generic_write_global_symbol_info *) data;
   asymbol *sym;
-
-  if (h->root.type == bfd_link_hash_warning)
-    h = (struct generic_link_hash_entry *) h->root.u.i.link;
 
   if (h->written)
     return TRUE;
@@ -3121,9 +3102,6 @@ static bfd_boolean
 fix_syms (struct bfd_link_hash_entry *h, void *data)
 {
   bfd *obfd = (bfd *) data;
-
-  if (h->type == bfd_link_hash_warning)
-    h = h->u.i.link;
 
   if (h->type == bfd_link_hash_defined
       || h->type == bfd_link_hash_defweak)

@@ -1,6 +1,6 @@
 /* IBM S/390-specific support for 64-bit ELF
    Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
-   2010  Free Software Foundation, Inc.
+   2010, 2011 Free Software Foundation, Inc.
    Contributed Martin Schwidefsky (schwidefsky@de.ibm.com).
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -1680,12 +1680,6 @@ allocate_dynrelocs (struct elf_link_hash_entry *h,
   if (h->root.type == bfd_link_hash_indirect)
     return TRUE;
 
-  if (h->root.type == bfd_link_hash_warning)
-    /* When warning symbols are created, they **replace** the "real"
-       entry in the hash table, thus we never get to see the real
-       symbol in a hash traversal.  So look at it now.  */
-    h = (struct elf_link_hash_entry *) h->root.u.i.link;
-
   info = (struct bfd_link_info *) inf;
   htab = elf_s390_hash_table (info);
   if (htab == NULL)
@@ -1906,9 +1900,6 @@ readonly_dynrelocs (h, inf)
 {
   struct elf_s390_link_hash_entry *eh;
   struct elf_s390_dyn_relocs *p;
-
-  if (h->root.type == bfd_link_hash_warning)
-    h = (struct elf_link_hash_entry *) h->root.u.i.link;
 
   eh = (struct elf_s390_link_hash_entry *) h;
   for (p = eh->dyn_relocs; p != NULL; p = p->next)
@@ -2280,15 +2271,8 @@ elf_s390_relocate_section (bfd *output_bfd,
 	}
 
       if (sec != NULL && elf_discarded_section (sec))
-	{
-	  /* For relocs against symbols from removed linkonce sections,
-	     or sections discarded by a linker script, we just want the
-	     section contents zeroed.  Avoid any special processing.  */
-	  _bfd_clear_contents (howto, input_bfd, contents + rel->r_offset);
-	  rel->r_info = 0;
-	  rel->r_addend = 0;
-	  continue;
-	}
+	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
+					 rel, relend, howto, contents);
 
       if (info->relocatable)
 	continue;
@@ -3415,6 +3399,7 @@ const struct elf_size_info s390_elf64_size_info =
 #define TARGET_BIG_SYM	bfd_elf64_s390_vec
 #define TARGET_BIG_NAME	"elf64-s390"
 #define ELF_ARCH	bfd_arch_s390
+#define ELF_TARGET_ID	S390_ELF_DATA
 #define ELF_MACHINE_CODE EM_S390
 #define ELF_MACHINE_ALT1 EM_S390_OLD
 #define ELF_MAXPAGESIZE 0x1000
