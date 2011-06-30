@@ -142,8 +142,13 @@ struct frame_id
 
 /* Methods for constructing and comparing Frame IDs.  */
 
-/* For convenience.  All fields are zero.  */
+/* For convenience.  All fields are zero.  This means "there is no frame".  */
 extern const struct frame_id null_frame_id;
+
+/* This means "there is no frame ID, but there is a frame".  It should be
+   replaced by best-effort frame IDs for the outermost frame, somehow.
+   The implementation is only special_addr_p set.  */
+extern const struct frame_id outer_frame_id;
 
 /* Flag to control debugging.  */
 
@@ -170,7 +175,8 @@ extern struct frame_id frame_id_build_special (CORE_ADDR stack_addr,
 extern struct frame_id frame_id_build_wild (CORE_ADDR stack_addr);
 
 /* Returns non-zero when L is a valid frame (a valid frame has a
-   non-zero .base).  */
+   non-zero .base).  The outermost frame is valid even without an
+   ID.  */
 extern int frame_id_p (struct frame_id l);
 
 /* Returns non-zero when L is a valid frame representing an inlined
@@ -203,6 +209,8 @@ enum frame_type
   /* In a signal handler, various OSs handle this in various ways.
      The main thing is that the frame may be far from normal.  */
   SIGTRAMP_FRAME,
+  /* Fake frame representing a cross-architecture call.  */
+  ARCH_FRAME,
   /* Sentinel or registers frame.  This frame obtains register values
      direct from the inferior's registers.  */
   SENTINEL_FRAME
@@ -545,8 +553,13 @@ extern int safe_frame_unwind_memory (struct frame_info *this_frame,
 				     CORE_ADDR addr, gdb_byte *buf, int len);
 
 /* Return this frame's architecture.  */
-
 extern struct gdbarch *get_frame_arch (struct frame_info *this_frame);
+
+/* Return the previous frame's architecture.  */
+extern struct gdbarch *frame_unwind_arch (struct frame_info *frame);
+
+/* Return the previous frame's architecture, skipping inline functions.  */
+extern struct gdbarch *frame_unwind_caller_arch (struct frame_info *frame);
 
 
 /* Values for the source flag to be used in print_frame_info_base().  */
@@ -688,5 +701,11 @@ extern struct frame_info *deprecated_safe_get_selected_frame (void);
 /* Create a frame using the specified BASE and PC.  */
 
 extern struct frame_info *create_new_frame (CORE_ADDR base, CORE_ADDR pc);
+
+/* Return true if the frame unwinder for frame FI is UNWINDER; false
+   otherwise.  */
+
+extern int frame_unwinder_is (struct frame_info *fi,
+			      const struct frame_unwind *unwinder);
 
 #endif /* !defined (FRAME_H)  */

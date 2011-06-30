@@ -1,6 +1,6 @@
 /* ELF support for BFD.
    Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
    Free Software Foundation, Inc.
 
    Written by Fred Fish @ Cygnus Support, from information published
@@ -109,9 +109,12 @@
 #define EM_MIPS		  8	/* MIPS R3000 (officially, big-endian only) */
 #define EM_S370		  9	/* IBM System/370 */
 #define EM_MIPS_RS3_LE	 10	/* MIPS R3000 little-endian (Oct 4 1999 Draft) Deprecated */
-
+#define EM_res011	 11	/* Reserved */
+#define EM_res012	 12	/* Reserved */
+#define EM_res013	 13	/* Reserved */
+#define EM_res014	 14	/* Reserved */
 #define EM_PARISC	 15	/* HPPA */
-
+#define EM_res016	 16	/* Reserved */
 #define EM_VPP550	 17	/* Fujitsu VPP500 */
 #define EM_SPARC32PLUS	 18	/* Sun's "v8plus" */
 #define EM_960		 19	/* Intel 80960 */
@@ -119,7 +122,18 @@
 #define EM_PPC64	 21	/* 64-bit PowerPC */
 #define EM_S390		 22	/* IBM S/390 */
 #define EM_SPU		 23	/* Sony/Toshiba/IBM SPU */
-
+#define EM_res024	 24	/* Reserved */
+#define EM_res025	 25	/* Reserved */
+#define EM_res026	 26	/* Reserved */
+#define EM_res027	 27	/* Reserved */
+#define EM_res028	 28	/* Reserved */
+#define EM_res029	 29	/* Reserved */
+#define EM_res030	 30	/* Reserved */
+#define EM_res031	 31	/* Reserved */
+#define EM_res032	 32	/* Reserved */
+#define EM_res033	 33	/* Reserved */
+#define EM_res034	 34	/* Reserved */
+#define EM_res035	 35	/* Reserved */
 #define EM_V800		 36	/* NEC V800 series */
 #define EM_FR20		 37	/* Fujitsu FR20 */
 #define EM_RH32		 38	/* TRW RH32 */
@@ -206,17 +220,46 @@
 #define EM_DSPIC30F	118	/* Microchip Technology dsPIC30F Digital Signal Controller */
 #define EM_CE		119	/* Freescale Communication Engine RISC core */
 #define EM_M32C		120	/* Renesas M32C series microprocessors */
-
+#define EM_res121	121	/* Reserved */
+#define EM_res122	122	/* Reserved */
+#define EM_res123	123	/* Reserved */
+#define EM_res124	124	/* Reserved */
+#define EM_res125	125	/* Reserved */
+#define EM_res126	126	/* Reserved */
+#define EM_res127	127	/* Reserved */
+#define EM_res128	128	/* Reserved */
+#define EM_res129	129	/* Reserved */
+#define EM_res130	130	/* Reserved */
 #define EM_TSK3000	131	/* Altium TSK3000 core */
 #define EM_RS08		132	/* Freescale RS08 embedded processor */
-
+#define EM_res133	133	/* Reserved */
 #define EM_ECOG2	134	/* Cyan Technology eCOG2 microprocessor */
 #define EM_SCORE	135	/* Sunplus Score */
+#define EM_SCORE7	135	/* Sunplus S+core7 RISC processor */
 #define EM_DSP24	136	/* New Japan Radio (NJR) 24-bit DSP Processor */
 #define EM_VIDEOCORE3	137	/* Broadcom VideoCore III processor */
 #define EM_LATTICEMICO32 138	/* RISC processor for Lattice FPGA architecture */
 #define EM_SE_C17	139	/* Seiko Epson C17 family */
-
+#define EM_res140	140	/* Reserved */
+#define EM_res141	141	/* Reserved */
+#define EM_res142	142	/* Reserved */
+#define EM_res143	143	/* Reserved */
+#define EM_res144	144	/* Reserved */
+#define EM_res145	145	/* Reserved */
+#define EM_res146	146	/* Reserved */
+#define EM_res147	147	/* Reserved */
+#define EM_res148	148	/* Reserved */
+#define EM_res149	149	/* Reserved */
+#define EM_res150	150	/* Reserved */
+#define EM_res151	151	/* Reserved */
+#define EM_res152	152	/* Reserved */
+#define EM_res153	153	/* Reserved */
+#define EM_res154	154	/* Reserved */
+#define EM_res155	155	/* Reserved */
+#define EM_res156	156	/* Reserved */
+#define EM_res157	157	/* Reserved */
+#define EM_res158	158	/* Reserved */
+#define EM_res159	159	/* Reserved */
 #define EM_MMDSP_PLUS	160	/* STMicroelectronics 64bit VLIW Data Signal Processor */
 #define EM_CYPRESS_M8C	161	/* Cypress M8C microprocessor */
 #define EM_R32C		162	/* Renesas R32C series microprocessors */
@@ -238,9 +281,16 @@
 #define EM_CR16		177	/* National Semiconductor CompactRISC 16-bit processor */
 #define EM_ETPU		178	/* Freescale Extended Time Processing Unit */
 #define EM_SLE9X	179	/* Infineon Technologies SLE9X core */
-#define EM_INTEL180	180	/* Reserved by Intel */
+#define EM_L1OM		180	/* Intel L1OM */
 #define EM_INTEL181	181	/* Reserved by Intel */
 #define EM_INTEL182	182	/* Reserved by Intel */
+#define EM_res183	183	/* Reserved by ARM */
+#define EM_res184	184	/* Reserved by ARM */
+#define EM_AVR32	185	/* Atmel Corporation 32-bit microprocessor family */
+#define EM_STM8	186	/* STMicroeletronics STM8 8-bit microcontroller */
+#define EM_TILE64	187	/* Tilera TILE64 multicore architecture family */
+#define EM_TILEPRO	188	/* Tilera TILEPro multicore architecture family */
+#define EM_MICROBLAZE	189	/* Xilinx MicroBlaze 32-bit RISC soft processor core */
 
 /* If it is necessary to assign new unofficial EM_* values, please pick large
    random numbers (0x8523, 0xa7f2, etc.) to minimize the chances of collision
@@ -343,6 +393,8 @@
 
 /* Old Sunplus S+core7 backend magic number. Written in the absence of an ABI.  */
 #define EM_SCORE_OLD            95
+
+#define EM_MICROBLAZE_OLD	0xbaab	/* Old MicroBlaze */
 
 /* See the above comment before you add a new EM_* value here.  */
 
@@ -555,6 +607,7 @@
 #define STB_GLOBAL	1		/* Symbol visible outside obj */
 #define STB_WEAK	2		/* Like globals, lower precedence */
 #define STB_LOOS	10		/* OS-specific semantics */
+#define STB_GNU_UNIQUE	10		/* Symbol is unique in namespace */
 #define STB_HIOS	12		/* OS-specific semantics */
 #define STB_LOPROC	13		/* Processor-specific semantics */
 #define STB_HIPROC	15		/* Processor-specific semantics */

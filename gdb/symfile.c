@@ -22,6 +22,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include "arch-utils.h"
 #include "bfdlink.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -128,7 +129,8 @@ static void overlay_command (char *, int);
 
 static void simple_free_overlay_table (void);
 
-static void read_target_long_array (CORE_ADDR, unsigned int *, int, int);
+static void read_target_long_array (CORE_ADDR, unsigned int *, int, int,
+				    enum bfd_endian);
 
 static int simple_read_overlay_table (void);
 
@@ -168,13 +170,6 @@ show_symbol_reloading (struct ui_file *file, int from_tty,
 Dynamic symbol table reloading multiple times in one run is %s.\n"),
 		    value);
 }
-
-/* If non-zero, gdb will notify the user when it is loading symbols
-   from a file.  This is almost always what users will want to have happen;
-   but for programs with lots of dynamically linked libraries, the output
-   can be more noise than signal.  */
-
-int print_symbol_loading = 1;
 
 /* If non-zero, shared library symbols will be added automatically
    when the inferior is created, new libraries are loaded, or when
@@ -791,7 +786,7 @@ syms_from_objfile (struct objfile *objfile,
       if (symfile_objfile != NULL)
 	{
 	  free_objfile (symfile_objfile);
-	  symfile_objfile = NULL;
+	  gdb_assert (symfile_objfile == NULL);
 	}
 
       /* Currently we keep symbols from the add-symbol-file command.
@@ -987,12 +982,9 @@ symbol_file_add_with_addrs_or_offsets (bfd *abfd,
 	deprecated_pre_add_symbol_hook (name);
       else
 	{
-          if (print_symbol_loading)
-	    {
-	      printf_unfiltered (_("Reading symbols from %s..."), name);
-	      wrap_here ("");
-	      gdb_flush (gdb_stdout);
-	    }
+	  printf_unfiltered (_("Reading symbols from %s..."), name);
+	  wrap_here ("");
+	  gdb_flush (gdb_stdout);
 	}
     }
   syms_from_objfile (objfile, addrs, offsets, num_offsets,
@@ -1005,7 +997,7 @@ symbol_file_add_with_addrs_or_offsets (bfd *abfd,
 
   if ((flags & OBJF_READNOW) || readnow_symbol_files)
     {
-      if ((from_tty || info_verbose) && print_symbol_loading)
+      if (from_tty || info_verbose)
 	{
 	  printf_unfiltered (_("expanding to full symbols..."));
 	  wrap_here ("");
@@ -1047,15 +1039,12 @@ symbol_file_add_with_addrs_or_offsets (bfd *abfd,
       xfree (debugfile);
     }
 
-  if (!have_partial_symbols () && !have_full_symbols ()
-      && print_symbol_loading)
+  if ((from_tty || info_verbose)
+      && !objfile_has_partial_symbols (objfile)
+      && !objfile_has_full_symbols (objfile))
     {
       wrap_here ("");
-      printf_unfiltered (_("(no debugging symbols found)"));
-      if (from_tty || info_verbose)
-        printf_unfiltered ("...");
-      else
-        printf_unfiltered ("\n");
+      printf_unfiltered (_("(no debugging symbols found)..."));
       wrap_here ("");
     }
 
@@ -1064,10 +1053,7 @@ symbol_file_add_with_addrs_or_offsets (bfd *abfd,
       if (deprecated_post_add_symbol_hook)
 	deprecated_post_add_symbol_hook ();
       else
-	{
-	  if (print_symbol_loading)
-	    printf_unfiltered (_("done.\n"));
-	}
+	printf_unfiltered (_("done.\n"));
     }
 
   /* We print some messages regardless of whether 'from_tty ||
@@ -1078,7 +1064,10 @@ symbol_file_add_with_addrs_or_offsets (bfd *abfd,
   do_cleanups (my_cleanups);
 
   if (objfile->sf == NULL)
-    return objfile;	/* No symbols. */
+    {
+      observer_notify_new_objfile (objfile);
+      return objfile;	/* No symbols. */
+    }
 
   new_symfile_objfile (objfile, add_flags);
 
@@ -1161,7 +1150,7 @@ symbol_file_clear (int from_tty)
      descriptors as well.  */
   no_shared_libraries (NULL, from_tty);
 
-  symfile_objfile = NULL;
+  gdb_assert (symfile_objfile == NULL);
   if (from_tty)
     printf_unfiltered (_("No symbol file now.\n"));
 }
@@ -1383,8 +1372,14 @@ find_separate_debug_file (struct objfile *objfile)
   gdb_assert (i >= 0 && IS_DIR_SEPARATOR (dir[i]));
   dir[i+1] = '\0';
 
+  /* Set I to max (strlen (canon_name), strlen (dir)). */
+  canon_name = lrealpath (dir);
+  i = strlen (dir);
+  if (canon_name && strlen (canon_name) > i)
+    i = strlen (canon_name);
+
   debugfile = alloca (strlen (debug_file_directory) + 1
-                      + strlen (dir)
+                      + i
                       + strlen (DEBUG_SUBDIRECTORY)
                       + strlen ("/")
                       + strlen (basename)
@@ -1398,6 +1393,7 @@ find_separate_debug_file (struct objfile *objfile)
     {
       xfree (basename);
       xfree (dir);
+      xfree (canon_name);
       return xstrdup (debugfile);
     }
 
@@ -1411,6 +1407,7 @@ find_separate_debug_file (struct objfile *objfile)
     {
       xfree (basename);
       xfree (dir);
+      xfree (canon_name);
       return xstrdup (debugfile);
     }
 
@@ -1424,12 +1421,12 @@ find_separate_debug_file (struct objfile *objfile)
     {
       xfree (basename);
       xfree (dir);
+      xfree (canon_name);
       return xstrdup (debugfile);
     }
 
   /* If the file is in the sysroot, try using its base path in the
      global debugfile directory.  */
-  canon_name = lrealpath (dir);
   if (canon_name
       && strncmp (canon_name, gdb_sysroot, strlen (gdb_sysroot)) == 0
       && IS_DIR_SEPARATOR (canon_name[strlen (gdb_sysroot)]))
@@ -1624,6 +1621,9 @@ symfile_bfd_open (char *name)
 	     bfd_errmsg (bfd_get_error ()));
     }
 
+  /* bfd_usrdata exists for applications and libbfd must not touch it.  */
+  gdb_assert (bfd_usrdata (sym_bfd) == NULL);
+
   return sym_bfd;
 }
 
@@ -1799,9 +1799,9 @@ load_progress (ULONGEST bytes, void *untyped_arg)
     {
       /* The write is just starting.  Let the user know we've started
 	 this section.  */
-      ui_out_message (uiout, 0, "Loading section %s, size 0x%s lma 0x%s\n",
-		      args->section_name, paddr_nz (args->section_size),
-		      paddr_nz (args->lma));
+      ui_out_message (uiout, 0, "Loading section %s, size %s lma %s\n",
+		      args->section_name, hex_string (args->section_size),
+		      paddress (target_gdbarch, args->lma));
       return;
     }
 
@@ -1818,11 +1818,11 @@ load_progress (ULONGEST bytes, void *untyped_arg)
       struct cleanup *verify_cleanups = make_cleanup (xfree, check);
 
       if (target_read_memory (args->lma, check, bytes) != 0)
-	error (_("Download verify read failed at 0x%s"),
-	       paddr (args->lma));
+	error (_("Download verify read failed at %s"),
+	       paddress (target_gdbarch, args->lma));
       if (memcmp (args->buffer, check, bytes) != 0)
-	error (_("Download verify compare failed at 0x%s"),
-	       paddr (args->lma));
+	error (_("Download verify compare failed at %s"),
+	       paddress (target_gdbarch, args->lma));
       do_cleanups (verify_cleanups);
     }
   totals->data_count += bytes;
@@ -1978,7 +1978,7 @@ generic_load (char *args, int from_tty)
 
   entry = bfd_get_start_address (loadfile_bfd);
   ui_out_text (uiout, "Start address ");
-  ui_out_field_fmt (uiout, "address", "0x%s", paddr_nz (entry));
+  ui_out_field_fmt (uiout, "address", "%s", paddress (target_gdbarch, entry));
   ui_out_text (uiout, ", load size ");
   ui_out_field_fmt (uiout, "load-size", "%lu", total_progress.data_count);
   ui_out_text (uiout, "\n");
@@ -2080,6 +2080,7 @@ print_transfer_performance (struct ui_file *stream,
 static void
 add_symbol_file_command (char *args, int from_tty)
 {
+  struct gdbarch *gdbarch = get_current_arch ();
   char *filename = NULL;
   int flags = OBJF_USERLOADED;
   char *arg;
@@ -2210,7 +2211,8 @@ add_symbol_file_command (char *args, int from_tty)
          entered on the command line. */
       section_addrs->other[sec_num].name = sec;
       section_addrs->other[sec_num].addr = addr;
-      printf_unfiltered ("\t%s_addr = %s\n", sec, paddress (addr));
+      printf_unfiltered ("\t%s_addr = %s\n", sec,
+			 paddress (gdbarch, addr));
       sec_num++;
 
       /* The object's sections are initialized when a
@@ -2315,6 +2317,8 @@ reread_symbols (void)
 		objfile->obfd = bfd_openr (obfd_filename, gnutarget);
 	      if (objfile->obfd == NULL)
 		error (_("Can't open %s to read symbols."), objfile->name);
+	      else
+		objfile->obfd = gdb_bfd_ref (objfile->obfd);
 	      /* bfd_openr sets cacheable to true, which is what we want.  */
 	      if (!bfd_check_format (objfile->obfd, bfd_object))
 		error (_("Can't read symbols from %s: %s."), objfile->name,
@@ -2418,7 +2422,8 @@ reread_symbols (void)
 	         zero is OK since dbxread.c also does what it needs to do if
 	         objfile->global_psymbols.size is 0.  */
 	      (*objfile->sf->sym_read) (objfile, 0);
-	      if (!have_partial_symbols () && !have_full_symbols ())
+	      if (!objfile_has_partial_symbols (objfile)
+		  && !objfile_has_full_symbols (objfile))
 		{
 		  wrap_here ("");
 		  printf_unfiltered (_("(no debugging symbols found)\n"));
@@ -2449,12 +2454,14 @@ reread_symbols (void)
 
   if (reread_one)
     {
+      /* Notify objfiles that we've modified objfile sections.  */
+      objfiles_changed ();
+
       clear_symtab_users ();
       /* At least one objfile has changed, so we can consider that
          the executable we're debugging has changed too.  */
       observer_notify_executable_changed ();
     }
-      
 }
 
 
@@ -3502,6 +3509,7 @@ list_overlays_command (char *args, int from_tty)
     ALL_OBJSECTIONS (objfile, osect)
       if (section_is_mapped (osect))
       {
+	struct gdbarch *gdbarch = get_objfile_arch (objfile);
 	const char *name;
 	bfd_vma lma, vma;
 	int size;
@@ -3512,13 +3520,13 @@ list_overlays_command (char *args, int from_tty)
 	name = bfd_section_name (objfile->obfd, osect->the_bfd_section);
 
 	printf_filtered ("Section %s, loaded at ", name);
-	fputs_filtered (paddress (lma), gdb_stdout);
+	fputs_filtered (paddress (gdbarch, lma), gdb_stdout);
 	puts_filtered (" - ");
-	fputs_filtered (paddress (lma + size), gdb_stdout);
+	fputs_filtered (paddress (gdbarch, lma + size), gdb_stdout);
 	printf_filtered (", mapped at ");
-	fputs_filtered (paddress (vma), gdb_stdout);
+	fputs_filtered (paddress (gdbarch, vma), gdb_stdout);
 	puts_filtered (" - ");
-	fputs_filtered (paddress (vma + size), gdb_stdout);
+	fputs_filtered (paddress (gdbarch, vma + size), gdb_stdout);
 	puts_filtered ("\n");
 
 	nmapped++;
@@ -3643,8 +3651,10 @@ overlay_off_command (char *args, int from_tty)
 static void
 overlay_load_command (char *args, int from_tty)
 {
-  if (gdbarch_overlay_update_p (current_gdbarch))
-    gdbarch_overlay_update (current_gdbarch, NULL);
+  struct gdbarch *gdbarch = get_current_arch ();
+
+  if (gdbarch_overlay_update_p (gdbarch))
+    gdbarch_overlay_update (gdbarch, NULL);
   else
     error (_("This target does not know how to read its overlay state."));
 }
@@ -3744,7 +3754,7 @@ simple_free_overlay_region_table (void)
    Convert to host order.  int LEN is number of ints  */
 static void
 read_target_long_array (CORE_ADDR memaddr, unsigned int *myaddr,
-			int len, int size)
+			int len, int size, enum bfd_endian byte_order)
 {
   /* FIXME (alloca): Not safe if array is very large. */
   gdb_byte *buf = alloca (len * size);
@@ -3752,7 +3762,7 @@ read_target_long_array (CORE_ADDR memaddr, unsigned int *myaddr,
 
   read_memory (memaddr, buf, len * size);
   for (i = 0; i < len; i++)
-    myaddr[i] = extract_unsigned_integer (size * i + buf, size);
+    myaddr[i] = extract_unsigned_integer (size * i + buf, size, byte_order);
 }
 
 /* Find and grab a copy of the target _ovly_table
@@ -3763,6 +3773,7 @@ simple_read_overlay_table (void)
   struct minimal_symbol *novlys_msym, *ovly_table_msym;
   struct gdbarch *gdbarch;
   int word_size;
+  enum bfd_endian byte_order;
 
   simple_free_overlay_table ();
   novlys_msym = lookup_minimal_symbol ("_novlys", NULL, NULL);
@@ -3785,14 +3796,16 @@ simple_read_overlay_table (void)
 
   gdbarch = get_objfile_arch (msymbol_objfile (ovly_table_msym));
   word_size = gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT;
+  byte_order = gdbarch_byte_order (gdbarch);
 
-  cache_novlys = read_memory_integer (SYMBOL_VALUE_ADDRESS (novlys_msym), 4);
+  cache_novlys = read_memory_integer (SYMBOL_VALUE_ADDRESS (novlys_msym),
+				      4, byte_order);
   cache_ovly_table
     = (void *) xmalloc (cache_novlys * sizeof (*cache_ovly_table));
   cache_ovly_table_base = SYMBOL_VALUE_ADDRESS (ovly_table_msym);
   read_target_long_array (cache_ovly_table_base,
                           (unsigned int *) cache_ovly_table,
-                          cache_novlys * 4, word_size);
+                          cache_novlys * 4, word_size, byte_order);
 
   return 1;			/* SUCCESS */
 }
@@ -3804,25 +3817,33 @@ static int
 simple_read_overlay_region_table (void)
 {
   struct minimal_symbol *msym;
+  struct gdbarch *gdbarch;
+  int word_size;
+  enum bfd_endian byte_order;
 
   simple_free_overlay_region_table ();
   msym = lookup_minimal_symbol ("_novly_regions", NULL, NULL);
-  if (msym != NULL)
-    cache_novly_regions = read_memory_integer (SYMBOL_VALUE_ADDRESS (msym), 4);
-  else
+  if (msym == NULL)
     return 0;			/* failure */
+
+  gdbarch = get_objfile_arch (msymbol_objfile (msym));
+  word_size = gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT;
+  byte_order = gdbarch_byte_order (gdbarch);
+
+  cache_novly_regions = read_memory_integer (SYMBOL_VALUE_ADDRESS (msym),
+					     4, byte_order);
+
   cache_ovly_region_table = (void *) xmalloc (cache_novly_regions * 12);
   if (cache_ovly_region_table != NULL)
     {
       msym = lookup_minimal_symbol ("_ovly_region_table", NULL, NULL);
       if (msym != NULL)
 	{
-	  struct gdbarch *gdbarch = get_objfile_arch (msymbol_objfile (msym));
-	  int word_size = gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT;
 	  cache_ovly_region_table_base = SYMBOL_VALUE_ADDRESS (msym);
 	  read_target_long_array (cache_ovly_region_table_base,
 				  (unsigned int *) cache_ovly_region_table,
-				  cache_novly_regions * 3, word_size);
+				  cache_novly_regions * 3,
+				  word_size, byte_order);
 	}
       else
 	return 0;		/* failure */
@@ -3849,6 +3870,7 @@ simple_overlay_update_1 (struct obj_section *osect)
   asection *bsect = osect->the_bfd_section;
   struct gdbarch *gdbarch = get_objfile_arch (osect->objfile);
   int word_size = gdbarch_long_bit (gdbarch) / TARGET_CHAR_BIT;
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
 
   size = bfd_get_section_size (osect->the_bfd_section);
   for (i = 0; i < cache_novlys; i++)
@@ -3858,7 +3880,7 @@ simple_overlay_update_1 (struct obj_section *osect)
       {
 	read_target_long_array (cache_ovly_table_base + i * word_size,
 				(unsigned int *) cache_ovly_table[i],
-				4, word_size);
+				4, word_size, byte_order);
 	if (cache_ovly_table[i][VMA] == bfd_section_vma (obfd, bsect)
 	    && cache_ovly_table[i][LMA] == bfd_section_lma (obfd, bsect)
 	    /* && cache_ovly_table[i][SIZE] == size */ )
@@ -4170,12 +4192,4 @@ the global debug-file directory prepended."),
 				     NULL,
 				     show_debug_file_directory,
 				     &setlist, &showlist);
-
-  add_setshow_boolean_cmd ("symbol-loading", no_class,
-                           &print_symbol_loading, _("\
-Set printing of symbol loading messages."), _("\
-Show printing of symbol loading messages."), NULL,
-                           NULL,
-                           NULL,
-                           &setprintlist, &showprintlist);
 }

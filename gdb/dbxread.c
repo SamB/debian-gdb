@@ -1384,6 +1384,7 @@ read_dbx_symtab (struct objfile *objfile)
 		  pst = (struct partial_symtab *) 0;
 		  includes_used = 0;
 		  dependencies_used = 0;
+		  has_line_numbers = 0;
 		}
 	      else
 		past_first_source_file = 1;
@@ -1508,6 +1509,7 @@ read_dbx_symtab (struct objfile *objfile)
 		    pst = (struct partial_symtab *) 0;
 		    includes_used = 0;
 		    dependencies_used = 0;
+		    has_line_numbers = 0;
 		  }
 	      }
 
@@ -1687,7 +1689,7 @@ pos %d"),
 	  sym_name = NULL;	/* pacify "gcc -Werror" */
  	  if (psymtab_language == language_cplus)
  	    {
- 	      char *new_name, *name = alloca (p - namestring + 1);
+ 	      char *new_name, *name = xmalloc (p - namestring + 1);
  	      memcpy (name, namestring, p - namestring);
  	      name[p - namestring] = '\0';
  	      new_name = cp_canonicalize_string (name);
@@ -1698,6 +1700,7 @@ pos %d"),
  					   &objfile->objfile_obstack);
  		  xfree (new_name);
  		}
+              xfree (name);
  	    }
 
  	  if (sym_len == 0)
@@ -2107,6 +2110,7 @@ pos %d"),
 	      pst = (struct partial_symtab *) 0;
 	      includes_used = 0;
 	      dependencies_used = 0;
+	      has_line_numbers = 0;
 	    }
 	  continue;
 

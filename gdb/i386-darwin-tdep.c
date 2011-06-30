@@ -32,7 +32,6 @@
 
 #include "i387-tdep.h"
 #include "i386-tdep.h"
-#include "amd64-tdep.h"
 #include "osabi.h"
 #include "ui-out.h"
 #include "symtab.h"
@@ -68,81 +67,31 @@ int i386_darwin_thread_state_reg_offset[] =
 const int i386_darwin_thread_state_num_regs = 
   ARRAY_SIZE (i386_darwin_thread_state_reg_offset);
 
-/* Offsets into the struct x86_thread_state64 where we'll find the saved regs.
-   From <mach/i386/thread_status.h> and amd64-tdep.h.  */
-int amd64_darwin_thread_state_reg_offset[] =
-{
-  0 * 8,			/* %rax */
-  1 * 8,			/* %rbx */
-  2 * 8,			/* %rcx */
-  3 * 8,			/* %rdx */
-  5 * 8,			/* %rsi */
-  4 * 8,			/* %rdi */
-  6 * 8,			/* %rbp */
-  7 * 8,			/* %rsp */
-  8 * 8,			/* %r8 ... */
-  9 * 8,
-  10 * 8,
-  11 * 8,
-  12 * 8,
-  13 * 8,
-  14 * 8,
-  15 * 8,			/* ... %r15 */
-  16 * 8,			/* %rip */
-  17 * 8,			/* %rflags */
-  18 * 8,			/* %cs */
-  -1,				/* %ss */
-  -1,				/* %ds */
-  -1,				/* %es */
-  19 * 8,			/* %fs */
-  20 * 8			/* %gs */
-};
-
-const int amd64_darwin_thread_state_num_regs = 
-  ARRAY_SIZE (amd64_darwin_thread_state_reg_offset);
-
 /* Assuming THIS_FRAME is a Darwin sigtramp routine, return the
    address of the associated sigcontext structure.  */
 
 static CORE_ADDR
 i386_darwin_sigcontext_addr (struct frame_info *this_frame)
 {
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   CORE_ADDR bp;
   CORE_ADDR si;
   gdb_byte buf[4];
 
   get_frame_register (this_frame, I386_EBP_REGNUM, buf);
-  bp = extract_unsigned_integer (buf, 4);
+  bp = extract_unsigned_integer (buf, 4, byte_order);
 
   /* A pointer to the ucontext is passed as the fourth argument
      to the signal handler.  */
   read_memory (bp + 24, buf, 4);
-  si = extract_unsigned_integer (buf, 4);
+  si = extract_unsigned_integer (buf, 4, byte_order);
 
   /* The pointer to mcontext is at offset 28.  */
   read_memory (si + 28, buf, 4);
 
   /* First register (eax) is at offset 12.  */
-  return extract_unsigned_integer (buf, 4) + 12;
-}
-
-static CORE_ADDR
-amd64_darwin_sigcontext_addr (struct frame_info *this_frame)
-{
-  CORE_ADDR rbx;
-  CORE_ADDR si;
-  gdb_byte buf[8];
-
-  /* A pointer to the ucontext is passed as the fourth argument
-     to the signal handler, which is saved in rbx.  */
-  get_frame_register (this_frame, AMD64_RBX_REGNUM, buf);
-  rbx = extract_unsigned_integer (buf, 8);
-
-  /* The pointer to mcontext is at offset 48.  */
-  read_memory (rbx + 48, buf, 8);
-
-  /* First register (rax) is at offset 16.  */
-  return extract_unsigned_integer (buf, 8) + 16;
+  return extract_unsigned_integer (buf, 4, byte_order) + 12;
 }
 
 /* Return true if the PC of THIS_FRAME is in a signal trampoline which
@@ -153,11 +102,149 @@ amd64_darwin_sigcontext_addr (struct frame_info *this_frame)
    Without this function, the frame is recognized as a normal frame which is
    not expected.  */
 
-static int
+int
 darwin_dwarf_signal_frame_p (struct gdbarch *gdbarch,
 			     struct frame_info *this_frame)
 {
   return i386_sigtramp_p (this_frame);
+}
+
+/* Check wether TYPE is a 128-bit vector (__m128, __m128d or __m128i).  */
+
+static int
+i386_m128_p (struct type *type)
+{
+  return (TYPE_CODE (type) == TYPE_CODE_ARRAY && TYPE_VECTOR (type)
+          && TYPE_LENGTH (type) == 16);
+}
+
+/* Return the alignment for TYPE when passed as an argument.  */
+
+static int
+i386_darwin_arg_type_alignment (struct type *type)
+{
+  type = check_typedef (type);
+  /* According to Mac OS X ABI document (passing arguments):
+     6.  The caller places 64-bit vectors (__m64) on the parameter area,
+         aligned to 8-byte boundaries.
+     7.  [...]  The caller aligns 128-bit vectors in the parameter area to
+         16-byte boundaries.  */
+  if (TYPE_CODE (type) == TYPE_CODE_ARRAY && TYPE_VECTOR (type))
+    return TYPE_LENGTH (type);
+  /* 4.  The caller places all the fields of structures (or unions) with no
+         vector elements in the parameter area.  These structures are 4-byte
+         aligned.
+     5.  The caller places structures with vector elements on the stack,
+         16-byte aligned.  */
+  if (TYPE_CODE (type) == TYPE_CODE_STRUCT
+      || TYPE_CODE (type) == TYPE_CODE_UNION)
+    {
+      int i;
+      int res = 4;
+      for (i = 0; i < TYPE_NFIELDS (type); i++)
+        res = max (res,
+                   i386_darwin_arg_type_alignment (TYPE_FIELD_TYPE (type, i)));
+      return res;
+    }
+  /* 2.  The caller aligns nonvector arguments to 4-byte boundaries.  */
+  return 4;
+}
+
+static CORE_ADDR
+i386_darwin_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
+			     struct regcache *regcache, CORE_ADDR bp_addr,
+			     int nargs, struct value **args, CORE_ADDR sp,
+			     int struct_return, CORE_ADDR struct_addr)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  gdb_byte buf[4];
+  int i;
+  int write_pass;
+
+  /* Determine the total space required for arguments and struct
+     return address in a first pass, then push arguments in a second pass.  */
+
+  for (write_pass = 0; write_pass < 2; write_pass++)
+    {
+      int args_space = 0;
+      int num_m128 = 0;
+
+      if (struct_return)
+	{
+	  if (write_pass)
+	    {
+	      /* Push value address.  */
+	      store_unsigned_integer (buf, 4, byte_order, struct_addr);
+	      write_memory (sp, buf, 4);
+	    }
+          args_space += 4;
+	}
+
+      for (i = 0; i < nargs; i++)
+	{
+          struct type *arg_type = value_enclosing_type (args[i]);
+
+          if (i386_m128_p (arg_type) && num_m128 < 4)
+            {
+              if (write_pass)
+                {
+                  const gdb_byte *val = value_contents_all (args[i]);
+                  regcache_raw_write
+                    (regcache, I387_MM0_REGNUM(tdep) + num_m128, val);
+                }
+              num_m128++;
+            }
+          else
+            {
+              int len = TYPE_LENGTH (arg_type);
+              int align = i386_darwin_arg_type_alignment (arg_type);
+
+              args_space = align_up (args_space, align);
+              if (write_pass)
+                write_memory (sp + args_space,
+                              value_contents_all (args[i]), len);
+
+              /* The System V ABI says that:
+                 
+                 "An argument's size is increased, if necessary, to make it a
+                 multiple of [32-bit] words.  This may require tail padding,
+                 depending on the size of the argument."
+                 
+                 This makes sure the stack stays word-aligned.  */
+              args_space += align_up (len, 4);
+            }
+        }
+
+      /* Darwin i386 ABI:
+	 1.  The caller ensures that the stack is 16-byte aligned at the point
+	     of the function call.  */
+      if (!write_pass)
+	sp = align_down (sp - args_space, 16);
+    }
+
+  /* Store return address.  */
+  sp -= 4;
+  store_unsigned_integer (buf, 4, byte_order, bp_addr);
+  write_memory (sp, buf, 4);
+
+  /* Finally, update the stack pointer...  */
+  store_unsigned_integer (buf, 4, byte_order, sp);
+  regcache_cooked_write (regcache, I386_ESP_REGNUM, buf);
+
+  /* ...and fake a frame pointer.  */
+  regcache_cooked_write (regcache, I386_EBP_REGNUM, buf);
+
+  /* MarkK wrote: This "+ 8" is all over the place:
+     (i386_frame_this_id, i386_sigtramp_frame_this_id,
+     i386_dummy_id).  It's there, since all frame unwinders for
+     a given target have to agree (within a certain margin) on the
+     definition of the stack address of a frame.  Otherwise frame id
+     comparison might not work correctly.  Since DWARF2/GCC uses the
+     stack address *before* the function call as a frame's CFA.  On
+     the i386, when %ebp is used as a frame pointer, the offset
+     between the contents %ebp and the CFA as defined by GCC.  */
+  return sp + 8;
 }
 
 static void
@@ -170,6 +257,7 @@ i386_darwin_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_num_regs (gdbarch, I386_SSE_NUM_REGS);
 
   dwarf2_frame_set_signal_frame_p (gdbarch, darwin_dwarf_signal_frame_p);
+  set_gdbarch_push_dummy_call (gdbarch, i386_darwin_push_dummy_call);
 
   tdep->struct_return = reg_struct_return;
 
@@ -178,28 +266,12 @@ i386_darwin_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->sc_reg_offset = i386_darwin_thread_state_reg_offset;
   tdep->sc_num_regs = i386_darwin_thread_state_num_regs;
 
-  tdep->jb_pc_offset = 20;
+  tdep->jb_pc_offset = 48;
 
-  set_solib_ops (gdbarch, &darwin_so_ops);
-}
-
-static void
-x86_darwin_init_abi_64 (struct gdbarch_info info, struct gdbarch *gdbarch)
-{
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-
-  amd64_init_abi (info, gdbarch);
-
-  tdep->struct_return = reg_struct_return;
-
-  dwarf2_frame_set_signal_frame_p (gdbarch, darwin_dwarf_signal_frame_p);
-
-  tdep->sigtramp_p = i386_sigtramp_p;
-  tdep->sigcontext_addr = amd64_darwin_sigcontext_addr;
-  tdep->sc_reg_offset = amd64_darwin_thread_state_reg_offset;
-  tdep->sc_num_regs = amd64_darwin_thread_state_num_regs;
-
-  tdep->jb_pc_offset = 148;
+  /* Although the i387 extended floating-point has only 80 significant
+     bits, a `long double' actually takes up 128, probably to enforce
+     alignment.  */
+  set_gdbarch_long_double_bit (gdbarch, 128);
 
   set_solib_ops (gdbarch, &darwin_so_ops);
 }
@@ -224,7 +296,4 @@ _initialize_i386_darwin_tdep (void)
 
   gdbarch_register_osabi (bfd_arch_i386, bfd_mach_i386_i386,
 			  GDB_OSABI_DARWIN, i386_darwin_init_abi);
-
-  gdbarch_register_osabi (bfd_arch_i386, bfd_mach_x86_64,
-                          GDB_OSABI_DARWIN, x86_darwin_init_abi_64);
 }

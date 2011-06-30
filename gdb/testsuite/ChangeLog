@@ -1,3 +1,525 @@
+2009-09-29  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* gdb.base/breakpoint-shadow.exp: Move the ia64 part into ...
+	* gdb.arch/ia64-breakpoint-shadow.exp: ... a new file, with new tests.
+	* gdb.arch/ia64-breakpoint-shadow.S: New file.
+
+2009-09-29  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+
+	* gdb.objc/basicclass.exp: Disable pending breakpoint query.
+	* gdb.objc/nondebug.exp: Likewise.
+
+2009-09-29  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+
+	* gdb.base/watchpoints.exp: Respect gdb,no_hardware_watchpoints
+	target_info setting.
+
+	* gdb.threads/thread-specific.exp (get_thread_list): Support targets
+	that detect new threads during "info threads".
+
+2009-09-28  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+
+	* gdb.threads/manythreads.c (main): Increase thread stack size
+	to 2*PTHREAD_STACK_MIN.
+	* gdb.threads/multi-create.c (main): Likewise.
+	(create_function): Likewise.
+
+2009-09-28  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+
+	* gdb.base/dump.exp: Pass difference of pointer types instead
+	of integer types as offset to restore in intarr3.srec case.
+
+2009-09-28  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+
+	* gdb.cp/gdb2495.exp: Skip test on spu*-*-*.
+
+2009-09-28  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+
+	* gdb.base/pie-support.exp: Pass "quiet" flag to gdb_compile.
+
+2009-09-26  Pierre Muller  <muller@ics.u-strasbg.fr>
+	
+	New test for two watchpoints, with disabling of
+	the first inserted.
+	* testsuite/gdb.base/watchpoints.c: New file.
+	* testsuite/gdb.base/watchpoints.exp: New file.
+
+2009-09-22  Tom Tromey  <tromey@redhat.com>
+
+	* gdb.python/py-function.exp: Add regression tests.
+
+2009-09-21  Phil Muldoon  <pmuldoon@redhat.com>
+
+	PR python/10633
+
+	* gdb.python/py-prettyprint.exp (gdb_py_test_silent_cmd): New
+	Function.
+	(run_lang_tests): Add print elements test.
+
+2009-09-21  Phil Muldoon  <pmuldoon@redhat.com>
+
+	* gdb.python/py-value.exp (test_subscript_regression): New
+	function.  Test for invalid subscripts.
+	* gdb.python/py-value.c (main): Add test array, and pointer to it.
+	(ptr_ref): New function.
+
+2009-09-15  Tom Tromey  <tromey@redhat.com>
+
+	* lib/mi-support.exp (mi_create_varobj): Update.
+	(mi_create_floating_varobj): Likewise.
+	(mi_create_dynamic_varobj): New proc.
+	(mi_varobj_update): Update.
+	(mi_varobj_update_with_type_change): Likewise.
+	(mi_varobj_update_kv_helper): New proc.
+	(mi_varobj_update_dynamic_helper): Rewrite.
+	(mi_varobj_update_dynamic): New proc.
+	(mi_list_varobj_children): Update.
+	(mi_list_varobj_children_range): Add 'from' and 'to' arguments.
+	* gdb.python/python-prettyprint.py (pp_outer): New class.
+	(pp_nullstr): Likewise.
+	(lookup_function): Register new printers.
+	* gdb.python/python-prettyprint.c (struct substruct): New type.
+	(struct outerstruct): Likewise.
+	(substruct_test): New function.
+	(struct nullstr): New type.
+	(string_1, string_2): New globals.
+	(main): Add new tests.
+	* gdb.python/python-mi.exp: Added regression tests.
+	* gdb.mi/mi2-var-display.exp: Update.
+	* gdb.mi/mi2-var-cmd.exp: Update.
+	* gdb.mi/mi2-var-child.exp: Update.
+	* gdb.mi/mi2-var-block.exp: Update.
+	* gdb.mi/mi-var-invalidate.exp: Update.
+	* gdb.mi/mi-var-display.exp: Update.
+	* gdb.mi/mi-var-cmd.exp: Update.
+	* gdb.mi/mi-var-child.exp: Update.
+	* gdb.mi/mi-var-block.exp: Update.
+	* gdb.mi/mi-break.exp: Update.
+	* gdb.mi/gdb701.exp: Update.
+
+2009-09-14  Sergio Durigan Junior <sergiodj@linux.vnet.ibm.com>
+
+	* Makefile.in: Inclusion of catch-syscall object.
+	* gdb.base/catch-syscall.c: New file.
+	* gdb.base/catch-syscall.exp: New file.
+
+2009-09-12  Michael Snyder  <msnyder@vmware.com>
+
+	* gdb.reverse/step-reverse.exp: Explicitly check for targets
+	that can support reverse debuggnig.
+
+2009-09-11  Tom Tromey  <tromey@redhat.com>
+
+	* gdb.dwarf2/valop.S: New file.
+	* gdb.dwarf2/valop.exp: New file.
+
+2009-09-11  Mark Kettenis  <kettenis@gnu.org>
+
+	* gdb.threads/current-lwp-dead.exp: Only run this on Linux.
+
+2009-09-10  Doug Evans  <dje@google.com>
+
+	* gdb.base/breakpoint-shadow.exp: Fix intermittent failures.
+	Add $gdb_prompt to second breakpoint regexp.
+
+2009-09-08  Thiago Jung Bauermann  <thiago.bauermann@gmail.com>
+
+	* gdb.python/Makefile.in (EXECUTABLES): Adjust to new executable
+	names, add missing ones.
+	* gdb.python/py-cmd.exp: Rename from python-cmd.exp.
+	* gdb.python/py-frame.c: Rename from python-frame.c.
+	* gdb.python/py-frame.exp: Rename from python-frame.exp.  Adjust
+	testfile name.
+	* gdb.python/py-function.exp: Rename from python-function.exp.
+	* gdb.python/py-mi.exp: Rename from python-mi.exp.  Adjust
+	testfile name.
+	* gdb.python/py-prettyprint.c: Rename from python-prettyprint.c.
+	* gdb.python/py-prettyprint.exp: Rename from python-prettyprint.exp.
+	Adjust testfile name.
+	* gdb.python/py-prettyprint.py: Rename from python-prettyprint.py.
+	* gdb.python/py-template.cc: Rename from python-template.cc.
+	* gdb.python/py-template.exp: Rename from python-template.exp.
+	Adjust testfile name.
+	* gdb.python/py-value.c: Rename from python-value.c.
+	* gdb.python/py-value.exp: Rename from python-value.exp.  Adjust
+	testfile name.
+
+2009-09-08  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* gdb.base/breakpoint-shadow.exp (Second breakpoint placed): Initialize
+	$bpt2address.
+	(Second breakpoint address is valid on ia64)
+	(Third breakpoint on ia64 in the Second breakpoint's bundle): New.
+
+2009-09-03  Joseph Myers  <joseph@codesourcery.com>
+
+	* gdb.base/ending-run.exp: Restrict regular expression matching
+	line number to require closing brace following.
+
+2009-09-03  Doug Evans  <dje@google.com>
+
+	* gdb.base/store.exp (check_set): Fix typo in expected value message.
+
+2009-09-02  Tom Tromey  <tromey@redhat.com>
+
+	* gdb.dwarf2/callframecfa.exp: Use gdb_continue_to_breakpoint.
+
+2009-09-02  Tom Tromey  <tromey@redhat.com>
+
+	* gdb.dwarf2/callframecfa.exp: New file.
+	* gdb.dwarf2/callframecfa.S: New file.
+
+2009-09-01  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* gdb.base/solib-overlap.exp, gdb.base/solib-overlap-lib.c,
+	gdb.base/solib-overlap-main.c: New.
+
+2009-08-28  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	PR gdb/10565
+
+	* gdb.base/bitfields.c (struct container, container): New.
+	(main): Initialize it and call break5.
+	* gdb.base/bitfields.exp (bitfield_at_offset): New test.
+
+2009-08-28  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	Support constant DW_AT_data_member_location by GCC PR debug/40659.
+	* gdb.dwarf2/dw2-inheritance.exp, gdb.dwarf2/dw2-inheritance.S: New.
+
+2009-08-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* gdb.mi/mi2-var-cmd.exp (create variable with invalid FRAME-ADDR): New.
+
+2009-08-26  Michael Snyder  <msnyder@vmware.com>
+
+	* gdb.base/i386-reverse.c: New file.
+	* gdb.base/i386-reverse.exp: New file.
+	* gdb.base/Makefile.in: Add new files to be removed.
+
+2009-08-26  Joseph Myers  <joseph@codesourcery.com>
+
+	* gdb.mi/mi-basics.exp (test_cwd_specification): Do not test
+	environment-pwd for remote host.
+	* gdb.mi/mi2-basics.exp (test_cwd_specification): Likewise.
+
+2009-08-24  Keith Seitz  <keiths@redhat.com>
+
+	* gdb.cp/cpcompletion.exp (test_class_complete): New procedure.
+	Add two new C++ completer tests which limit the output to a
+	given class. 
+
+2009-08-24  Michael Snyder  <msnyder@vmware.com>
+
+	* gdb.base/del.exp: Fix typo in comment.
+	* gdb.base/step-bt.exp: Fix cut and paste error in comment.
+
+2009-08-22  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* configure: Regenerate.
+	* gdb.hp/configure: Likewise.
+	* gdb.hp/gdb.aCC/configure: Likewise.
+	* gdb.hp/gdb.base-hp/configure: Likewise.
+	* gdb.hp/gdb.compat/configure: Likewise.
+	* gdb.hp/gdb.defects/configure: Likewise.
+	* gdb.hp/gdb.objdbg/configure: Likewise.
+	* gdb.stabs/configure: Likewise.
+
+2009-08-19  Doug Evans  <dje@google.com>
+
+	* gdb.base/gdbvars.c: New file.
+	* gdb.base/gdbvars.exp: Test convenience vars with program variables.
+
+2009-08-14  Pedro Alves  <pedro@codesourcery.com>
+
+	* gdb.threads/killed.exp, gdb.threads/manythreads.exp,
+	gdb.threads/staticthreads.exp: Adjust to "quit" output changes.
+
+2009-08-13  Pedro Alves  <pedro@codesourcery.com>
+
+	* gdb.base/default.exp: Adjust "set language test": it's now an
+	enum command.  Larger help string moved to "help set language".
+	* gdb.base/help.exp: Adjust "help set language" expected output,
+	now lists all known languages.
+
+2009-08-11  Nathan Froyd  <froydnj@codesourcery.com>
+
+	* gdb.arch/altivec-abi.exp (altivec_abi_tests): Turn on printing of
+	all frame arguments.
+	* gdb.arch/altivec-regs.exp: Likewise.
+
+2009-08-07  Tom Tromey  <tromey@redhat.com>
+
+	* gdb.base/setshow.exp: Add tests for changes to set language, set
+	check range, and set check type.
+
+2009-08-03  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* lib/mi-support.exp (mi_list_breakpoints): Make it work.
+	* gdb.mi/mi-break.exp (test_breakpoint_commands): New.
+    	Call it.
+
+2009-07-31  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+
+	* configure.ac: Run gdb.cell tests when appropriate.
+	* configure: Regenerate.
+	* lib/cell.exp: New file.
+	* gdb.cell: New directory.
+	* gdb.cell/configure.ac: New file.
+	* gdb.cell/configure: New file.
+	* gdb.cell/Makefile.in: New file.
+	* gdb.cell/arch.exp: New file.
+	* gdb.cell/break.c: New file.
+	* gdb.cell/break.exp: New file.
+	* gdb.cell/break-spu.c: New file.
+	* gdb.cell/bt.c: New file.
+	* gdb.cell/bt2-spu.c: New file.
+	* gdb.cell/bt-spu.c: New file.
+	* gdb.cell/bt.exp: New file.
+	* gdb.cell/coremaker.c: New file.
+	* gdb.cell/coremaker-spu.c: New file.
+	* gdb.cell/core.exp: New file.
+	* gdb.cell/gcore.exp: New file.
+	* gdb.cell/data.c: New file.
+	* gdb.cell/data.exp: New file.
+	* gdb.cell/data-spu.c: New file.
+	* gdb.cell/ea-cache.exp: New file.
+	* gdb.cell/ea-cache.c: New file.
+	* gdb.cell/ea-cache-spu.c: New file.
+	* gdb.cell/ea-standalone.c: New file.
+	* gdb.cell/ea-standalone.exp: New file.
+	* gdb.cell/ea-test.c: New file.
+	* gdb.cell/ea-test.exp: New file.
+	* gdb.cell/f-regs.exp: New file.
+	* gdb.cell/mem-access.c: New file.
+	* gdb.cell/mem-access.exp: New file.
+	* gdb.cell/mem-access-spu.c: New file.
+	* gdb.cell/ptype.exp: New file.
+	* gdb.cell/registers.exp: New file.
+	* gdb.cell/size.c: New file.
+	* gdb.cell/sizeof.exp: New file.
+	* gdb.cell/size-spu.c: New file.
+	* gdb.cell/solib.exp: New file.
+	* gdb.cell/solib-symbol.exp: New file.
+
+2009-07-31  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+
+	* gdb.xml/tdesc-regs.exp: Skip for SPU targets.
+
+2009-07-28  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.base/float.exp: Handle VFP registers.
+
+2009-07-14  Michael Snyder  <msnyder@vmware.com>
+
+	* gdb.reverse/finish-reverse.exp: Do not expect reverse-finish
+	to bring gdb to the beginning of the calling line.
+
+	* gdb.arch/i386-signal.c (sigframe): Add a nop to avoid
+	confusing the i386 epilogue unwinder.
+
+2009-07-14  Stan Shebs  <stan@codesourcery.com>
+
+	* gdb.trace/tracecmd.exp: Add basic test of tracepoint conditions.
+
+2009-07-14  Michael Snyder  <msnyder@vmware.com>
+
+	* gdb.reverse/step-reverse.exp (stepi into function call):
+	Call instruction may not be first instruction in the line.
+	(reverse stepi from a function call): Used wrong line number.
+
+2009-07-13  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* gdb.arch/amd64-i386-address.exp, gdb.arch/amd64-i386-address.S: New.
+
+2009-07-13  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	Fix gdb.base/macscp.exp when using custom inputrc.
+	* gdb.base/completion.exp: Remove env(INPUTRC) set and restore.
+	* gdb.base/readline.exp: Remove env(INPUTRC) set and restore.  Remove
+	env(TERM) set.
+	* gdb.cp/cpcompletion.exp: Remove env(INPUTRC) set.
+	* lib/gdb.exp (default_gdb_start): Add env(INPUTRC) and env(TERM) set.
+
+2009-07-13  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	Fix racy clashing of output files for gdb.base{1,2}/ parallel run.
+	* gdb.base/annota1.exp (thread_test): Import global $testfile.
+	Change the compilation target to match the testcase name.
+	* gdb.base/sect-cmd.exp: Change the compilation target to match the
+	testcase name.
+	* a2-run.exp: Use for setup prepare_for_testing.  Change the
+	compilation target to match the testcase name.
+	* gdb.base/commands.exp: Likewise.
+	* gdb.base/finish.exp: Likewise.
+	* gdb.base/float.exp: Likewise.
+	* gdb.base/info-target.exp: Likewise.
+	* gdb.base/relational.exp: Likewise.
+	* gdb.base/term.exp: Likewise.
+	* gdb.base/until.exp: Likewise.
+	* gdb.base/volatile.exp: Likewise.
+	* gdb.base/whatis-exp.exp: Likewise.
+
+2009-07-11  Hui Zhu  <teawater@gmail.com>
+
+	* gdb.base/help.exp (disassemble): Update expected help text.
+
+2009-07-09  Tom Tromey  <tromey@redhat.com>
+
+	* lib/gdb.exp: Handle TRANSCRIPT.
+	(remote_spawn, remote_close, send_gdb): New procs.
+
+2009-07-10 Phil Muldoon  <pmuldoon@redhat.com>
+
+	* gdb.python/python-prettyprint.c: Add counted null string
+	structure.
+	* gdb.python/python-prettyprint.exp: Print null string. Test for
+	embedded nulls.
+	* gdb.python/python-prettyprint.py (pp_ns): New Function.
+	* gdb.python/python-value.exp (test_value_in_inferior): Add
+	variable length string fetch tests.
+	* gdb.python/python-value.c (main): Add strings for string fetch tests.
+
+2009-07-09  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* gdb.base/dump.exp (inaccessible memory is reported): New test.
+
+2009-07-07  Tom Tromey  <tromey@redhat.com>
+
+	* gdb.base/call-rt-st.exp: Update for change to escape output.
+	* gdb.base/callfuncs.exp: Likewise.
+	* gdb.base/charset.exp: Likewise.
+	* gdb.base/constvars.exp: Likewise.
+	* gdb.base/long_long.exp: Likewise.
+	* gdb.base/pointers.exp: Likewise.
+	* gdb.base/printcmds.exp: Likewise.
+	* gdb.base/setvar.exp: Likewise.
+	* gdb.base/store.exp: Likewise.
+	* gdb.cp/ref-types.exp: Likewise.
+	* gdb.mi/mi-var-child.exp: Likewise.
+	* gdb.mi/mi-var-display.exp: Likewise.
+	* gdb.mi/mi2-var-display.exp: Likewise.
+	* gdb.base/charset.exp: Test octal escape sequence length.
+	Update for change to escape output.
+
+2009-07-07  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* gdb.mi/mi2-var-cmd.exp (floating varobj invalidation): New test.
+
+2009-07-06  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* lib/java.exp (java_init): Ignore $GCJ if it is empty.
+
+2009-07-06  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* lib/gdbserver-support.exp (gdbserver_start): Loop spawning
+	gdbserver increasing $portnum if "Can't bind address" has been seen.
+
+2009-07-05  Pedro Alves  <pedro@codesourcery.com>
+
+	* gdb.base/ending-run.exp: Add "step out of main" pattern for
+	mingw32ce.
+
+2009-07-05  Pedro Alves  <pedro@codesourcery.com>
+
+	* gdb.base/long_long.exp: arm-mingw32ce defaults to natural-endian
+	VFP format.
+
+2009-07-02  Pedro Alves  <pedro@codesourcery.com>
+
+	* gdb.base/multi-forks.exp: Only run detach-on-fork tests on
+	linux.  Adjust to use "inferior", "info inferiors", "detach
+	inferior" and "kill inferior" instead of "restart", "info fork",
+	"detach fork" and "delete fork".
+	* gdb.base/ending-run.exp: Spell out "info".
+	* gdb.base/help.exp: Adjust to use test_prefix_command_help for
+	the "kill" command.
+
+2009-07-02  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+
+	* gdb.threads/tls-shared.exp: Update to locexpr_describe_location
+	change to prefix TLS offset in hex with 0x.
+
+2009-07-02  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+
+	* gdb.base/default.exp: Update test case for "x" changes.
+
+2009-07-01  Tristan Gingold  <gingold@adacore.com>
+
+	* gdb.base/bigcore.exp: Make darwin untested.
+
+2009-06-30  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* gdb.base/completion.exp (directory completion): Create the directory.
+	New variables uniquedir, escapeduniquedir, uniquesu, uniquesub,
+	escapeuniquesub.
+	(directory completion 2): Expect now ${escapeuniquesub}.
+	(Glob remaining of directory test): Remove one excessive newline.
+	Expect the real output.
+
+2009-06-30  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	Fix `make check//%' target after `make check' has been ran.
+	* Makefile.in (TEST_TARGETS): Remove the %/.dir dependency.  Add
+	a mkdir call.
+	(check-gdb.base%): Remove the gdb.base%/.dir dependency.
+	(%/.dir): Remove.
+
+2009-06-30  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* lib/mi-support.exp (mi_check_thread_states): Permit any output before
+	the expected result record.
+
+2009-06-30  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	Remove racy FAILs relying just on the timeouts.
+	* gdb.base/setshow.exp (set annotate 2, show annotate (2))
+	(annotation_level 2): Remove racy FAILs.
+
+2009-06-30  Paul Pluzhnikov  <ppluzhnikov@google.com>
+
+	gdb/10275
+	* gdb.dwarf2/dw2-restore.{S,exp}: New test.	
+	
+2009-06-30  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* gdb.opt/inline-locals.exp: Remove XFAIL with duplicated arg1.
+
+2009-06-30  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* gdb.mi/mi-stack.exp: Testing symbolic options
+	to -stack-list-locals and -stack-list-arguments.
+
+2009-06-29  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* gdb.threads/current-lwp-dead.exp, gdb.threads/current-lwp-dead.c: New.
+
+2009-06-29  Tom Tromey  <tromey@redhat.com>
+
+	* dg-extract-results.sh: New file.
+	* Makefile.in (FORCE_PARALLEL): New variable.
+	(CHECK_TARGET): New conditional variable.
+	(check): Use CHECK_TARGET.
+	(DO_RUNTEST): New variable.
+	(check-single): New target.
+	(TEST_DIRS): New variable.
+	(TEST_TARGETS): Likewise.
+	(check-parallel): New target.
+	(check-gdb.%): New pattern.
+	(BASE1_FILES): New variable.
+	(BASE2_FILES): Likewise.
+	(check-gdb.base%): New pattern.
+	(%/.dir): New pattern.
+	* configure: Rebuild.
+	* aclocal.m4 (AM_CONDITIONAL): New defun.
+	* configure.ac: Check whether user is using GNU make.
+	(GMAKE): New conditional.
+
+2009-06-29  Sami Wagiaalla  <swagiaal@redhat.com>
+
+	* gdb.cp/namespace-nested-import.cc: New test.
+	* gdb.cp/namespace-nested-import.exp: New test.
+
 2009-06-27  Daniel Jacobowitz  <dan@codesourcery.com>
 
 	* gdb.base/break.exp: Add an XFAIL for gcc/36748.

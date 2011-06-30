@@ -146,9 +146,6 @@ multiple_symbols_select_mode (void)
   return multiple_symbols_mode;
 }
 
-/* The single non-language-specific builtin type */
-struct type *builtin_type_error;
-
 /* Block in which the most recently searched-for symbol was found.
    Might be better to make this a parameter to lookup_symbol and
    value_of_this. */
@@ -2082,8 +2079,8 @@ find_pc_sect_symtab (CORE_ADDR pc, struct obj_section *section)
 	   will cause a core dump), but maybe we can successfully
 	   continue, so let's not.  */
 	warning (_("\
-(Internal error: pc 0x%s in read in psymtab, but not in symtab.)\n"),
-		 paddr_nz (pc));
+(Internal error: pc %s in read in psymtab, but not in symtab.)\n"),
+		 paddress (get_objfile_arch (ps->objfile), pc));
       s = PSYMTAB_TO_SYMTAB (ps);
     }
   return (s);
@@ -3246,6 +3243,8 @@ search_symbols (char *regexp, domain_enum kind, int nfiles, char *files[],
     {
       ALL_MSYMBOLS (objfile, msymbol)
       {
+        QUIT;
+
 	if (MSYMBOL_TYPE (msymbol) == ourtype ||
 	    MSYMBOL_TYPE (msymbol) == ourtype2 ||
 	    MSYMBOL_TYPE (msymbol) == ourtype3 ||
@@ -3336,6 +3335,8 @@ search_symbols (char *regexp, domain_enum kind, int nfiles, char *files[],
     {
       ALL_MSYMBOLS (objfile, msymbol)
       {
+        QUIT;
+
 	if (MSYMBOL_TYPE (msymbol) == ourtype ||
 	    MSYMBOL_TYPE (msymbol) == ourtype2 ||
 	    MSYMBOL_TYPE (msymbol) == ourtype3 ||
@@ -3835,7 +3836,8 @@ default_make_symbol_completion_list (char *text, char *word)
 	   which are in symbols.  */
 	while (p > text)
 	  {
-	    if (isalnum (p[-1]) || p[-1] == '_' || p[-1] == '\0')
+	    if (isalnum (p[-1]) || p[-1] == '_' || p[-1] == '\0'
+		|| p[-1] == ':')
 	      --p;
 	    else
 	      break;
@@ -4778,10 +4780,6 @@ in an expression."), _("\
 Show how the debugger handles ambiguities in expressions."), _("\
 Valid values are \"ask\", \"all\", \"cancel\", and the default is \"all\"."),
                         NULL, NULL, &setlist, &showlist);
-
-  /* Initialize the one built-in type that isn't language dependent... */
-  builtin_type_error = init_type (TYPE_CODE_ERROR, 0, 0,
-				  "<unknown type>", (struct objfile *) NULL);
 
   observer_attach_executable_changed (symtab_observer_executable_changed);
 }

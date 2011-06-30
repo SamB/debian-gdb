@@ -37,6 +37,7 @@ typedef void (mi_cmd_argv_ftype) (char *command, char **argv, int argc);
 
 /* Function implementing each command */
 extern mi_cmd_argv_ftype mi_cmd_break_insert;
+extern mi_cmd_argv_ftype mi_cmd_break_commands;
 extern mi_cmd_argv_ftype mi_cmd_break_watch;
 extern mi_cmd_argv_ftype mi_cmd_disassemble;
 extern mi_cmd_argv_ftype mi_cmd_data_evaluate_expression;
@@ -98,6 +99,8 @@ extern mi_cmd_argv_ftype mi_cmd_var_set_visualizer;
 extern mi_cmd_argv_ftype mi_cmd_var_show_attributes;
 extern mi_cmd_argv_ftype mi_cmd_var_show_format;
 extern mi_cmd_argv_ftype mi_cmd_var_update;
+extern mi_cmd_argv_ftype mi_cmd_enable_pretty_printing;
+extern mi_cmd_argv_ftype mi_cmd_var_set_update_range;
 
 /* Description of a single command. */
 

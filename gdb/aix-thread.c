@@ -901,7 +901,7 @@ pd_enable (void)
   if (!(ms = lookup_minimal_symbol (stub_name, NULL, NULL)))
     return;
   pd_brk_addr = SYMBOL_VALUE_ADDRESS (ms);
-  if (!create_thread_event_breakpoint (pd_brk_addr))
+  if (!create_thread_event_breakpoint (target_gdbarch, pd_brk_addr))
     return;
 
   /* Prepare for thread debugging.  */
@@ -1734,7 +1734,6 @@ aix_thread_extra_thread_info (struct thread_info *thread)
   pthdb_suspendstate_t suspendstate;
   pthdb_detachstate_t detachstate;
   int cancelpend;
-  long length;
   static char *ret = NULL;
 
   if (!PD_TID (thread->ptid))
@@ -1775,7 +1774,7 @@ aix_thread_extra_thread_info (struct thread_info *thread)
 
   xfree (ret);			/* Free old buffer.  */
 
-  ret = ui_file_xstrdup (buf, &length);
+  ret = ui_file_xstrdup (buf, NULL);
   ui_file_delete (buf);
 
   return ret;

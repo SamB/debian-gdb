@@ -163,6 +163,7 @@ Jim Blandy			jimb@red-bean.com
 Joel Brobecker			brobecker@adacore.com
 Kevin Buettner			kevinb@redhat.com
 Andrew Cagney			cagney@gnu.org
+Doug Evans			dje@google.com
 Daniel Jacobowitz		dan@debian.org
 Mark Kettenis           	kettenis@gnu.org
 Stan Shebs			stan@codesourcery.com
@@ -529,6 +530,7 @@ Jan Kratochvil					jan.kratochvil@redhat.com
 Jonathan Larmour				jifl@ecoscentric.com
 Jeff Law					law@redhat.com
 David Lecomber					david@streamline-computing.com
+Don Lee						don.lee@sunplusct.com
 Robert Lipe					rjl@sco.com
 Sandra Loosemore				sandra@codesourcery.com
 H.J. Lu						hjl.tools@gmail.com

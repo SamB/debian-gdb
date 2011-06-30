@@ -8,7 +8,7 @@
 /* Main header file for the bfd library -- portable access to object files.
 
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
    Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
@@ -463,7 +463,6 @@ extern int bfd_seek (bfd *, file_ptr, int);
 extern file_ptr bfd_tell (bfd *);
 extern int bfd_flush (bfd *);
 extern int bfd_stat (bfd *, struct stat *);
-extern void *bfd_mmap (bfd *, void *, bfd_size_type, int, int, file_ptr);
 
 /* Deprecated old routines.  */
 #if __GNUC__
@@ -1123,6 +1122,9 @@ long bfd_get_mtime (bfd *abfd);
 
 file_ptr bfd_get_size (bfd *abfd);
 
+void *bfd_mmap (bfd *abfd, void *addr, bfd_size_type len,
+    int prot, int flags, file_ptr offset);
+
 /* Extracted from bfdwin.c.  */
 /* Extracted from section.c.  */
 typedef struct bfd_section
@@ -1403,6 +1405,13 @@ typedef struct bfd_section
      section size calculated on a previous linker relaxation pass.  */
   bfd_size_type rawsize;
 
+  /* Relaxation table. */
+  struct relax_table *relax;
+
+  /* Count of used relaxation table entries. */
+  int relax_count;
+
+
   /* If this section is going to be output, then this value is the
      offset in *bytes* into the output section of the first byte in the
      input section (byte ==> smallest addressable unit on the
@@ -1491,6 +1500,17 @@ typedef struct bfd_section
     struct bfd_section *s;
   } map_head, map_tail;
 } asection;
+
+/* Relax table contains information about instructions which can
+   be removed by relaxation -- replacing a long address with a 
+   short address.  */
+struct relax_table {
+  /* Address where bytes may be deleted. */
+  bfd_vma addr;
+  
+  /* Number of bytes to be deleted.  */
+  int size;
+};
 
 /* These sections are global, and are managed by BFD.  The application
    and target back end are not permitted to change the values in
@@ -1627,8 +1647,8 @@ extern asection bfd_ind_section;
   /* has_tls_get_addr_call, has_gp_reloc, need_finalize_relax,     */  \
      0,                     0,            0,                           \
                                                                        \
-  /* reloc_done, vma, lma, size, rawsize                           */  \
-     0,          0,   0,   0,    0,                                    \
+  /* reloc_done, vma, lma, size, rawsize, relax, relax_count,      */  \
+     0,          0,   0,   0,    0,       0,     0,                    \
                                                                        \
   /* output_offset, output_section,              alignment_power,  */  \
      0,             (struct bfd_section *) &SEC, 0,                    \
@@ -1833,6 +1853,9 @@ enum bfd_architecture
 #define bfd_mach_i386_i386_intel_syntax 3
 #define bfd_mach_x86_64 64
 #define bfd_mach_x86_64_intel_syntax 65
+  bfd_arch_l1om,   /* Intel L1OM */
+#define bfd_mach_l1om 66
+#define bfd_mach_l1om_intel_syntax 67
   bfd_arch_we32k,     /* AT&T WE32xxx */
   bfd_arch_tahoe,     /* CCI/Harris Tahoe */
   bfd_arch_i860,      /* Intel 860 */
@@ -1857,6 +1880,7 @@ enum bfd_architecture
 #define bfd_mach_ppc64         64
 #define bfd_mach_ppc_403       403
 #define bfd_mach_ppc_403gc     4030
+#define bfd_mach_ppc_405       405
 #define bfd_mach_ppc_505       505
 #define bfd_mach_ppc_601       601
 #define bfd_mach_ppc_602       602
@@ -2065,6 +2089,7 @@ enum bfd_architecture
 #define bfd_mach_r800           11 /* R800: successor with multiplication.  */
   bfd_arch_lm32,      /* Lattice Mico32 */
 #define bfd_mach_lm32      1
+  bfd_arch_microblaze,/* Xilinx MicroBlaze. */
   bfd_arch_last
   };
 
@@ -2543,6 +2568,7 @@ relocation types already defined.  */
   BFD_RELOC_SPU_HI16,
   BFD_RELOC_SPU_PPU32,
   BFD_RELOC_SPU_PPU64,
+  BFD_RELOC_SPU_ADD_PIC,
 
 /* Alpha ECOFF and ELF relocations.  Some of these treat the symbol or
 "addend" in some special way.
@@ -4506,6 +4532,59 @@ BFD_RELOC_MACH_O_PAIR.  */
 
 /* Mach-O generic relocations.  */
   BFD_RELOC_MACH_O_PAIR,
+
+/* This is a 32 bit reloc for the microblaze that stores the 
+low 16 bits of a value  */
+  BFD_RELOC_MICROBLAZE_32_LO,
+
+/* This is a 32 bit pc-relative reloc for the microblaze that 
+stores the low 16 bits of a value  */
+  BFD_RELOC_MICROBLAZE_32_LO_PCREL,
+
+/* This is a 32 bit reloc for the microblaze that stores a 
+value relative to the read-only small data area anchor  */
+  BFD_RELOC_MICROBLAZE_32_ROSDA,
+
+/* This is a 32 bit reloc for the microblaze that stores a 
+value relative to the read-write small data area anchor  */
+  BFD_RELOC_MICROBLAZE_32_RWSDA,
+
+/* This is a 32 bit reloc for the microblaze to handle 
+expressions of the form "Symbol Op Symbol"  */
+  BFD_RELOC_MICROBLAZE_32_SYM_OP_SYM,
+
+/* This is a 64 bit reloc that stores the 32 bit pc relative 
+value in two words (with an imm instruction).  No relocation is 
+done here - only used for relaxing  */
+  BFD_RELOC_MICROBLAZE_64_NONE,
+
+/* This is a 64 bit reloc that stores the 32 bit pc relative 
+value in two words (with an imm instruction).  The relocation is
+PC-relative GOT offset  */
+  BFD_RELOC_MICROBLAZE_64_GOTPC,
+
+/* This is a 64 bit reloc that stores the 32 bit pc relative 
+value in two words (with an imm instruction).  The relocation is
+GOT offset  */
+  BFD_RELOC_MICROBLAZE_64_GOT,
+
+/* This is a 64 bit reloc that stores the 32 bit pc relative 
+value in two words (with an imm instruction).  The relocation is
+PC-relative offset into PLT  */
+  BFD_RELOC_MICROBLAZE_64_PLT,
+
+/* This is a 64 bit reloc that stores the 32 bit GOT relative 
+value in two words (with an imm instruction).  The relocation is
+relative offset from _GLOBAL_OFFSET_TABLE_  */
+  BFD_RELOC_MICROBLAZE_64_GOTOFF,
+
+/* This is a 32 bit reloc that stores the 32 bit GOT relative 
+value in a word.  The relocation is relative offset from  */
+  BFD_RELOC_MICROBLAZE_32_GOTOFF,
+
+/* This is used to tell the dynamic linker to copy the value out of
+the dynamic object into the runtime process image.  */
+  BFD_RELOC_MICROBLAZE_COPY,
   BFD_RELOC_UNUSED };
 typedef enum bfd_reloc_code_real bfd_reloc_code_real_type;
 reloc_howto_type *bfd_reloc_type_lookup
@@ -4637,6 +4716,10 @@ typedef struct bfd_symbol
      calling the function that it points to.  BSF_FUNCTION must
      also be also set.  */
 #define BSF_GNU_INDIRECT_FUNCTION (1 << 22)
+  /* This symbol is a globally unique data object.  The dynamic linker
+     will make sure that in the entire process there is just one symbol
+     with this name and type in use.  BSF_OBJECT must also be set.  */
+#define BSF_GNU_UNIQUE         (1 << 23)
 
   flagword flags;
 
@@ -4700,6 +4783,14 @@ bfd_boolean bfd_copy_private_symbol_data
             (ibfd, isymbol, obfd, osymbol))
 
 /* Extracted from bfd.c.  */
+enum bfd_direction
+  {
+    no_direction = 0,
+    read_direction = 1,
+    write_direction = 2,
+    both_direction = 3
+  };
+
 struct bfd
 {
   /* A unique identifier of the BFD  */
@@ -4734,14 +4825,7 @@ struct bfd
   bfd_format format;
 
   /* The direction with which the BFD was opened.  */
-  enum bfd_direction
-    {
-      no_direction = 0,
-      read_direction = 1,
-      write_direction = 2,
-      both_direction = 3
-    }
-  direction;
+  enum bfd_direction direction;
 
   /* Format_specific flags.  */
   flagword flags;

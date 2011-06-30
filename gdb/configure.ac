@@ -26,9 +26,7 @@ AC_CONFIG_HEADER(config.h:config.in)
 AM_MAINTAINER_MODE
 
 AC_PROG_CC
-AC_GNU_SOURCE
-AC_AIX
-AC_ISC_POSIX
+AC_USE_SYSTEM_EXTENSIONS
 gl_EARLY
 AM_PROG_CC_STDC
 
@@ -685,8 +683,8 @@ if test "${have_libpython}" = yes; then
 else
   # Even if Python support is not compiled in, we need to have these files
   # included in order to recognize the GDB command "python".
-  CONFIG_OBS="$CONFIG_OBS python.o python-value.o python-prettyprint.o"
-  CONFIG_SRCS="$CONFIG_SRCS python/python.c python/python-value.c python/python-prettyprint.c"
+  CONFIG_OBS="$CONFIG_OBS python.o py-value.o py-prettyprint.o"
+  CONFIG_SRCS="$CONFIG_SRCS python/python.c python/py-value.c python/py-prettyprint.c"
 fi
 AC_SUBST(PYTHON_CFLAGS)
 
@@ -785,7 +783,7 @@ AC_FUNC_ALLOCA
 AC_FUNC_MMAP
 AC_FUNC_VFORK
 AC_CHECK_FUNCS([canonicalize_file_name realpath getrusage getuid \
-                getgid poll pread64 sbrk setpgid setpgrp setsid \
+		getgid pipe poll pread64 sbrk setpgid setpgrp setsid \
 		sigaction sigprocmask sigsetmask socketpair syscall \
 		ttrace wborder setlocale iconvlist libiconvlist btowc])
 AM_LANGINFO_CODESET
@@ -1512,11 +1510,6 @@ AC_ARG_ENABLE(werror,
      *) AC_MSG_ERROR(bad value ${enableval} for --enable-werror) ;;
    esac])
 
-# Enable -Werror by default when using gcc
-if test "${GCC}" = yes -a -z "${ERROR_ON_WARNING}" ; then
-    ERROR_ON_WARNING=yes
-fi
-
 WERROR_CFLAGS=""
 if test "${ERROR_ON_WARNING}" = yes ; then
     WERROR_CFLAGS="-Werror"
@@ -1918,32 +1911,6 @@ dnl  Detect the character set used by this host.
 dnl  At the moment, we just assume it's UTF-8.
 AC_DEFINE(GDB_DEFAULT_HOST_CHARSET, "UTF-8",
           [Define to be a string naming the default host character set.])
-
-# Flags needed to enable html installing and building
-AC_ARG_WITH(datarootdir,
-AC_HELP_STRING([--with-datarootdir], [use datarootdir as the data root directory.]),
-[datarootdir="\${prefix}/${withval}"],
-[datarootdir="\${prefix}/share"])
-
-AC_ARG_WITH(docdir,
-AC_HELP_STRING([--with-docdir], [install documentation in this directory.]),
-[docdir="\${prefix}/${withval}"],
-[docdir="\${datarootdir}/doc"])
-
-AC_ARG_WITH(pdfdir,
-AC_HELP_STRING([--with-pdfdir], [install pdf in this directory.]),
-[pdfdir="\${prefix}/${withval}"],
-[pdfdir="\${docdir}"])
-
-AC_ARG_WITH(htmldir,
-AC_HELP_STRING([--with-htmldir], [install html in this directory.]),
-[htmldir="\${prefix}/${withval}"],
-[htmldir="\${docdir}"])
-
-AC_SUBST(datarootdir)
-AC_SUBST(docdir)
-AC_SUBST(htmldir)
-AC_SUBST(pdfdir)
 
 AC_OUTPUT(Makefile .gdbinit:gdbinit.in gnulib/Makefile,
 [

@@ -52,8 +52,7 @@ struct bp_target_info;
 struct target_desc;
 struct displaced_step_closure;
 struct core_regset_section;
-
-extern struct gdbarch *current_gdbarch;
+struct syscall;
 
 /* The architecture associated with the connection to the target.
  
@@ -563,7 +562,7 @@ extern void set_gdbarch_skip_solib_resolver (struct gdbarch *gdbarch, gdbarch_sk
 
 /* Some systems also have trampoline code for returning from shared libs. */
 
-typedef int (gdbarch_in_solib_return_trampoline_ftype) (CORE_ADDR pc, char *name);
+typedef int (gdbarch_in_solib_return_trampoline_ftype) (struct gdbarch *gdbarch, CORE_ADDR pc, char *name);
 extern int gdbarch_in_solib_return_trampoline (struct gdbarch *gdbarch, CORE_ADDR pc, char *name);
 extern void set_gdbarch_in_solib_return_trampoline (struct gdbarch *gdbarch, gdbarch_in_solib_return_trampoline_ftype *in_solib_return_trampoline);
 
@@ -735,6 +734,20 @@ typedef struct displaced_step_closure * (gdbarch_displaced_step_copy_insn_ftype)
 extern struct displaced_step_closure * gdbarch_displaced_step_copy_insn (struct gdbarch *gdbarch, CORE_ADDR from, CORE_ADDR to, struct regcache *regs);
 extern void set_gdbarch_displaced_step_copy_insn (struct gdbarch *gdbarch, gdbarch_displaced_step_copy_insn_ftype *displaced_step_copy_insn);
 
+/* Return true if GDB should use hardware single-stepping to execute
+   the displaced instruction identified by CLOSURE.  If false,
+   GDB will simply restart execution at the displaced instruction
+   location, and it is up to the target to ensure GDB will receive
+   control again (e.g. by placing a software breakpoint instruction
+   into the displaced instruction buffer).
+  
+   The default implementation returns false on all targets that
+   provide a gdbarch_software_single_step routine, and true otherwise. */
+
+typedef int (gdbarch_displaced_step_hw_singlestep_ftype) (struct gdbarch *gdbarch, struct displaced_step_closure *closure);
+extern int gdbarch_displaced_step_hw_singlestep (struct gdbarch *gdbarch, struct displaced_step_closure *closure);
+extern void set_gdbarch_displaced_step_hw_singlestep (struct gdbarch *gdbarch, gdbarch_displaced_step_hw_singlestep_ftype *displaced_step_hw_singlestep);
+
 /* Fix up the state resulting from successfully single-stepping a
    displaced instruction, to give the result we would have gotten from
    stepping the instruction in its original location.
@@ -823,6 +836,15 @@ typedef int (gdbarch_process_record_ftype) (struct gdbarch *gdbarch, struct regc
 extern int gdbarch_process_record (struct gdbarch *gdbarch, struct regcache *regcache, CORE_ADDR addr);
 extern void set_gdbarch_process_record (struct gdbarch *gdbarch, gdbarch_process_record_ftype *process_record);
 
+/* Save process state after a signal.
+   Return -1 if something goes wrong, 0 otherwise. */
+
+extern int gdbarch_process_record_signal_p (struct gdbarch *gdbarch);
+
+typedef int (gdbarch_process_record_signal_ftype) (struct gdbarch *gdbarch, struct regcache *regcache, enum target_signal signal);
+extern int gdbarch_process_record_signal (struct gdbarch *gdbarch, struct regcache *regcache, enum target_signal signal);
+extern void set_gdbarch_process_record_signal (struct gdbarch *gdbarch, gdbarch_process_record_signal_ftype *process_record_signal);
+
 /* Signal translation: translate inferior's signal (host's) number into
    GDB's representation. */
 
@@ -855,6 +877,15 @@ typedef void (gdbarch_record_special_symbol_ftype) (struct gdbarch *gdbarch, str
 extern void gdbarch_record_special_symbol (struct gdbarch *gdbarch, struct objfile *objfile, asymbol *sym);
 extern void set_gdbarch_record_special_symbol (struct gdbarch *gdbarch, gdbarch_record_special_symbol_ftype *record_special_symbol);
 
+/* Function for the 'catch syscall' feature.
+   Get architecture-specific system calls information from registers. */
+
+extern int gdbarch_get_syscall_number_p (struct gdbarch *gdbarch);
+
+typedef LONGEST (gdbarch_get_syscall_number_ftype) (struct gdbarch *gdbarch, ptid_t ptid);
+extern LONGEST gdbarch_get_syscall_number (struct gdbarch *gdbarch, ptid_t ptid);
+extern void set_gdbarch_get_syscall_number (struct gdbarch *gdbarch, gdbarch_get_syscall_number_ftype *get_syscall_number);
+
 /* True if the list of shared libraries is one and only for all
    processes, as opposed to a list of shared libraries per inferior.
    This usually means that all processes, although may or may not share
@@ -871,6 +902,9 @@ extern void set_gdbarch_has_global_solist (struct gdbarch *gdbarch, int has_glob
 
 extern int gdbarch_has_global_breakpoints (struct gdbarch *gdbarch);
 extern void set_gdbarch_has_global_breakpoints (struct gdbarch *gdbarch, int has_global_breakpoints);
+
+/* Definition for an unknown syscall, used basically in error-cases.  */
+#define UNKNOWN_SYSCALL (-1)
 
 extern struct gdbarch_tdep *gdbarch_tdep (struct gdbarch *gdbarch);
 
@@ -919,8 +953,7 @@ extern struct gdbarch_tdep *gdbarch_tdep (struct gdbarch *gdbarch);
    of all the previously created architures for this architecture
    family.  The (possibly NULL) ARCHES->gdbarch can used to access
    values from the previously selected architecture for this
-   architecture family.  The global ``current_gdbarch'' shall not be
-   used.
+   architecture family.
 
    The INIT function shall return any of: NULL - indicating that it
    doesn't recognize the selected architecture; an existing ``struct
@@ -1029,12 +1062,12 @@ extern int gdbarch_update_p (struct gdbarch_info info);
    set, and then finished using gdbarch_info_fill.
 
    Returns the corresponding architecture, or NULL if no matching
-   architecture was found.  "current_gdbarch" is not updated.  */
+   architecture was found.  */
 
 extern struct gdbarch *gdbarch_find_by_info (struct gdbarch_info info);
 
 
-/* Helper function.  Set the global "current_gdbarch" to "gdbarch".
+/* Helper function.  Set the global "target_gdbarch" to "gdbarch".
 
    FIXME: kettenis/20031124: Of the functions that follow, only
    gdbarch_from_bfd is supposed to survive.  The others will
@@ -1042,7 +1075,7 @@ extern struct gdbarch *gdbarch_find_by_info (struct gdbarch_info info);
    multi-arch.  However, for now we're still stuck with the concept of
    a single active architecture.  */
 
-extern void deprecated_current_gdbarch_select_hack (struct gdbarch *gdbarch);
+extern void deprecated_target_gdbarch_select_hack (struct gdbarch *gdbarch);
 
 
 /* Register per-architecture data-pointer.

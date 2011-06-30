@@ -414,12 +414,6 @@ struct objfile
 
 #define OBJF_USERLOADED	(1 << 3)	/* User loaded */
 
-/* The bfd of this objfile is used outside of the objfile (e.g. by solib).
-   Do not try to free it.  */
-
-#define OBJF_KEEPBFD	(1 << 4)	/* Do not delete bfd */
-
-
 /* The object file that the main symbol table was loaded from (e.g. the
    argument to the "symbol-file" or "file" command).  */
 
@@ -478,9 +472,15 @@ extern void free_all_objfiles (void);
 
 extern void objfile_relocate (struct objfile *, struct section_offsets *);
 
+extern int objfile_has_partial_symbols (struct objfile *objfile);
+
+extern int objfile_has_full_symbols (struct objfile *objfile);
+
 extern int have_partial_symbols (void);
 
 extern int have_full_symbols (void);
+
+extern void objfiles_changed (void);
 
 /* This operation deletes all objfile entries that represent solibs that
    weren't explicitly loaded by the user, via e.g., the add-symbol-file
@@ -500,14 +500,26 @@ extern int in_plt_section (CORE_ADDR, char *);
 /* Keep a registry of per-objfile data-pointers required by other GDB
    modules.  */
 
+/* Allocate an entry in the per-objfile registry.  */
 extern const struct objfile_data *register_objfile_data (void);
+
+/* Allocate an entry in the per-objfile registry.
+   SAVE and FREE are called when clearing objfile data.
+   First all registered SAVE functions are called.
+   Then all registered FREE functions are called.
+   Either or both of SAVE, FREE may be NULL.  */
 extern const struct objfile_data *register_objfile_data_with_cleanup
-  (void (*cleanup) (struct objfile *, void *));
+  (void (*save) (struct objfile *, void *),
+   void (*free) (struct objfile *, void *));
+
 extern void clear_objfile_data (struct objfile *objfile);
 extern void set_objfile_data (struct objfile *objfile,
 			      const struct objfile_data *data, void *value);
 extern void *objfile_data (struct objfile *objfile,
 			   const struct objfile_data *data);
+
+extern struct bfd *gdb_bfd_ref (struct bfd *abfd);
+extern void gdb_bfd_unref (struct bfd *abfd);
 
 
 /* Traverse all object files.  ALL_OBJFILES_SAFE works even if you delete

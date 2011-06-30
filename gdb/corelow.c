@@ -592,6 +592,36 @@ core_files_info (struct target_ops *t)
   print_section_info (core_data, core_bfd);
 }
 
+struct spuid_list
+{
+  gdb_byte *buf;
+  ULONGEST offset;
+  LONGEST len;
+  ULONGEST pos;
+  ULONGEST written;
+};
+
+static void
+add_to_spuid_list (bfd *abfd, asection *asect, void *list_p)
+{
+  struct spuid_list *list = list_p;
+  enum bfd_endian byte_order
+    = bfd_big_endian (abfd)? BFD_ENDIAN_BIG : BFD_ENDIAN_LITTLE;
+  int fd, pos = 0;
+
+  sscanf (bfd_section_name (abfd, asect), "SPU/%d/regs%n", &fd, &pos);
+  if (pos == 0)
+    return;
+
+  if (list->pos >= list->offset && list->pos + 4 <= list->offset + list->len)
+    {
+      store_unsigned_integer (list->buf + list->pos - list->offset,
+			      4, byte_order, fd);
+      list->written += 4;
+    }
+  list->pos += 4;
+}
+
 static LONGEST
 core_xfer_partial (struct target_ops *ops, enum target_object object,
 		   const char *annex, gdb_byte *readbuf,
@@ -682,6 +712,53 @@ core_xfer_partial (struct target_ops *ops, enum target_object object,
 	}
       /* FALL THROUGH */
 
+    case TARGET_OBJECT_SPU:
+      if (readbuf && annex)
+	{
+	  /* When the SPU contexts are stored in a core file, BFD
+	     represents this with a fake section called "SPU/<annex>".  */
+
+	  struct bfd_section *section;
+	  bfd_size_type size;
+	  char *contents;
+
+	  char sectionstr[100];
+	  xsnprintf (sectionstr, sizeof sectionstr, "SPU/%s", annex);
+
+	  section = bfd_get_section_by_name (core_bfd, sectionstr);
+	  if (section == NULL)
+	    return -1;
+
+	  size = bfd_section_size (core_bfd, section);
+	  if (offset >= size)
+	    return 0;
+	  size -= offset;
+	  if (size > len)
+	    size = len;
+	  if (size > 0
+	      && !bfd_get_section_contents (core_bfd, section, readbuf,
+					    (file_ptr) offset, size))
+	    {
+	      warning (_("Couldn't read SPU section in core file."));
+	      return -1;
+	    }
+
+	  return size;
+	}
+      else if (readbuf)
+	{
+	  /* NULL annex requests list of all present spuids.  */
+	  struct spuid_list list;
+	  list.buf = readbuf;
+	  list.offset = offset;
+	  list.len = len;
+	  list.pos = 0;
+	  list.written = 0;
+	  bfd_map_over_sections (core_bfd, add_to_spuid_list, &list);
+	  return list.written;
+	}
+      return -1;
+
     default:
       if (ops->beneath != NULL)
 	return ops->beneath->to_xfer_partial (ops->beneath, object, annex,
@@ -695,7 +772,7 @@ core_xfer_partial (struct target_ops *ops, enum target_object object,
    `gdb internal error' (since generic_mourn calls breakpoint_init_inferior).  */
 
 static int
-ignore (struct bp_target_info *bp_tgt)
+ignore (struct gdbarch *gdbarch, struct bp_target_info *bp_tgt)
 {
   return 0;
 }

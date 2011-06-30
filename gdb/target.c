@@ -93,6 +93,9 @@ static LONGEST target_xfer_partial (struct target_ops *ops,
 				    void *readbuf, const void *writebuf,
 				    ULONGEST offset, LONGEST len);
 
+static struct gdbarch *default_thread_architecture (struct target_ops *ops,
+						    ptid_t ptid);
+
 static void init_dummy_target (void);
 
 static struct target_ops debug_target;
@@ -103,15 +106,19 @@ static void debug_to_prepare_to_store (struct regcache *);
 
 static void debug_to_files_info (struct target_ops *);
 
-static int debug_to_insert_breakpoint (struct bp_target_info *);
+static int debug_to_insert_breakpoint (struct gdbarch *,
+				       struct bp_target_info *);
 
-static int debug_to_remove_breakpoint (struct bp_target_info *);
+static int debug_to_remove_breakpoint (struct gdbarch *,
+				       struct bp_target_info *);
 
 static int debug_to_can_use_hw_breakpoint (int, int, int);
 
-static int debug_to_insert_hw_breakpoint (struct bp_target_info *);
+static int debug_to_insert_hw_breakpoint (struct gdbarch *,
+					  struct bp_target_info *);
 
-static int debug_to_remove_hw_breakpoint (struct bp_target_info *);
+static int debug_to_remove_hw_breakpoint (struct gdbarch *,
+					  struct bp_target_info *);
 
 static int debug_to_insert_watchpoint (CORE_ADDR, int, int);
 
@@ -203,7 +210,45 @@ show_targetdebug (struct ui_file *file, int from_tty,
 
 static void setup_target_debug (void);
 
-DCACHE *target_dcache;
+/* The option sets this.  */
+static int stack_cache_enabled_p_1 = 1;
+/* And set_stack_cache_enabled_p updates this.
+   The reason for the separation is so that we don't flush the cache for
+   on->on transitions.  */
+static int stack_cache_enabled_p = 1;
+
+/* This is called *after* the stack-cache has been set.
+   Flush the cache for off->on and on->off transitions.
+   There's no real need to flush the cache for on->off transitions,
+   except cleanliness.  */
+
+static void
+set_stack_cache_enabled_p (char *args, int from_tty,
+			   struct cmd_list_element *c)
+{
+  if (stack_cache_enabled_p != stack_cache_enabled_p_1)
+    target_dcache_invalidate ();
+
+  stack_cache_enabled_p = stack_cache_enabled_p_1;
+}
+
+static void
+show_stack_cache_enabled_p (struct ui_file *file, int from_tty,
+			    struct cmd_list_element *c, const char *value)
+{
+  fprintf_filtered (file, _("Cache use for stack accesses is %s.\n"), value);
+}
+
+/* Cache of memory operations, to speed up remote access.  */
+static DCACHE *target_dcache;
+
+/* Invalidate the target dcache.  */
+
+void
+target_dcache_invalidate (void)
+{
+  dcache_invalidate (target_dcache);
+}
 
 /* The user just typed 'target' without the name of a target.  */
 
@@ -406,7 +451,7 @@ target_kill (void)
 void
 target_load (char *arg, int from_tty)
 {
-  dcache_invalidate (target_dcache);
+  target_dcache_invalidate ();
   (*current_target.to_load) (arg, from_tty);
 }
 
@@ -602,6 +647,7 @@ update_current_target (void)
       /* Do not inherit to_follow_fork.  */
       INHERIT (to_insert_exec_catchpoint, t);
       INHERIT (to_remove_exec_catchpoint, t);
+      INHERIT (to_set_syscall_catchpoint, t);
       INHERIT (to_has_exited, t);
       /* Do not inherit to_mourn_inferiour.  */
       INHERIT (to_can_run, t);
@@ -630,6 +676,7 @@ update_current_target (void)
       INHERIT (to_make_corefile_notes, t);
       /* Do not inherit to_get_thread_local_address.  */
       INHERIT (to_can_execute_reverse, t);
+      INHERIT (to_thread_architecture, t);
       /* Do not inherit to_read_description.  */
       INHERIT (to_get_ada_task_ptid, t);
       /* Do not inherit to_search_memory.  */
@@ -675,10 +722,10 @@ update_current_target (void)
 	    (int (*) (int, int, int))
 	    return_zero);
   de_fault (to_insert_hw_breakpoint,
-	    (int (*) (struct bp_target_info *))
+	    (int (*) (struct gdbarch *, struct bp_target_info *))
 	    return_minus_one);
   de_fault (to_remove_hw_breakpoint,
-	    (int (*) (struct bp_target_info *))
+	    (int (*) (struct gdbarch *, struct bp_target_info *))
 	    return_minus_one);
   de_fault (to_insert_watchpoint,
 	    (int (*) (CORE_ADDR, int, int))
@@ -743,6 +790,9 @@ update_current_target (void)
   de_fault (to_remove_exec_catchpoint,
 	    (int (*) (int))
 	    tcomplain);
+  de_fault (to_set_syscall_catchpoint,
+	    (int (*) (int, int, int, int, int *))
+	    tcomplain);
   de_fault (to_has_exited,
 	    (int (*) (int, int, int *))
 	    return_zero);
@@ -770,6 +820,8 @@ update_current_target (void)
   de_fault (to_async_mask,
 	    (int (*) (int))
 	    return_one);
+  de_fault (to_thread_architecture,
+	    default_thread_architecture);
   current_target.to_read_description = NULL;
   de_fault (to_get_ada_task_ptid,
             (ptid_t (*) (long, long))
@@ -1133,12 +1185,14 @@ target_section_by_addr (struct target_ops *target, CORE_ADDR addr)
    value are just as for target_xfer_partial.  */
 
 static LONGEST
-memory_xfer_partial (struct target_ops *ops, void *readbuf, const void *writebuf,
-		     ULONGEST memaddr, LONGEST len)
+memory_xfer_partial (struct target_ops *ops, enum target_object object,
+		     void *readbuf, const void *writebuf, ULONGEST memaddr,
+		     LONGEST len)
 {
   LONGEST res;
   int reg_len;
   struct mem_region *region;
+  struct inferior *inf;
 
   /* Zero length requests are ok and require no work.  */
   if (len == 0)
@@ -1213,18 +1267,20 @@ memory_xfer_partial (struct target_ops *ops, void *readbuf, const void *writebuf
       return -1;
     }
 
-  if (region->attrib.cache)
+  inf = find_inferior_pid (ptid_get_pid (inferior_ptid));
+
+  if (inf != NULL
+      && (region->attrib.cache
+	  || (stack_cache_enabled_p && object == TARGET_OBJECT_STACK_MEMORY)))
     {
-      /* FIXME drow/2006-08-09: This call discards OPS, so the raw
-	 memory request will start back at current_target.  */
       if (readbuf != NULL)
-	res = dcache_xfer_memory (target_dcache, memaddr, readbuf,
+	res = dcache_xfer_memory (ops, target_dcache, memaddr, readbuf,
 				  reg_len, 0);
       else
 	/* FIXME drow/2006-08-09: If we're going to preserve const
 	   correctness dcache_xfer_memory should take readbuf and
 	   writebuf.  */
-	res = dcache_xfer_memory (target_dcache, memaddr,
+	res = dcache_xfer_memory (ops, target_dcache, memaddr,
 				  (void *) writebuf,
 				  reg_len, 1);
       if (res <= 0)
@@ -1266,6 +1322,20 @@ memory_xfer_partial (struct target_ops *ops, void *readbuf, const void *writebuf
   if (readbuf && !show_memory_breakpoints)
     breakpoint_restore_shadows (readbuf, memaddr, reg_len);
 
+  /* Make sure the cache gets updated no matter what - if we are writing
+     to the stack.  Even if this write is not tagged as such, we still need
+     to update the cache.  */
+
+  if (res > 0
+      && inf != NULL
+      && writebuf != NULL
+      && !region->attrib.cache
+      && stack_cache_enabled_p
+      && object != TARGET_OBJECT_STACK_MEMORY)
+    {
+      dcache_update (target_dcache, memaddr, (void *) writebuf, res);
+    }
+
   /* If we still haven't got anything, return the last error.  We
      give up.  */
   return res;
@@ -1300,8 +1370,9 @@ target_xfer_partial (struct target_ops *ops,
   /* If this is a memory transfer, let the memory-specific code
      have a look at it instead.  Memory transfers are more
      complicated.  */
-  if (object == TARGET_OBJECT_MEMORY)
-    retval = memory_xfer_partial (ops, readbuf, writebuf, offset, len);
+  if (object == TARGET_OBJECT_MEMORY || object == TARGET_OBJECT_STACK_MEMORY)
+    retval = memory_xfer_partial (ops, object, readbuf,
+				  writebuf, offset, len);
   else
     {
       enum target_object raw_object = object;
@@ -1383,6 +1454,23 @@ target_read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len)
     return EIO;
 }
 
+/* Like target_read_memory, but specify explicitly that this is a read from
+   the target's stack.  This may trigger different cache behavior.  */
+
+int
+target_read_stack (CORE_ADDR memaddr, gdb_byte *myaddr, int len)
+{
+  /* Dispatch to the topmost target, not the flattened current_target.
+     Memory accesses check target->to_has_(all_)memory, and the
+     flattened target doesn't inherit those.  */
+
+  if (target_read (current_target.beneath, TARGET_OBJECT_STACK_MEMORY, NULL,
+		   myaddr, memaddr, len) == len)
+    return 0;
+  else
+    return EIO;
+}
+
 int
 target_write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr, int len)
 {
@@ -1454,7 +1542,7 @@ target_flash_erase (ULONGEST address, LONGEST length)
 	{
 	  if (targetdebug)
 	    fprintf_unfiltered (gdb_stdlog, "target_flash_erase (%s, %s)\n",
-                                paddr (address), phex (length, 0));
+                                hex_string (address), phex (length, 0));
 	  t->to_flash_erase (t, address, length);
 	  return;
 	}
@@ -1822,13 +1910,13 @@ get_target_memory (struct target_ops *ops, CORE_ADDR addr, gdb_byte *buf,
 
 ULONGEST
 get_target_memory_unsigned (struct target_ops *ops,
-			    CORE_ADDR addr, int len)
+			    CORE_ADDR addr, int len, enum bfd_endian byte_order)
 {
   gdb_byte buf[sizeof (ULONGEST)];
 
   gdb_assert (len <= sizeof (buf));
   get_target_memory (ops, addr, buf, len);
-  return extract_unsigned_integer (buf, len);
+  return extract_unsigned_integer (buf, len, byte_order);
 }
 
 static void
@@ -1894,6 +1982,29 @@ target_pre_inferior (int from_tty)
     }
 }
 
+/* Callback for iterate_over_inferiors.  Gets rid of the given
+   inferior.  */
+
+static int
+dispose_inferior (struct inferior *inf, void *args)
+{
+  struct thread_info *thread;
+
+  thread = any_thread_of_process (inf->pid);
+  if (thread)
+    {
+      switch_to_thread (thread->ptid);
+
+      /* Core inferiors actually should be detached, not killed.  */
+      if (target_has_execution)
+	target_kill ();
+      else
+	target_detach (NULL, 0);
+    }
+
+  return 0;
+}
+
 /* This is to be called by the open routine before it does
    anything.  */
 
@@ -1902,11 +2013,12 @@ target_preopen (int from_tty)
 {
   dont_repeat ();
 
-  if (target_has_execution)
+  if (have_inferiors ())
     {
       if (!from_tty
-          || query (_("A program is being debugged already.  Kill it? ")))
-	target_kill ();
+	  || !have_live_inferiors ()
+	  || query (_("A program is being debugged already.  Kill it? ")))
+	iterate_over_inferiors (dispose_inferior, NULL);
       else
 	error (_("Program not killed."));
     }
@@ -2023,7 +2135,7 @@ target_resume (ptid_t ptid, int step, enum target_signal signal)
 {
   struct target_ops *t;
 
-  dcache_invalidate (target_dcache);
+  target_dcache_invalidate ();
 
   for (t = current_target.beneath; t != NULL; t = t->beneath)
     {
@@ -2288,7 +2400,8 @@ target_require_runnable (void)
       /* Do not worry about thread_stratum targets that can not
 	 create inferiors.  Assume they will be pushed again if
 	 necessary, and continue to the process_stratum.  */
-      if (t->to_stratum == thread_stratum)
+      if (t->to_stratum == thread_stratum
+	  || t->to_stratum == arch_stratum)
 	continue;
 
       error (_("\
@@ -2446,6 +2559,12 @@ default_watchpoint_addr_within_range (struct target_ops *target,
 				      CORE_ADDR start, int length)
 {
   return addr >= start && addr < start + length;
+}
+
+static struct gdbarch *
+default_thread_architecture (struct target_ops *ops, ptid_t ptid)
+{
+  return target_gdbarch;
 }
 
 static int
@@ -2751,9 +2870,9 @@ target_waitstatus_to_string (const struct target_waitstatus *ws)
     case TARGET_WAITKIND_EXECD:
       return xstrprintf ("%sexecd", kind_str);
     case TARGET_WAITKIND_SYSCALL_ENTRY:
-      return xstrprintf ("%ssyscall-entry", kind_str);
+      return xstrprintf ("%sentered syscall", kind_str);
     case TARGET_WAITKIND_SYSCALL_RETURN:
-      return xstrprintf ("%ssyscall-return", kind_str);
+      return xstrprintf ("%sexited syscall", kind_str);
     case TARGET_WAITKIND_SPURIOUS:
       return xstrprintf ("%sspurious", kind_str);
     case TARGET_WAITKIND_IGNORE:
@@ -2780,6 +2899,7 @@ debug_print_register (const char * func,
     fprintf_unfiltered (gdb_stdlog, "(%d)", regno);
   if (regno >= 0 && regno < gdbarch_num_regs (gdbarch))
     {
+      enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
       int i, size = register_size (gdbarch, regno);
       unsigned char buf[MAX_REGISTER_SIZE];
       regcache_raw_collect (regcache, regno, buf);
@@ -2790,7 +2910,7 @@ debug_print_register (const char * func,
 	}
       if (size <= sizeof (LONGEST))
 	{
-	  ULONGEST val = extract_unsigned_integer (buf, size);
+	  ULONGEST val = extract_unsigned_integer (buf, size, byte_order);
 	  fprintf_unfiltered (gdb_stdlog, " %s %s",
 			      core_addr_to_string_nz (val), plongest (val));
 	}
@@ -2855,8 +2975,8 @@ deprecated_debug_xfer_memory (CORE_ADDR memaddr, bfd_byte *myaddr, int len,
 
   fprintf_unfiltered (gdb_stdlog,
 		      "target_xfer_memory (%s, xxx, %d, %s, xxx) = %d",
-		      paddress (memaddr), len, write ? "write" : "read",
-                      retval);
+		      paddress (target_gdbarch, memaddr), len,
+		      write ? "write" : "read", retval);
 
   if (retval > 0)
     {
@@ -2893,11 +3013,12 @@ debug_to_files_info (struct target_ops *target)
 }
 
 static int
-debug_to_insert_breakpoint (struct bp_target_info *bp_tgt)
+debug_to_insert_breakpoint (struct gdbarch *gdbarch,
+			    struct bp_target_info *bp_tgt)
 {
   int retval;
 
-  retval = debug_target.to_insert_breakpoint (bp_tgt);
+  retval = debug_target.to_insert_breakpoint (gdbarch, bp_tgt);
 
   fprintf_unfiltered (gdb_stdlog,
 		      "target_insert_breakpoint (0x%lx, xxx) = %ld\n",
@@ -2907,11 +3028,12 @@ debug_to_insert_breakpoint (struct bp_target_info *bp_tgt)
 }
 
 static int
-debug_to_remove_breakpoint (struct bp_target_info *bp_tgt)
+debug_to_remove_breakpoint (struct gdbarch *gdbarch,
+			    struct bp_target_info *bp_tgt)
 {
   int retval;
 
-  retval = debug_target.to_remove_breakpoint (bp_tgt);
+  retval = debug_target.to_remove_breakpoint (gdbarch, bp_tgt);
 
   fprintf_unfiltered (gdb_stdlog,
 		      "target_remove_breakpoint (0x%lx, xxx) = %ld\n",
@@ -2996,11 +3118,12 @@ debug_to_watchpoint_addr_within_range (struct target_ops *target,
 }
 
 static int
-debug_to_insert_hw_breakpoint (struct bp_target_info *bp_tgt)
+debug_to_insert_hw_breakpoint (struct gdbarch *gdbarch,
+			       struct bp_target_info *bp_tgt)
 {
   int retval;
 
-  retval = debug_target.to_insert_hw_breakpoint (bp_tgt);
+  retval = debug_target.to_insert_hw_breakpoint (gdbarch, bp_tgt);
 
   fprintf_unfiltered (gdb_stdlog,
 		      "target_insert_hw_breakpoint (0x%lx, xxx) = %ld\n",
@@ -3010,11 +3133,12 @@ debug_to_insert_hw_breakpoint (struct bp_target_info *bp_tgt)
 }
 
 static int
-debug_to_remove_hw_breakpoint (struct bp_target_info *bp_tgt)
+debug_to_remove_hw_breakpoint (struct gdbarch *gdbarch,
+			       struct bp_target_info *bp_tgt)
 {
   int retval;
 
-  retval = debug_target.to_remove_hw_breakpoint (bp_tgt);
+  retval = debug_target.to_remove_hw_breakpoint (gdbarch, bp_tgt);
 
   fprintf_unfiltered (gdb_stdlog,
 		      "target_remove_hw_breakpoint (0x%lx, xxx) = %ld\n",
@@ -3236,6 +3360,19 @@ debug_to_notice_signals (ptid_t ptid)
                       PIDGET (ptid));
 }
 
+static struct gdbarch *
+debug_to_thread_architecture (struct target_ops *ops, ptid_t ptid)
+{
+  struct gdbarch *retval;
+
+  retval = debug_target.to_thread_architecture (ops, ptid);
+
+  fprintf_unfiltered (gdb_stdlog, "target_thread_architecture (%s) = %p [%s]\n",
+		      target_pid_to_str (ptid), retval,
+		      gdbarch_bfd_arch_info (retval)->printable_name);
+  return retval;
+}
+
 static void
 debug_to_stop (ptid_t ptid)
 {
@@ -3309,6 +3446,7 @@ setup_target_debug (void)
   current_target.to_stop = debug_to_stop;
   current_target.to_rcmd = debug_to_rcmd;
   current_target.to_pid_to_exec_file = debug_to_pid_to_exec_file;
+  current_target.to_thread_architecture = debug_to_thread_architecture;
 }
 
 
@@ -3420,6 +3558,17 @@ Tells gdb whether to control the inferior in asynchronous mode."),
 			   show_maintenance_target_async_permitted,
 			   &setlist,
 			   &showlist);
+
+  add_setshow_boolean_cmd ("stack-cache", class_support,
+			   &stack_cache_enabled_p_1, _("\
+Set cache use for stack access."), _("\
+Show cache use for stack access."), _("\
+When on, use the data cache for all stack access, regardless of any\n\
+configured memory regions.  This improves remote performance significantly.\n\
+By default, caching for stack access is on."),
+			   set_stack_cache_enabled_p,
+			   show_stack_cache_enabled_p,
+			   &setlist, &showlist);
 
   target_dcache = dcache_init ();
 }

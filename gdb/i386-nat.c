@@ -217,6 +217,7 @@ static void
 i386_show_dr (const char *func, CORE_ADDR addr,
 	      int len, enum target_hw_bp_type type)
 {
+  int addr_size = gdbarch_addr_bit (target_gdbarch) / 8;
   int i;
 
   puts_unfiltered (func);
@@ -240,8 +241,8 @@ i386_show_dr (const char *func, CORE_ADDR addr,
     {
       printf_unfiltered ("\
 \tDR%d: addr=0x%s, ref.count=%d  DR%d: addr=0x%s, ref.count=%d\n",
-			 i, paddr(dr_mirror[i]), dr_ref_count[i],
-			 i+1, paddr(dr_mirror[i+1]), dr_ref_count[i+1]);
+		 i, phex (dr_mirror[i], addr_size), dr_ref_count[i],
+		 i+1, phex (dr_mirror[i+1], addr_size), dr_ref_count[i+1]);
       i++;
     }
 }
@@ -554,7 +555,10 @@ i386_stopped_data_address (struct target_ops *ops, CORE_ADDR *addr_p)
 	     that GDB doesn't call the target_stopped_data_address
 	     method except for data watchpoints.  In other words, I'm
 	     being paranoiac.  */
-	  && I386_DR_GET_RW_LEN (i) != 0)
+	  && I386_DR_GET_RW_LEN (i) != 0
+	  /* This third condition makes sure DRi is not vacant, this
+	     avoids false positives in windows-nat.c.  */
+	  && !I386_DR_VACANT (i))
 	{
 	  addr = dr_mirror[i];
 	  rc = 1;
@@ -601,7 +605,8 @@ i386_stopped_by_hwbp (void)
 /* Insert a hardware-assisted breakpoint at BP_TGT->placed_address.
    Return 0 on success, EBUSY on failure.  */
 static int
-i386_insert_hw_breakpoint (struct bp_target_info *bp_tgt)
+i386_insert_hw_breakpoint (struct gdbarch *gdbarch,
+			   struct bp_target_info *bp_tgt)
 {
   unsigned len_rw = i386_length_and_rw_bits (1, hw_execute);
   CORE_ADDR addr = bp_tgt->placed_address;
@@ -617,7 +622,8 @@ i386_insert_hw_breakpoint (struct bp_target_info *bp_tgt)
    Return 0 on success, -1 on failure.  */
 
 static int
-i386_remove_hw_breakpoint (struct bp_target_info *bp_tgt)
+i386_remove_hw_breakpoint (struct gdbarch *gdbarch,
+			   struct bp_target_info *bp_tgt)
 {
   unsigned len_rw = i386_length_and_rw_bits (1, hw_execute);
   CORE_ADDR addr = bp_tgt->placed_address;

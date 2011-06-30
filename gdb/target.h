@@ -53,7 +53,6 @@ struct target_section_table;
 
 #include "bfd.h"
 #include "symtab.h"
-#include "dcache.h"
 #include "memattr.h"
 #include "vec.h"
 #include "gdb_signals.h"
@@ -65,7 +64,8 @@ enum strata
     core_stratum,		/* Core dump files */
     process_stratum,		/* Executing processes */
     thread_stratum,		/* Executing threads */
-    record_stratum		/* Support record debugging */
+    record_stratum,		/* Support record debugging */
+    arch_stratum		/* Architecture overrides */
   };
 
 enum thread_control_capabilities
@@ -142,14 +142,15 @@ struct target_waitstatus
   {
     enum target_waitkind kind;
 
-    /* Forked child pid, execd pathname, exit status or signal number.  */
+    /* Forked child pid, execd pathname, exit status, signal number or
+       syscall number.  */
     union
       {
 	int integer;
 	enum target_signal sig;
 	ptid_t related_pid;
 	char *execd_pathname;
-	int syscall_id;
+	int syscall_number;
       }
     value;
   };
@@ -160,6 +161,21 @@ struct target_waitstatus
    options is not requested, target_wait blocks waiting for an
    event.  */
 #define TARGET_WNOHANG 1
+
+/* The structure below stores information about a system call.
+   It is basically used in the "catch syscall" command, and in
+   every function that gives information about a system call.
+   
+   It's also good to mention that its fields represent everything
+   that we currently know about a syscall in GDB.  */
+struct syscall
+  {
+    /* The syscall number.  */
+    int number;
+
+    /* The syscall name.  */
+    const char *name;
+  };
 
 /* Return a pretty printed form of target_waitstatus.
    Space for the result is malloc'd, caller must free.  */
@@ -202,6 +218,10 @@ enum target_object
      Target implementations of to_xfer_partial never need to handle
      this object, and most callers should not use it.  */
   TARGET_OBJECT_RAW_MEMORY,
+  /* Memory known to be part of the target's stack.  This is cached even
+     if it is not in a region marked as such, since it is known to be
+     "normal" RAM.  */
+  TARGET_OBJECT_STACK_MEMORY,
   /* Kernel Unwind Table.  See "ia64-tdep.c".  */
   TARGET_OBJECT_UNWIND_TABLE,
   /* Transfer auxilliary vector.  */
@@ -305,7 +325,8 @@ extern char *target_read_stralloc (struct target_ops *ops,
 extern void get_target_memory (struct target_ops *ops, CORE_ADDR addr,
 			       gdb_byte *buf, LONGEST len);
 extern ULONGEST get_target_memory_unsigned (struct target_ops *ops,
-					    CORE_ADDR addr, int len);
+					    CORE_ADDR addr, int len,
+					    enum bfd_endian byte_order);
 
 struct thread_info;		/* fwd decl for parameter list below: */
 
@@ -367,11 +388,11 @@ struct target_ops
 				   struct target_ops *target);
 
     void (*to_files_info) (struct target_ops *);
-    int (*to_insert_breakpoint) (struct bp_target_info *);
-    int (*to_remove_breakpoint) (struct bp_target_info *);
+    int (*to_insert_breakpoint) (struct gdbarch *, struct bp_target_info *);
+    int (*to_remove_breakpoint) (struct gdbarch *, struct bp_target_info *);
     int (*to_can_use_hw_breakpoint) (int, int, int);
-    int (*to_insert_hw_breakpoint) (struct bp_target_info *);
-    int (*to_remove_hw_breakpoint) (struct bp_target_info *);
+    int (*to_insert_hw_breakpoint) (struct gdbarch *, struct bp_target_info *);
+    int (*to_remove_hw_breakpoint) (struct gdbarch *, struct bp_target_info *);
     int (*to_remove_watchpoint) (CORE_ADDR, int, int);
     int (*to_insert_watchpoint) (CORE_ADDR, int, int);
     int (*to_stopped_by_watchpoint) (void);
@@ -401,6 +422,7 @@ struct target_ops
     int (*to_follow_fork) (struct target_ops *, int);
     void (*to_insert_exec_catchpoint) (int);
     int (*to_remove_exec_catchpoint) (int);
+    int (*to_set_syscall_catchpoint) (int, int, int, int, int *);
     int (*to_has_exited) (int, int, int *);
     void (*to_mourn_inferior) (struct target_ops *);
     int (*to_can_run) (void);
@@ -542,6 +564,18 @@ struct target_ops
        simultaneously?  */
     int (*to_supports_multi_process) (void);
 
+    /* Determine current architecture of thread PTID.
+
+       The target is supposed to determine the architecture of the code where
+       the target is currently stopped at (on Cell, if a target is in spu_run,
+       to_thread_architecture would return SPU, otherwise PPC32 or PPC64).
+       This is architecture used to perform decr_pc_after_break adjustment,
+       and also determines the frame architecture of the innermost frame.
+       ptrace operations need to operate according to target_gdbarch.
+
+       The default implementation always returns target_gdbarch.  */
+    struct gdbarch *(*to_thread_architecture) (struct target_ops *, ptid_t);
+
     int to_magic;
     /* Need sub-structure for target machine related rather than comm related?
      */
@@ -657,11 +691,14 @@ extern void target_store_registers (struct regcache *regcache, int regs);
 #define	target_supports_multi_process()	\
      (*current_target.to_supports_multi_process) ()
 
-extern DCACHE *target_dcache;
+/* Invalidate all target dcaches.  */
+extern void target_dcache_invalidate (void);
 
 extern int target_read_string (CORE_ADDR, char **, int, int *);
 
 extern int target_read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len);
+
+extern int target_read_stack (CORE_ADDR memaddr, gdb_byte *myaddr, int len);
 
 extern int target_write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr,
 				int len);
@@ -728,6 +765,8 @@ extern int inferior_has_vforked (ptid_t pid, ptid_t *child_pid);
 
 extern int inferior_has_execd (ptid_t pid, char **execd_pathname);
 
+extern int inferior_has_called_syscall (ptid_t pid, int *syscall_number);
+
 /* Print a line about the current target.  */
 
 #define	target_files_info()	\
@@ -736,14 +775,14 @@ extern int inferior_has_execd (ptid_t pid, char **execd_pathname);
 /* Insert a breakpoint at address BP_TGT->placed_address in the target
    machine.  Result is 0 for success, or an errno value.  */
 
-#define	target_insert_breakpoint(bp_tgt)	\
-     (*current_target.to_insert_breakpoint) (bp_tgt)
+#define	target_insert_breakpoint(gdbarch, bp_tgt)	\
+     (*current_target.to_insert_breakpoint) (gdbarch, bp_tgt)
 
 /* Remove a breakpoint at address BP_TGT->placed_address in the target
    machine.  Result is 0 for success, or an errno value.  */
 
-#define	target_remove_breakpoint(bp_tgt)	\
-     (*current_target.to_remove_breakpoint) (bp_tgt)
+#define	target_remove_breakpoint(gdbarch, bp_tgt)	\
+     (*current_target.to_remove_breakpoint) (gdbarch, bp_tgt)
 
 /* Initialize the terminal settings we record for the inferior,
    before we actually run the inferior.  */
@@ -879,6 +918,27 @@ int target_follow_fork (int follow_child);
 
 #define target_remove_exec_catchpoint(pid) \
      (*current_target.to_remove_exec_catchpoint) (pid)
+
+/* Syscall catch.
+
+   NEEDED is nonzero if any syscall catch (of any kind) is requested.
+   If NEEDED is zero, it means the target can disable the mechanism to
+   catch system calls because there are no more catchpoints of this type.
+
+   ANY_COUNT is nonzero if a generic (filter-less) syscall catch is
+   being requested.  In this case, both TABLE_SIZE and TABLE should
+   be ignored.
+
+   TABLE_SIZE is the number of elements in TABLE.  It only matters if
+   ANY_COUNT is zero.
+
+   TABLE is an array of ints, indexed by syscall number.  An element in
+   this array is nonzero if that syscall should be caught.  This argument
+   only matters if ANY_COUNT is zero.  */
+
+#define target_set_syscall_catchpoint(pid, needed, any_count, table_size, table) \
+     (*current_target.to_set_syscall_catchpoint) (pid, needed, any_count, \
+						  table_size, table)
 
 /* Returns TRUE if PID has exited.  And, also sets EXIT_STATUS to the
    exit code of PID, if any.  */
@@ -1039,6 +1099,11 @@ extern char *normal_pid_to_str (ptid_t ptid);
 #define target_pid_to_exec_file(pid) \
      (current_target.to_pid_to_exec_file) (pid)
 
+/* See the to_thread_architecture description in struct target_ops.  */
+
+#define target_thread_architecture(ptid) \
+     (current_target.to_thread_architecture (&current_target, ptid))
+
 /*
  * Iterator function for target memory regions.
  * Calls a callback function once for each memory region 'mapped'
@@ -1101,11 +1166,11 @@ extern char *normal_pid_to_str (ptid_t ptid);
 #define	target_remove_watchpoint(addr, len, type)	\
      (*current_target.to_remove_watchpoint) (addr, len, type)
 
-#define target_insert_hw_breakpoint(bp_tgt) \
-     (*current_target.to_insert_hw_breakpoint) (bp_tgt)
+#define target_insert_hw_breakpoint(gdbarch, bp_tgt) \
+     (*current_target.to_insert_hw_breakpoint) (gdbarch, bp_tgt)
 
-#define target_remove_hw_breakpoint(bp_tgt) \
-     (*current_target.to_remove_hw_breakpoint) (bp_tgt)
+#define target_remove_hw_breakpoint(gdbarch, bp_tgt) \
+     (*current_target.to_remove_hw_breakpoint) (gdbarch, bp_tgt)
 
 #define target_stopped_data_address(target, x) \
     (*target.to_stopped_data_address) (target, x)
@@ -1221,9 +1286,9 @@ extern struct target_section_table *target_get_section_table
 
 /* From mem-break.c */
 
-extern int memory_remove_breakpoint (struct bp_target_info *);
+extern int memory_remove_breakpoint (struct gdbarch *, struct bp_target_info *);
 
-extern int memory_insert_breakpoint (struct bp_target_info *);
+extern int memory_insert_breakpoint (struct gdbarch *, struct bp_target_info *);
 
 extern int default_memory_remove_breakpoint (struct gdbarch *, struct bp_target_info *);
 

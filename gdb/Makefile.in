@@ -166,6 +166,9 @@ INTL_CFLAGS = @INCINTL@
 TARGET_SYSTEM_ROOT = @TARGET_SYSTEM_ROOT@
 TARGET_SYSTEM_ROOT_DEFINE = @TARGET_SYSTEM_ROOT_DEFINE@
 
+# Did the user give us a --with-gdb-datadir option?
+GDB_DATADIR = @GDB_DATADIR@
+
 # Helper code from gnulib.
 LIBGNU = gnulib/libgnu.a
 INCGNU = -I$(srcdir)/gnulib -Ignulib
@@ -264,24 +267,24 @@ SUBDIR_TUI_CFLAGS= \
 #
 SUBDIR_PYTHON_OBS = \
 	python.o \
-	python-cmd.o \
-	python-frame.o \
-	python-function.o \
-	python-objfile.o \
-	python-prettyprint.o \
-	python-type.o \
-	python-utils.o \
-	python-value.o
+	py-cmd.o \
+	py-frame.o \
+	py-function.o \
+	py-objfile.o \
+	py-prettyprint.o \
+	py-type.o \
+	py-utils.o \
+	py-value.o
 SUBDIR_PYTHON_SRCS = \
 	python/python.c \
-	python/python-cmd.c \
-	python/python-frame.c \
-	python/python-function.c \
-	python/python-objfile.c \
-	python/python-prettyprint.c \
-	python/python-type.c \
-	python/python-utils.c \
-	python/python-value.c
+	python/py-cmd.c \
+	python/py-frame.c \
+	python/py-function.c \
+	python/py-objfile.c \
+	python/py-prettyprint.c \
+	python/py-type.c \
+	python/py-utils.c \
+	python/py-value.c
 SUBDIR_PYTHON_DEPS =
 SUBDIR_PYTHON_LDFLAGS=
 SUBDIR_PYTHON_CFLAGS=
@@ -466,8 +469,9 @@ TARGET_OBS = @TARGET_OBS@
 ALL_64_TARGET_OBS = \
 	alphabsd-tdep.o alphafbsd-tdep.o alpha-linux-tdep.o alpha-mdebug-tdep.o \
 	alphanbsd-tdep.o alphaobsd-tdep.o alpha-osf1-tdep.o alpha-tdep.o \
-	amd64fbsd-tdep.o amd64-dicos-tdep.o amd64-linux-tdep.o amd64nbsd-tdep.o \
-	amd64obsd-tdep.o amd64-sol2-tdep.o amd64-tdep.o \
+	amd64fbsd-tdep.o amd64-darwin-tdep.o amd64-dicos-tdep.o \
+	amd64-linux-tdep.o amd64nbsd-tdep.o \
+	amd64obsd-tdep.o amd64-sol2-tdep.o amd64-tdep.o amd64-windows-tdep.o \
 	ia64-linux-tdep.o ia64-tdep.o \
 	mips64obsd-tdep.o \
 	sparc64fbsd-tdep.o sparc64-linux-tdep.o sparc64nbsd-tdep.o \
@@ -487,7 +491,7 @@ ALL_TARGET_OBS = \
 	i386bsd-tdep.o i386-cygwin-tdep.o i386fbsd-tdep.o i386gnu-tdep.o \
 	i386-linux-tdep.o i386nbsd-tdep.o i386-nto-tdep.o i386obsd-tdep.o \
 	i386-sol2-tdep.o i386-tdep.o i387-tdep.o \
-	i386-dicos-tdep.o \
+	i386-dicos-tdep.o i386-darwin-tdep.o \
 	iq2000-tdep.o \
 	linux-tdep.o \
 	lm32-tdep.o \
@@ -500,6 +504,7 @@ ALL_TARGET_OBS = \
 	mips-irix-tdep.o mips-linux-tdep.o \
 	mipsnbsd-tdep.o mips-tdep.o \
 	mn10300-linux-tdep.o mn10300-tdep.o \
+	moxie-tdep.o \
 	mt-tdep.o \
 	nto-tdep.o \
 	ppc-linux-tdep.o ppcnbsd-tdep.o ppcobsd-tdep.o ppc-sysv-tdep.o \
@@ -509,7 +514,7 @@ ALL_TARGET_OBS = \
 	sh64-tdep.o sh-linux-tdep.o shnbsd-tdep.o sh-tdep.o \
 	sparc-linux-tdep.o sparcnbsd-tdep.o sparcobsd-tdep.o \
 	sparc-sol2-tdep.o sparc-tdep.o \
-	spu-tdep.o \
+	spu-tdep.o spu-multiarch.o solib-spu.o \
 	v850-tdep.o \
 	vaxnbsd-tdep.o vaxobsd-tdep.o vax-tdep.o \
 	xstormy16-tdep.o \
@@ -518,12 +523,11 @@ ALL_TARGET_OBS = \
 	bsd-uthread.o \
 	nbsd-tdep.o obsd-tdep.o \
 	sol2-tdep.o \
-	solib.o solib-frv.o solib-irix.o solib-svr4.o solib-target.o \
-	solib-som.o solib-pa64.o \
+	solib-frv.o solib-irix.o solib-svr4.o solib-target.o \
+	solib-som.o solib-pa64.o solib-darwin.o \
 	dbug-rom.o dink32-rom.o ppcbug-rom.o m32r-rom.o dsrec.o monitor.o \
 	remote-m32r-sdi.o \
 	xcoffread.o \
-	prologue-value.o \
 	symfile-mem.o \
 	corelow.o \
 	windows-tdep.o \
@@ -619,7 +623,8 @@ TARGET_FLAGS_TO_PASS = \
 	"MAKEINFO=$(MAKEINFO)" \
 	"MAKEHTML=$(MAKEHTML)" \
 	"RUNTEST=$(RUNTEST)" \
-	"RUNTESTFLAGS=$(RUNTESTFLAGS)"
+	"RUNTESTFLAGS=$(RUNTESTFLAGS)" \
+	"FORCE_PARALLEL=$(FORCE_PARALLEL)"
 
 # All source files that go into linking GDB.
 # Links made at configuration time should not be specified here, since
@@ -674,7 +679,9 @@ SFILES = ada-exp.y ada-lang.c ada-typeprint.c ada-valprint.c ada-tasks.c \
 	wrapper.c \
 	xml-tdesc.c xml-support.c \
 	inferior.c gdb_usleep.c \
-	record.c
+	record.c \
+	jit.c \
+	xml-syscall.c \
 
 LINTFILES = $(SFILES) $(YYFILES) $(CONFIG_SRCS) init.c
 
@@ -736,16 +743,14 @@ gdb_locale.h gdb_dirent.h arch-utils.h trad-frame.h gnu-nat.h \
 language.h nbsd-tdep.h wrapper.h solib-svr4.h \
 macroexp.h ui-file.h regcache.h gdb_string.h tracepoint.h i386-tdep.h \
 inf-child.h p-lang.h event-top.h gdbtypes.h scm-tags.h user-regs.h \
-regformats/regdef.h config/alpha/nm-osf3.h config/i386/nm-cygwin.h \
-config/i386/nm-linux64.h config/i386/nm-i386gnu.h \
+regformats/regdef.h config/alpha/nm-osf3.h  config/i386/nm-i386gnu.h \
 config/i386/nm-fbsd.h config/i386/nm-i386sol2.h config/i386/nm-linux.h \
-config/i386/nm-i386.h config/i386/nm-go32.h config/nm-nto.h \
-config/sparc/nm-sol2.h config/nm-linux.h config/mips/nm-irix5.h	\
+config/nm-nto.h config/sparc/nm-sol2.h config/nm-linux.h \
 config/rs6000/nm-rs6000.h top.h bsd-kvm.h gdb-stabs.h reggroups.h \
 annotate.h sim-regno.h dictionary.h dfp.h main.h frame-unwind.h	\
 remote-fileio.h i386-linux-tdep.h vax-tdep.h objc-lang.h \
 sentinel-frame.h bcache.h symfile.h windows-tdep.h linux-tdep.h \
-gdb_usleep.h
+gdb_usleep.h jit.h xml-syscall.h ada-operator.inc
 
 # Header files that already have srcdir in them, or which are in objdir.
 
@@ -825,9 +830,16 @@ COMMON_OBS = $(DEPFILES) $(CONFIG_OBS) $(YYOBJ) \
 	trad-frame.o \
 	tramp-frame.o \
 	solib.o solib-null.o \
-	prologue-value.o memory-map.o xml-support.o \
+	prologue-value.o memory-map.o xml-support.o xml-syscall.o \
 	target-descriptions.o target-memory.o xml-tdesc.o xml-builtin.o \
-	inferior.o osdata.o gdb_usleep.o record.o
+	inferior.o osdata.o gdb_usleep.o record.o \
+	jit.o
+
+# Definitions for the syscall's XML files and dir
+XML_SYSCALLS_DIR = syscalls/
+XML_SYSCALLS_FILES = gdb-syscalls.dtd \
+		     ppc-linux.xml ppc64-linux.xml \
+		     i386-linux.xml amd64-linux.xml
 
 TSOBS = inflow.o
 
@@ -862,10 +874,40 @@ generated_files = config.h observer.h observer.inc ada-lex.c \
 	$(COMPILE) $<
 	$(POSTCOMPILE)
 
-all: gdb$(EXEEXT) $(CONFIG_ALL)
+all: gdb$(EXEEXT) $(CONFIG_ALL) xml-syscall-copy
 	@$(MAKE) $(FLAGS_TO_PASS) DO=all "DODIRS=`echo $(SUBDIRS) | sed 's/testsuite//'`" subdir_do
 .PHONY: all-tui
 all-tui: $(TUI)$(EXEEXT)
+
+# This is needed for running GDB from the build directory
+.PHONY: xml-syscall-copy
+xml-syscall-copy:
+	if [ "`cd $(srcdir) && pwd`" != "`pwd`" ] ; then \
+	  mkdir -p ./$(XML_SYSCALLS_DIR) ; \
+	  list='$(XML_SYSCALLS_FILES)' ; \
+ 	  for file in $$list ; do \
+	    f=$(srcdir)/$(XML_SYSCALLS_DIR)/$$file ; \
+	    if test -f $$f ; then \
+	      $(INSTALL_DATA) $$f \
+	    	  ./$(XML_SYSCALLS_DIR) ; \
+	    fi ; \
+	  done ; \
+	fi ;
+
+# This target is responsible for properly installing the syscalls'
+# XML files in the system.
+.PHONY: xml-syscall-install
+xml-syscall-install:
+	$(SHELL) $(srcdir)/../mkinstalldirs \
+		$(DESTDIR)$(GDB_DATADIR)/$(XML_SYSCALLS_DIR) ; \
+	list='$(XML_SYSCALLS_FILES)' ; \
+	for file in $$list ; do \
+	  f=$(srcdir)/$(XML_SYSCALLS_DIR)/$$file ; \
+	  if test -f $$f ; then \
+	    $(INSTALL_DATA) $$f \
+	    	$(DESTDIR)$(GDB_DATADIR)/$(XML_SYSCALLS_DIR) ; \
+	  fi ; \
+	done ;
 
 installcheck:
 
@@ -884,7 +926,9 @@ check: force
 # will run 3 concurrent sessions of check, eventually testing all 10
 # combinations.  GNU make is required for the % pattern to work, as is
 # a shell that expands alternations within braces.  If GNU make is not
-# used, this rule will harmlessly fail to match.
+# used, this rule will harmlessly fail to match.  Used FORCE_PARALLEL to
+# prevent serialized checking due to the passed RUNTESTFLAGS.
+# FIXME: use config.status --config not --version, when available.
 check//%: force
 	@if [ -f testsuite/config.status ]; then \
 	  rootme=`pwd`; export rootme; \
@@ -893,17 +937,18 @@ check//%: force
 	  variant=`echo "$@" | sed 's,^[^/]*//,,'`; \
 	  vardots=`echo "$$variant" | sed 's,/,.,g'`; \
 	  testdir=testsuite.$$vardots; \
-	  if [ ! -f $$testdir/Makefile ]; then \
-	    (cd testsuite && find . -name config.status) | \
-	    sed s,/config.status$$,, | sort | while read subdir; do \
-	      $(SHELL) $(srcdir)/../mkinstalldirs $$testdir/$$subdir && \
-	      (cd $$testdir/$$subdir && \
-	       $(SHELL) $$rootme/testsuite/$$subdir/config.status \
-		 --recheck && \
-	       $(SHELL) ./config.status); done; \
+	  if [ ! -f $$testdir/Makefile ] && [ -f testsuite/config.status ]; then \
+	    configargs=`cd testsuite && ./config.status --version | \
+	      sed -n -e 's,"$$,,' -e 's,^ *with options ",,p'`; \
+	    $(SHELL) $(srcdir)/../mkinstalldirs $$testdir && \
+	    (cd $$testdir && \
+	     eval $(SHELL) "\"\$$rootsrc/testsuite/configure\" $$configargs" \
+			   "\"--srcdir=\$$rootsrc/testsuite\"" \
+	     ); \
 	  else :; fi && cd $$testdir && \
 	  $(MAKE) $(TARGET_FLAGS_TO_PASS) \
 	    RUNTESTFLAGS="--target_board=$$variant $(RUNTESTFLAGS)" \
+	    FORCE_PARALLEL=$(if $(FORCE_PARALLEL),1,$(if $(RUNTESTFLAGS),,1)) \
 	    "$$target"; \
 	else true; fi
 
@@ -920,8 +965,11 @@ gdb.z:gdb.1
 # source file and doesn't care about rebuilding or just wants to save the
 # time it takes for make to check that all is up to date.
 # install-only is intended to address that need.
-install: all install-only
-install-only: $(CONFIG_INSTALL)
+install: all install-only 
+
+# The "install-only" target also installs the syscalls' XML files in
+# the system.
+install-only: $(CONFIG_INSTALL) xml-syscall-install
 	transformed_name=`t='$(program_transform_name)'; \
 			  echo gdb | sed -e "$$t"` ; \
 		if test "x$$transformed_name" = x; then \
@@ -1209,15 +1257,68 @@ gnulib/Makefile: gnulib/Makefile.in gnulib/Makefile.in config.status @frags@
 	  $(SHELL) config.status
 
 config.h: stamp-h ; @true
-stamp-h: config.in config.status
+stamp-h: $(srcdir)/config.in config.status
 	CONFIG_HEADERS=config.h:config.in \
 	  CONFIG_COMMANDS="default depdir" \
 	  CONFIG_FILES= \
 	  CONFIG_LINKS= \
 	  $(SHELL) config.status
 
-config.status: configure configure.tgt configure.host
+config.status: $(srcdir)/configure configure.tgt configure.host
 	$(SHELL) config.status --recheck
+
+ACLOCAL = aclocal
+ACLOCAL_AMFLAGS = -I gnulib/m4
+aclocal_m4_deps = \
+	configure.ac \
+	gnulib/m4/extensions.m4 \
+	gnulib/m4/gnulib-common.m4 \
+	gnulib/m4/gnulib-comp.m4 \
+	gnulib/m4/include_next.m4 \
+	gnulib/m4/longlong.m4 \
+	gnulib/m4/memchr.m4 \
+	gnulib/m4/memcmp.m4 \
+	gnulib/m4/memmem.m4 \
+	gnulib/m4/onceonly_2_57.m4 \
+	gnulib/m4/stdint.m4 \
+	gnulib/m4/string_h.m4 \
+	gnulib/m4/wchar.m4 \
+	../config/extensions.m4 \
+	../config/lead-dot.m4 \
+	../config/proginstall.m4 \
+	../bfd/bfd.m4 \
+	../config/acinclude.m4 \
+	../config/override.m4 \
+	../config/gettext-sister.m4 \
+	../config/lib-ld.m4 \
+	../config/lib-prefix.m4 \
+	../config/lib-link.m4 \
+	../config/acx.m4 \
+	../config/tcl.m4 \
+	../config/depstand.m4 \
+	../config/lcmessage.m4 \
+	../config/codeset.m4
+
+$(srcdir)/aclocal.m4: @MAINTAINER_MODE_TRUE@ $(aclocal_m4_deps)
+	cd $(srcdir) && $(ACLOCAL) $(ACLOCAL_AMFLAGS)
+
+AUTOCONF = autoconf
+configure_deps = $(srcdir)/configure.ac $(srcdir)/aclocal.m4
+$(srcdir)/configure: @MAINTAINER_MODE_TRUE@ $(configure_deps)
+	cd $(srcdir) && $(AUTOCONF)
+
+AUTOHEADER = autoheader
+$(srcdir)/config.in: @MAINTAINER_MODE_TRUE@ $(configure_deps)
+	cd $(srcdir) && $(AUTOHEADER)
+	rm -f stamp-h
+	touch $@
+
+# automatic rebuilding in automake-generated Makefiles requires
+# this rule in the toplevel Makefile, which, with GNU make, causes
+# the desired updates through the implicit regeneration of the Makefile
+# and all of its prerequisites.
+am--refresh:
+	@:
 
 force:
 
@@ -1288,6 +1389,7 @@ ALLDEPFILES = \
 	amd64bsd-nat.c amd64fbsd-nat.c amd64fbsd-tdep.c \
 	amd64nbsd-nat.c amd64nbsd-tdep.c \
 	amd64obsd-nat.c amd64obsd-tdep.c \
+	amd64-darwin-tdep.c \
 	amd64-dicos-tdep.c \
 	amd64-linux-nat.c amd64-linux-tdep.c \
 	amd64-sol2-tdep.c \
@@ -1296,7 +1398,7 @@ ALLDEPFILES = \
 	avr-tdep.c \
 	bsd-uthread.c bsd-kvm.c \
 	core-regset.c corelow.c \
-	dcache.c dicos-tdep.c \
+	dcache.c dicos-tdep.c darwin-nat.c \
 	exec.c \
 	fbsd-nat.c \
 	fork-child.c \
@@ -1312,6 +1414,7 @@ ALLDEPFILES = \
 	i386bsd-nat.c i386bsd-tdep.c i386fbsd-nat.c i386fbsd-tdep.c \
 	i386nbsd-nat.c i386nbsd-tdep.c i386obsd-nat.c i386obsd-tdep.c \
 	i387-tdep.c \
+	i386-darwin-tdep.c i386-darwin-nat.c \
 	i386-dicos-tdep.c \
 	i386-linux-tdep.c i386-nat.c \
 	i386-sol2-nat.c i386-sol2-tdep.c \
@@ -1362,7 +1465,7 @@ ALLDEPFILES = \
 	sparc64-nat.c sparc64-tdep.c sparc64fbsd-nat.c sparc64fbsd-tdep.c \
 	sparc64nbsd-nat.c sparc64nbsd-tdep.c sparc64obsd-tdep.c \
 	sparcnbsd-nat.c sparcnbsd-tdep.c sparcobsd-tdep.c \
-	spu-linux-nat.c spu-tdep.c \
+	spu-linux-nat.c spu-tdep.c spu-multiarch.c solib-spu.c \
 	v850-tdep.c \
 	vax-nat.c vax-tdep.c vaxbsd-nat.c vaxnbsd-tdep.c \
 	windows-nat.c windows-tdep.c \
@@ -1860,36 +1963,36 @@ python.o: $(srcdir)/python/python.c
 	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/python.c
 	$(POSTCOMPILE)
 
-python-cmd.o: $(srcdir)/python/python-cmd.c
-	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/python-cmd.c
+py-cmd.o: $(srcdir)/python/py-cmd.c
+	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/py-cmd.c
 	$(POSTCOMPILE)
 
-python-frame.o: $(srcdir)/python/python-frame.c
-	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/python-frame.c
+py-frame.o: $(srcdir)/python/py-frame.c
+	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/py-frame.c
 	$(POSTCOMPILE)
 
-python-function.o: $(srcdir)/python/python-function.c
-	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/python-function.c
+py-function.o: $(srcdir)/python/py-function.c
+	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/py-function.c
 	$(POSTCOMPILE)
 
-python-objfile.o: $(srcdir)/python/python-objfile.c
-	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/python-objfile.c
+py-objfile.o: $(srcdir)/python/py-objfile.c
+	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/py-objfile.c
 	$(POSTCOMPILE)
 
-python-prettyprint.o: $(srcdir)/python/python-prettyprint.c
-	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/python-prettyprint.c
+py-prettyprint.o: $(srcdir)/python/py-prettyprint.c
+	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/py-prettyprint.c
 	$(POSTCOMPILE)
 
-python-type.o: $(srcdir)/python/python-type.c
-	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/python-type.c
+py-type.o: $(srcdir)/python/py-type.c
+	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/py-type.c
 	$(POSTCOMPILE)
 
-python-utils.o: $(srcdir)/python/python-utils.c
-	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/python-utils.c
+py-utils.o: $(srcdir)/python/py-utils.c
+	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/py-utils.c
 	$(POSTCOMPILE)
 
-python-value.o: $(srcdir)/python/python-value.c
-	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/python-value.c
+py-value.o: $(srcdir)/python/py-value.c
+	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/py-value.c
 	$(POSTCOMPILE)
 
 #
