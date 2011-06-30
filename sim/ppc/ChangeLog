@@ -1,3 +1,26 @@
+2006-11-22  Tom Marn <tom.marn@telargo.com>
+
+	Committed by Andrew Cagney.
+	* ppc-instructions: Implement optional PowerPC stfiwx instruction.
+	
+2006-07-12  Fred Fish  <fnf@specifix.com>
+
+	* sim-endian.h (asm/byteorder.h): Don't include private kernel
+	header.
+
+2006-06-13  Richard Earnshaw  <rearnsha@arm.com>
+
+	* configure: Regenerated.
+
+2006-05-31  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* Makefile.in: Replace INTLLIBS and INTLDEPS with LIBINTL
+	and LIBINTL_DEP everywhere.
+	(INTL_DIR, INTL_SRC): Remove.
+	(INTL_CFLAGS): Use INCINTL.
+	* configure.ac: Use ZW_GNU_GETTEXT_SISTER_DIR.
+	* configure: Regenerated.
+
 2006-05-05  Andreas Schwab  <schwab@suse.de>
 
 	* configure.ac (CFLAGS_FOR_BUILD): Set and substitute.

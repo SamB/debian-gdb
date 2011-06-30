@@ -69,10 +69,10 @@
     h0 = (signed64)h1 + (signed64)h2;
   else // SUB
     h0 = (signed64)h1 - (signed64)h2;
-  if (((h0 & 0x100000000) >> 1) != (h0 & 0x80000000))
+  if (((h0 & 0x100000000LL) >> 1) != (h0 & 0x80000000))
     {
       DSPCR |= DSPCR_OUFLAG4;
-      if (h0 & 0x100000000)
+      if (h0 & 0x100000000LL)
 	h0 = 0x80000000;
       else
 	h0 = 0x7fffffff;
@@ -193,9 +193,10 @@
 	}
       else // right
 	{
-	  if (sat == 1 && shift != 0)
-	    h0 += (1 << (shift - 1));
-	  h0 = h0 >> shift;
+	  if (sat == 1 && shift != 0 && (h0 & (1 << (shift-1))))
+	    h0 = (h0 >> shift) + 1;
+	  else
+	    h0 = h0 >> shift;
 	}
 
       result |= ((unsigned32)((unsigned16)h0) << i);
@@ -246,9 +247,10 @@
 {
   unsigned32 result = GPR[rt];
   signed32 h0 = (signed32)result;
-  if (shift != 0)
-    h0 += (1 << (shift - 1));
-  h0 = h0 >> shift;
+  if (shift != 0 && (h0 & (1 << (shift-1))))
+    h0 = (h0 >> shift) + 1;
+  else
+    h0 = h0 >> shift;
   GPR[rd] = EXTEND32 (h0);
 }
 

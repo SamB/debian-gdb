@@ -1,3 +1,15 @@
+2006-06-13  Richard Earnshaw  <rearnsha@arm.com>
+
+	* configure: Regenerated.
+
+2006-06-05  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* configure: Regenerated.
+
+2006-05-31  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* configure: Regenerated.
+
 2005-11-10  Andrew Stubbs  <andrew.stubbs@st.com>
 
 	* interp.c (sim_memory_size): Use same amount of memory on Windows as
