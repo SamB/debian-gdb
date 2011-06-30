@@ -1,7 +1,7 @@
 /* Declarations for value printing routines for GDB, the GNU debugger.
 
    Copyright (C) 1986, 1988, 1989, 1991, 1992, 1993, 1994, 2000, 2005, 2007,
-   2008 Free Software Foundation, Inc.
+   2008, 2009 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -87,6 +87,9 @@ struct value_print_options
 
   /* Controls Python pretty-printing.  */
   int raw;
+
+  /* If nonzero, print the value in "summary" form.  */
+  int summary;
 };
 
 /* The global print options set by the user.  In general this should
