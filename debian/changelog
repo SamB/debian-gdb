@@ -1,3 +1,14 @@
+gdb (7.3.50~cvs20110627-2) experimental; urgency=low
+
+  * Restrict prelink build depend to linux-any architectures.
+  * Fix cross-build target:
+    - Set DEB_BUILD_GNU_TYPE and use it for --build= instead of
+    DEB_HOST_GNU_TYPE; Thanks Loïc Minier (Closes: #601028)
+  * Add preliminary support for armhf.
+    - Thanks Konstantinos Margaritis (Closes: #596953)
+
+ -- Hector Oron <zumbi@debian.org>  Tue, 05 Jul 2011 22:37:20 +0100
+
 gdb (7.3.50~cvs20110627-1) experimental; urgency=low
 
   * Upstream pre-release based on CVS date 20110627.

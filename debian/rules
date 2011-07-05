@@ -25,6 +25,7 @@ install = /usr/bin/install -p
 # untested command fails.
 SHELL += -e
 
+DEB_BUILD_GNU_TYPE := $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
 DEB_HOST_GNU_SYSTEM := $(shell dpkg-architecture -qDEB_HOST_GNU_SYSTEM)
 DEB_HOST_GNU_CPU := $(shell dpkg-architecture -qDEB_HOST_GNU_CPU)
 DEB_HOST_GNU_TYPE := $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
@@ -110,7 +111,7 @@ export INSTALL
 # causes a harmless, but ugly, testsuite failure in maint.exp.
 EXTRA_FLAGS := --disable-gdbtk --disable-shared \
 	--srcdir=$(shell pwd) --with-system-readline \
-	$(arch_config_args) --build=$(DEB_HOST_GNU_TYPE)
+	$(arch_config_args) --build=$(DEB_BUILD_GNU_TYPE)
 
 # Debian does not include 64-bit expat packages yet, so --with-expat
 # is here rather than in EXTRA_FLAGS.  Similarly Python.
