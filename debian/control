@@ -14,7 +14,7 @@ Suggests: gdb-doc
 Description: The GNU Debugger
  GDB is a source-level debugger, capable of breaking programs at
  any specific line, displaying variable values, and determining
- where errors occurred. Currently, it works for C, C++, Fortran,
+ where errors occurred. Currently, it works for C, C++, D, Fortran,
  Modula 2 and Java programs. A must-have for any serious
  programmer.
 
@@ -26,7 +26,7 @@ Conflicts: gdb
 Description: The GNU Debugger
  GDB is a source-level debugger, capable of breaking programs at
  any specific line, displaying variable values, and determining
- where errors occurred. Currently, it works for C, C++, Fortran,
+ where errors occurred. Currently, it works for C, C++, D, Fortran,
  Modula 2 and Java programs. A must-have for any serious
  programmer.
  .
@@ -40,7 +40,7 @@ Depends: ${shlibs:Depends}, gdb, ${misc:Depends}
 Description: The GNU Debugger (64-bit)
  GDB is a source-level debugger, capable of breaking programs at
  any specific line, displaying variable values, and determining
- where errors occurred. Currently, it works for C, C++, Fortran
+ where errors occurred. Currently, it works for C, C++, D, Fortran
  Modula 2 and Java programs. A must-have for any serious
  programmer.
 
@@ -52,7 +52,7 @@ Replaces: gdb (<< 7.0.1-1)
 Description: The GNU Debugger (remote server)
  GDB is a source-level debugger, capable of breaking programs at
  any specific line, displaying variable values, and determining
- where errors occurred. Currently, it works for C, C++, Fortran
+ where errors occurred. Currently, it works for C, C++, D, Fortran
  Modula 2 and Java programs. A must-have for any serious
  programmer.
  .
@@ -67,7 +67,7 @@ Priority: extra
 Description: The GNU Debugger (libgdb.a)
  GDB is a source-level debugger, capable of breaking programs at
  any specific line, displaying variable values, and determining
- where errors occurred. Currently, it works for C, C++, Fortran
+ where errors occurred. Currently, it works for C, C++, D, Fortran
  Modula 2 and Java programs. A must-have for any serious
  programmer.
  .
@@ -82,7 +82,7 @@ Depends: ${misc:Depends}, gdb
 Description: The GNU Debugger (source)
  GDB is a source-level debugger, capable of breaking programs at
  any specific line, displaying variable values, and determining
- where errors occurred. Currently, it works for C, C++, Fortran
+ where errors occurred. Currently, it works for C, C++, D, Fortran
  Modula 2 and Java programs. A must-have for any serious
  programmer.
  .
