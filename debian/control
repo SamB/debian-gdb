@@ -1,5 +1,6 @@
 Source: gdb
 Maintainer: Hector Oron <zumbi@debian.org>
+Uploaders: Luca Bruno <lucab@debian.org>
 Section: devel
 Priority: optional
 Standards-Version: 3.9.2
