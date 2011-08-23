@@ -208,11 +208,7 @@ DESCRIPTION
 .  char ar_pad_char;
 .
 .  {* The maximum number of characters in an archive header.  *}
-.  unsigned char ar_max_namelen;
-.
-.  {* How well this target matches, used to select between various
-.     possible targets when more than one target matches.  *}
-.  unsigned char match_priority;
+.  unsigned short ar_max_namelen;
 .
 .  {* Entries for byte swapping for data. These are different from the
 .     other entry points, since they don't take a BFD as the first argument.
@@ -661,7 +657,6 @@ extern const bfd_target bfd_elf32_powerpcle_vec;
 extern const bfd_target bfd_elf32_powerpc_vxworks_vec;
 extern const bfd_target bfd_elf32_rx_le_vec;
 extern const bfd_target bfd_elf32_rx_be_vec;
-extern const bfd_target bfd_elf32_rx_be_ns_vec;
 extern const bfd_target bfd_elf32_s390_vec;
 extern const bfd_target bfd_elf32_bigscore_vec;
 extern const bfd_target bfd_elf32_littlescore_vec;
@@ -688,12 +683,6 @@ extern const bfd_target bfd_elf32_sparc_vxworks_vec;
 extern const bfd_target bfd_elf32_spu_vec;
 extern const bfd_target bfd_elf32_tic6x_be_vec;
 extern const bfd_target bfd_elf32_tic6x_le_vec;
-extern const bfd_target bfd_elf32_tic6x_elf_be_vec;
-extern const bfd_target bfd_elf32_tic6x_elf_le_vec;
-extern const bfd_target bfd_elf32_tic6x_linux_be_vec;
-extern const bfd_target bfd_elf32_tic6x_linux_le_vec;
-extern const bfd_target bfd_elf32_tilegx_vec;
-extern const bfd_target bfd_elf32_tilepro_vec;
 extern const bfd_target bfd_elf32_tradbigmips_vec;
 extern const bfd_target bfd_elf32_tradlittlemips_vec;
 extern const bfd_target bfd_elf32_tradbigmips_freebsd_vec;
@@ -730,7 +719,6 @@ extern const bfd_target bfd_elf64_sh64nbsd_vec;
 extern const bfd_target bfd_elf64_sparc_vec;
 extern const bfd_target bfd_elf64_sparc_freebsd_vec;
 extern const bfd_target bfd_elf64_sparc_sol2_vec;
-extern const bfd_target bfd_elf64_tilegx_vec;
 extern const bfd_target bfd_elf64_tradbigmips_vec;
 extern const bfd_target bfd_elf64_tradlittlemips_vec;
 extern const bfd_target bfd_elf64_tradbigmips_freebsd_vec;
@@ -1022,7 +1010,6 @@ static const bfd_target * const _bfd_target_vector[] =
 	&bfd_elf32_powerpc_vxworks_vec,
 	&bfd_elf32_powerpcle_vec,
 	&bfd_elf32_rx_be_vec,
-	&bfd_elf32_rx_be_ns_vec,
 	&bfd_elf32_rx_le_vec,
 	&bfd_elf32_s390_vec,
 #ifdef BFD64
@@ -1054,8 +1041,6 @@ static const bfd_target * const _bfd_target_vector[] =
 	&bfd_elf32_spu_vec,
 	&bfd_elf32_tic6x_be_vec,
 	&bfd_elf32_tic6x_le_vec,
-	&bfd_elf32_tilegx_vec,
-	&bfd_elf32_tilepro_vec,
 	&bfd_elf32_tradbigmips_vec,
 	&bfd_elf32_tradlittlemips_vec,
 	&bfd_elf32_tradbigmips_freebsd_vec,
@@ -1093,7 +1078,6 @@ static const bfd_target * const _bfd_target_vector[] =
 	&bfd_elf64_sparc_vec,
 	&bfd_elf64_sparc_freebsd_vec,
 	&bfd_elf64_sparc_sol2_vec,
-	&bfd_elf64_tilegx_vec,
 	&bfd_elf64_tradbigmips_vec,
 	&bfd_elf64_tradlittlemips_vec,
 	&bfd_elf64_tradbigmips_freebsd_vec,

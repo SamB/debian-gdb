@@ -91,7 +91,7 @@ msymbol_hash_iw (const char *string)
 	++string;
       if (*string && *string != '(')
 	{
-	  hash = SYMBOL_HASH_NEXT (hash, *string);
+	  hash = hash * 67 + *string - 113;
 	  ++string;
 	}
     }
@@ -106,7 +106,7 @@ msymbol_hash (const char *string)
   unsigned int hash = 0;
 
   for (; *string; ++string)
-    hash = SYMBOL_HASH_NEXT (hash, *string);
+    hash = hash * 67 + *string - 113;
   return hash;
 }
 
@@ -239,16 +239,11 @@ lookup_minimal_symbol (const char *name, const char *sfile,
 
 		  if (pass == 1)
 		    {
-		      int (*cmp) (const char *, const char *);
-
-		      cmp = (case_sensitivity == case_sensitive_on
-		             ? strcmp : strcasecmp);
-		      match = cmp (SYMBOL_LINKAGE_NAME (msymbol),
-				   modified_name) == 0;
+		      match = strcmp (SYMBOL_LINKAGE_NAME (msymbol),
+				      modified_name) == 0;
 		    }
 		  else
 		    {
-		      /* The function respects CASE_SENSITIVITY.  */
 		      match = SYMBOL_MATCHES_SEARCH_NAME (msymbol,
 							  modified_name);
 		    }

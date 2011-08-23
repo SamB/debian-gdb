@@ -1,6 +1,6 @@
 /* Generic ECOFF (Extended-COFF) routines.
    Copyright 1990, 1991, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+   2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
    Original version by Per Bothner.
    Full support added by Ian Lance Taylor, ian@cygnus.com.
@@ -3231,6 +3231,14 @@ _bfd_ecoff_bfd_link_hash_table_create (bfd *abfd)
   ((struct ecoff_link_hash_entry *) \
    bfd_link_hash_lookup (&(table)->root, (string), (create), (copy), (follow)))
 
+/* Traverse an ECOFF link hash table.  */
+
+#define ecoff_link_hash_traverse(table, func, info)			\
+  (bfd_link_hash_traverse						\
+   (&(table)->root,							\
+    (bfd_boolean (*) (struct bfd_link_hash_entry *, void *)) (func),	\
+    (info)))
+
 /* Get the ECOFF link hash table from the info structure.  This is
    just a cast.  */
 
@@ -4251,9 +4259,8 @@ ecoff_reloc_link_order (bfd *output_bfd,
    the hash table.  */
 
 static bfd_boolean
-ecoff_link_write_external (struct bfd_hash_entry *bh, void * data)
+ecoff_link_write_external (struct ecoff_link_hash_entry *h, void * data)
 {
-  struct ecoff_link_hash_entry *h = (struct ecoff_link_hash_entry *) bh;
   struct extsym_info *einfo = (struct extsym_info *) data;
   bfd *output_bfd = einfo->abfd;
   bfd_boolean strip;
@@ -4484,7 +4491,9 @@ _bfd_ecoff_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
   /* Write out the external symbols.  */
   einfo.abfd = abfd;
   einfo.info = info;
-  bfd_hash_traverse (&info->hash->table, ecoff_link_write_external, &einfo);
+  ecoff_link_hash_traverse (ecoff_hash_table (info),
+			    ecoff_link_write_external,
+			    (void *) &einfo);
 
   if (info->relocatable)
     {

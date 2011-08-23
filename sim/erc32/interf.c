@@ -234,9 +234,6 @@ sim_open (kind, callback, abfd, argv)
 		if ((stat + 1) < argc) {
 		    freq = strtol(argv[++stat], (char **)NULL, 0);
 		}
-	    } else
-	    if (strncmp(argv[stat], "--sysroot=", sizeof("--sysroot=") - 1) == 0) {
-		/* Ignore until we start to support this.  */
 	    } else {
 		(*sim_callback->printf_filtered) (sim_callback,
 						  "unknown option %s\n",
@@ -482,12 +479,6 @@ sim_do_command(sd, cmd)
     char           *cmd;
 {
     exec_cmd(&sregs, cmd);
-}
-
-char **
-sim_complete_command (SIM_DESC sd, char *text, char *word)
-{
-  return NULL;
 }
 
 #if 0 /* FIXME: These shouldn't exist.  */

@@ -530,10 +530,7 @@ vms_get_module_name (const char *filename, bfd_boolean upcase)
    -  100ns granularity
    -  epoch is Nov 17, 1858.
    Here has the constants and the routines used to convert VMS from/to UNIX time.
-   The conversion routines don't assume 64 bits arithmetic.
-
-   Here we assume that the definition of time_t is the UNIX one, ie integer
-   type, expressing seconds since the epoch.  */
+   The conversion routines don't assume 64 bits arithmetic.  */
 
 /* UNIX time granularity for VMS, ie 1s / 100ns.  */
 #define VMS_TIME_FACTOR 10000000
@@ -549,7 +546,6 @@ vms_time_to_time_t (unsigned int hi, unsigned int lo)
   unsigned int tmp;
   unsigned int rlo;
   int i;
-  time_t res;
 
   /* First convert to seconds.  */
   tmp = hi % VMS_TIME_FACTOR;
@@ -566,18 +562,14 @@ vms_time_to_time_t (unsigned int hi, unsigned int lo)
   lo = rlo;
 
   /* Return 0 in case of overflow.  */
-  if (hi > 1
-      || (hi == 1 && lo >= VMS_TIME_OFFSET))
+  if (lo > VMS_TIME_OFFSET && hi > 1)
     return 0;
 
   /* Return 0 in case of underflow.  */
-  if (hi == 0 && lo < VMS_TIME_OFFSET)
+  if (lo < VMS_TIME_OFFSET)
     return 0;
 
-  res = lo - VMS_TIME_OFFSET;
-  if (res <= 0)
-    return 0;
-  return res;
+  return lo - VMS_TIME_OFFSET;
 }
 
 /* Convert a time_t to a VMS time.  */

@@ -283,7 +283,6 @@ disassemble (bfd_vma memaddr, struct disassemble_info *info, int bytes_read, uns
 	       *opindex_ptr != 0;
 	       opindex_ptr++, opnum++)
 	    {
-	      bfd_boolean square = FALSE;
 	      long value;
 	      int flag;
 	      char *prefix;
@@ -324,17 +323,11 @@ disassemble (bfd_vma memaddr, struct disassemble_info *info, int bytes_read, uns
 		}
 
 	      if (opnum == 1 && opnum == memop)
-		{
-		  info->fprintf_func (info->stream, "%s[", prefix);
-		  square = TRUE;
-		}
+		info->fprintf_func (info->stream, "%s[", prefix);
 	      else if (opnum > 1
 		       && (v850_operands[*(opindex_ptr - 1)].flags & V850_OPERAND_DISP) != 0
 		       && opnum == memop)
-		{
-		  info->fprintf_func (info->stream, "%s[", prefix);
-		  square = TRUE;
-		}
+		info->fprintf_func (info->stream, "%s[", prefix);
 	      else if (opnum > 1)
 		info->fprintf_func (info->stream, ", %s", prefix);
 
@@ -438,7 +431,7 @@ disassemble (bfd_vma memaddr, struct disassemble_info *info, int bytes_read, uns
 		  break;
 		}
 
-	      if (square)
+	      if (opnum == 2 && opnum == memop)
 		(*info->fprintf_func) (info->stream, "]");
 	    }
 

@@ -22,7 +22,7 @@ if ![dwarf2_support] {
 }
 
 # This test can only be run on x86 targets.
-if { ![is_x86_like_target] } {
+if { ![istarget i?86-*] } {
     return 0
 }
 

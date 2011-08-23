@@ -64,6 +64,7 @@ static void objfile_free_data (struct objfile *objfile);
 /* Externally visible variables that are owned by this module.
    See declarations in objfile.h for more info.  */
 
+struct objfile *current_objfile;	/* For symbol file being read in */
 struct objfile *rt_common_objfile;	/* For runtime common symbols */
 
 struct objfile_pspace_info
@@ -245,6 +246,10 @@ allocate_objfile (bfd *abfd, int flags)
   objfile->sect_index_data = -1;
   objfile->sect_index_bss = -1;
   objfile->sect_index_rodata = -1;
+
+  /* We don't yet have a C++-specific namespace symtab.  */
+
+  objfile->cp_namespace_symtab = NULL;
 
   /* Add this file onto the tail of the linked list of other such files.  */
 
@@ -582,10 +587,6 @@ free_objfile (struct objfile *objfile)
      lists.  */
   preserve_values (objfile);
 
-  /* It still may reference data modules have associated with the objfile and
-     the symbol file data.  */
-  forget_cached_source_info_for_objfile (objfile);
-
   /* First do any symbol file specific actions required when we are
      finished with a particular symbol file.  Note that if the objfile
      is using reusable symbol information (via mmalloc) then each of
@@ -598,8 +599,7 @@ free_objfile (struct objfile *objfile)
       (*objfile->sf->sym_finish) (objfile);
     }
 
-  /* Discard any data modules have associated with the objfile.  The function
-     still may reference objfile->obfd.  */
+  /* Discard any data modules have associated with the objfile.  */
   objfile_free_data (objfile);
 
   gdb_bfd_unref (objfile->obfd);
@@ -636,9 +636,13 @@ free_objfile (struct objfile *objfile)
 
   {
     struct symtab_and_line cursal = get_current_source_symtab_and_line ();
+    struct symtab *s;
 
-    if (cursal.symtab && cursal.symtab->objfile == objfile)
-      clear_current_source_symtab_and_line ();
+    ALL_OBJFILE_SYMTABS (objfile, s)
+      {
+	if (s == cursal.symtab)
+	  clear_current_source_symtab_and_line ();
+      }
   }
 
   /* The last thing we do is free the objfile struct itself.  */

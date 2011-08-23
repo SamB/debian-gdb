@@ -261,7 +261,6 @@ psim_options(device *root,
     while (*p != '\0') {
       switch (*p) {
       default:
-	printf_filtered ("Invalid Option: %s\n", argv[argp]);
 	psim_usage(0, 0);
 	error ("");
 	break;
@@ -358,10 +357,6 @@ psim_options(device *root,
         }
 	else if (strcmp (argv[argp], "--help") == 0)
 	  psim_usage (0, 1);
-	else if (strncmp (argv[argp], "--sysroot=",
-			  sizeof ("--sysroot=") - 1) == 0)
-	  /* Ignore this option.  */
-	  p = argv[argp] + strlen(argv[argp]) - 1;
 	else if (strcmp (argv[argp], "--version") == 0)
 	  {
 	    extern const char version[];
@@ -369,11 +364,7 @@ psim_options(device *root,
 	    exit (0);
 	  }
 	else
-	  {
-	    printf_filtered ("Invalid option: %s\n", argv[argp]);
-	    psim_usage (0, 0);
-	    error ("");
-	  }
+	  error("Unrecognized option");
 	break;
       }
       p += 1;

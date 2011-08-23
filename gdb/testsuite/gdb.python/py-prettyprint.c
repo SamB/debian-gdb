@@ -44,10 +44,6 @@ struct lazystring {
   const char *lazy_str;
 };
 
-struct hint_error {
-  int x;
-};
-
 #ifdef __cplusplus
 struct S : public s {
   int zs;
@@ -229,7 +225,6 @@ main ()
   nostring_type nstype, nstype2;
   struct ns ns, ns2;
   struct lazystring estring, estring2;
-  struct hint_error hint_error;
 
   nstype.elements = narray;
   nstype.len = 0;

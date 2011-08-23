@@ -26,7 +26,7 @@ set binfile ${objdir}/${subdir}/${testfile}
 
 if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" \
 	  executable { debug }] != "" } {
-    untested ${testfile}.exp
+    untested i386-sigframe.exp
     return -1
 }
 

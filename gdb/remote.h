@@ -56,8 +56,4 @@ bfd *remote_bfd_open (const char *remote_file, const char *target);
 
 int remote_filename_p (const char *filename);
 
-extern int remote_register_number_and_offset (struct gdbarch *gdbarch,
-					      int regnum, int *pnum,
-					      int *poffset);
-
 #endif

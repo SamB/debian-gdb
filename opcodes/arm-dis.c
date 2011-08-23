@@ -45,14 +45,6 @@
 #define NUM_ELEM(a)     (sizeof (a) / sizeof (a)[0])
 #endif
 
-/* Cached mapping symbol state.  */
-enum map_type
-{
-  MAP_ARM,
-  MAP_THUMB,
-  MAP_DATA
-};
-
 struct arm_private_data
 {
   /* The features to use when disassembling optional instructions.  */
@@ -61,13 +53,6 @@ struct arm_private_data
   /* Whether any mapping symbols are present in the provided symbol
      table.  -1 if we do not know yet, otherwise 0 or 1.  */
   int has_mapping_symbols;
-
-  /* Track the last type (although this doesn't seem to be useful) */
-  enum map_type last_type;
-
-  /* Tracking symbol table information */
-  int last_mapping_sym;
-  bfd_vma last_mapping_addr;
 };
 
 struct opcode32
@@ -1336,7 +1321,6 @@ static const struct opcode16 thumb_opcodes[] =
        %H		print a 16-bit immediate from hw2[3:0],hw1[11:0]
        %S		print a possibly-shifted Rm
 
-       %L		print address for a ldrd/strd instruction
        %a		print the address of a plain load/store
        %w		print the width and signedness of a core load/store
        %m		print register mask for ldm/stm
@@ -1565,10 +1549,10 @@ static const struct opcode32 thumb32_opcodes[] =
   {ARM_EXT_V6T2, 0xe9100000, 0xffd00000, "ldmdb%c\t%16-19r%21'!, %m"},
   {ARM_EXT_V6T2, 0xe9c00000, 0xffd000ff, "strd%c\t%12-15r, %8-11r, [%16-19r]"},
   {ARM_EXT_V6T2, 0xe9d00000, 0xffd000ff, "ldrd%c\t%12-15r, %8-11r, [%16-19r]"},
-  {ARM_EXT_V6T2, 0xe9400000, 0xff500000, "strd%c\t%12-15r, %8-11r, [%16-19r, #%23`-%0-7W]%21'!%L"},
-  {ARM_EXT_V6T2, 0xe9500000, 0xff500000, "ldrd%c\t%12-15r, %8-11r, [%16-19r, #%23`-%0-7W]%21'!%L"},
-  {ARM_EXT_V6T2, 0xe8600000, 0xff700000, "strd%c\t%12-15r, %8-11r, [%16-19r], #%23`-%0-7W%L"},
-  {ARM_EXT_V6T2, 0xe8700000, 0xff700000, "ldrd%c\t%12-15r, %8-11r, [%16-19r], #%23`-%0-7W%L"},
+  {ARM_EXT_V6T2, 0xe9400000, 0xff500000, "strd%c\t%12-15r, %8-11r, [%16-19r, #%23`-%0-7W]%21'!"},
+  {ARM_EXT_V6T2, 0xe9500000, 0xff500000, "ldrd%c\t%12-15r, %8-11r, [%16-19r, #%23`-%0-7W]%21'!"},
+  {ARM_EXT_V6T2, 0xe8600000, 0xff700000, "strd%c\t%12-15r, %8-11r, [%16-19r], #%23`-%0-7W"},
+  {ARM_EXT_V6T2, 0xe8700000, 0xff700000, "ldrd%c\t%12-15r, %8-11r, [%16-19r], #%23`-%0-7W"},
   {ARM_EXT_V6T2, 0xf8000000, 0xff100000, "str%w%c.w\t%12-15r, %a"},
   {ARM_EXT_V6T2, 0xf8100000, 0xfe100000, "ldr%w%c.w\t%12-15r, %a"},
 
@@ -1657,6 +1641,18 @@ static unsigned int ifthen_next_state;
 /* The address of the insn for which the IT state is valid.  */
 static bfd_vma ifthen_address;
 #define IFTHEN_COND ((ifthen_state >> 4) & 0xf)
+
+/* Cached mapping symbol state.  */
+enum map_type
+{
+  MAP_ARM,
+  MAP_THUMB,
+  MAP_DATA
+};
+
+enum map_type last_type;
+int last_mapping_sym = -1;
+bfd_vma last_mapping_addr = 0;
 
 
 /* Functions.  */
@@ -1873,7 +1869,7 @@ print_insn_coprocessor (bfd_vma pc,
 		case 'A':
 		  {
 		    int rn = (given >> 16) & 0xf;
-  		    bfd_vma offset = given & 0xff;
+  		    int offset = given & 0xff;
 
 		    func (stream, "[%s", arm_regnames [(given >> 16) & 0xf]);
 
@@ -1893,8 +1889,6 @@ print_insn_coprocessor (bfd_vma pc,
 			  func (stream, ", #%d]%s",
 				offset,
 				WRITEBACK_BIT_SET ? "!" : "");
-			else if (NEGATIVE_BIT_SET)
-			  func (stream, ", #-0]");
 			else
 			  func (stream, "]");
 		      }
@@ -1906,14 +1900,10 @@ print_insn_coprocessor (bfd_vma pc,
 			  {
 			    if (offset)
 			      func (stream, ", #%d", offset);
-			    else if (NEGATIVE_BIT_SET)
-			      func (stream, ", #-0");
 			  }
 			else
 			  {
-			    func (stream, ", {%s%d}",
-				  (NEGATIVE_BIT_SET && !offset) ? "-" : "",
-				  offset);
+			    func (stream, ", {%d}", offset);
 			    value_in_comment = offset;
 			  }
 		      }
@@ -2335,7 +2325,7 @@ print_arm_address (bfd_vma pc, struct disassemble_info *info, long given)
 {
   void *stream = info->stream;
   fprintf_ftype func = info->fprintf_func;
-  bfd_vma offset = 0;
+  int offset = 0;
 
   if (((given & 0x000f0000) == 0x000f0000)
       && ((given & 0x02000000) == 0))
@@ -2344,15 +2334,13 @@ print_arm_address (bfd_vma pc, struct disassemble_info *info, long given)
 
       func (stream, "[pc");
 
+      if (NEGATIVE_BIT_SET)
+	offset = - offset;
+
       if (PRE_BIT_SET)
 	{
-	  /* Pre-indexed.  Elide offset of positive zero when
-	     non-writeback.  */
-	  if (WRITEBACK_BIT_SET || NEGATIVE_BIT_SET || offset)
-	    func (stream, ", #%s%d", NEGATIVE_BIT_SET ? "-" : "", offset);
-
-	  if (NEGATIVE_BIT_SET)
-	    offset = -offset;
+	  /* Pre-indexed.  */
+	  func (stream, ", #%d]", offset);
 
 	  offset += pc + 8;
 
@@ -2360,11 +2348,12 @@ print_arm_address (bfd_vma pc, struct disassemble_info *info, long given)
 	     being used.  Probably a very dangerous thing
 	     for the programmer to do, but who are we to
 	     argue ?  */
-	  func (stream, "]%s", WRITEBACK_BIT_SET ? "!" : "");
+	  if (WRITEBACK_BIT_SET)
+	    func (stream, "!");
 	}
       else  /* Post indexed.  */
 	{
-	  func (stream, "], #%s%d", NEGATIVE_BIT_SET ? "-" : "", offset);
+	  func (stream, "], #%d", offset);
 
 	  /* Ie ignore the offset.  */
 	  offset = pc + 8;
@@ -2383,14 +2372,15 @@ print_arm_address (bfd_vma pc, struct disassemble_info *info, long given)
 	{
 	  if ((given & 0x02000000) == 0)
 	    {
-	      /* Elide offset of positive zero when non-writeback.  */
 	      offset = given & 0xfff;
-	      if (WRITEBACK_BIT_SET || NEGATIVE_BIT_SET || offset)
-		func (stream, ", #%s%d", NEGATIVE_BIT_SET ? "-" : "", offset);
+	      if (offset)
+		func (stream, ", #%s%d",
+		      NEGATIVE_BIT_SET ? "-" : "", offset);
 	    }
 	  else
 	    {
-	      func (stream, ", %s", NEGATIVE_BIT_SET ? "-" : "");
+	      func (stream, ", %s",
+		    NEGATIVE_BIT_SET ? "-" : "");
 	      arm_decode_shift (given, func, stream, TRUE);
 	    }
 
@@ -2401,10 +2391,12 @@ print_arm_address (bfd_vma pc, struct disassemble_info *info, long given)
 	{
 	  if ((given & 0x02000000) == 0)
 	    {
-	      /* Always show offset.  */
 	      offset = given & 0xfff;
-	      func (stream, "], #%s%d",
-		    NEGATIVE_BIT_SET ? "-" : "", offset);
+	      if (offset)
+		func (stream, "], #%s%d",
+		      NEGATIVE_BIT_SET ? "-" : "", offset);
+	      else
+		func (stream, "]");
 	    }
 	  else
 	    {
@@ -2995,25 +2987,22 @@ print_insn_arm (bfd_vma pc, struct disassemble_info *info, long given)
                       if ((given & 0x004f0000) == 0x004f0000)
 			{
                           /* PC relative with immediate offset.  */
-			  bfd_vma offset = ((given & 0xf00) >> 4) | (given & 0xf);
+			  int offset = ((given & 0xf00) >> 4) | (given & 0xf);
+
+			  if (NEGATIVE_BIT_SET)
+			    offset = - offset;
 
 			  if (PRE_BIT_SET)
 			    {
-			      /* Elide positive zero offset.  */
-			      if (offset || NEGATIVE_BIT_SET)
-				func (stream, "[pc, #%s%d]\t; ",
-				      NEGATIVE_BIT_SET ? "-" : "", offset);
+			      if (offset)
+				func (stream, "[pc, #%d]\t; ", offset);
 			      else
-				func (stream, "[pc]\t; ");
-			      if (NEGATIVE_BIT_SET)
-				offset = -offset;
+				func (stream, "[pc]\t; ");				
 			      info->print_address_func (offset + pc + 8, info);
 			    }
 			  else
 			    {
-			      /* Always show the offset.  */
-			      func (stream, "[pc], #%s%d",
-				    NEGATIVE_BIT_SET ? "-" : "", offset);
+			      func (stream, "[pc], #%d", offset);
 			      if (! allow_unpredictable)
 				is_unpredictable = TRUE;
 			    }
@@ -3022,6 +3011,9 @@ print_insn_arm (bfd_vma pc, struct disassemble_info *info, long given)
 			{
 			  int offset = ((given & 0xf00) >> 4) | (given & 0xf);
 
+			  if (NEGATIVE_BIT_SET)
+			    offset = - offset;
+
 			  func (stream, "[%s",
 				arm_regnames[(given >> 16) & 0xf]);
 
@@ -3029,15 +3021,13 @@ print_insn_arm (bfd_vma pc, struct disassemble_info *info, long given)
 			    {
 			      if (IMMEDIATE_BIT_SET)
 				{
-				  /* Elide offset for non-writeback
-				     positive zero.  */
-				  if (WRITEBACK_BIT_SET || NEGATIVE_BIT_SET
-				      || offset)
-				    func (stream, ", #%s%d",
-					  NEGATIVE_BIT_SET ? "-" : "", offset);
-
-				  if (NEGATIVE_BIT_SET)
-				    offset = -offset;
+				  if (WRITEBACK_BIT_SET)
+				    /* Immediate Pre-indexed.  */
+				    /* PR 10924: Offset must be printed, even if it is zero.  */
+				    func (stream, ", #%d", offset);
+				  else if (offset)
+				    /* Immediate Offset: printing zero offset is optional.  */
+				    func (stream, ", #%d", offset);
 
 				  value_in_comment = offset;
 				}
@@ -3065,10 +3055,7 @@ print_insn_arm (bfd_vma pc, struct disassemble_info *info, long given)
 				{
 				  /* Immediate Post-indexed.  */
 				  /* PR 10924: Offset must be printed, even if it is zero.  */
-				  func (stream, "], #%s%d",
-					NEGATIVE_BIT_SET ? "-" : "", offset);
-				  if (NEGATIVE_BIT_SET)
-				    offset = -offset;
+				  func (stream, "], #%d", offset);
 				  value_in_comment = offset;
 				}
 			      else
@@ -3102,7 +3089,7 @@ print_insn_arm (bfd_vma pc, struct disassemble_info *info, long given)
 
 		    case 'b':
 		      {
-			bfd_vma disp = (((given & 0xffffff) ^ 0x800000) - 0x800000);
+			int disp = (((given & 0xffffff) ^ 0x800000) - 0x800000);
 			info->print_address_func (disp * 4 + pc + 8, info);
 		      }
 		      break;
@@ -3619,7 +3606,7 @@ print_insn_thumb16 (bfd_vma pc, struct disassemble_info *info, long given)
 		    {
 		    case '-':
 		      {
-			bfd_vma reg;
+			long reg;
 
 			c++;
 			while (*c >= '0' && *c <= '9')
@@ -3731,7 +3718,7 @@ psr_name (int regno)
     case 9: return "PSP";
     case 16: return "PRIMASK";
     case 17: return "BASEPRI";
-    case 18: return "BASEPRI_MAX";
+    case 18: return "BASEPRI_MASK";
     case 19: return "FAULTMASK";
     case 20: return "CONTROL";
     default: return "<unknown>";
@@ -3908,7 +3895,7 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		  unsigned int i12 = (given & 0x00000fff);
 		  unsigned int i8  = (given & 0x000000ff);
 		  bfd_boolean writeback = FALSE, postind = FALSE;
-		  bfd_vma offset = 0;
+		  int offset = 0;
 
 		  func (stream, "[%s", arm_regnames[Rn]);
 		  if (U) /* 12-bit positive immediate offset.  */
@@ -4085,7 +4072,7 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		  unsigned int S = (given & 0x04000000u) >> 26;
 		  unsigned int J1 = (given & 0x00002000u) >> 13;
 		  unsigned int J2 = (given & 0x00000800u) >> 11;
-		  bfd_vma offset = 0;
+		  int offset = 0;
 
 		  offset |= !S << 20;
 		  offset |= J2 << 19;
@@ -4103,7 +4090,7 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		  unsigned int S = (given & 0x04000000u) >> 26;
 		  unsigned int I1 = (given & 0x00002000u) >> 13;
 		  unsigned int I2 = (given & 0x00000800u) >> 11;
-		  bfd_vma offset = 0;
+		  int offset = 0;
 
 		  offset |= !S << 24;
 		  offset |= !(I1 ^ S) << 23;
@@ -4284,21 +4271,6 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		      abort ();
 		    }
 		}
-		break;
-
-	      case 'L':
-		/* PR binutils/12534
-		   If we have a PC relative offset in an LDRD or STRD
-		   instructions then display the decoded address.  */
-		if (((given >> 16) & 0xf) == 0xf)
-		  {
-		    bfd_vma offset = (given & 0xff) * 4;
-
-		    if ((given & (1 << 23)) == 0)
-		      offset = - offset;
-		    func (stream, "\t; ");
-		    info->print_address_func ((pc & ~3) + 4 + offset, info);
-		  }
 		break;
 
 	      default:
@@ -4663,8 +4635,6 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
       select_arm_features (info->mach, & private.features);
 
       private.has_mapping_symbols = -1;
-      private.last_mapping_sym = -1;
-      private.last_mapping_addr = 0;
 
       info->private_data = & private;
     }
@@ -4688,8 +4658,8 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
       /* Start scanning at the start of the function, or wherever
 	 we finished last time.  */
       start = info->symtab_pos + 1;
-      if (start < private_data->last_mapping_sym)
-	start = private_data->last_mapping_sym;
+      if (start < last_mapping_sym)
+	start = last_mapping_sym;
       found = FALSE;
 
       /* First, look for mapping symbols.  */
@@ -4711,7 +4681,7 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
 	  if (!found)
 	    {
 	      /* No mapping symbol found at this address.  Look backwards
-		 for a preceding one.  */
+		 for a preceeding one.  */
 	      for (n = start - 1; n >= 0; n--)
 		{
 		  if (get_map_sym_type (info, n, &type))
@@ -4771,7 +4741,7 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
 	  if (!found)
 	    {
 	      /* No mapping symbol found at this address.  Look backwards
-		 for a preceding one.  */
+		 for a preceeding one.  */
 	      for (n = start - 1; n >= 0; n--)
 		{
 		  if (get_sym_code_type (info, n, &type))
@@ -4784,10 +4754,10 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
 	    }
 	}
 
-      private_data->last_mapping_sym = last_sym;
-      private_data->last_type = type;
-      is_thumb = (private_data->last_type == MAP_THUMB);
-      is_data = (private_data->last_type == MAP_DATA);
+      last_mapping_sym = last_sym;
+      last_type = type;
+      is_thumb = (last_type == MAP_THUMB);
+      is_data = (last_type == MAP_DATA);
 
       /* Look a little bit ahead to see if we should print out
 	 two or four bytes of data.  If there's a symbol,
@@ -4993,5 +4963,5 @@ the -M switch:\n"));
 	     regnames[i].description);
 
   fprintf (stream, "  force-thumb              Assume all insns are Thumb insns\n");
-  fprintf (stream, "  no-force-thumb           Examine preceding label to determine an insn's type\n\n");
+  fprintf (stream, "  no-force-thumb           Examine preceeding label to determine an insn's type\n\n");
 }

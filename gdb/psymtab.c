@@ -588,8 +588,7 @@ match_partial_symbol (struct partial_symtab *pst, int global,
 
 static void
 pre_expand_symtabs_matching_psymtabs (struct objfile *objfile,
-				      enum block_enum block_kind,
-				      const char *name,
+				      int kind, const char *name,
 				      domain_enum domain)
 {
   /* Nothing.  */
@@ -691,15 +690,8 @@ lookup_partial_symbol (struct partial_symtab *pst, const char *name,
 	internal_error (__FILE__, __LINE__,
 			_("failed internal consistency check"));
 
-      /* For `case_sensitivity == case_sensitive_off' strcmp_iw_ordered will
-	 search more exactly than what matches SYMBOL_MATCHES_SEARCH_NAME.  */
-      while (top >= start && SYMBOL_MATCHES_SEARCH_NAME (*top, search_name))
-	top--;
-
-      /* Fixup to have a symbol which matches SYMBOL_MATCHES_SEARCH_NAME.  */
-      top++;
-
-      while (top <= real_top && SYMBOL_MATCHES_SEARCH_NAME (*top, search_name))
+      while (top <= real_top
+	     && SYMBOL_MATCHES_SEARCH_NAME (*top, search_name))
 	{
 	  if (symbol_matches_domain (SYMBOL_LANGUAGE (*top),
 				     SYMBOL_DOMAIN (*top), domain))
@@ -1082,7 +1074,9 @@ read_psymtabs_with_filename (struct objfile *objfile, const char *filename)
 
 static void
 map_symbol_filenames_psymtab (struct objfile *objfile,
-			      symbol_filename_ftype *fun, void *data)
+			      void (*fun) (const char *, const char *,
+					   void *),
+			      void *data)
 {
   struct partial_symtab *ps;
 
@@ -1214,7 +1208,7 @@ expand_symtabs_matching_via_partial (struct objfile *objfile,
 							  void *),
 				     int (*name_matcher) (const char *,
 							  void *),
-				     enum search_domain kind,
+				     domain_enum kind,
 				     void *data)
 {
   struct partial_symtab *ps;
@@ -1915,7 +1909,9 @@ expand_partial_symbol_names (int (*fun) (const char *, void *), void *data)
 }
 
 void
-map_partial_symbol_filenames (symbol_filename_ftype *fun, void *data)
+map_partial_symbol_filenames (void (*fun) (const char *, const char *,
+					   void *),
+			      void *data)
 {
   struct objfile *objfile;
 

@@ -509,7 +509,7 @@ struct main_type
 	   Otherwise, physname is the mangled label of the static field.  */
 
 	CORE_ADDR physaddr;
-	const char *physname;
+	char *physname;
       }
       loc;
 
@@ -773,7 +773,7 @@ struct cplus_struct_type
 	       arguments.  See gdb_mangle_name for the conversion from this
 	       format to the one used if is_stub is clear.  */
 
-	    const char *physname;
+	    char *physname;
 
 	    /* The function type for the method.
 	       (This comment used to say "The return value of the method",
@@ -1362,8 +1362,6 @@ extern struct type *allocate_stub_method (struct type *);
 
 extern char *type_name_no_tag (const struct type *);
 
-extern const char *type_name_no_tag_or_error (struct type *type);
-
 extern struct type *lookup_struct_elt_type (struct type *, char *, int);
 
 extern struct type *make_pointer_type (struct type *, struct type **);
@@ -1405,7 +1403,7 @@ extern void check_stub_method_group (struct type *, int);
 extern char *gdb_mangle_name (struct type *, int, int);
 
 extern struct type *lookup_typename (const struct language_defn *,
-				     struct gdbarch *, const char *,
+				     struct gdbarch *, char *,
 				     const struct block *, int);
 
 extern struct type *lookup_template_type (char *, struct type *,

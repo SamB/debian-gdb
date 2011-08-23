@@ -24,6 +24,9 @@
 
 #include "dv-bfin_uart.h"
 
+/* XXX: This should be pushed into the model data.  */
+#define BFIN_MMR_UART2_SIZE	0x30
+
 /* UART_MSR */
 #define SCTS (1 << 0)
 

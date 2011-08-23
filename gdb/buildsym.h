@@ -70,8 +70,8 @@ struct subfile
     struct linetable *line_vector;
     int line_vector_length;
     enum language language;
-    const char *producer;
-    const char *debugformat;
+    char *producer;
+    char *debugformat;
     struct symtab *symtab;
   };
 
@@ -292,15 +292,7 @@ extern void record_pending_block (struct objfile *objfile,
 				  struct block *block,
 				  struct pending_block *opblock);
 
-/* Record the name of the debug format in the current pending symbol
-   table.  FORMAT must be a string with a lifetime at least as long as
-   the symtab's objfile.  */
-
-extern void record_debugformat (const char *format);
-
-/* Record the name of the debuginfo producer (usually the compiler) in
-   the current pending symbol table.  PRODUCER must be a string with a
-   lifetime at least as long as the symtab's objfile.  */
+extern void record_debugformat (char *format);
 
 extern void record_producer (const char *producer);
 

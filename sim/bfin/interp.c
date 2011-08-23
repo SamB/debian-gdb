@@ -594,8 +594,8 @@ bfin_syscall (SIM_CPU *cpu)
     {
       tbuf += sprintf (tbuf, "%lu (error = %i)", sc.result, sc.errcode);
       SET_DREG (0, sc.result);
-      SET_DREG (1, sc.result2);
-      SET_DREG (2, sc.errcode);
+      /* Blackfin libgloss only expects R0 to be updated, not R1.  */
+      /*SET_DREG (1, sc.errcode);*/
     }
 
   TRACE_SYSCALL (cpu, "%s", _tbuf);
@@ -1222,7 +1222,7 @@ sim_create_inferior (SIM_DESC sd, struct bfd *abfd,
      'target sim' with `bfin-...-gdb`), we need to handle it.  */
   if (STATE_OPEN_KIND (sd) == SIM_OPEN_DEBUG)
     {
-      freeargv (STATE_PROG_ARGV (sd));
+      free (STATE_PROG_ARGV (sd));
       STATE_PROG_ARGV (sd) = dupargv (argv);
     }
 

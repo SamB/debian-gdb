@@ -623,9 +623,12 @@ pex_free (struct pex_obj *obj)
 
   if (obj->next_input_name_allocated)
     free (obj->next_input_name);
-  free (obj->children);
-  free (obj->status);
-  free (obj->time);
+  if (obj->children != NULL)
+    free (obj->children);
+  if (obj->status != NULL)
+    free (obj->status);
+  if (obj->time != NULL)
+    free (obj->time);
 
   if (obj->remove_count > 0)
     {

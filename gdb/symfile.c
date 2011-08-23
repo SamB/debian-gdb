@@ -527,7 +527,7 @@ relative_addr_info_to_section_offsets (struct section_offsets *section_offsets,
       struct other_sections *osp;
 
       osp = &addrs->other[i];
-      if (osp->sectindex == -1)
+      if (osp->addr == 0)
   	continue;
 
       /* Record all sections in offsets.  */
@@ -568,7 +568,10 @@ addrs_section_compar (const void *ap, const void *bp)
   if (retval)
     return retval;
 
-  return a->sectindex - b->sectindex;
+  /* SECTINDEX is undefined iff ADDR is zero.  */
+  a_idx = a->addr == 0 ? 0 : a->sectindex;
+  b_idx = b->addr == 0 ? 0 : b->sectindex;
+  return a_idx - b_idx;
 }
 
 /* Provide sorted array of pointers to sections of ADDRS.  The array is
@@ -731,7 +734,8 @@ addr_info_make_relative (struct section_addr_info *addrs, bfd *abfd)
 		     bfd_get_filename (abfd));
 
 	  addrs->other[i].addr = 0;
-	  addrs->other[i].sectindex = -1;
+
+	  /* SECTINDEX is invalid if ADDR is zero.  */
 	}
     }
 
@@ -1063,9 +1067,6 @@ new_symfile_objfile (struct objfile *objfile, int add_flags)
    syms_from_objfile, above.
    ADDRS is ignored when SYMFILE_MAINLINE bit is set in ADD_FLAGS.
 
-   PARENT is the original objfile if ABFD is a separate debug info file.
-   Otherwise PARENT is NULL.
-
    Upon success, returns a pointer to the objfile that was added.
    Upon failure, jumps back to command level (never returns).  */
 
@@ -1075,7 +1076,7 @@ symbol_file_add_with_addrs_or_offsets (bfd *abfd,
                                        struct section_addr_info *addrs,
                                        struct section_offsets *offsets,
                                        int num_offsets,
-                                       int flags, struct objfile *parent)
+                                       int flags)
 {
   struct objfile *objfile;
   struct cleanup *my_cleanups;
@@ -1104,9 +1105,6 @@ symbol_file_add_with_addrs_or_offsets (bfd *abfd,
 
   objfile = allocate_objfile (abfd, flags);
   discard_cleanups (my_cleanups);
-
-  if (parent)
-    add_separate_debug_objfile (objfile, parent);
 
   /* We either created a new mapped symbol table, mapped an existing
      symbol table file which has not had initial symbol reading
@@ -1198,10 +1196,11 @@ symbol_file_add_separate (bfd *bfd, int symfile_flags, struct objfile *objfile)
     (bfd, symfile_flags,
      sap, NULL, 0,
      objfile->flags & (OBJF_REORDERED | OBJF_SHARED | OBJF_READNOW
-		       | OBJF_USERLOADED),
-     objfile);
+		       | OBJF_USERLOADED));
 
   do_cleanups (my_cleanup);
+
+  add_separate_debug_objfile (new_objfile, objfile);
 }
 
 /* Process the symbol file ABFD, as either the main file or as a
@@ -1212,10 +1211,10 @@ symbol_file_add_separate (bfd *bfd, int symfile_flags, struct objfile *objfile)
 struct objfile *
 symbol_file_add_from_bfd (bfd *abfd, int add_flags,
                           struct section_addr_info *addrs,
-                          int flags, struct objfile *parent)
+                          int flags)
 {
   return symbol_file_add_with_addrs_or_offsets (abfd, add_flags, addrs, 0, 0,
-                                                flags, parent);
+                                                flags);
 }
 
 
@@ -1227,7 +1226,7 @@ symbol_file_add (char *name, int add_flags, struct section_addr_info *addrs,
 		 int flags)
 {
   return symbol_file_add_from_bfd (symfile_bfd_open (name), add_flags, addrs,
-                                   flags, NULL);
+                                   flags);
 }
 
 
@@ -2461,6 +2460,7 @@ reread_symbols (void)
 	  objfile->psymtabs = NULL;
 	  objfile->psymtabs_addrmap = NULL;
 	  objfile->free_psymtabs = NULL;
+	  objfile->cp_namespace_symtab = NULL;
 	  objfile->template_symbols = NULL;
 	  objfile->msymbols = NULL;
 	  objfile->deprecated_sym_private = NULL;

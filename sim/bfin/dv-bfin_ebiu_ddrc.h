@@ -21,4 +21,6 @@
 #ifndef DV_BFIN_EBIU_DDRC_H
 #define DV_BFIN_EBIU_DDRC_H
 
+#define BFIN_MMR_EBIU_DDRC_SIZE	0xb0
+
 #endif

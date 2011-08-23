@@ -7,8 +7,8 @@
 
 /* Main header file for the bfd library -- portable access to object files.
 
-   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
@@ -298,8 +298,8 @@ typedef struct bfd_section *sec_ptr;
 #define bfd_set_section_userdata(bfd, ptr, val) (((ptr)->userdata = (val)),TRUE)
 /* Find the address one past the end of SEC.  */
 #define bfd_get_section_limit(bfd, sec) \
-  (((bfd)->direction != write_direction && (sec)->rawsize != 0	\
-    ? (sec)->rawsize : (sec)->size) / bfd_octets_per_byte (bfd))
+  (((sec)->rawsize ? (sec)->rawsize : (sec)->size) \
+   / bfd_octets_per_byte (bfd))
 
 /* Return TRUE if input section SEC has been discarded.  */
 #define elf_discarded_section(sec)				\
@@ -439,7 +439,7 @@ extern void bfd_hash_traverse
 /* Allows the default size of a hash table to be configured. New hash
    tables allocated using bfd_hash_table_init will be created with
    this size.  */
-extern unsigned long bfd_hash_set_default_size (unsigned long);
+extern void bfd_hash_set_default_size (bfd_size_type);
 
 /* This structure is used to keep track of stabs in sections
    information while linking.  */
@@ -919,10 +919,6 @@ extern bfd_boolean elf32_arm_build_stubs
 extern bfd_boolean elf32_arm_fix_exidx_coverage
 (struct bfd_section **, unsigned int, struct bfd_link_info *, bfd_boolean);
 
-/* C6x unwind section editing support.  */
-extern bfd_boolean elf32_tic6x_fix_exidx_coverage
-(struct bfd_section **, unsigned int, struct bfd_link_info *, bfd_boolean);
-
 /* PowerPC @tls opcode transform/validate.  */
 extern unsigned int _bfd_elf_ppc_at_tls_transform
   (unsigned int, unsigned int);
@@ -1033,9 +1029,9 @@ bfd_boolean bfd_fill_in_gnu_debuglink_section
 #define bfd_put_signed_8 \
   bfd_put_8
 #define bfd_get_8(abfd, ptr) \
-  (*(const unsigned char *) (ptr) & 0xff)
+  (*(unsigned char *) (ptr) & 0xff)
 #define bfd_get_signed_8(abfd, ptr) \
-  (((*(const unsigned char *) (ptr) & 0xff) ^ 0x80) - 0x80)
+  (((*(unsigned char *) (ptr) & 0xff) ^ 0x80) - 0x80)
 
 #define bfd_put_16(abfd, val, ptr) \
   BFD_SEND (abfd, bfd_putx16, ((val),(ptr)))
@@ -1143,8 +1139,7 @@ long bfd_get_mtime (bfd *abfd);
 file_ptr bfd_get_size (bfd *abfd);
 
 void *bfd_mmap (bfd *abfd, void *addr, bfd_size_type len,
-    int prot, int flags, file_ptr offset,
-    void **map_addr, bfd_size_type *map_len);
+    int prot, int flags, file_ptr offset);
 
 /* Extracted from bfdwin.c.  */
 /* Extracted from section.c.  */
@@ -1324,11 +1319,6 @@ typedef struct bfd_section
      allow the back end to control what the linker does with
      sections.  */
 #define SEC_COFF_SHARED_LIBRARY 0x4000000
-
-  /* This input section should be copied to output in reverse order
-     as an array of pointers.  This is for ELF linker internal use
-     only.  */
-#define SEC_ELF_REVERSE_COPY 0x4000000
 
   /* This section contains data which may be shared with other
      executables or shared objects. This is for COFF only.  */
@@ -2134,10 +2124,6 @@ enum bfd_architecture
   bfd_arch_lm32,      /* Lattice Mico32 */
 #define bfd_mach_lm32      1
   bfd_arch_microblaze,/* Xilinx MicroBlaze. */
-  bfd_arch_tilepro,   /* Tilera TILEPro */
-  bfd_arch_tilegx, /* Tilera TILE-Gx */
-#define bfd_mach_tilepro   1
-#define bfd_mach_tilegx    1
   bfd_arch_last
   };
 
@@ -4804,178 +4790,6 @@ value in a word.  The relocation is relative offset from  */
 /* This is used to tell the dynamic linker to copy the value out of
 the dynamic object into the runtime process image.  */
   BFD_RELOC_MICROBLAZE_COPY,
-
-/* Tilera TILEPro Relocations.  */
-  BFD_RELOC_TILEPRO_COPY,
-  BFD_RELOC_TILEPRO_GLOB_DAT,
-  BFD_RELOC_TILEPRO_JMP_SLOT,
-  BFD_RELOC_TILEPRO_RELATIVE,
-  BFD_RELOC_TILEPRO_BROFF_X1,
-  BFD_RELOC_TILEPRO_JOFFLONG_X1,
-  BFD_RELOC_TILEPRO_JOFFLONG_X1_PLT,
-  BFD_RELOC_TILEPRO_IMM8_X0,
-  BFD_RELOC_TILEPRO_IMM8_Y0,
-  BFD_RELOC_TILEPRO_IMM8_X1,
-  BFD_RELOC_TILEPRO_IMM8_Y1,
-  BFD_RELOC_TILEPRO_DEST_IMM8_X1,
-  BFD_RELOC_TILEPRO_MT_IMM15_X1,
-  BFD_RELOC_TILEPRO_MF_IMM15_X1,
-  BFD_RELOC_TILEPRO_IMM16_X0,
-  BFD_RELOC_TILEPRO_IMM16_X1,
-  BFD_RELOC_TILEPRO_IMM16_X0_LO,
-  BFD_RELOC_TILEPRO_IMM16_X1_LO,
-  BFD_RELOC_TILEPRO_IMM16_X0_HI,
-  BFD_RELOC_TILEPRO_IMM16_X1_HI,
-  BFD_RELOC_TILEPRO_IMM16_X0_HA,
-  BFD_RELOC_TILEPRO_IMM16_X1_HA,
-  BFD_RELOC_TILEPRO_IMM16_X0_PCREL,
-  BFD_RELOC_TILEPRO_IMM16_X1_PCREL,
-  BFD_RELOC_TILEPRO_IMM16_X0_LO_PCREL,
-  BFD_RELOC_TILEPRO_IMM16_X1_LO_PCREL,
-  BFD_RELOC_TILEPRO_IMM16_X0_HI_PCREL,
-  BFD_RELOC_TILEPRO_IMM16_X1_HI_PCREL,
-  BFD_RELOC_TILEPRO_IMM16_X0_HA_PCREL,
-  BFD_RELOC_TILEPRO_IMM16_X1_HA_PCREL,
-  BFD_RELOC_TILEPRO_IMM16_X0_GOT,
-  BFD_RELOC_TILEPRO_IMM16_X1_GOT,
-  BFD_RELOC_TILEPRO_IMM16_X0_GOT_LO,
-  BFD_RELOC_TILEPRO_IMM16_X1_GOT_LO,
-  BFD_RELOC_TILEPRO_IMM16_X0_GOT_HI,
-  BFD_RELOC_TILEPRO_IMM16_X1_GOT_HI,
-  BFD_RELOC_TILEPRO_IMM16_X0_GOT_HA,
-  BFD_RELOC_TILEPRO_IMM16_X1_GOT_HA,
-  BFD_RELOC_TILEPRO_MMSTART_X0,
-  BFD_RELOC_TILEPRO_MMEND_X0,
-  BFD_RELOC_TILEPRO_MMSTART_X1,
-  BFD_RELOC_TILEPRO_MMEND_X1,
-  BFD_RELOC_TILEPRO_SHAMT_X0,
-  BFD_RELOC_TILEPRO_SHAMT_X1,
-  BFD_RELOC_TILEPRO_SHAMT_Y0,
-  BFD_RELOC_TILEPRO_SHAMT_Y1,
-  BFD_RELOC_TILEPRO_IMM16_X0_TLS_GD,
-  BFD_RELOC_TILEPRO_IMM16_X1_TLS_GD,
-  BFD_RELOC_TILEPRO_IMM16_X0_TLS_GD_LO,
-  BFD_RELOC_TILEPRO_IMM16_X1_TLS_GD_LO,
-  BFD_RELOC_TILEPRO_IMM16_X0_TLS_GD_HI,
-  BFD_RELOC_TILEPRO_IMM16_X1_TLS_GD_HI,
-  BFD_RELOC_TILEPRO_IMM16_X0_TLS_GD_HA,
-  BFD_RELOC_TILEPRO_IMM16_X1_TLS_GD_HA,
-  BFD_RELOC_TILEPRO_IMM16_X0_TLS_IE,
-  BFD_RELOC_TILEPRO_IMM16_X1_TLS_IE,
-  BFD_RELOC_TILEPRO_IMM16_X0_TLS_IE_LO,
-  BFD_RELOC_TILEPRO_IMM16_X1_TLS_IE_LO,
-  BFD_RELOC_TILEPRO_IMM16_X0_TLS_IE_HI,
-  BFD_RELOC_TILEPRO_IMM16_X1_TLS_IE_HI,
-  BFD_RELOC_TILEPRO_IMM16_X0_TLS_IE_HA,
-  BFD_RELOC_TILEPRO_IMM16_X1_TLS_IE_HA,
-  BFD_RELOC_TILEPRO_TLS_DTPMOD32,
-  BFD_RELOC_TILEPRO_TLS_DTPOFF32,
-  BFD_RELOC_TILEPRO_TLS_TPOFF32,
-
-/* Tilera TILE-Gx Relocations.  */
-  BFD_RELOC_TILEGX_HW0,
-  BFD_RELOC_TILEGX_HW1,
-  BFD_RELOC_TILEGX_HW2,
-  BFD_RELOC_TILEGX_HW3,
-  BFD_RELOC_TILEGX_HW0_LAST,
-  BFD_RELOC_TILEGX_HW1_LAST,
-  BFD_RELOC_TILEGX_HW2_LAST,
-  BFD_RELOC_TILEGX_COPY,
-  BFD_RELOC_TILEGX_GLOB_DAT,
-  BFD_RELOC_TILEGX_JMP_SLOT,
-  BFD_RELOC_TILEGX_RELATIVE,
-  BFD_RELOC_TILEGX_BROFF_X1,
-  BFD_RELOC_TILEGX_JUMPOFF_X1,
-  BFD_RELOC_TILEGX_JUMPOFF_X1_PLT,
-  BFD_RELOC_TILEGX_IMM8_X0,
-  BFD_RELOC_TILEGX_IMM8_Y0,
-  BFD_RELOC_TILEGX_IMM8_X1,
-  BFD_RELOC_TILEGX_IMM8_Y1,
-  BFD_RELOC_TILEGX_DEST_IMM8_X1,
-  BFD_RELOC_TILEGX_MT_IMM14_X1,
-  BFD_RELOC_TILEGX_MF_IMM14_X1,
-  BFD_RELOC_TILEGX_MMSTART_X0,
-  BFD_RELOC_TILEGX_MMEND_X0,
-  BFD_RELOC_TILEGX_SHAMT_X0,
-  BFD_RELOC_TILEGX_SHAMT_X1,
-  BFD_RELOC_TILEGX_SHAMT_Y0,
-  BFD_RELOC_TILEGX_SHAMT_Y1,
-  BFD_RELOC_TILEGX_IMM16_X0_HW0,
-  BFD_RELOC_TILEGX_IMM16_X1_HW0,
-  BFD_RELOC_TILEGX_IMM16_X0_HW1,
-  BFD_RELOC_TILEGX_IMM16_X1_HW1,
-  BFD_RELOC_TILEGX_IMM16_X0_HW2,
-  BFD_RELOC_TILEGX_IMM16_X1_HW2,
-  BFD_RELOC_TILEGX_IMM16_X0_HW3,
-  BFD_RELOC_TILEGX_IMM16_X1_HW3,
-  BFD_RELOC_TILEGX_IMM16_X0_HW0_LAST,
-  BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST,
-  BFD_RELOC_TILEGX_IMM16_X0_HW1_LAST,
-  BFD_RELOC_TILEGX_IMM16_X1_HW1_LAST,
-  BFD_RELOC_TILEGX_IMM16_X0_HW2_LAST,
-  BFD_RELOC_TILEGX_IMM16_X1_HW2_LAST,
-  BFD_RELOC_TILEGX_IMM16_X0_HW0_PCREL,
-  BFD_RELOC_TILEGX_IMM16_X1_HW0_PCREL,
-  BFD_RELOC_TILEGX_IMM16_X0_HW1_PCREL,
-  BFD_RELOC_TILEGX_IMM16_X1_HW1_PCREL,
-  BFD_RELOC_TILEGX_IMM16_X0_HW2_PCREL,
-  BFD_RELOC_TILEGX_IMM16_X1_HW2_PCREL,
-  BFD_RELOC_TILEGX_IMM16_X0_HW3_PCREL,
-  BFD_RELOC_TILEGX_IMM16_X1_HW3_PCREL,
-  BFD_RELOC_TILEGX_IMM16_X0_HW0_LAST_PCREL,
-  BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST_PCREL,
-  BFD_RELOC_TILEGX_IMM16_X0_HW1_LAST_PCREL,
-  BFD_RELOC_TILEGX_IMM16_X1_HW1_LAST_PCREL,
-  BFD_RELOC_TILEGX_IMM16_X0_HW2_LAST_PCREL,
-  BFD_RELOC_TILEGX_IMM16_X1_HW2_LAST_PCREL,
-  BFD_RELOC_TILEGX_IMM16_X0_HW0_GOT,
-  BFD_RELOC_TILEGX_IMM16_X1_HW0_GOT,
-  BFD_RELOC_TILEGX_IMM16_X0_HW1_GOT,
-  BFD_RELOC_TILEGX_IMM16_X1_HW1_GOT,
-  BFD_RELOC_TILEGX_IMM16_X0_HW2_GOT,
-  BFD_RELOC_TILEGX_IMM16_X1_HW2_GOT,
-  BFD_RELOC_TILEGX_IMM16_X0_HW3_GOT,
-  BFD_RELOC_TILEGX_IMM16_X1_HW3_GOT,
-  BFD_RELOC_TILEGX_IMM16_X0_HW0_LAST_GOT,
-  BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST_GOT,
-  BFD_RELOC_TILEGX_IMM16_X0_HW1_LAST_GOT,
-  BFD_RELOC_TILEGX_IMM16_X1_HW1_LAST_GOT,
-  BFD_RELOC_TILEGX_IMM16_X0_HW2_LAST_GOT,
-  BFD_RELOC_TILEGX_IMM16_X1_HW2_LAST_GOT,
-  BFD_RELOC_TILEGX_IMM16_X0_HW0_TLS_GD,
-  BFD_RELOC_TILEGX_IMM16_X1_HW0_TLS_GD,
-  BFD_RELOC_TILEGX_IMM16_X0_HW1_TLS_GD,
-  BFD_RELOC_TILEGX_IMM16_X1_HW1_TLS_GD,
-  BFD_RELOC_TILEGX_IMM16_X0_HW2_TLS_GD,
-  BFD_RELOC_TILEGX_IMM16_X1_HW2_TLS_GD,
-  BFD_RELOC_TILEGX_IMM16_X0_HW3_TLS_GD,
-  BFD_RELOC_TILEGX_IMM16_X1_HW3_TLS_GD,
-  BFD_RELOC_TILEGX_IMM16_X0_HW0_LAST_TLS_GD,
-  BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST_TLS_GD,
-  BFD_RELOC_TILEGX_IMM16_X0_HW1_LAST_TLS_GD,
-  BFD_RELOC_TILEGX_IMM16_X1_HW1_LAST_TLS_GD,
-  BFD_RELOC_TILEGX_IMM16_X0_HW2_LAST_TLS_GD,
-  BFD_RELOC_TILEGX_IMM16_X1_HW2_LAST_TLS_GD,
-  BFD_RELOC_TILEGX_IMM16_X0_HW0_TLS_IE,
-  BFD_RELOC_TILEGX_IMM16_X1_HW0_TLS_IE,
-  BFD_RELOC_TILEGX_IMM16_X0_HW1_TLS_IE,
-  BFD_RELOC_TILEGX_IMM16_X1_HW1_TLS_IE,
-  BFD_RELOC_TILEGX_IMM16_X0_HW2_TLS_IE,
-  BFD_RELOC_TILEGX_IMM16_X1_HW2_TLS_IE,
-  BFD_RELOC_TILEGX_IMM16_X0_HW3_TLS_IE,
-  BFD_RELOC_TILEGX_IMM16_X1_HW3_TLS_IE,
-  BFD_RELOC_TILEGX_IMM16_X0_HW0_LAST_TLS_IE,
-  BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST_TLS_IE,
-  BFD_RELOC_TILEGX_IMM16_X0_HW1_LAST_TLS_IE,
-  BFD_RELOC_TILEGX_IMM16_X1_HW1_LAST_TLS_IE,
-  BFD_RELOC_TILEGX_IMM16_X0_HW2_LAST_TLS_IE,
-  BFD_RELOC_TILEGX_IMM16_X1_HW2_LAST_TLS_IE,
-  BFD_RELOC_TILEGX_TLS_DTPMOD64,
-  BFD_RELOC_TILEGX_TLS_DTPOFF64,
-  BFD_RELOC_TILEGX_TLS_TPOFF64,
-  BFD_RELOC_TILEGX_TLS_DTPMOD32,
-  BFD_RELOC_TILEGX_TLS_DTPOFF32,
-  BFD_RELOC_TILEGX_TLS_TPOFF32,
   BFD_RELOC_UNUSED };
 typedef enum bfd_reloc_code_real bfd_reloc_code_real_type;
 reloc_howto_type *bfd_reloc_type_lookup
@@ -5296,17 +5110,14 @@ struct bfd
   /* Decompress sections in this BFD.  */
 #define BFD_DECOMPRESS 0x10000
 
-  /* BFD is a dummy, for plugins.  */
-#define BFD_PLUGIN 0x20000
-
   /* Flags bits to be saved in bfd_preserve_save.  */
 #define BFD_FLAGS_SAVED \
-  (BFD_IN_MEMORY | BFD_COMPRESS | BFD_DECOMPRESS | BFD_PLUGIN)
+  (BFD_IN_MEMORY | BFD_COMPRESS | BFD_DECOMPRESS)
 
   /* Flags bits which are for BFD use only.  */
 #define BFD_FLAGS_FOR_BFD_USE_MASK \
   (BFD_IN_MEMORY | BFD_COMPRESS | BFD_DECOMPRESS | BFD_LINKER_CREATED \
-   | BFD_PLUGIN | BFD_TRADITIONAL_FORMAT | BFD_DETERMINISTIC_OUTPUT)
+   | BFD_TRADITIONAL_FORMAT | BFD_DETERMINISTIC_OUTPUT)
 
   /* Currently my_archive is tested before adding origin to
      anything. I believe that this can become always an add of
@@ -5758,11 +5569,7 @@ typedef struct bfd_target
   char ar_pad_char;
 
   /* The maximum number of characters in an archive header.  */
-  unsigned char ar_max_namelen;
-
-  /* How well this target matches, used to select between various
-     possible targets when more than one target matches.  */
-  unsigned char match_priority;
+  unsigned short ar_max_namelen;
 
   /* Entries for byte swapping for data. These are different from the
      other entry points, since they don't take a BFD as the first argument.

@@ -377,11 +377,6 @@ proc gdb_breakpoint { function args } {
 		send_gdb "$pending_response\n"
 		exp_continue
 	}
-	-re "A problem internal to GDB has been detected" {
-		fail "setting breakpoint at $function in runto (GDB internal error)"
-		gdb_internal_error_resync
-		return 0
-	}
 	-re "$gdb_prompt $" {
 		if { $no_message == 0 } {
 			fail "setting breakpoint at $function"
@@ -595,10 +590,6 @@ proc gdb_test_multiple { command message user_code } {
 
     if [string match "*\[\r\n\]" $command] {
 	error "Invalid trailing newline in \"$message\" test"
-    }
-
-    if [string match "*\[\r\n\]*" $message] {
-	error "Invalid newline in \"$message\" test"
     }
 
     # TCL/EXPECT WART ALERT
@@ -1099,8 +1090,8 @@ proc gdb_test_exact { args } {
 # of text per element and then strip trailing \r\n's.
 # Example:
 # gdb_test_list_exact "foo" "bar" \
-#    "\[^\r\n\]+\[\r\n\]+" \
-#    "\[^\r\n\]+" \
+#     {[^\r\n]+[\r\n]+} \
+#     {[^\r\n]+} \
 #     { \
 #	{expected result 1} \
 #	{expected result 2} \
@@ -1486,47 +1477,6 @@ proc skip_shlib_tests {} {
     return 1
 }
 
-# Return 1 if _Complex types are supported, otherwise, return 0.
-
-proc support_complex_tests {} {
-    global support_complex_tests_saved
-
-    # Use the cached value, if it exists.
-    if [info exists support_complex_tests_saved] {
-        verbose "returning saved $support_complex_tests_saved" 2
-        return $support_complex_tests_saved
-    }
-
-    # Set up, compile, and execute a test program containing _Complex types.
-    # Include the current process ID in the file names to prevent conflicts
-    # with invocations for multiple testsuites.
-    set src complex[pid].c
-    set exe complex[pid].x
-
-    set f [open $src "w"]
-    puts $f "int main() {"
-    puts $f "_Complex float cf;"
-    puts $f "_Complex double cd;"
-    puts $f "_Complex long double cld;"
-    puts $f "  return 0; }"
-    close $f
-
-    verbose "compiling testfile $src" 2
-    set compile_flags {debug nowarnings quiet}
-    set lines [gdb_compile $src $exe executable $compile_flags]
-    file delete $src
-    file delete $exe
-
-    if ![string match "" $lines] then {
-        verbose "testfile compilation failed, returning 0" 2
-        set support_complex_tests_saved 0
-    } else {
-	set support_complex_tests_saved 1
-    }
-
-    return $support_complex_tests_saved
-}
-
 # Return 1 if target is ILP32.
 # This cannot be decided simply from looking at the target string,
 # as it might depend on externally passed compiler options like -m64.
@@ -1602,29 +1552,6 @@ proc is_lp64_target {} {
 
     verbose "$me:  returning 1" 2
     return [set is_lp64_target_saved($board) 1]
-}
-
-# Return 1 if this target is an x86 or x86-64 with -m32.
-proc is_x86_like_target {} {
-    if {[istarget i?86-*]} {
-	return 1
-    }
-    if {![istarget "x86_64-*-*"]} {
-	return 0
-    }
-    return [is_ilp32_target]
-}
-
-# Return 1 if displaced stepping is supported on target, otherwise, return 0.
-proc support_displaced_stepping {} {
-
-    if { [istarget "x86_64-*-linux*"] || [istarget "i\[34567\]86-*-linux*"]
-	 || [istarget "arm*-*-linux*"] || [istarget "powerpc-*-linux*"]
-	 || [istarget "powerpc64-*-linux*"] || [istarget "s390*-*-*"] } {
-	return 1
-    }
-
-    return 0
 }
 
 # Run a test on the target to see if it supports vmx hardware.  Return 0 if so, 
@@ -2717,43 +2644,6 @@ proc shlib_symbol_file { libname } {
     return $libname
 }
 
-# Return the filename to download to the target and load for this
-# executable.  Normally just BINFILE unless it is renamed to something
-# else for this target.
-
-proc exec_target_file { binfile } {
-    return $binfile
-}
-
-# Return the filename GDB will load symbols from when debugging this
-# executable.  Normally just BINFILE unless executables for this target
-# have separate files for symbols.
-
-proc exec_symbol_file { binfile } {
-    return $binfile
-}
-
-# Rename the executable file.  Normally this is just BINFILE1 being renamed
-# to BINFILE2, but some targets require multiple binary files.
-proc gdb_rename_execfile { binfile1 binfile2 } {
-    file rename -force [exec_target_file ${binfile1}] \
-		       [exec_target_file ${binfile2}]
-    if { [exec_target_file ${binfile1}] != [exec_symbol_file ${binfile1}] } {
-	file rename -force [exec_symbol_file ${binfile1}] \
-			   [exec_symbol_file ${binfile2}]
-    }
-}
-
-# "Touch" the executable file to update the date.  Normally this is just
-# BINFILE, but some targets require multiple files.
-proc gdb_touch_execfile { binfile } {
-    set time [clock seconds]
-    file mtime [exec_target_file ${binfile}] $time
-    if { [exec_target_file ${binfile}] != [exec_symbol_file ${binfile}] } {
-	file mtime [exec_symbol_file ${binfile}] $time
-    }
-}
-
 # gdb_download
 #
 # Copy a file to the remote target and return its target filename.
@@ -2914,11 +2804,6 @@ proc gdb_init { args } {
     # especially having color output turned on can cause tests to fail.
     setenv GREP_OPTIONS ""
 
-    # Clear $gdbserver_reconnect_p.
-    global gdbserver_reconnect_p
-    set gdbserver_reconnect_p 1
-    unset gdbserver_reconnect_p
-
     return [eval default_gdb_init $args];
 }
 
@@ -3006,14 +2891,6 @@ proc setup_xfail_format { format } {
 	setup_xfail "*-*-*"
     }
     return $ret;
-}
-
-# Like setup_kfail, but only call setup_kfail conditionally if
-# istarget[TARGET] returns true.
-proc setup_kfail_for_target { PR target } {
-    if { [istarget $target] } {
-	setup_kfail $PR $target
-    }
 }
 
 proc gdb_step_for_stub { } {
@@ -3719,19 +3596,3 @@ proc core_find {binfile {deletefiles {}} {arg ""}} {
     }
     return $destcore
 }
-
-# gdb_target_symbol_prefix_flags returns a string that can be added
-# to gdb_compile options to define SYMBOL_PREFIX macro value
-# symbol_prefix_flags returns a string that can be added
-# for targets that use underscore as symbol prefix.
-# TODO: find out automatically if the target needs this.
-
-proc gdb_target_symbol_prefix_flags {} {
-    if { [istarget "*-*-cygwin*"] || [istarget "i?86-*-mingw*"]
-	 || [istarget "*-*-msdosdjgpp*"] || [istarget "*-*-go32*"] } {
-	return "additional_flags=-DSYMBOL_PREFIX=\"_\""
-    } else {
-	return ""
-    }
-}
-
