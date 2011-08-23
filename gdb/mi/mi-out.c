@@ -30,7 +30,6 @@ struct ui_out_data
     int suppress_output;
     int mi_version;
     struct ui_file *buffer;
-    struct ui_file *original_buffer;
   };
 typedef struct ui_out_data mi_out_data;
 
@@ -64,7 +63,6 @@ static void mi_message (struct ui_out *uiout, int verbosity,
      ATTRIBUTE_PRINTF (3, 0);
 static void mi_wrap_hint (struct ui_out *uiout, char *identstring);
 static void mi_flush (struct ui_out *uiout);
-static int mi_redirect (struct ui_out *uiout, struct ui_file *outstream);
 
 /* This is the MI ui-out implementation functions vector */
 
@@ -88,7 +86,7 @@ struct ui_out_impl mi_ui_out_impl =
   mi_message,
   mi_wrap_hint,
   mi_flush,
-  mi_redirect,
+  NULL,
   1, /* Needs MI hacks.  */
 };
 
@@ -212,6 +210,11 @@ void
 mi_field_skip (struct ui_out *uiout, int fldno, int width,
                enum ui_align alignment, const char *fldname)
 {
+  mi_out_data *data = ui_out_data (uiout);
+
+  if (data->suppress_output)
+    return;
+  mi_field_string (uiout, fldno, width, alignment, fldname, "");
 }
 
 /* other specific mi_field_* end up here so alignment and field
@@ -289,25 +292,6 @@ mi_flush (struct ui_out *uiout)
   mi_out_data *data = ui_out_data (uiout);
 
   gdb_flush (data->buffer);
-}
-
-int
-mi_redirect (struct ui_out *uiout, struct ui_file *outstream)
-{
-  mi_out_data *data = ui_out_data (uiout);
-
-  if (outstream != NULL)
-    {
-      data->original_buffer = data->buffer;
-      data->buffer = outstream;
-    }
-  else if (data->original_buffer != NULL)
-    {
-      data->buffer = data->original_buffer;
-      data->original_buffer = NULL;
-    }
-
-  return 0;
 }
 
 /* local functions */

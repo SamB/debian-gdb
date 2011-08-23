@@ -258,7 +258,7 @@ enum return_value_convention
    point in the chain.  Use discard_cleanups to remove cleanups
    from the chain back to a given point, not doing them.
 
-   If the argument is pointer to allocated memory, then you need
+   If the argument is pointer to allocated memory, then you need to
    to additionally set the 'free_arg' member to a function that will
    free that memory.  This function will be called both when the cleanup
    is executed and when it's discarded.  */
@@ -271,6 +271,15 @@ struct cleanup
     void *arg;
   };
 
+/* Be conservative and use enum bitfields only with GCC.
+   This is copied from gcc 3.3.1, system.h.  */
+
+#if defined(__GNUC__) && (__GNUC__ >= 2)
+#define ENUM_BITFIELD(TYPE) enum TYPE
+#else
+#define ENUM_BITFIELD(TYPE) unsigned int
+#endif
+
 /* vec.h-style vectors of strings want a typedef for char * .  */
 
 typedef char * char_ptr;
@@ -281,13 +290,6 @@ struct symtab;
 struct breakpoint;
 struct frame_info;
 struct gdbarch;
-struct value;
-
-/* From main.c.  */
-
-/* This really belong in utils.c (path-utils.c?), but it references some
-   globals that are currently only available to main.c.  */
-extern char *relocate_gdb_directory (const char *initial, int flag);
 
 /* From utils.c */
 
@@ -360,9 +362,6 @@ extern struct cleanup *make_cleanup_unpush_target (struct target_ops *ops);
 
 extern struct cleanup *
   make_cleanup_restore_ui_file (struct ui_file **variable);
-
-extern struct cleanup *make_cleanup_value_free_to_mark (struct value *);
-extern struct cleanup *make_cleanup_value_free (struct value *);
 
 extern struct cleanup *make_final_cleanup (make_cleanup_ftype *, void *);
 
@@ -729,6 +728,44 @@ extern struct command_line *read_command_lines_1 (char * (*) (void), int,
 						  void *);
 
 extern void free_command_lines (struct command_line **);
+
+/* To continue the execution commands when running gdb asynchronously.
+   A continuation structure contains a pointer to a function to be called 
+   to finish the command, once the target has stopped.  Such mechanism is
+   used by the finish and until commands, and in the remote protocol
+   when opening an extended-remote connection.  */
+
+struct continuation;
+struct thread_info;
+struct inferior;
+
+/* From utils.c */
+
+/* Thread specific continuations.  */
+
+extern void add_continuation (struct thread_info *,
+			      void (*)(void *), void *,
+			      void (*)(void *));
+extern void do_all_continuations (void);
+extern void do_all_continuations_thread (struct thread_info *);
+extern void discard_all_continuations (void);
+extern void discard_all_continuations_thread (struct thread_info *);
+
+extern void add_intermediate_continuation (struct thread_info *,
+					   void (*)(void *), void *,
+					   void (*)(void *));
+extern void do_all_intermediate_continuations (void);
+extern void do_all_intermediate_continuations_thread (struct thread_info *);
+extern void discard_all_intermediate_continuations (void);
+extern void discard_all_intermediate_continuations_thread (struct thread_info *);
+
+/* Inferior specific (any thread) continuations.  */
+
+extern void add_inferior_continuation (void (*) (void *),
+				       void *,
+				       void (*) (void *));
+extern void do_all_inferior_continuations (void);
+extern void discard_all_inferior_continuations (struct inferior *inf);
 
 /* String containing the current directory (what getwd would return).  */
 
@@ -1218,14 +1255,5 @@ void dummy_obstack_deallocate (void *object, void *data);
 
 extern void initialize_progspace (void);
 extern void initialize_inferiors (void);
-
-/* Special block numbers */
-
-enum block_enum
-{
-  GLOBAL_BLOCK = 0,
-  STATIC_BLOCK = 1,
-  FIRST_LOCAL_BLOCK = 2
-};
 
 #endif /* #ifndef DEFS_H */

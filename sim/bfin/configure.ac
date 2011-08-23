@@ -33,7 +33,6 @@ SIM_AC_OPTION_HARDWARE(yes,,\
 	bfin_mmu \
 	bfin_nfc \
 	bfin_otp \
-	bfin_pfmon \
 	bfin_pll \
 	bfin_ppi \
 	bfin_rtc \

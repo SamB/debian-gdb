@@ -648,8 +648,7 @@ solib_read_symbols (struct so_list *so, int flags)
 	  sap = build_section_addr_info_from_section_table (so->sections,
 							    so->sections_end);
 	  so->objfile = symbol_file_add_from_bfd (so->abfd,
-						  flags, sap, OBJF_SHARED,
-						  NULL);
+						  flags, sap, OBJF_SHARED);
 	  so->objfile->addr_low = so->addr_low;
 	  free_section_addr_info (sap);
 	}

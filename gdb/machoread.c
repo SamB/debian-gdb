@@ -397,8 +397,8 @@ macho_add_oso_symfile (oso_el *oso, bfd *abfd,
   objfile = symbol_file_add_from_bfd
     (abfd, symfile_flags & ~(SYMFILE_MAINLINE | SYMFILE_VERBOSE), NULL,
      main_objfile->flags & (OBJF_REORDERED | OBJF_SHARED
-			    | OBJF_READNOW | OBJF_USERLOADED),
-     main_objfile);
+                            | OBJF_READNOW | OBJF_USERLOADED));
+  add_separate_debug_objfile (objfile, main_objfile);
 
   current_oso.main_objfile = NULL;
   if (current_oso.symbol_table)
@@ -660,7 +660,7 @@ macho_symfile_read (struct objfile *objfile, int symfile_flags)
       /* Try to read .eh_frame / .debug_frame.  */
       /* First, locate these sections.  We ignore the result status
 	 as it only checks for debug info.  */
-      dwarf2_has_info (objfile, NULL);
+      dwarf2_has_info (objfile);
       dwarf2_build_frame_info (objfile);
       
       /* Check for DSYM file.  */
@@ -702,7 +702,7 @@ macho_symfile_read (struct objfile *objfile, int symfile_flags)
 	}
     }
 
-  if (dwarf2_has_info (objfile, NULL))
+  if (dwarf2_has_info (objfile))
     {
       /* DWARF 2 sections */
       dwarf2_build_psymtabs (objfile);

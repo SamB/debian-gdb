@@ -21,6 +21,9 @@ Free Software Foundation, Inc.
  *      on function calls.  Useful to test printing frames, stepping, etc.
  */
 
+#include <stdio.h>
+#include <unistd.h>
+
 int callee4 (void)
 {
   int A=1;
@@ -47,6 +50,7 @@ callee1 (int intarg, char *strarg, double fltarg)
 
 void callme (int i)
 {
+  printf ("callme\n");
 }
 
 int return_1 ()

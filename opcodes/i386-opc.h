@@ -92,8 +92,6 @@ enum
   CpuSSE4_2,
   /* AVX support required */
   CpuAVX,
-  /* AVX2 support required */
-  CpuAVX2,
   /* Intel L1OM support required */
   CpuL1OM,
   /* Xsave/xrstor New Instructions support required */
@@ -128,12 +126,6 @@ enum
   CpuRdRnd,
   /* F16C Instructions required */
   CpuF16C,
-  /* Intel BMI2 support required */
-  CpuBMI2,
-  /* LZCNT support required */
-  CpuLZCNT,
-  /* INVPCID Instructions required */
-  CpuINVPCID,
   /* 64bit support available, used by -march= in assembler.  */
   CpuLM,
   /* 64bit support required  */
@@ -189,7 +181,6 @@ typedef union i386_cpu_flags
       unsigned int cpusse4_1:1;
       unsigned int cpusse4_2:1;
       unsigned int cpuavx:1;
-      unsigned int cpuavx2:1;
       unsigned int cpul1om:1;
       unsigned int cpuxsave:1;
       unsigned int cpuxsaveopt:1;
@@ -207,9 +198,6 @@ typedef union i386_cpu_flags
       unsigned int cpufsgsbase:1;
       unsigned int cpurdrnd:1;
       unsigned int cpuf16c:1;
-      unsigned int cpubmi2:1;
-      unsigned int cpulzcnt:1;
-      unsigned int cpuinvpcid:1;
       unsigned int cpulm:1;
       unsigned int cpu64:1;
       unsigned int cpuno64:1;
@@ -319,12 +307,9 @@ enum
 	VEX.DDS.  The second register operand is encoded in VEX.vvvv 
 	where the content of first source register will be overwritten
 	by the result.
-	VEX.NDD2.  The second destination register operand is encoded in
-	VEX.vvvv for instructions with 2 destination register operands.
-	For assembler, there are no difference between VEX.NDS, VEX.DDS
-	and VEX.NDD2.
-     2. VEX.NDD.  Register destination is encoded in VEX.vvvv for
-     instructions with 1 destination register operand.
+	For assembler, there are no difference between VEX.NDS and
+	VEX.DDS.
+     2. VEX.NDD.  Register destination is encoded in VEX.vvvv.
      3. VEX.LWP.  Register destination is encoded in VEX.vvvv and one
 	of the operands can access a memory location.
    */
@@ -365,13 +350,6 @@ enum
   VexSources,
   /* instruction has VEX 8 bit imm */
   VexImmExt,
-  /* Instruction with vector SIB byte:
-	1: 128bit vector register.
-	2: 256bit vector register.
-   */
-#define VecSIB128	1
-#define VecSIB256	2
-  VecSIB,
   /* SSE to AVX support required */
   SSE2AVX,
   /* No AVX equivalent */
@@ -434,7 +412,6 @@ typedef struct i386_opcode_modifier
   unsigned int vexopcode:3;
   unsigned int vexsources:2;
   unsigned int veximmext:1;
-  unsigned int vecsib:2;
   unsigned int sse2avx:1;
   unsigned int noavx:1;
   unsigned int oldgcc:1;

@@ -30,7 +30,6 @@
 #endif
 #include <sys/ptrace.h>
 #include "linux-nat.h"
-#include "linux-ptrace.h"
 #include "linux-fork.h"
 #include "gdbthread.h"
 #include "gdbcmd.h"
@@ -161,10 +160,48 @@ blocked.  */
 #define O_LARGEFILE 0
 #endif
 
+/* If the system headers did not provide the constants, hard-code the normal
+   values.  */
+#ifndef PTRACE_EVENT_FORK
+
+#define PTRACE_SETOPTIONS	0x4200
+#define PTRACE_GETEVENTMSG	0x4201
+
+/* Options set using PTRACE_SETOPTIONS.  */
+#define PTRACE_O_TRACESYSGOOD	0x00000001
+#define PTRACE_O_TRACEFORK	0x00000002
+#define PTRACE_O_TRACEVFORK	0x00000004
+#define PTRACE_O_TRACECLONE	0x00000008
+#define PTRACE_O_TRACEEXEC	0x00000010
+#define PTRACE_O_TRACEVFORKDONE	0x00000020
+#define PTRACE_O_TRACEEXIT	0x00000040
+
+/* Wait extended result codes for the above trace options.  */
+#define PTRACE_EVENT_FORK	1
+#define PTRACE_EVENT_VFORK	2
+#define PTRACE_EVENT_CLONE	3
+#define PTRACE_EVENT_EXEC	4
+#define PTRACE_EVENT_VFORK_DONE	5
+#define PTRACE_EVENT_EXIT	6
+
+#endif /* PTRACE_EVENT_FORK */
+
 /* Unlike other extended result codes, WSTOPSIG (status) on
    PTRACE_O_TRACESYSGOOD syscall events doesn't return SIGTRAP, but
    instead SIGTRAP with bit 7 set.  */
 #define SYSCALL_SIGTRAP (SIGTRAP | 0x80)
+
+/* We can't always assume that this flag is available, but all systems
+   with the ptrace event handlers also have __WALL, so it's safe to use
+   here.  */
+#ifndef __WALL
+#define __WALL          0x40000000 /* Wait for any child.  */
+#endif
+
+#ifndef PTRACE_GETSIGINFO
+# define PTRACE_GETSIGINFO    0x4202
+# define PTRACE_SETSIGINFO    0x4203
+#endif
 
 /* The single-threaded native GNU/Linux target_ops.  We save a pointer for
    the use of the multi-threaded target.  */
@@ -195,6 +232,16 @@ show_debug_linux_nat (struct ui_file *file, int from_tty,
 		      struct cmd_list_element *c, const char *value)
 {
   fprintf_filtered (file, _("Debugging of GNU/Linux lwp module is %s.\n"),
+		    value);
+}
+
+static int debug_linux_nat_async = 0;
+static void
+show_debug_linux_nat_async (struct ui_file *file, int from_tty,
+			    struct cmd_list_element *c, const char *value)
+{
+  fprintf_filtered (file,
+		    _("Debugging of GNU/Linux async lwp module is %s.\n"),
 		    value);
 }
 
@@ -250,10 +297,14 @@ static int linux_supports_tracesysgood_flag = -1;
 
 static int linux_supports_tracevforkdone_flag = -1;
 
+/* Async mode support.  */
+
+/* Zero if the async mode, although enabled, is masked, which means
+   linux_nat_wait should behave as if async mode was off.  */
+static int linux_nat_async_mask_value = 1;
+
 /* Stores the current used ptrace() options.  */
 static int current_ptrace_options = 0;
-
-/* Async mode support.  */
 
 /* The read/write ends of the pipe registered as waitable file in the
    event loop.  */
@@ -302,6 +353,7 @@ static void linux_nat_async (void (*callback)
 			     (enum inferior_event_type event_type,
 			      void *context),
 			     void *context);
+static int linux_nat_async_mask (int mask);
 static int kill_lwp (int lwpid, int signo);
 
 static int stop_callback (struct lwp_info *lp, void *data);
@@ -1044,26 +1096,6 @@ restore_child_signals_mask (sigset_t *prev_mask)
 {
   sigprocmask (SIG_SETMASK, prev_mask, NULL);
 }
-
-/* Mask of signals to pass directly to the inferior.  */
-static sigset_t pass_mask;
-
-/* Update signals to pass to the inferior.  */
-static void
-linux_nat_pass_signals (int numsigs, unsigned char *pass_signals)
-{
-  int signo;
-
-  sigemptyset (&pass_mask);
-
-  for (signo = 1; signo < NSIG; signo++)
-    {
-      int target_signo = target_signal_from_host (signo);
-      if (target_signo < numsigs && pass_signals[target_signo])
-        sigaddset (&pass_mask, signo);
-    }
-}
-
 
 
 /* Prototypes for local functions.  */
@@ -1461,10 +1493,7 @@ lin_lwp_attach_lwp (ptid_t ptid)
 
       status = linux_nat_post_attach_wait (ptid, 0, &cloned, &signalled);
       if (!WIFSTOPPED (status))
-	{
-	  restore_child_signals_mask (&prev_mask);
-	  return -1;
-	}
+	return -1;
 
       lp = add_lwp (ptid);
       lp->stopped = 1;
@@ -1532,9 +1561,6 @@ linux_nat_create_inferior (struct target_ops *ops,
     }
 #endif /* HAVE_PERSONALITY */
 
-  /* Make sure we report all signals during startup.  */
-  linux_nat_pass_signals (0, NULL);
-
   linux_ops->to_create_inferior (ops, exec_file, allargs, env, from_tty);
 
 #ifdef HAVE_PERSONALITY
@@ -1555,9 +1581,6 @@ linux_nat_attach (struct target_ops *ops, char *args, int from_tty)
   struct lwp_info *lp;
   int status;
   ptid_t ptid;
-
-  /* Make sure we report all signals during attach.  */
-  linux_nat_pass_signals (0, NULL);
 
   linux_ops->to_attach (ops, args, from_tty);
 
@@ -1917,9 +1940,19 @@ linux_nat_resume (struct target_ops *ops,
 
   if (lp->status && WIFSTOPPED (lp->status))
     {
-      if (!lp->step
-	  && WSTOPSIG (lp->status)
-	  && sigismember (&pass_mask, WSTOPSIG (lp->status)))
+      enum target_signal saved_signo;
+      struct inferior *inf;
+
+      inf = find_inferior_pid (ptid_get_pid (lp->ptid));
+      gdb_assert (inf);
+      saved_signo = target_signal_from_host (WSTOPSIG (lp->status));
+
+      /* Defer to common code if we're gaining control of the
+	 inferior.  */
+      if (inf->control.stop_soon == NO_STOP_QUIETLY
+	  && signal_stop_state (saved_signo) == 0
+	  && signal_print_state (saved_signo) == 0
+	  && signal_pass_state (saved_signo) == 1)
 	{
 	  if (debug_linux_nat)
 	    fprintf_unfiltered (gdb_stdlog,
@@ -1929,7 +1962,7 @@ linux_nat_resume (struct target_ops *ops,
 	  /* FIXME: What should we do if we are supposed to continue
 	     this thread with a signal?  */
 	  gdb_assert (signo == TARGET_SIGNAL_0);
-	  signo = target_signal_from_host (WSTOPSIG (lp->status));
+	  signo = saved_signo;
 	  lp->status = 0;
 	}
     }
@@ -2351,33 +2384,6 @@ linux_handle_extended_wait (struct lwp_info *lp, int status,
 		  _("unknown ptrace event %d"), event);
 }
 
-/* Return non-zero if LWP is a zombie.  */
-
-static int
-linux_lwp_is_zombie (long lwp)
-{
-  char buffer[MAXPATHLEN];
-  FILE *procfile;
-  int retval = 0;
-
-  xsnprintf (buffer, sizeof (buffer), "/proc/%ld/status", lwp);
-  procfile = fopen (buffer, "r");
-  if (procfile == NULL)
-    {
-      warning (_("unable to open /proc file '%s'"), buffer);
-      return 0;
-    }
-  while (fgets (buffer, sizeof (buffer), procfile) != NULL)
-    if (strcmp (buffer, "State:\tZ (zombie)\n") == 0)
-      {
-	retval = 1;
-	break;
-      }
-  fclose (procfile);
-
-  return retval;
-}
-
 /* Wait for LP to stop.  Returns the wait status, or 0 if the LWP has
    exited.  */
 
@@ -2385,76 +2391,28 @@ static int
 wait_lwp (struct lwp_info *lp)
 {
   pid_t pid;
-  int status = 0;
+  int status;
   int thread_dead = 0;
-  sigset_t prev_mask;
 
   gdb_assert (!lp->stopped);
   gdb_assert (lp->status == 0);
 
-  /* Make sure SIGCHLD is blocked for sigsuspend avoiding a race below.  */
-  block_child_signals (&prev_mask);
-
-  for (;;)
-    {
-      /* If my_waitpid returns 0 it means the __WCLONE vs. non-__WCLONE kind
-	 was right and we should just call sigsuspend.  */
-
-      pid = my_waitpid (GET_LWP (lp->ptid), &status, WNOHANG);
-      if (pid == -1 && errno == ECHILD)
-	pid = my_waitpid (GET_LWP (lp->ptid), &status, __WCLONE | WNOHANG);
-      if (pid != 0)
-	break;
-
-      /* Bugs 10970, 12702.
-	 Thread group leader may have exited in which case we'll lock up in
-	 waitpid if there are other threads, even if they are all zombies too.
-	 Basically, we're not supposed to use waitpid this way.
-	 __WCLONE is not applicable for the leader so we can't use that.
-	 LINUX_NAT_THREAD_ALIVE cannot be used here as it requires a STOPPED
-	 process; it gets ESRCH both for the zombie and for running processes.
-
-	 As a workaround, check if we're waiting for the thread group leader and
-	 if it's a zombie, and avoid calling waitpid if it is.
-
-	 This is racy, what if the tgl becomes a zombie right after we check?
-	 Therefore always use WNOHANG with sigsuspend - it is equivalent to
-	 waiting waitpid but the linux_lwp_is_zombie is safe this way.  */
-
-      if (GET_PID (lp->ptid) == GET_LWP (lp->ptid)
-	  && linux_lwp_is_zombie (GET_LWP (lp->ptid)))
-	{
-	  thread_dead = 1;
-	  if (debug_linux_nat)
-	    fprintf_unfiltered (gdb_stdlog,
-				"WL: Thread group leader %s vanished.\n",
-				target_pid_to_str (lp->ptid));
-	  break;
-	}
-
-      /* Wait for next SIGCHLD and try again.  This may let SIGCHLD handlers
-	 get invoked despite our caller had them intentionally blocked by
-	 block_child_signals.  This is sensitive only to the loop of
-	 linux_nat_wait_1 and there if we get called my_waitpid gets called
-	 again before it gets to sigsuspend so we can safely let the handlers
-	 get executed here.  */
-
-      sigsuspend (&suspend_mask);
-    }
-
-  restore_child_signals_mask (&prev_mask);
-
+  pid = my_waitpid (GET_LWP (lp->ptid), &status, 0);
   if (pid == -1 && errno == ECHILD)
     {
-      /* The thread has previously exited.  We need to delete it
-	 now because, for some vendor 2.4 kernels with NPTL
-	 support backported, there won't be an exit event unless
-	 it is the main thread.  2.6 kernels will report an exit
-	 event for each thread that exits, as expected.  */
-      thread_dead = 1;
-      if (debug_linux_nat)
-	fprintf_unfiltered (gdb_stdlog, "WL: %s vanished.\n",
-			    target_pid_to_str (lp->ptid));
+      pid = my_waitpid (GET_LWP (lp->ptid), &status, __WCLONE);
+      if (pid == -1 && errno == ECHILD)
+	{
+	  /* The thread has previously exited.  We need to delete it
+	     now because, for some vendor 2.4 kernels with NPTL
+	     support backported, there won't be an exit event unless
+	     it is the main thread.  2.6 kernels will report an exit
+	     event for each thread that exits, as expected.  */
+	  thread_dead = 1;
+	  if (debug_linux_nat)
+	    fprintf_unfiltered (gdb_stdlog, "WL: %s vanished.\n",
+				target_pid_to_str (lp->ptid));
+	}
     }
 
   if (!thread_dead)
@@ -3320,7 +3278,7 @@ linux_nat_wait_1 (struct target_ops *ops,
   int status = 0;
   pid_t pid;
 
-  if (debug_linux_nat)
+  if (debug_linux_nat_async)
     fprintf_unfiltered (gdb_stdlog, "LLW: enter\n");
 
   /* The first time we get here after starting a new inferior, we may
@@ -3363,7 +3321,7 @@ retry:
     {
       ourstatus->kind = TARGET_WAITKIND_IGNORE;
 
-      if (debug_linux_nat)
+      if (debug_linux_nat_async)
 	fprintf_unfiltered (gdb_stdlog, "LLW: exit (no resumed LWP)\n");
 
       restore_child_signals_mask (&prev_mask);
@@ -3606,7 +3564,7 @@ retry:
 		  /* No interesting event.  */
 		  ourstatus->kind = TARGET_WAITKIND_IGNORE;
 
-		  if (debug_linux_nat)
+		  if (debug_linux_nat_async)
 		    fprintf_unfiltered (gdb_stdlog, "LLW: exit (ignore)\n");
 
 		  restore_child_signals_mask (&prev_mask);
@@ -3621,7 +3579,7 @@ retry:
 	  /* No interesting event for PID yet.  */
 	  ourstatus->kind = TARGET_WAITKIND_IGNORE;
 
-	  if (debug_linux_nat)
+	  if (debug_linux_nat_async)
 	    fprintf_unfiltered (gdb_stdlog, "LLW: exit (ignore)\n");
 
 	  restore_child_signals_mask (&prev_mask);
@@ -3650,11 +3608,20 @@ retry:
   if (WIFSTOPPED (status))
     {
       enum target_signal signo = target_signal_from_host (WSTOPSIG (status));
+      struct inferior *inf;
 
-      /* When using hardware single-step, we need to report every signal.
-	 Otherwise, signals in pass_mask may be short-circuited.  */
+      inf = find_inferior_pid (ptid_get_pid (lp->ptid));
+      gdb_assert (inf);
+
+      /* Defer to common code if we get a signal while
+	 single-stepping, since that may need special care, e.g. to
+	 skip the signal handler, or, if we're gaining control of the
+	 inferior.  */
       if (!lp->step
-	  && WSTOPSIG (status) && sigismember (&pass_mask, WSTOPSIG (status)))
+	  && inf->control.stop_soon == NO_STOP_QUIETLY
+	  && signal_stop_state (signo) == 0
+	  && signal_print_state (signo) == 0
+	  && signal_pass_state (signo) == 1)
 	{
 	  /* FIMXE: kettenis/2001-06-06: Should we resume all threads
 	     here?  It is not clear we should.  GDB may not expect
@@ -3750,7 +3717,7 @@ retry:
   else
     store_waitstatus (ourstatus, status);
 
-  if (debug_linux_nat)
+  if (debug_linux_nat_async)
     fprintf_unfiltered (gdb_stdlog, "LLW: exit\n");
 
   restore_child_signals_mask (&prev_mask);
@@ -3850,18 +3817,6 @@ linux_nat_wait (struct target_ops *ops,
 static int
 kill_callback (struct lwp_info *lp, void *data)
 {
-  /* PTRACE_KILL may resume the inferior.  Send SIGKILL first.  */
-
-  errno = 0;
-  kill (GET_LWP (lp->ptid), SIGKILL);
-  if (debug_linux_nat)
-    fprintf_unfiltered (gdb_stdlog,
-			"KC:  kill (SIGKILL) %s, 0, 0 (%s)\n",
-			target_pid_to_str (lp->ptid),
-			errno ? safe_strerror (errno) : "OK");
-
-  /* Some kernels ignore even SIGKILL for processes under ptrace.  */
-
   errno = 0;
   ptrace (PTRACE_KILL, GET_LWP (lp->ptid), 0, 0);
   if (debug_linux_nat)
@@ -5354,7 +5309,11 @@ linux_nat_is_async_p (void)
   /* NOTE: palves 2008-03-21: We're only async when the user requests
      it explicitly with the "set target-async" command.
      Someday, linux will always be async.  */
-  return target_async_permitted;
+  if (!target_async_permitted)
+    return 0;
+
+  /* See target.h/target_async_mask.  */
+  return linux_nat_async_mask_value;
 }
 
 /* target_can_async_p implementation.  */
@@ -5365,7 +5324,11 @@ linux_nat_can_async_p (void)
   /* NOTE: palves 2008-03-21: We're only async when the user requests
      it explicitly with the "set target-async" command.
      Someday, linux will always be async.  */
-  return target_async_permitted;
+  if (!target_async_permitted)
+    return 0;
+
+  /* See target.h/target_async_mask.  */
+  return linux_nat_async_mask_value;
 }
 
 static int
@@ -5383,6 +5346,37 @@ static int
 linux_nat_supports_multi_process (void)
 {
   return linux_multi_process;
+}
+
+/* target_async_mask implementation.  */
+
+static int
+linux_nat_async_mask (int new_mask)
+{
+  int curr_mask = linux_nat_async_mask_value;
+
+  if (curr_mask != new_mask)
+    {
+      if (new_mask == 0)
+	{
+	  linux_nat_async (NULL, 0);
+	  linux_nat_async_mask_value = new_mask;
+	}
+      else
+	{
+	  linux_nat_async_mask_value = new_mask;
+
+	  /* If we're going out of async-mask in all-stop, then the
+	     inferior is stopped.  The next resume will call
+	     target_async.  In non-stop, the target event source
+	     should be always registered in the event loop.  Do so
+	     now.  */
+	  if (non_stop)
+	    linux_nat_async (inferior_event_handler, 0);
+	}
+    }
+
+  return curr_mask;
 }
 
 static int async_terminal_is_ours = 1;
@@ -5449,9 +5443,8 @@ sigchld_handler (int signo)
 {
   int old_errno = errno;
 
-  if (debug_linux_nat)
-    ui_file_write_async_safe (gdb_stdlog,
-			      "sigchld\n", sizeof ("sigchld\n") - 1);
+  if (debug_linux_nat_async)
+    fprintf_unfiltered (gdb_stdlog, "sigchld\n");
 
   if (signo == SIGCHLD
       && linux_nat_event_pipe[0] != -1)
@@ -5511,6 +5504,10 @@ static void
 linux_nat_async (void (*callback) (enum inferior_event_type event_type,
 				   void *context), void *context)
 {
+  if (linux_nat_async_mask_value == 0 || !target_async_permitted)
+    internal_error (__FILE__, __LINE__,
+		    "Calling target_async when async is masked");
+
   if (callback != NULL)
     {
       async_client_callback = callback;
@@ -5602,6 +5599,9 @@ linux_nat_close (int quitting)
   /* Unregister from the event loop.  */
   if (target_is_async_p ())
     target_async (NULL, 0);
+
+  /* Reset the async_masking.  */
+  linux_nat_async_mask_value = 1;
 
   if (linux_ops->to_close)
     linux_ops->to_close (quitting);
@@ -5733,7 +5733,6 @@ linux_nat_add_target (struct target_ops *t)
   t->to_detach = linux_nat_detach;
   t->to_resume = linux_nat_resume;
   t->to_wait = linux_nat_wait;
-  t->to_pass_signals = linux_nat_pass_signals;
   t->to_xfer_partial = linux_nat_xfer_partial;
   t->to_kill = linux_nat_kill;
   t->to_mourn_inferior = linux_nat_mourn_inferior;
@@ -5749,6 +5748,7 @@ linux_nat_add_target (struct target_ops *t)
   t->to_is_async_p = linux_nat_is_async_p;
   t->to_supports_non_stop = linux_nat_supports_non_stop;
   t->to_async = linux_nat_async;
+  t->to_async_mask = linux_nat_async_mask;
   t->to_terminal_inferior = linux_nat_terminal_inferior;
   t->to_terminal_ours = linux_nat_terminal_ours;
   t->to_close = linux_nat_close;
@@ -5825,6 +5825,15 @@ Show debugging of GNU/Linux lwp module."), _("\
 Enables printf debugging output."),
 			    NULL,
 			    show_debug_linux_nat,
+			    &setdebuglist, &showdebuglist);
+
+  add_setshow_zinteger_cmd ("lin-lwp-async", class_maintenance,
+			    &debug_linux_nat_async, _("\
+Set debugging of GNU/Linux async lwp module."), _("\
+Show debugging of GNU/Linux async lwp module."), _("\
+Enables printf debugging output."),
+			    NULL,
+			    show_debug_linux_nat_async,
 			    &setdebuglist, &showdebuglist);
 
   /* Save this mask as the default.  */

@@ -1853,9 +1853,3 @@ sim_set_callbacks (host_callback *ptr)
 {
   callback = ptr; 
 }
-
-char **
-sim_complete_command (SIM_DESC sd, char *text, char *word)
-{
-  return NULL;
-}

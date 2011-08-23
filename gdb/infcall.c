@@ -387,8 +387,10 @@ static struct gdb_exception
 run_inferior_call (struct thread_info *call_thread, CORE_ADDR real_pc)
 {
   volatile struct gdb_exception e;
+  int saved_async = 0;
   int saved_in_infcall = call_thread->control.in_infcall;
   ptid_t call_thread_ptid = call_thread->ptid;
+  char *saved_target_shortname = xstrdup (target_shortname);
 
   call_thread->control.in_infcall = 1;
 
@@ -399,23 +401,21 @@ run_inferior_call (struct thread_info *call_thread, CORE_ADDR real_pc)
   /* We want stop_registers, please...  */
   call_thread->control.proceed_to_finish = 1;
 
-  TRY_CATCH (e, RETURN_MASK_ALL)
-    {
-      proceed (real_pc, TARGET_SIGNAL_0, 0);
+  if (target_can_async_p ())
+    saved_async = target_async_mask (0);
 
-      /* Inferior function calls are always synchronous, even if the
-	 target supports asynchronous execution.  Do here what
-	 `proceed' itself does in sync mode.  */
-      if (target_can_async_p () && is_running (inferior_ptid))
-	{
-	  wait_for_inferior ();
-	  normal_stop ();
-	}
-    }
+  TRY_CATCH (e, RETURN_MASK_ALL)
+    proceed (real_pc, TARGET_SIGNAL_0, 0);
 
   /* At this point the current thread may have changed.  Refresh
      CALL_THREAD as it could be invalid if its thread has exited.  */
   call_thread = find_thread_ptid (call_thread_ptid);
+
+  /* Don't restore the async mask if the target has changed,
+     saved_async is for the original target.  */
+  if (saved_async
+      && strcmp (saved_target_shortname, target_shortname) == 0)
+    target_async_mask (saved_async);
 
   enable_watchpoints_after_interactive_call_stop ();
 
@@ -432,6 +432,8 @@ run_inferior_call (struct thread_info *call_thread, CORE_ADDR real_pc)
 
   if (call_thread != NULL)
     call_thread->control.in_infcall = saved_in_infcall;
+
+  xfree (saved_target_shortname);
 
   return e;
 }
@@ -492,9 +494,6 @@ call_function_by_hand (struct value *function, int nargs, struct value **args)
 
   if (get_traceframe_number () >= 0)
     error (_("May not call functions while looking at trace frames."));
-
-  if (execution_direction == EXEC_REVERSE)
-    error (_("Cannot call functions in reverse mode."));
 
   frame = get_current_frame ();
   gdbarch = get_frame_arch (frame);

@@ -33,7 +33,7 @@
 #include "cli/cli-script.h"     /* for reset_command_nest_depth */
 #include "main.h"
 #include "gdbthread.h"
-#include "continuations.h"
+
 #include "gdbcmd.h"		/* for dont_repeat() */
 
 /* readline include files.  */
@@ -520,6 +520,8 @@ command_line_handler (char *rl)
   static unsigned linelength = 0;
   char *p;
   char *p1;
+  extern char *line;
+  extern int linesize;
   char *nline;
   char got_eof = 0;
 
@@ -659,7 +661,7 @@ command_line_handler (char *rl)
      previous command, return the value in the global buffer.  */
   if (repeat && p == linebuffer && *p != '\\')
     {
-      command_handler (saved_command_line);
+      command_handler (line);
       display_gdb_prompt (0);
       return;
     }
@@ -667,7 +669,7 @@ command_line_handler (char *rl)
   for (p1 = linebuffer; *p1 == ' ' || *p1 == '\t'; p1++);
   if (repeat && !*p1)
     {
-      command_handler (saved_command_line);
+      command_handler (line);
       display_gdb_prompt (0);
       return;
     }
@@ -691,15 +693,15 @@ command_line_handler (char *rl)
   /* Save into global buffer if appropriate.  */
   if (repeat)
     {
-      if (linelength > saved_command_line_size)
+      if (linelength > linesize)
 	{
-	  saved_command_line = xrealloc (saved_command_line, linelength);
-	  saved_command_line_size = linelength;
+	  line = xrealloc (line, linelength);
+	  linesize = linelength;
 	}
-      strcpy (saved_command_line, linebuffer);
+      strcpy (line, linebuffer);
       if (!more_to_come)
 	{
-	  command_handler (saved_command_line);
+	  command_handler (line);
 	  display_gdb_prompt (0);
 	}
       return;

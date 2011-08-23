@@ -33,7 +33,6 @@ struct blockvector;
 struct axs_value;
 struct agent_expr;
 struct program_space;
-struct language_defn;
 
 /* Some of the structures in this file are space critical.
    The space-critical structures are:
@@ -396,27 +395,25 @@ typedef enum domain_enum_tag
 
   /* LABEL_DOMAIN may be used for names of labels (for gotos).  */
 
-  LABEL_DOMAIN
-} domain_enum;
+  LABEL_DOMAIN,
 
-/* Searching domains, used for `search_symbols'.  Element numbers are
-   hardcoded in GDB, check all enum uses before changing it.  */
+  /* Searching domains.  These overlap with VAR_DOMAIN, providing
+     some granularity with the search_symbols function.  */
 
-enum search_domain
-{
   /* Everything in VAR_DOMAIN minus FUNCTIONS_DOMAIN and
      TYPES_DOMAIN.  */
-  VARIABLES_DOMAIN = 0,
+  VARIABLES_DOMAIN,
 
   /* All functions -- for some reason not methods, though.  */
-  FUNCTIONS_DOMAIN = 1,
+  FUNCTIONS_DOMAIN,
 
   /* All defined types */
-  TYPES_DOMAIN = 2,
+  TYPES_DOMAIN,
 
   /* Any type.  */
-  ALL_DOMAIN = 3
-};
+  ALL_DOMAIN
+}
+domain_enum;
 
 /* An address-class says where to find the value of a symbol.  */
 
@@ -792,6 +789,23 @@ struct symtab
 
   char *dirname;
 
+  /* This component says how to free the data we point to:
+     free_nothing => do nothing; some other symtab will free
+     the data this one uses.
+     free_linetable => free just the linetable.  FIXME: Is this redundant
+     with the primary field?  */
+
+  enum free_code
+  {
+    free_nothing, free_linetable
+  }
+  free_code;
+
+  /* A function to call to free space, if necessary.  This is IN
+     ADDITION to the action indicated by free_code.  */
+
+  void (*free_func)(struct symtab *symtab);
+
   /* Total number of lines found in source file.  */
 
   int nlines;
@@ -811,11 +825,11 @@ struct symtab
      for automated testing of gdb but may also be information that is
      useful to the user.  */
 
-  const char *debugformat;
+  char *debugformat;
 
   /* String of producer version information.  May be zero.  */
 
-  const char *producer;
+  char *producer;
 
   /* Full name of file as found by searching the source path.
      NULL if not yet known.  */
@@ -847,6 +861,10 @@ struct symtab
 #define VTBL_FNADDR_OFFSET 2
 
 /* External variables and functions for the objects described above.  */
+
+/* See the comment in symfile.c about how current_objfile is used.  */
+
+extern struct objfile *current_objfile;
 
 /* True if we are nested inside psymtab_to_symtab.  */
 
@@ -918,9 +936,6 @@ extern struct symbol *lookup_symbol_aux_block (const char *name,
 					       const struct block *block,
 					       const domain_enum domain);
 
-extern struct symbol *lookup_language_this (const struct language_defn *lang,
-					    const struct block *block);
-
 /* Lookup a symbol only in the file static scope of all the objfiles.  */
 
 struct symbol *lookup_static_symbol_aux (const char *name,
@@ -934,11 +949,11 @@ extern struct symbol *lookup_block_symbol (const struct block *, const char *,
 
 /* lookup a [struct, union, enum] by name, within a specified block.  */
 
-extern struct type *lookup_struct (const char *, struct block *);
+extern struct type *lookup_struct (char *, struct block *);
 
-extern struct type *lookup_union (const char *, struct block *);
+extern struct type *lookup_union (char *, struct block *);
 
-extern struct type *lookup_enum (const char *, struct block *);
+extern struct type *lookup_enum (char *, struct block *);
 
 /* from blockframe.c: */
 
@@ -1013,13 +1028,6 @@ extern struct minimal_symbol *prim_record_minimal_symbol_and_info
 extern unsigned int msymbol_hash_iw (const char *);
 
 extern unsigned int msymbol_hash (const char *);
-
-/* Compute the next hash value from previous HASH and the character C.  This
-   is only a GDB in-memory computed value with no external files compatibility
-   requirements.  */
-
-#define SYMBOL_HASH_NEXT(hash, c) \
-  ((hash) * 67 + tolower ((unsigned char) (c)) - 113)
 
 extern struct objfile * msymbol_objfile (struct minimal_symbol *sym);
 
@@ -1182,6 +1190,8 @@ void maintenance_check_symtabs (char *, int);
 
 void maintenance_print_statistics (char *, int);
 
+extern void free_symtab (struct symtab *);
+
 /* Symbol-reading stuff in symfile.c and solib.c.  */
 
 extern void clear_solib (void);
@@ -1192,7 +1202,6 @@ extern int identify_source_line (struct symtab *, int, int, CORE_ADDR);
 
 extern void print_source_lines (struct symtab *, int, int, int);
 
-extern void forget_cached_source_info_for_objfile (struct objfile *);
 extern void forget_cached_source_info (void);
 
 extern void select_source_symtab (struct symtab *);
@@ -1263,7 +1272,7 @@ struct symbol_search
   struct symbol_search *next;
 };
 
-extern void search_symbols (char *, enum search_domain, int, char **,
+extern void search_symbols (char *, domain_enum, int, char **,
 			    struct symbol_search **);
 extern void free_search_symbols (struct symbol_search *);
 extern struct cleanup *make_cleanup_free_search_symbols (struct symbol_search

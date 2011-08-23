@@ -328,8 +328,7 @@ enum
 enum arm_st_branch_type {
   ST_BRANCH_TO_ARM,
   ST_BRANCH_TO_THUMB,
-  ST_BRANCH_LONG,
-  ST_BRANCH_UNKNOWN
+  ST_BRANCH_LONG
 };
 
 #define ARM_SYM_BRANCH_TYPE(SYM) \

@@ -8,11 +8,10 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: bug-binutils@gnu.org\n"
-"POT-Creation-Date: 2011-06-02 14:30+0100\n"
+"POT-Creation-Date: 2010-11-05 10:27+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
-"Language: \n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -111,23 +110,23 @@ msgstr ""
 msgid "must specify .jd or no nullify suffix"
 msgstr ""
 
-#: arm-dis.c:1994
+#: arm-dis.c:1990
 msgid "<illegal precision>"
 msgstr ""
 
 #. XXX - should break 'option' at following delimiter.
-#: arm-dis.c:4376
+#: arm-dis.c:4357
 #, c-format
 msgid "Unrecognised register name set: %s\n"
 msgstr ""
 
 #. XXX - should break 'option' at following delimiter.
-#: arm-dis.c:4384
+#: arm-dis.c:4365
 #, c-format
 msgid "Unrecognised disassembler option: %s\n"
 msgstr ""
 
-#: arm-dis.c:4976
+#: arm-dis.c:4950
 #, c-format
 msgid ""
 "\n"
@@ -135,17 +134,17 @@ msgid ""
 "the -M switch:\n"
 msgstr ""
 
-#: avr-dis.c:115 avr-dis.c:135
+#: avr-dis.c:115 avr-dis.c:125
 #, c-format
 msgid "undefined"
 msgstr ""
 
-#: avr-dis.c:197
+#: avr-dis.c:187
 #, c-format
 msgid "Internal disassembler error"
 msgstr ""
 
-#: avr-dis.c:250
+#: avr-dis.c:236
 #, c-format
 msgid "unknown constraint `%c'"
 msgstr ""
@@ -380,11 +379,11 @@ msgstr ""
 msgid "%02x\t\t*unknown*"
 msgstr ""
 
-#: i386-dis.c:10774
+#: i386-dis.c:10671
 msgid "<internal disassembler error>"
 msgstr ""
 
-#: i386-dis.c:11071
+#: i386-dis.c:10968
 #, c-format
 msgid ""
 "\n"
@@ -393,126 +392,126 @@ msgid ""
 "with the -M switch (multiple options should be separated by commas):\n"
 msgstr ""
 
-#: i386-dis.c:11075
+#: i386-dis.c:10972
 #, c-format
 msgid "  x86-64      Disassemble in 64bit mode\n"
 msgstr ""
 
-#: i386-dis.c:11076
+#: i386-dis.c:10973
 #, c-format
 msgid "  i386        Disassemble in 32bit mode\n"
 msgstr ""
 
-#: i386-dis.c:11077
+#: i386-dis.c:10974
 #, c-format
 msgid "  i8086       Disassemble in 16bit mode\n"
 msgstr ""
 
-#: i386-dis.c:11078
+#: i386-dis.c:10975
 #, c-format
 msgid "  att         Display instruction in AT&T syntax\n"
 msgstr ""
 
-#: i386-dis.c:11079
+#: i386-dis.c:10976
 #, c-format
 msgid "  intel       Display instruction in Intel syntax\n"
 msgstr ""
 
-#: i386-dis.c:11080
+#: i386-dis.c:10977
 #, c-format
 msgid ""
 "  att-mnemonic\n"
 "              Display instruction in AT&T mnemonic\n"
 msgstr ""
 
-#: i386-dis.c:11082
+#: i386-dis.c:10979
 #, c-format
 msgid ""
 "  intel-mnemonic\n"
 "              Display instruction in Intel mnemonic\n"
 msgstr ""
 
-#: i386-dis.c:11084
+#: i386-dis.c:10981
 #, c-format
 msgid "  addr64      Assume 64bit address size\n"
 msgstr ""
 
-#: i386-dis.c:11085
+#: i386-dis.c:10982
 #, c-format
 msgid "  addr32      Assume 32bit address size\n"
 msgstr ""
 
-#: i386-dis.c:11086
+#: i386-dis.c:10983
 #, c-format
 msgid "  addr16      Assume 16bit address size\n"
 msgstr ""
 
-#: i386-dis.c:11087
+#: i386-dis.c:10984
 #, c-format
 msgid "  data32      Assume 32bit data size\n"
 msgstr ""
 
-#: i386-dis.c:11088
+#: i386-dis.c:10985
 #, c-format
 msgid "  data16      Assume 16bit data size\n"
 msgstr ""
 
-#: i386-dis.c:11089
+#: i386-dis.c:10986
 #, c-format
 msgid "  suffix      Always display instruction suffix in AT&T syntax\n"
 msgstr ""
 
-#: i386-gen.c:467 ia64-gen.c:307
+#: i386-gen.c:459 ia64-gen.c:307
 #, c-format
 msgid "%s: Error: "
 msgstr ""
 
-#: i386-gen.c:599
+#: i386-gen.c:591
 #, c-format
 msgid "%s: %d: Unknown bitfield: %s\n"
 msgstr ""
 
-#: i386-gen.c:601
+#: i386-gen.c:593
 #, c-format
 msgid "Unknown bitfield: %s\n"
 msgstr ""
 
-#: i386-gen.c:657
+#: i386-gen.c:649
 #, c-format
 msgid "%s: %d: Missing `)' in bitfield: %s\n"
 msgstr ""
 
-#: i386-gen.c:922
+#: i386-gen.c:914
 #, c-format
 msgid "can't find i386-opc.tbl for reading, errno = %s\n"
 msgstr ""
 
-#: i386-gen.c:1053
+#: i386-gen.c:1045
 #, c-format
 msgid "can't find i386-reg.tbl for reading, errno = %s\n"
 msgstr ""
 
-#: i386-gen.c:1130
+#: i386-gen.c:1122
 #, c-format
 msgid "can't create i386-init.h, errno = %s\n"
 msgstr ""
 
-#: i386-gen.c:1219 ia64-gen.c:2820
+#: i386-gen.c:1211 ia64-gen.c:2820
 #, c-format
 msgid "unable to change directory to \"%s\", errno = %s\n"
 msgstr ""
 
-#: i386-gen.c:1226
+#: i386-gen.c:1218
 #, c-format
 msgid "%d unused bits in i386_cpu_flags.\n"
 msgstr ""
 
-#: i386-gen.c:1233
+#: i386-gen.c:1225
 #, c-format
 msgid "%d unused bits in i386_operand_type.\n"
 msgstr ""
 
-#: i386-gen.c:1247
+#: i386-gen.c:1239
 #, c-format
 msgid "can't create i386-tbl.h, errno = %s\n"
 msgstr ""
@@ -830,26 +829,26 @@ msgstr ""
 msgid "Value is not aligned enough"
 msgstr ""
 
-#: mips-dis.c:845
+#: mips-dis.c:841
 msgid "# internal error, incomplete extension sequence (+)"
 msgstr ""
 
-#: mips-dis.c:1011
+#: mips-dis.c:975
 #, c-format
 msgid "# internal error, undefined extension sequence (+%c)"
 msgstr ""
 
-#: mips-dis.c:1371
+#: mips-dis.c:1335
 #, c-format
 msgid "# internal error, undefined modifier (%c)"
 msgstr ""
 
-#: mips-dis.c:1975
+#: mips-dis.c:1939
 #, c-format
 msgid "# internal disassembler error, unrecognised modifier (%c)"
 msgstr ""
 
-#: mips-dis.c:2213
+#: mips-dis.c:2177
 #, c-format
 msgid ""
 "\n"
@@ -857,7 +856,7 @@ msgid ""
 "with the -M switch (multiple options should be separated by commas):\n"
 msgstr ""
 
-#: mips-dis.c:2217
+#: mips-dis.c:2181
 #, c-format
 msgid ""
 "\n"
@@ -865,7 +864,7 @@ msgid ""
 "                           Default: based on binary being disassembled.\n"
 msgstr ""
 
-#: mips-dis.c:2221
+#: mips-dis.c:2185
 #, c-format
 msgid ""
 "\n"
@@ -873,7 +872,7 @@ msgid ""
 "                           Default: numeric.\n"
 msgstr ""
 
-#: mips-dis.c:2225
+#: mips-dis.c:2189
 #, c-format
 msgid ""
 "\n"
@@ -882,7 +881,7 @@ msgid ""
 "                           Default: based on binary being disassembled.\n"
 msgstr ""
 
-#: mips-dis.c:2230
+#: mips-dis.c:2194
 #, c-format
 msgid ""
 "\n"
@@ -891,7 +890,7 @@ msgid ""
 "                           Default: based on binary being disassembled.\n"
 msgstr ""
 
-#: mips-dis.c:2235
+#: mips-dis.c:2199
 #, c-format
 msgid ""
 "\n"
@@ -899,7 +898,7 @@ msgid ""
 "                           specified ABI.\n"
 msgstr ""
 
-#: mips-dis.c:2239
+#: mips-dis.c:2203
 #, c-format
 msgid ""
 "\n"
@@ -907,7 +906,7 @@ msgid ""
 "                           specified architecture.\n"
 msgstr ""
 
-#: mips-dis.c:2243
+#: mips-dis.c:2207
 #, c-format
 msgid ""
 "\n"
@@ -915,12 +914,12 @@ msgid ""
 "   "
 msgstr ""
 
-#: mips-dis.c:2248 mips-dis.c:2256 mips-dis.c:2258
+#: mips-dis.c:2212 mips-dis.c:2220 mips-dis.c:2222
 #, c-format
 msgid "\n"
 msgstr ""
 
-#: mips-dis.c:2250
+#: mips-dis.c:2214
 #, c-format
 msgid ""
 "\n"
@@ -995,43 +994,43 @@ msgid ""
 "the -M switch:\n"
 msgstr ""
 
-#: ppc-opc.c:879 ppc-opc.c:907
+#: ppc-opc.c:878 ppc-opc.c:906
 msgid "invalid conditional option"
 msgstr ""
 
-#: ppc-opc.c:909
+#: ppc-opc.c:908
 msgid "attempt to set y bit when using + or - modifier"
 msgstr ""
 
-#: ppc-opc.c:941
+#: ppc-opc.c:940
 msgid "invalid mask field"
 msgstr ""
 
-#: ppc-opc.c:967
+#: ppc-opc.c:966
 msgid "ignoring invalid mfcr mask"
 msgstr ""
 
-#: ppc-opc.c:1017 ppc-opc.c:1052
+#: ppc-opc.c:1016 ppc-opc.c:1051
 msgid "illegal bitmask"
 msgstr ""
 
-#: ppc-opc.c:1172
+#: ppc-opc.c:1171
 msgid "index register in load range"
 msgstr ""
 
-#: ppc-opc.c:1188
+#: ppc-opc.c:1187
 msgid "source and target register operands must be different"
 msgstr ""
 
-#: ppc-opc.c:1203
+#: ppc-opc.c:1202
 msgid "invalid register operand when updating"
 msgstr ""
 
-#: ppc-opc.c:1282
+#: ppc-opc.c:1281
 msgid "invalid sprg number"
 msgstr ""
 
-#: ppc-opc.c:1452
+#: ppc-opc.c:1451
 msgid "invalid constant"
 msgstr ""
 
@@ -1078,12 +1077,12 @@ msgstr ""
 msgid "unknown"
 msgstr ""
 
-#: v850-dis.c:372
+#: v850-dis.c:365
 #, c-format
 msgid "unknown operand shift: %x\n"
 msgstr ""
 
-#: v850-dis.c:384
+#: v850-dis.c:377
 #, c-format
 msgid "unknown reg: %d\n"
 msgstr ""

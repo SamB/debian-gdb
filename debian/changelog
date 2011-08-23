@@ -1,3 +1,41 @@
+gdb (7.3-1) unstable; urgency=low
+
+  * New upstream release, including:
+    - Initial OpenCL C language support has been added
+    - C++ enhancements:
+       * Template parameters are now in scope when debugging in an
+         instantiation
+       * The motion commands "next", "finish", "until", and "advance" now
+         work better when exceptions are thrown
+    - Improved Python support, enhancing the existing APIs as well as
+      introducing new ones.
+    - Improved thread debugging support:
+       * GDB now understands thread names
+       * A new command "thread find [REGEXP]" has been added
+    - GDBserver enhancements:
+       * Support for PowerPC LynxOS (versions 4.x and 5.x) and i686 LynxOS
+         (version 5.x)
+       * Support for Blackfin Linux
+    - Support for reading and writing a new .gdb_index section,
+      containing a fast index of DWARF debugging info
+    - Various GDB/MI improvements
+    - Support for ia64 HP-UX (ia64-*-hpux*) has been added
+    - Target support for Analog Devices, Inc. Blackfin Processors (bfin-*)
+    - GNU simulator improvements:
+       * New --map-info flag
+       * CFI flash simulation support
+    - Other worthy improvments (in random order):
+      * The "catch syscall" command is now available on mips-linux.
+      * New GDB Commands: "set directories"
+      * Support for using labels in linespecs (Eg you can use "advance label")
+      * The "watch" command now accepts an optional "-location" argument
+      * Thread debugging of core dumps now supported on GNU/Linux
+      * Ranged breakpoints support (PowerPC BookE running Linux 2.6.34 or later)
+      * Support for Ada task switching inside programs using the Ravenscar profile
+    - See gdb/NEWS for more detailed information.  
+
+ -- Hector Oron <zumbi@debian.org>  Tue, 23 Aug 2011 11:13:36 +0100
+
 gdb (7.3.50~cvs20110627-2) experimental; urgency=low
 
   * Restrict prelink build depend to linux-any architectures.

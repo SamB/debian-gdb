@@ -1,12 +1,11 @@
-2011-05-11  Jan Kratochvil  <jan.kratochvil@redhat.com>
+2011-06-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
-	Workaround gdb.base/completion.exp regression on readline-6.2.
-	* complete.c (get_y_or_n): Disable the return on RL_STATE_CALLBACK.
-
-2011-05-11  Jan Kratochvil  <jan.kratochvil@redhat.com>
-
-	Imported readline 6.2, and upstream patch 001.
-	* configure: Regenerate.
+	Avoid free from a signal handler.
+	* Makefile.in (xmalloc.o): Add readline.h.
+	* xmalloc.c: Include readline.h.
+	(xmalloc, xrealloc): Disable them by #if 0.
+	(xfree): Return on RL_STATE_SIGHANDLER, #undef free.
+	* xmalloc.h (xfree, free): New definition.
 
 2011-03-04  Michael Snyder  <msnyder@vmware.com>
 

@@ -1311,7 +1311,8 @@ delete_non_B_K_work_stuff (struct work_stuff *work)
       int i;
 
       for (i = 0; i < work->ntmpl_args; i++)
-	free ((char*) work->tmpl_argvec[i]);
+	if (work->tmpl_argvec[i])
+	  free ((char*) work->tmpl_argvec[i]);
 
       free ((char*) work->tmpl_argvec);
       work->tmpl_argvec = NULL;

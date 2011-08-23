@@ -1819,7 +1819,7 @@ amd64_emit_const (LONGEST num)
 
   i = 0;
   buf[i++] = 0x48;  buf[i++] = 0xb8; /* mov $<n>,%rax */
-  memcpy (&buf[i], &num, sizeof (num));
+  *((LONGEST *) (&buf[i])) = num;
   i += 8;
   append_insns (&buildaddr, i, buf);
   current_insn_ptr = buildaddr;
@@ -1876,7 +1876,7 @@ amd64_emit_reg (int reg)
   buildaddr = current_insn_ptr;
   i = 0;
   buf[i++] = 0xbe; /* mov $<n>,%esi */
-  memcpy (&buf[i], &reg, sizeof (reg));
+  *((int *) (&buf[i])) = reg;
   i += 4;
   append_insns (&buildaddr, i, buf);
   current_insn_ptr = buildaddr;
@@ -1959,7 +1959,7 @@ amd64_emit_int_call_1 (CORE_ADDR fn, int arg1)
   buildaddr = current_insn_ptr;
   i = 0;
   buf[i++] = 0xbf; /* movl $<n>,%edi */
-  memcpy (&buf[i], &arg1, sizeof (arg1));
+  *((int *) (&buf[i])) = arg1;
   i += 4;
   append_insns (&buildaddr, i, buf);
   current_insn_ptr = buildaddr;
@@ -1978,7 +1978,7 @@ amd64_emit_void_call_2 (CORE_ADDR fn, int arg1)
   buildaddr = current_insn_ptr;
   i = 0;
   buf[i++] = 0xbf; /* movl $<n>,%edi */
-  memcpy (&buf[i], &arg1, sizeof (arg1));
+  *((int *) (&buf[i])) = arg1;
   i += 4;
   append_insns (&buildaddr, i, buf);
   current_insn_ptr = buildaddr;
@@ -2301,19 +2301,18 @@ static void
 i386_emit_const (LONGEST num)
 {
   unsigned char buf[16];
-  int i, hi, lo;
+  int i, hi;
   CORE_ADDR buildaddr = current_insn_ptr;
 
   i = 0;
   buf[i++] = 0xb8; /* mov $<n>,%eax */
-  lo = num & 0xffffffff;
-  memcpy (&buf[i], &lo, sizeof (lo));
+  *((int *) (&buf[i])) = (num & 0xffffffff);
   i += 4;
   hi = ((num >> 32) & 0xffffffff);
   if (hi)
     {
       buf[i++] = 0xbb; /* mov $<n>,%ebx */
-      memcpy (&buf[i], &hi, sizeof (hi));
+      *((int *) (&buf[i])) = hi;
       i += 4;
     }
   else
@@ -2352,7 +2351,7 @@ i386_emit_reg (int reg)
   buildaddr = current_insn_ptr;
   i = 0;
   buf[i++] = 0xb8; /* mov $<n>,%eax */
-  memcpy (&buf[i], &reg, sizeof (reg));
+  *((int *) (&buf[i])) = reg;
   i += 4;
   append_insns (&buildaddr, i, buf);
   current_insn_ptr = buildaddr;
@@ -2452,7 +2451,7 @@ i386_emit_int_call_1 (CORE_ADDR fn, int arg1)
   buf[i++] = 0xc7;  /* movl $<arg1>,(%esp) */
   buf[i++] = 0x04;
   buf[i++] = 0x24;
-  memcpy (&buf[i], &arg1, sizeof (arg1));
+  *((int *) (&buf[i])) = arg1;
   i += 4;
   append_insns (&buildaddr, i, buf);
   current_insn_ptr = buildaddr;
@@ -2487,7 +2486,7 @@ i386_emit_void_call_2 (CORE_ADDR fn, int arg1)
   buf[i++] = 0xc7;  /* movl $<arg1>,(%esp) */
   buf[i++] = 0x04;
   buf[i++] = 0x24;
-  memcpy (&buf[i], &arg1, sizeof (arg1));
+  *((int *) (&buf[i])) = arg1;
   i += 4;
   append_insns (&buildaddr, i, buf);
   current_insn_ptr = buildaddr;

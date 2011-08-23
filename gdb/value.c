@@ -2388,7 +2388,7 @@ value_static_field (struct type *type, int fieldno)
       break;
     case FIELD_LOC_KIND_PHYSNAME:
     {
-      const char *phys_name = TYPE_FIELD_STATIC_PHYSNAME (type, fieldno);
+      char *phys_name = TYPE_FIELD_STATIC_PHYSNAME (type, fieldno);
       /* TYPE_FIELD_NAME (type, fieldno); */
       struct symbol *sym = lookup_symbol (phys_name, 0, VAR_DOMAIN, 0);
 
@@ -2559,7 +2559,7 @@ value_fn_field (struct value **arg1p, struct fn_field *f,
 {
   struct value *v;
   struct type *ftype = TYPE_FN_FIELD_TYPE (f, j);
-  const char *physname = TYPE_FN_FIELD_PHYSNAME (f, j);
+  char *physname = TYPE_FN_FIELD_PHYSNAME (f, j);
   struct symbol *sym;
   struct minimal_symbol *msym;
 
@@ -2963,19 +2963,6 @@ value_from_contents_and_address (struct type *type,
   set_value_address (v, address);
   VALUE_LVAL (v) = lval_memory;
   return v;
-}
-
-/* Create a value of type TYPE holding the contents CONTENTS.
-   The new value is `not_lval'.  */
-
-struct value *
-value_from_contents (struct type *type, const gdb_byte *contents)
-{
-  struct value *result;
-
-  result = allocate_value (type);
-  memcpy (value_contents_raw (result), contents, TYPE_LENGTH (type));
-  return result;
 }
 
 struct value *

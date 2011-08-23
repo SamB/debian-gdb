@@ -150,8 +150,7 @@ fnpy_call (struct gdbarch *gdbarch, const struct language_defn *language,
 static int
 fnpy_init (PyObject *self, PyObject *args, PyObject *kwds)
 {
-  const char *name;
-  char *docstring = NULL;
+  char *name, *docstring = NULL;
 
   if (! PyArg_ParseTuple (args, "s", &name))
     return -1;

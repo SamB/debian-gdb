@@ -353,14 +353,6 @@ no_dwarf_call (struct dwarf_expr_context *ctx, size_t die_offset)
 		  _("Support for DW_OP_call* is invalid in CFI"));
 }
 
-/* Helper function for execute_stack_op.  */
-
-static struct type *
-no_base_type (struct dwarf_expr_context *ctx, size_t die)
-{
-  error (_("Support for typed DWARF is not supported in CFI"));
-}
-
 /* Execute the required actions for both the DW_CFA_restore and
 DW_CFA_restore_extended instructions.  */
 static void
@@ -402,7 +394,6 @@ execute_stack_op (const gdb_byte *exp, ULONGEST len, int addr_size,
 
   ctx = new_dwarf_expr_context ();
   old_chain = make_cleanup_free_dwarf_expr_context (ctx);
-  make_cleanup_value_free_to_mark (value_mark ());
 
   ctx->gdbarch = get_frame_arch (this_frame);
   ctx->addr_size = addr_size;
@@ -415,15 +406,14 @@ execute_stack_op (const gdb_byte *exp, ULONGEST len, int addr_size,
   ctx->get_frame_pc = no_get_frame_pc;
   ctx->get_tls_address = no_get_tls_address;
   ctx->dwarf_call = no_dwarf_call;
-  ctx->get_base_type = no_base_type;
 
-  dwarf_expr_push_address (ctx, initial, initial_in_stack_memory);
+  dwarf_expr_push (ctx, initial, initial_in_stack_memory);
   dwarf_expr_eval (ctx, exp, len);
 
   if (ctx->location == DWARF_VALUE_MEMORY)
     result = dwarf_expr_fetch_address (ctx, 0);
   else if (ctx->location == DWARF_VALUE_REGISTER)
-    result = read_reg (this_frame, value_as_long (dwarf_expr_fetch (ctx, 0)));
+    result = read_reg (this_frame, dwarf_expr_fetch (ctx, 0));
   else
     {
       /* This is actually invalid DWARF, but if we ever do run across
@@ -2183,6 +2173,12 @@ Corrupt data in %s:%s; align 8 workaround apparently succeeded"),
   return ret;
 }
 
+
+/* Imported from dwarf2read.c.  */
+extern void dwarf2_get_section_info (struct objfile *, const char *,
+				     asection **, gdb_byte **,
+				     bfd_size_type *);
+
 static int
 qsort_fde_cmp (const void *a, const void *b)
 {
@@ -2227,7 +2223,7 @@ dwarf2_build_frame_info (struct objfile *objfile)
   unit->dbase = 0;
   unit->tbase = 0;
 
-  dwarf2_get_section_info (objfile, DWARF2_EH_FRAME,
+  dwarf2_get_section_info (objfile, ".eh_frame",
                            &unit->dwarf_frame_section,
                            &unit->dwarf_frame_buffer,
                            &unit->dwarf_frame_size);
@@ -2263,7 +2259,7 @@ dwarf2_build_frame_info (struct objfile *objfile)
         }
     }
 
-  dwarf2_get_section_info (objfile, DWARF2_DEBUG_FRAME,
+  dwarf2_get_section_info (objfile, ".debug_frame",
                            &unit->dwarf_frame_section,
                            &unit->dwarf_frame_buffer,
                            &unit->dwarf_frame_size);

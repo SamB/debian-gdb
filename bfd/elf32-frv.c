@@ -1,5 +1,5 @@
 /* FRV-specific support for 32-bit ELF.
-   Copyright 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+   Copyright 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -2884,9 +2884,8 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 						      osec, sym,
 						      rel->r_addend))
 	    {
-	      info->callbacks->einfo
-		(_("%H: relocation to `%s+%v'"
-		   " may have caused the error above\n"),
+	      (*_bfd_error_handler)
+		(_("%B(%A+0x%x): relocation to `%s+%x' may have caused the error above"),
 		 input_bfd, input_section, rel->r_offset, name, rel->r_addend);
 	      return FALSE;
 	    }
@@ -2898,10 +2897,9 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 	  picrel = NULL;
 	  if (h && ! FRVFDPIC_SYM_LOCAL (info, h))
 	    {
-	      info->callbacks->einfo
-		(_("%H: relocation references symbol"
-		   " not defined in the module\n"),
-		 input_bfd, input_section, rel->r_offset);
+	      info->callbacks->warning
+		(info, _("relocation references symbol not defined in the module"),
+		 name, input_bfd, input_section, rel->r_offset);
 	      return FALSE;
 	    }
 	  break;
@@ -2974,9 +2972,10 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 	    /* Is this a call instruction?  */
 	    if ((insn & (unsigned long)0x01fc0000) != 0x003c0000)
 	      {
-		info->callbacks->einfo
-		  (_("%H: R_FRV_GETTLSOFF not applied to a call instruction\n"),
-		   input_bfd, input_section, rel->r_offset);
+		r = info->callbacks->warning
+		  (info,
+		   _("R_FRV_GETTLSOFF not applied to a call instruction"),
+		   name, input_bfd, input_section, rel->r_offset);
 		return FALSE;
 	      }
 
@@ -3015,10 +3014,10 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 	    /* Is this an lddi instruction?  */
 	    if ((insn & (unsigned long)0x01fc0000) != 0x00cc0000)
 	      {
-		info->callbacks->einfo
-		  (_("%H: R_FRV_GOTTLSDESC12"
-		     " not applied to an lddi instruction\n"),
-		   input_bfd, input_section, rel->r_offset);
+		r = info->callbacks->warning
+		  (info,
+		   _("R_FRV_GOTTLSDESC12 not applied to an lddi instruction"),
+		   name, input_bfd, input_section, rel->r_offset);
 		return FALSE;
 	      }
 
@@ -3086,10 +3085,10 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 	    /* Is this a sethi instruction?  */
 	    if ((insn & (unsigned long)0x01ff0000) != 0x00f80000)
 	      {
-		info->callbacks->einfo
-		  (_("%H: R_FRV_GOTTLSDESCHI"
-		     " not applied to a sethi instruction\n"),
-		   input_bfd, input_section, rel->r_offset);
+		r = info->callbacks->warning
+		  (info,
+		   _("R_FRV_GOTTLSDESCHI not applied to a sethi instruction"),
+		   name, input_bfd, input_section, rel->r_offset);
 		return FALSE;
 	      }
 
@@ -3123,10 +3122,11 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 	    /* Is this a setlo or setlos instruction?  */
 	    if ((insn & (unsigned long)0x01f70000) != 0x00f40000)
 	      {
-		info->callbacks->einfo
-		  (_("%H: R_FRV_GOTTLSDESCLO"
-		     " not applied to a setlo or setlos instruction\n"),
-		   input_bfd, input_section, rel->r_offset);
+		r = info->callbacks->warning
+		  (info,
+		   _("R_FRV_GOTTLSDESCLO"
+		     " not applied to a setlo or setlos instruction"),
+		   name, input_bfd, input_section, rel->r_offset);
 		return FALSE;
 	      }
 
@@ -3170,10 +3170,10 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 	    /* Is this an ldd instruction?  */
 	    if ((insn & (unsigned long)0x01fc0fc0) != 0x00080140)
 	      {
-		info->callbacks->einfo
-		  (_("%H: R_FRV_TLSDESC_RELAX"
-		     " not applied to an ldd instruction\n"),
-		   input_bfd, input_section, rel->r_offset);
+		r = info->callbacks->warning
+		  (info,
+		   _("R_FRV_TLSDESC_RELAX not applied to an ldd instruction"),
+		   name, input_bfd, input_section, rel->r_offset);
 		return FALSE;
 	      }
 
@@ -3254,10 +3254,11 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 	    /* Is this a calll or callil instruction?  */
 	    if ((insn & (unsigned long)0x7ff80fc0) != 0x02300000)
 	      {
-		info->callbacks->einfo
-		  (_("%H: R_FRV_GETTLSOFF_RELAX"
-		     " not applied to a calll instruction\n"),
-		   input_bfd, input_section, rel->r_offset);
+		r = info->callbacks->warning
+		  (info,
+		   _("R_FRV_GETTLSOFF_RELAX"
+		     " not applied to a calll instruction"),
+		   name, input_bfd, input_section, rel->r_offset);
 		return FALSE;
 	      }
 
@@ -3308,10 +3309,10 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 	    /* Is this an ldi instruction?  */
 	    if ((insn & (unsigned long)0x01fc0000) != 0x00c80000)
 	      {
-		info->callbacks->einfo
-		  (_("%H: R_FRV_GOTTLSOFF12"
-		     " not applied to an ldi instruction\n"),
-		   input_bfd, input_section, rel->r_offset);
+		r = info->callbacks->warning
+		  (info,
+		   _("R_FRV_GOTTLSOFF12 not applied to an ldi instruction"),
+		   name, input_bfd, input_section, rel->r_offset);
 		return FALSE;
 	      }
 
@@ -3338,10 +3339,10 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 	    /* Is this a sethi instruction?  */
 	    if ((insn & (unsigned long)0x01ff0000) != 0x00f80000)
 	      {
-		info->callbacks->einfo
-		  (_("%H: R_FRV_GOTTLSOFFHI"
-		     " not applied to a sethi instruction\n"),
-		   input_bfd, input_section, rel->r_offset);
+		r = info->callbacks->warning
+		  (info,
+		   _("R_FRV_GOTTLSOFFHI not applied to a sethi instruction"),
+		   name, input_bfd, input_section, rel->r_offset);
 		return FALSE;
 	      }
 
@@ -3367,10 +3368,11 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 	    /* Is this a setlo or setlos instruction?  */
 	    if ((insn & (unsigned long)0x01f70000) != 0x00f40000)
 	      {
-		info->callbacks->einfo
-		  (_("%H: R_FRV_GOTTLSOFFLO"
-		     " not applied to a setlo or setlos instruction\n"),
-		   input_bfd, input_section, rel->r_offset);
+		r = info->callbacks->warning
+		  (info,
+		   _("R_FRV_GOTTLSOFFLO"
+		     " not applied to a setlo or setlos instruction"),
+		   name, input_bfd, input_section, rel->r_offset);
 		return FALSE;
 	      }
 
@@ -3397,10 +3399,10 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 	    /* Is this an ld instruction?  */
 	    if ((insn & (unsigned long)0x01fc0fc0) != 0x00080100)
 	      {
-		info->callbacks->einfo
-		  (_("%H: R_FRV_TLSOFF_RELAX"
-		     " not applied to an ld instruction\n"),
-		   input_bfd, input_section, rel->r_offset);
+		r = info->callbacks->warning
+		  (info,
+		   _("R_FRV_TLSOFF_RELAX not applied to an ld instruction"),
+		   name, input_bfd, input_section, rel->r_offset);
 		return FALSE;
 	      }
 
@@ -3442,10 +3444,10 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 	    /* Is this a sethi instruction?  */
 	    if ((insn & (unsigned long)0x01ff0000) != 0x00f80000)
 	      {
-		info->callbacks->einfo
-		  (_("%H: R_FRV_TLSMOFFHI"
-		     " not applied to a sethi instruction\n"),
-		   input_bfd, input_section, rel->r_offset);
+		r = info->callbacks->warning
+		  (info,
+		   _("R_FRV_TLSMOFFHI not applied to a sethi instruction"),
+		   name, input_bfd, input_section, rel->r_offset);
 		return FALSE;
 	      }
 
@@ -3469,10 +3471,11 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 	    /* Is this a setlo or setlos instruction?  */
 	    if ((insn & (unsigned long)0x01f70000) != 0x00f40000)
 	      {
-		info->callbacks->einfo
-		  (_("R_FRV_TLSMOFFLO"
-		     " not applied to a setlo or setlos instruction\n"),
-		   input_bfd, input_section, rel->r_offset);
+		r = info->callbacks->warning
+		  (info,
+		   _("R_FRV_TLSMOFFLO"
+		     " not applied to a setlo or setlos instruction"),
+		   name, input_bfd, input_section, rel->r_offset);
 		return FALSE;
 	      }
 
@@ -3590,10 +3593,9 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 		  {
 		    if (addend)
 		      {
-			info->callbacks->einfo
-			  (_("%H: R_FRV_FUNCDESC references dynamic symbol"
-			     " with nonzero addend\n"),
-			   input_bfd, input_section, rel->r_offset);
+			info->callbacks->warning
+			  (info, _("R_FRV_FUNCDESC references dynamic symbol with nonzero addend"),
+			   name, input_bfd, input_section, rel->r_offset);
 			return FALSE;
 		      }
 		    dynindx = h->dynindx;
@@ -3631,10 +3633,10 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 						       input_section
 						       ->output_section))
 			  {
-			    info->callbacks->einfo
-			      (_("%H: cannot emit fixups"
-				 " in read-only section\n"),
-			       input_bfd, input_section, rel->r_offset);
+			    info->callbacks->warning
+			      (info,
+			       _("cannot emit fixups in read-only section"),
+			       name, input_bfd, input_section, rel->r_offset);
 			    return FALSE;
 			  }
 
@@ -3662,10 +3664,10 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 						   input_section
 						   ->output_section))
 		      {
-			info->callbacks->einfo
-			  (_("%H: cannot emit dynamic relocations"
-			     " in read-only section\n"),
-			   input_bfd, input_section, rel->r_offset);
+			info->callbacks->warning
+			  (info,
+			   _("cannot emit dynamic relocations in read-only section"),
+			   name, input_bfd, input_section, rel->r_offset);
 			return FALSE;
 		      }
 
@@ -3711,10 +3713,9 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 	      {
 		if (addend && r_type == R_FRV_FUNCDESC_VALUE)
 		  {
-		    info->callbacks->einfo
-		      (_("%H: R_FRV_FUNCDESC_VALUE"
-			 " references dynamic symbol with nonzero addend\n"),
-		       input_bfd, input_section, rel->r_offset);
+		    info->callbacks->warning
+		      (info, _("R_FRV_FUNCDESC_VALUE references dynamic symbol with nonzero addend"),
+		       name, input_bfd, input_section, rel->r_offset);
 		    return FALSE;
 		  }
 		dynindx = h->dynindx;
@@ -3753,9 +3754,10 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 						   input_section
 						   ->output_section))
 		      {
-			info->callbacks->einfo
-			  (_("%H: cannot emit fixups in read-only section\n"),
-			   input_bfd, input_section, rel->r_offset);
+			info->callbacks->warning
+			  (info,
+			   _("cannot emit fixups in read-only section"),
+			   name, input_bfd, input_section, rel->r_offset);
 			return FALSE;
 		      }
 		    if (!h || h->root.type != bfd_link_hash_undefweak)
@@ -3796,10 +3798,10 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 						   input_section
 						   ->output_section))
 		      {
-			info->callbacks->einfo
-			  (_("%H: cannot emit dynamic relocations"
-			     " in read-only section\n"),
-			   input_bfd, input_section, rel->r_offset);
+			info->callbacks->warning
+			  (info,
+			   _("cannot emit dynamic relocations in read-only section"),
+			   name, input_bfd, input_section, rel->r_offset);
 			return FALSE;
 		      }
 
@@ -3967,9 +3969,16 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 	      && !(picrel && picrel->symndx == -1
 		   && picrel->d.h->root.type == bfd_link_hash_undefined))
 	    {
-	      info->callbacks->einfo
-		(_("%H: reloc against `%s' references a different segment\n"),
-		 input_bfd, input_section, rel->r_offset, name);
+	      if (info->shared || info->pie)
+		(*_bfd_error_handler)
+		  (_("%B(%A+0x%lx): reloc against `%s': %s"),
+		   input_bfd, input_section, (long)rel->r_offset, name,
+		   _("relocation references a different segment"));
+	      else
+		info->callbacks->warning
+		  (info,
+		   _("relocation references a different segment"),
+		   name, input_bfd, input_section, rel->r_offset);
 	    }
 	  if (!silence_segment_error && (info->shared || info->pie))
 	    return FALSE;
@@ -4117,9 +4126,9 @@ elf32_frv_relocate_section (output_bfd, info, input_bfd, input_section,
 
 	  if (msg)
 	    {
-	      info->callbacks->einfo
-		(_("%H: reloc against `%s': %s\n"),
-		 input_bfd, input_section, rel->r_offset, name, msg);
+	      (*_bfd_error_handler)
+		(_("%B(%A+0x%lx): reloc against `%s': %s"),
+		 input_bfd, input_section, (long)rel->r_offset, name, msg);
 	      return FALSE;
 	    }
 
@@ -5873,8 +5882,8 @@ elf32_frvfdpic_finish_dynamic_sections (bfd *output_bfd,
 	      != (frvfdpic_gotfixup_section (info)->reloc_count * 4))
 	    {
 	    error:
-	      info->callbacks->einfo
-		("LINKER BUG: .rofixup section size mismatch\n");
+	      (*_bfd_error_handler)
+		("LINKER BUG: .rofixup section size mismatch");
 	      return FALSE;
 	    }
 
@@ -6393,8 +6402,8 @@ elf32_frv_check_relocs (abfd, info, sec, relocs)
 
 	default:
 	bad_reloc:
-	  info->callbacks->einfo
-	    (_("%B: unsupported relocation type %i\n"),
+	  (*_bfd_error_handler)
+	    (_("%B: unsupported relocation type %i"),
 	     abfd, ELF32_R_TYPE (rel->r_info));
 	  return FALSE;
         }

@@ -171,7 +171,7 @@ extern void address_to_signed_pointer (struct gdbarch *gdbarch,
 				       struct type *type, gdb_byte *buf,
 				       CORE_ADDR addr);
 
-extern void wait_for_inferior (void);
+extern void wait_for_inferior (int treat_exec_as_sigtrap);
 
 extern void prepare_for_detach (void);
 
@@ -187,12 +187,6 @@ extern void reopen_exec_file (void);
    Normally, use `proceed', which handles a lot of bookkeeping.  */
 
 extern void resume (int, enum target_signal);
-
-extern ptid_t user_visible_resume_ptid (int step);
-
-extern void insert_step_resume_breakpoint_at_sal (struct gdbarch *,
-						  struct symtab_and_line ,
-						  struct frame_id);
 
 /* From misc files */
 
@@ -352,13 +346,11 @@ enum stop_kind
 enum exec_direction_kind
   {
     EXEC_FORWARD,
-    EXEC_REVERSE
+    EXEC_REVERSE,
+    EXEC_ERROR
   };
 
-/* The current execution direction.  This should only be set to enum
-   exec_direction_kind values.  It is only an int to make it
-   compatible with make_cleanup_restore_integer.  */
-extern int execution_direction;
+extern enum exec_direction_kind execution_direction;
 
 /* Save register contents here when executing a "finish" command or are
    about to pop a stack dummy frame, if-and-only-if proceed_to_finish is set.

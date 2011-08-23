@@ -40,9 +40,6 @@ static int extended_protocol;
 static int response_needed;
 static int exit_requested;
 
-/* --once: Exit after the first connection has closed.  */
-int run_once;
-
 int multi_process;
 int non_stop;
 
@@ -1540,7 +1537,6 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 	  strcat (own_buf, ";StaticTracepoints+");
 	  strcat (own_buf, ";qXfer:statictrace:read+");
 	  strcat (own_buf, ";qXfer:traceframe-info:read+");
-	  strcat (own_buf, ";EnableDisableTracepoints+");
 	}
 
       return;
@@ -2316,9 +2312,7 @@ gdbserver_usage (FILE *stream)
 	   "  --debug               Enable general debugging output.\n"
 	   "  --remote-debug        Enable remote protocol debugging output.\n"
 	   "  --version             Display version information and exit.\n"
-	   "  --wrapper WRAPPER --  Run WRAPPER to start new programs.\n"
-	   "  --once                Exit after the first connection has "
-								  "closed.\n");
+	   "  --wrapper WRAPPER --  Run WRAPPER to start new programs.\n");
   if (REPORT_BUGS_TO[0] && stream == stdout)
     fprintf (stream, "Report bugs to \"%s\".\n", REPORT_BUGS_TO);
 }
@@ -2443,6 +2437,17 @@ detach_or_kill_for_exit (void)
   for_each_inferior (&all_processes, detach_or_kill_inferior_callback);
 }
 
+static void
+join_inferiors_callback (struct inferior_list_entry *entry)
+{
+  struct process_info *process = (struct process_info *) entry;
+
+  /* If we are attached, then we can exit.  Otherwise, we need to hang
+     around doing nothing, until the child is gone.  */
+  if (!process->attached)
+    join_inferior (ptid_get_pid (process->head.id));
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -2531,8 +2536,6 @@ main (int argc, char *argv[])
 		}
 	    }
 	}
-      else if (strcmp (*next_arg, "--once") == 0)
-	run_once = 1;
       else
 	{
 	  fprintf (stderr, "Unknown argument: %s\n", *next_arg);
@@ -2645,8 +2648,6 @@ main (int argc, char *argv[])
       exit (1);
     }
 
-  remote_prepare (port);
-
   while (1)
     {
       noack_mode = 0;
@@ -2675,7 +2676,7 @@ main (int argc, char *argv[])
 	 getpkt to fail; close the connection and reopen it at the
 	 top of the loop.  */
 
-      if (exit_requested || run_once)
+      if (exit_requested)
 	{
 	  detach_or_kill_for_exit ();
 	  exit (0);
@@ -2841,7 +2842,8 @@ process_serial_event (void)
 	      /* If we are attached, then we can exit.  Otherwise, we
 		 need to hang around doing nothing, until the child is
 		 gone.  */
-	      join_inferior (pid);
+	      for_each_inferior (&all_processes,
+				 join_inferiors_callback);
 	      exit (0);
 	    }
 	}

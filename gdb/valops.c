@@ -2670,7 +2670,6 @@ find_overload_match (struct type **arg_types, int nargs,
       if (func_name == NULL)
         {
 	  *symp = fsym;
-	  do_cleanups (all_cleanups);
           return 0;
         }
 
@@ -3099,16 +3098,14 @@ classify_oload_match (struct badness_vector *oload_champ_bv,
 
 /* C++: return 1 is NAME is a legitimate name for the destructor of
    type TYPE.  If TYPE does not have a destructor, or if NAME is
-   inappropriate for TYPE, an error is signaled.  Parameter TYPE should not yet
-   have CHECK_TYPEDEF applied, this function will apply it itself.  */
-
+   inappropriate for TYPE, an error is signaled.  */
 int
-destructor_name_p (const char *name, struct type *type)
+destructor_name_p (const char *name, const struct type *type)
 {
   if (name[0] == '~')
     {
-      const char *dname = type_name_no_tag_or_error (type);
-      const char *cp = strchr (dname, '<');
+      char *dname = type_name_no_tag (type);
+      char *cp = strchr (dname, '<');
       unsigned int len;
 
       /* Do not compare the template part for template classes.  */
@@ -3602,19 +3599,12 @@ value_full_object (struct value *argp,
    inappropriate context.  */
 
 struct value *
-value_of_this (const struct language_defn *lang, int complain)
+value_of_local (const char *name, int complain)
 {
-  struct symbol *sym;
+  struct symbol *func, *sym;
   struct block *b;
   struct value * ret;
   struct frame_info *frame;
-
-  if (!lang->la_name_of_this)
-    {
-      if (complain)
-	error (_("no `this' in current language"));
-      return 0;
-    }
 
   if (complain)
     frame = get_selected_frame (_("no frame selected"));
@@ -3625,22 +3615,52 @@ value_of_this (const struct language_defn *lang, int complain)
 	return 0;
     }
 
-  b = get_frame_block (frame, NULL);
+  func = get_frame_function (frame);
+  if (!func)
+    {
+      if (complain)
+	error (_("no `%s' in nameless context"), name);
+      else
+	return 0;
+    }
 
-  sym = lookup_language_this (lang, b);
+  b = SYMBOL_BLOCK_VALUE (func);
+  if (dict_empty (BLOCK_DICT (b)))
+    {
+      if (complain)
+	error (_("no args, no `%s'"), name);
+      else
+	return 0;
+    }
+
+  /* Calling lookup_block_symbol is necessary to get the LOC_REGISTER
+     symbol instead of the LOC_ARG one (if both exist).  */
+  sym = lookup_block_symbol (b, name, VAR_DOMAIN);
   if (sym == NULL)
     {
       if (complain)
 	error (_("current stack frame does not contain a variable named `%s'"),
-	       lang->la_name_of_this);
+	       name);
       else
 	return NULL;
     }
 
   ret = read_var_value (sym, frame);
   if (ret == 0 && complain)
-    error (_("`%s' argument unreadable"), lang->la_name_of_this);
+    error (_("`%s' argument unreadable"), name);
   return ret;
+}
+
+/* C++/Objective-C: return the value of the class instance variable,
+   if one exists.  Flag COMPLAIN signals an error if the request is
+   made in an inappropriate context.  */
+
+struct value *
+value_of_this (int complain)
+{
+  if (!current_language->la_name_of_this)
+    return 0;
+  return value_of_local (current_language->la_name_of_this, complain);
 }
 
 /* Create a slice (sub-string, sub-array) of ARRAY, that is LENGTH

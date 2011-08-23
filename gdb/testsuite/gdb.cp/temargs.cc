@@ -23,7 +23,6 @@ int a_global;
 struct S
 {
   int f;
-  void somefunc() { }
 };
 
 template<typename T, int I, int *P, int S::*MP>
@@ -56,12 +55,18 @@ void func ()
   // Breakpoint 3.
 }
 
-template<void (S::*F) ()>
-struct K2
+// GCC PR debug/49546
+struct S3
 {
-  void k2_m ()
+  static void m (int x) {}
+};
+template <void (*F) (int)>
+// or: template <void (F) (int)>
+struct K3
+{
+  void k3_m ()
   {
-    // Breakpoint 5.
+    F (0);	// Breakpoint 6.
   }
 };
 
@@ -71,13 +76,14 @@ int main ()
   // Note that instantiating with P==0 does not work with g++.
   // That would be worth testing, once g++ is fixed.
   Base<long, 47, &a_global, &S::f>::Inner<float> inner;
-  K2<&S::somefunc> k2;
+  K3<&S3::m> k3;
+// or: K3<S3::m> k3;
 
   base.base_m ();
   inner.inner_m ();
   func<unsigned char, 91, &a_global, &S::f> ();
   base.templ_m<short> ();
-  k2.k2_m ();
+  k3.k3_m ();
 
   return 0;
 }
