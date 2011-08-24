@@ -29,9 +29,11 @@ Forwarded: <no|not-needed|url proving that it has been forwarded>
 Reviewed-By: <name and email of someone who approved the patch>
 Last-Update: <YYYY-MM-DD>
 
---- gdb-7.3.50~cvs20110627.orig/gdb/main.c
-+++ gdb-7.3.50~cvs20110627/gdb/main.c
-@@ -815,7 +815,7 @@ captured_main (void *data)
+Index: gdb-7.4/gdb/main.c
+===================================================================
+--- gdb-7.4.orig/gdb/main.c	2011-11-17 15:58:35.000000000 +0000
++++ gdb-7.4/gdb/main.c	2011-11-17 17:03:51.853359064 +0000
+@@ -822,7 +822,7 @@
       debugging or what directory you are in.  */
  
    if (home_gdbinit && !inhibit_gdbinit)
@@ -40,7 +42,7 @@ Last-Update: <YYYY-MM-DD>
  
    /* Now perform all the actions indicated by the arguments.  */
    if (cdarg != NULL)
-@@ -894,7 +894,7 @@ captured_main (void *data)
+@@ -901,7 +901,7 @@
    /* Read the .gdbinit file in the current directory, *if* it isn't
       the same as the $HOME/.gdbinit file (it should exist, also).  */
    if (local_gdbinit && !inhibit_gdbinit)
@@ -49,9 +51,11 @@ Last-Update: <YYYY-MM-DD>
  
    /* Now that all .gdbinit's have been read and all -d options have been
       processed, we can read any scripts mentioned in SYMARG.
---- gdb-7.3.50~cvs20110627.orig/gdb/cli/cli-cmds.c
-+++ gdb-7.3.50~cvs20110627/gdb/cli/cli-cmds.c
-@@ -1423,6 +1423,10 @@ show_max_user_call_depth (struct ui_file
+Index: gdb-7.4/gdb/cli/cli-cmds.c
+===================================================================
+--- gdb-7.4.orig/gdb/cli/cli-cmds.c	2011-11-17 17:03:20.505359078 +0000
++++ gdb-7.4/gdb/cli/cli-cmds.c	2011-11-17 17:03:51.853359064 +0000
+@@ -1608,6 +1608,10 @@
  }
  
  

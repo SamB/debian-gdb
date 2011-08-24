@@ -41,6 +41,7 @@
 #include "buildsym.h"
 #include "complaints.h"
 #include "demangle.h"
+#include "gdb-demangle.h"
 #include "language.h"
 #include "doublest.h"
 #include "cp-abi.h"
@@ -729,7 +730,7 @@ define_symbol (CORE_ADDR valu, char *string, int desc, int type,
 	SYMBOL_SET_NAMES (sym, string, p - string, 1, objfile);
 
       if (SYMBOL_LANGUAGE (sym) == language_cplus)
-	cp_scan_for_anonymous_namespaces (sym);
+	cp_scan_for_anonymous_namespaces (sym, objfile);
 
     }
   p++;
@@ -2236,7 +2237,7 @@ rs6000_builtin_type (int typenum, struct objfile *objfile)
 /* Replace *OLD_NAME with the method name portion of PHYSNAME.  */
 
 static void
-update_method_name_from_physname (char **old_name, char *physname)
+update_method_name_from_physname (char **old_name, const char *physname)
 {
   char *method_name;
 

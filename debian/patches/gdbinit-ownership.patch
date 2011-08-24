@@ -6,11 +6,11 @@ several problems with the implementation.  It needs to be revisited.
  gdb/main.c         |    4 ++--
  2 files changed, 43 insertions(+), 3 deletions(-)
 
-Index: gdb-7.3.50~cvs20110627/gdb/cli/cli-cmds.c
+Index: gdb-7.4/gdb/cli/cli-cmds.c
 ===================================================================
---- gdb-7.3.50~cvs20110627.orig/gdb/cli/cli-cmds.c	2011-06-28 00:07:45.783103790 +0100
-+++ gdb-7.3.50~cvs20110627/gdb/cli/cli-cmds.c	2011-06-28 00:13:11.767104902 +0100
-@@ -54,6 +54,8 @@
+--- gdb-7.4.orig/gdb/cli/cli-cmds.c	2011-11-17 15:58:35.000000000 +0000
++++ gdb-7.4/gdb/cli/cli-cmds.c	2011-11-17 17:03:20.505359078 +0000
+@@ -55,6 +55,8 @@
  #include "tui/tui.h"	/* For tui_active et.al.  */
  #endif
  
@@ -19,7 +19,7 @@ Index: gdb-7.3.50~cvs20110627/gdb/cli/cli-cmds.c
  #include <fcntl.h>
  
  /* Prototypes for local command functions */
-@@ -580,13 +582,47 @@
+@@ -585,13 +587,47 @@
           If the source command was invoked interactively, throw an
  	 error.  Otherwise (e.g. if it was invoked by a script),
  	 silently ignore the error.  */
@@ -65,6 +65,6 @@ Index: gdb-7.3.50~cvs20110627/gdb/cli/cli-cmds.c
 +    }
 +#endif
 +
-   source_script_from_stream (stream, file);
-   do_cleanups (old_cleanups);
- }
+   /* The python support reopens the file, so we need to pass full_path here
+      in case the file was found on the search path.  It's useful to do this
+      anyway so that error messages show the actual file used.  But only do

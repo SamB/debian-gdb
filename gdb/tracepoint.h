@@ -212,6 +212,9 @@ struct cleanup *make_cleanup_restore_current_traceframe (void);
 struct cleanup *make_cleanup_restore_traceframe_number (void);
 
 void free_actions (struct breakpoint *);
+
+extern char *decode_agent_options (char *exp);
+
 extern void validate_actionline (char **, struct breakpoint *);
 
 extern void end_actions_pseudocommand (char *args, int from_tty);
@@ -232,7 +235,7 @@ extern void parse_tsv_definition (char *line, struct uploaded_tsv **utsvp);
 
 extern struct uploaded_tp *get_uploaded_tp (int num, ULONGEST addr,
 					    struct uploaded_tp **utpp);
-extern struct breakpoint *create_tracepoint_from_upload (struct uploaded_tp *utp);
+extern struct tracepoint *create_tracepoint_from_upload (struct uploaded_tp *utp);
 extern void merge_uploaded_tracepoints (struct uploaded_tp **utpp);
 extern void merge_uploaded_trace_state_variables (struct uploaded_tsv **utsvp);
 

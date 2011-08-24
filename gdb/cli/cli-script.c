@@ -35,6 +35,7 @@
 #include "gdb_assert.h"
 
 #include "python/python.h"
+#include "interps.h"
 
 /* Prototypes for local functions.  */
 
@@ -317,12 +318,12 @@ execute_user_command (struct cmd_list_element *c, char *args)
   static int user_call_depth = 0;
   extern int max_user_call_depth;
 
-  old_chain = setup_user_args (args);
-
   cmdlines = c->user_commands;
   if (cmdlines == 0)
     /* Null command */
     return;
+
+  old_chain = setup_user_args (args);
 
   if (++user_call_depth > max_user_call_depth)
     error (_("Max user call depth exceeded -- command aborted."));
@@ -337,6 +338,9 @@ execute_user_command (struct cmd_list_element *c, char *args)
   /* Also set the global in_user_command, so that NULL instream is
      not confused with Insight.  */
   in_user_command = 1;
+
+  make_cleanup_restore_integer (&interpreter_async);
+  interpreter_async = 0;
 
   command_nest_depth++;
   while (cmdlines)
@@ -598,6 +602,7 @@ void
 while_command (char *arg, int from_tty)
 {
   struct command_line *command = NULL;
+  struct cleanup *old_chain;
 
   control_level = 1;
   command = get_command_line (while_control, arg);
@@ -605,8 +610,13 @@ while_command (char *arg, int from_tty)
   if (command == NULL)
     return;
 
+  old_chain = make_cleanup_restore_integer (&interpreter_async);
+  interpreter_async = 0;
+
   execute_control_command_untraced (command);
   free_command_lines (&command);
+
+  do_cleanups (old_chain);
 }
 
 /* "if" command support.  Execute either the true or false arm depending
@@ -616,6 +626,7 @@ void
 if_command (char *arg, int from_tty)
 {
   struct command_line *command = NULL;
+  struct cleanup *old_chain;
 
   control_level = 1;
   command = get_command_line (if_control, arg);
@@ -623,8 +634,13 @@ if_command (char *arg, int from_tty)
   if (command == NULL)
     return;
 
+  old_chain = make_cleanup_restore_integer (&interpreter_async);
+  interpreter_async = 0;
+
   execute_control_command_untraced (command);
   free_command_lines (&command);
+
+  do_cleanups (old_chain);
 }
 
 /* Cleanup */
@@ -1589,19 +1605,6 @@ source_cleanup_lines (void *args)
   source_file_name = p->old_file;
 }
 
-struct wrapped_read_command_file_args
-{
-  FILE *stream;
-};
-
-static void
-wrapped_read_command_file (struct ui_out *uiout, void *data)
-{
-  struct wrapped_read_command_file_args *args = data;
-
-  read_command_file (args->stream);
-}
-
 /* Used to implement source_command.  */
 
 void
@@ -1625,12 +1628,12 @@ script_from_file (FILE *stream, const char *file)
   error_pre_print = "";
 
   {
-    struct gdb_exception e;
-    struct wrapped_read_command_file_args args;
+    volatile struct gdb_exception e;
 
-    args.stream = stream;
-    e = catch_exception (uiout, wrapped_read_command_file, &args,
-			 RETURN_MASK_ERROR);
+    TRY_CATCH (e, RETURN_MASK_ERROR)
+      {
+	read_command_file (stream);
+      }
     switch (e.reason)
       {
       case 0:
@@ -1674,7 +1677,7 @@ show_user_1 (struct cmd_list_element *c, char *prefix, char *name,
     return;
   fprintf_filtered (stream, "User command \"%s%s\":\n", prefix, name);
 
-  print_command_lines (uiout, cmdlines, 1);
+  print_command_lines (current_uiout, cmdlines, 1);
   fputs_filtered ("\n", stream);
 }
 

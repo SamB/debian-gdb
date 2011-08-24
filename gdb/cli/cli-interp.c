@@ -37,16 +37,10 @@ struct ui_out *cli_uiout;
 static struct gdb_exception safe_execute_command (struct ui_out *uiout,
 						  char *command, 
 						  int from_tty);
-struct captured_execute_command_args
-{
-  char *command;
-  int from_tty;
-};
-
 /* These implement the cli out interpreter: */
 
 static void *
-cli_interpreter_init (int top_level)
+cli_interpreter_init (struct interp *self, int top_level)
 {
   return NULL;
 }
@@ -117,31 +111,35 @@ cli_interpreter_exec (void *data, const char *command_str)
   return result;
 }
 
-static void
-do_captured_execute_command (struct ui_out *uiout, void *data)
-{
-  struct captured_execute_command_args *args =
-    (struct captured_execute_command_args *) data;
-
-  execute_command (args->command, args->from_tty);
-}
-
 static struct gdb_exception
-safe_execute_command (struct ui_out *uiout, char *command, int from_tty)
+safe_execute_command (struct ui_out *command_uiout, char *command, int from_tty)
 {
-  struct gdb_exception e;
-  struct captured_execute_command_args args;
+  volatile struct gdb_exception e;
+  struct ui_out *saved_uiout;
 
-  args.command = command;
-  args.from_tty = from_tty;
-  e = catch_exception (uiout, do_captured_execute_command, &args,
-		       RETURN_MASK_ALL);
+  /* Save and override the global ``struct ui_out'' builder.  */
+  saved_uiout = current_uiout;
+  current_uiout = command_uiout;
+
+  TRY_CATCH (e, RETURN_MASK_ALL)
+    {
+      execute_command (command, from_tty);
+    }
+
+  /* Restore the global builder.  */
+  current_uiout = saved_uiout;
+
   /* FIXME: cagney/2005-01-13: This shouldn't be needed.  Instead the
      caller should print the exception.  */
   exception_print (gdb_stderr, e);
   return e;
 }
 
+static struct ui_out *
+cli_ui_out (struct interp *self)
+{
+  return cli_uiout;
+}
 
 /* Standard gdb initialization hook.  */
 extern initialize_file_ftype _initialize_cli_interp; /* -Wmissing-prototypes */
@@ -154,13 +152,14 @@ _initialize_cli_interp (void)
     cli_interpreter_resume,	/* resume_proc */
     cli_interpreter_suspend,	/* suspend_proc */
     cli_interpreter_exec,	/* exec_proc */
-    cli_interpreter_display_prompt_p	/* prompt_proc_p */
+    cli_interpreter_display_prompt_p,	/* prompt_proc_p */
+    cli_ui_out			/* ui_out_proc */
   };
   struct interp *cli_interp;
 
   /* Create a default uiout builder for the CLI.  */
   cli_uiout = cli_out_new (gdb_stdout);
-  cli_interp = interp_new (INTERP_CONSOLE, NULL, cli_uiout, &procs);
+  cli_interp = interp_new (INTERP_CONSOLE, &procs);
 
   interp_add (cli_interp);
 }

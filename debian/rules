@@ -255,8 +255,6 @@ binary-post-install/gdb-source ::
 
 debian/control:: debian/control.in $(CROSS_FORCE)
 	cat debian/control.in \
-		| sed "s/@kfreebsd@/`type-handling any kfreebsd`/g" \
-		| sed "s/@gnu@/`type-handling any gnu`/g" \
 		| sed "s/@TS@/$(TS)/g" \
 		> debian/control
 ifeq ($(DEB_CROSS),yes)

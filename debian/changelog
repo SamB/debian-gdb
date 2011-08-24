@@ -1,3 +1,15 @@
+gdb (7.4-1~cvs20111117) experimental; urgency=low
+
+  * CVS snapshot release (20111117)
+  * debian/control.in: Stop using deprecated type-handling Build-Depends
+    Thanks Guillem Jover. (Closes: #639164)
+  * debian/control.in: Mention D language support in description
+    - Also mention other supported languages. (Closes: #595892)
+  * debian/control.in: Add Vcs-Git, Vcs-Browser and Homepage fields.
+  * debian/control.in: Bump Standards-Version
+
+ -- Hector Oron <zumbi@debian.org>  Wed, 24 Aug 2011 20:02:33 +0100
+
 gdb (7.3-1) unstable; urgency=low
 
   * New upstream release, including:

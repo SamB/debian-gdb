@@ -377,6 +377,11 @@ proc gdb_breakpoint { function args } {
 		send_gdb "$pending_response\n"
 		exp_continue
 	}
+	-re "A problem internal to GDB has been detected" {
+		fail "setting breakpoint at $function in runto (GDB internal error)"
+		gdb_internal_error_resync
+		return 0
+	}
 	-re "$gdb_prompt $" {
 		if { $no_message == 0 } {
 			fail "setting breakpoint at $function"
@@ -592,6 +597,10 @@ proc gdb_test_multiple { command message user_code } {
 	error "Invalid trailing newline in \"$message\" test"
     }
 
+    if [string match "*\[\r\n\]*" $message] {
+	error "Invalid newline in \"$message\" test"
+    }
+
     # TCL/EXPECT WART ALERT
     # Expect does something very strange when it receives a single braced
     # argument.  It splits it along word separators and performs substitutions.
@@ -668,6 +677,7 @@ proc gdb_test_multiple { command message user_code } {
     set result -1
     set string "${command}\n";
     if { $command != "" } {
+	set multi_line_re "\[\r\n\] *>"
 	while { "$string" != "" } {
 	    set foo [string first "\n" "$string"];
 	    set len [string length "$string"];
@@ -688,10 +698,11 @@ proc gdb_test_multiple { command message user_code } {
 		# command output is not lost for pattern matching
 		# - guo
 		gdb_expect 2 {
-		    -notransfer -re "\[\r\n\]" { verbose "partial: match" 3 }
+		    -notransfer -re "$multi_line_re$" { verbose "partial: match" 3 }
 		    timeout { verbose "partial: timeout" 3 }
 		}
 		set string [string range "$string" [expr $foo + 1] end];
+		set multi_line_re "$multi_line_re.*\[\r\n\] *>"
 	    } else {
 		break;
 	    }
@@ -1090,8 +1101,8 @@ proc gdb_test_exact { args } {
 # of text per element and then strip trailing \r\n's.
 # Example:
 # gdb_test_list_exact "foo" "bar" \
-#     {[^\r\n]+[\r\n]+} \
-#     {[^\r\n]+} \
+#    "\[^\r\n\]+\[\r\n\]+" \
+#    "\[^\r\n\]+" \
 #     { \
 #	{expected result 1} \
 #	{expected result 2} \
@@ -1477,6 +1488,94 @@ proc skip_shlib_tests {} {
     return 1
 }
 
+# Return 1 if _Complex types are supported, otherwise, return 0.
+
+proc support_complex_tests {} {
+    global support_complex_tests_saved
+
+    # Use the cached value, if it exists.
+    if [info exists support_complex_tests_saved] {
+        verbose "returning saved $support_complex_tests_saved" 2
+        return $support_complex_tests_saved
+    }
+
+    # Set up, compile, and execute a test program containing _Complex types.
+    # Include the current process ID in the file names to prevent conflicts
+    # with invocations for multiple testsuites.
+    set src complex[pid].c
+    set exe complex[pid].x
+
+    set f [open $src "w"]
+    puts $f "int main() {"
+    puts $f "_Complex float cf;"
+    puts $f "_Complex double cd;"
+    puts $f "_Complex long double cld;"
+    puts $f "  return 0; }"
+    close $f
+
+    verbose "compiling testfile $src" 2
+    set compile_flags {debug nowarnings quiet}
+    set lines [gdb_compile $src $exe executable $compile_flags]
+    file delete $src
+    file delete $exe
+
+    if ![string match "" $lines] then {
+        verbose "testfile compilation failed, returning 0" 2
+        set support_complex_tests_saved 0
+    } else {
+	set support_complex_tests_saved 1
+    }
+
+    return $support_complex_tests_saved
+}
+
+# Return 1 if target hardware or OS supports single stepping to signal
+# handler, otherwise, return 0.
+
+proc can_single_step_to_signal_handler {} {
+
+    # Targets don't have hardware single step.  On these targets, when
+    # a signal is delivered during software single step, gdb is unable
+    # to determine the next instruction addresses, because start of signal
+    # handler is one of them.
+    if { [istarget "arm*-*-*"] || [istarget "mips*-*-*"]
+	 || [istarget "tic6x-*-*"] || [istarget "sparc*-*-linux*"] } {
+	return 0
+    }
+
+    return 1
+}
+
+# Return 1 if target supports process record, otherwise return 0.
+
+proc supports_process_record {} {
+
+    if [target_info exists gdb,use_precord] {
+	return [target_info gdb,use_precord]
+    }
+
+    if { [istarget "x86_64-*-linux*"] || [istarget "i\[34567\]86-*-linux*"] } {
+	return 1
+    }
+
+    return 0
+}
+
+# Return 1 if target supports reverse debugging, otherwise return 0.
+
+proc supports_reverse {} {
+
+    if [target_info exists gdb,can_reverse] {
+	return [target_info gdb,can_reverse]
+    }
+
+    if { [istarget "x86_64-*-linux*"] || [istarget "i\[34567\]86-*-linux*"] } {
+	return 1
+    }
+
+    return 0
+}
+
 # Return 1 if target is ILP32.
 # This cannot be decided simply from looking at the target string,
 # as it might depend on externally passed compiler options like -m64.
@@ -1552,6 +1651,69 @@ proc is_lp64_target {} {
 
     verbose "$me:  returning 1" 2
     return [set is_lp64_target_saved($board) 1]
+}
+
+# Return 1 if target has x86_64 registers - either amd64 or x32.
+# x32 target identifies as x86_64-*-linux*, therefore it cannot be determined
+# just from the target string.
+proc is_amd64_regs_target {} {
+    global is_amd64_regs_target_saved
+
+    if {![istarget "x86_64-*-*"] && ![istarget "i?86-*"]} {
+	return 0
+    }
+
+    # Use the cached value, if it exists.  Cache value per "board" to handle
+    # runs with multiple options (e.g. unix/{-m32,-64}) correctly.
+    set me "is_amd64_regs_target"
+    set board [target_info name]
+    if [info exists is_amd64_regs_target_saved($board)] {
+        verbose "$me:  returning saved $is_amd64_regs_target_saved($board)" 2
+        return $is_amd64_regs_target_saved($board)
+    }
+
+    set src reg64[pid].s
+    set obj reg64[pid].o
+
+    set f [open $src "w"]
+    foreach reg \
+            {rax rbx rcx rdx rsi rdi rbp rsp r8 r9 r10 r11 r12 r13 r14 r15} {
+	puts $f "\tincq %$reg"
+    }
+    close $f
+
+    verbose "$me:  compiling testfile $src" 2
+    set lines [gdb_compile $src $obj object {quiet}]
+    file delete $src
+    file delete $obj
+
+    if ![string match "" $lines] then {
+        verbose "$me:  testfile compilation failed, returning 0" 2
+        return [set is_amd64_regs_target_saved($board) 0]
+    }
+
+    verbose "$me:  returning 1" 2
+    return [set is_amd64_regs_target_saved($board) 1]
+}
+
+# Return 1 if this target is an x86 or x86-64 with -m32.
+proc is_x86_like_target {} {
+    if {![istarget "x86_64-*-*"] && ![istarget i?86-*]} {
+	return 0
+    }
+    return [expr [is_ilp32_target] && ![is_amd64_regs_target]]
+}
+
+# Return 1 if displaced stepping is supported on target, otherwise, return 0.
+proc support_displaced_stepping {} {
+
+    if { [istarget "x86_64-*-linux*"] || [istarget "i\[34567\]86-*-linux*"]
+	 || [istarget "arm*-*-linux*"] || [istarget "powerpc-*-linux*"]
+	 || [istarget "powerpc64-*-linux*"] || [istarget "s390*-*-*"] } {
+	return 1
+    }
+
+    return 0
 }
 
 # Run a test on the target to see if it supports vmx hardware.  Return 0 if so, 
@@ -2095,13 +2257,13 @@ proc gdb_compile {source dest type options} {
     # dynamically load one by basename, we must specify rpath.  If we
     # are using a remote host, DejaGNU will link to the shared library
     # using a relative path, so again we must specify an rpath.
-    if { $shlib_load || ($shlib_found && [is_remote host]) } {
+    if { $shlib_load || ($shlib_found && [is_remote target]) } {
 	if { ([istarget "*-*-mingw*"]
 	      || [istarget *-*-cygwin*]
 	      || [istarget *-*-pe*]
 	      || [istarget hppa*-*-hpux*])} {
 	    # Do not need anything.
-	} elseif { [istarget *-*-openbsd*] } {
+	} elseif { [istarget *-*-freebsd*] || [istarget *-*-openbsd*] } {
 	    lappend new_options "ldflags=-Wl,-rpath,${outdir}"
 	} elseif { [istarget arm*-*-symbianelf*] } {
 	    if { $shlib_load } {
@@ -2310,11 +2472,56 @@ proc gdb_compile_shlib {sources dest options} {
 		 || [istarget *-*-cygwin*]
 		 || [istarget *-*-pe*])} {
 	       lappend link_options "additional_flags=-Wl,--out-implib,${dest}.a"
-	   }
+	   } elseif [is_remote target] {
+	     # By default, we do not set the soname.  This causes the linker
+	     # on ELF systems to create a DT_NEEDED entry in the executable
+	     # refering to the full path name of the library.  This is a
+	     # problem in remote testing if the library is in a different
+	     # directory there.  To fix this, we set a soname of just the
+	     # base filename for the library, and add an appropriate -rpath
+	     # to the main executable (in gdb_compile).
+             set destbase [file tail $dest]
+             lappend link_options "additional_flags=-Wl,-soname,$destbase"
+           }
        }
        if {[gdb_compile "${objects}" "${dest}" executable $link_options] != ""} {
            return -1
        }
+    }
+}
+
+# This is just like gdb_compile_shlib, above, except that it tries compiling
+# against several different thread libraries, to see which one this
+# system has.
+proc gdb_compile_shlib_pthreads {sources dest options} {
+    set built_binfile 0
+    set why_msg "unrecognized error"
+    foreach lib {-lpthreads -lpthread -lthread ""} {
+        # This kind of wipes out whatever libs the caller may have
+        # set.  Or maybe theirs will override ours.  How infelicitous.
+        set options_with_lib [concat $options [list libs=$lib quiet]]
+        set ccout [gdb_compile_shlib $sources $dest $options_with_lib]
+        switch -regexp -- $ccout {
+            ".*no posix threads support.*" {
+                set why_msg "missing threads include file"
+                break
+            }
+            ".*cannot open -lpthread.*" {
+                set why_msg "missing runtime threads library"
+            }
+            ".*Can't find library for -lpthread.*" {
+                set why_msg "missing runtime threads library"
+            }
+            {^$} {
+                pass "successfully compiled posix threads test case"
+                set built_binfile 1
+                break
+            }
+        }
+    }
+    if {!$built_binfile} {
+        unsupported "Couldn't compile $sources: ${why_msg}"
+        return -1
     }
 }
 
@@ -2644,6 +2851,43 @@ proc shlib_symbol_file { libname } {
     return $libname
 }
 
+# Return the filename to download to the target and load for this
+# executable.  Normally just BINFILE unless it is renamed to something
+# else for this target.
+
+proc exec_target_file { binfile } {
+    return $binfile
+}
+
+# Return the filename GDB will load symbols from when debugging this
+# executable.  Normally just BINFILE unless executables for this target
+# have separate files for symbols.
+
+proc exec_symbol_file { binfile } {
+    return $binfile
+}
+
+# Rename the executable file.  Normally this is just BINFILE1 being renamed
+# to BINFILE2, but some targets require multiple binary files.
+proc gdb_rename_execfile { binfile1 binfile2 } {
+    file rename -force [exec_target_file ${binfile1}] \
+		       [exec_target_file ${binfile2}]
+    if { [exec_target_file ${binfile1}] != [exec_symbol_file ${binfile1}] } {
+	file rename -force [exec_symbol_file ${binfile1}] \
+			   [exec_symbol_file ${binfile2}]
+    }
+}
+
+# "Touch" the executable file to update the date.  Normally this is just
+# BINFILE, but some targets require multiple files.
+proc gdb_touch_execfile { binfile } {
+    set time [clock seconds]
+    file mtime [exec_target_file ${binfile}] $time
+    if { [exec_target_file ${binfile}] != [exec_symbol_file ${binfile}] } {
+	file mtime [exec_symbol_file ${binfile}] $time
+    }
+}
+
 # gdb_download
 #
 # Copy a file to the remote target and return its target filename.
@@ -2804,6 +3048,11 @@ proc gdb_init { args } {
     # especially having color output turned on can cause tests to fail.
     setenv GREP_OPTIONS ""
 
+    # Clear $gdbserver_reconnect_p.
+    global gdbserver_reconnect_p
+    set gdbserver_reconnect_p 1
+    unset gdbserver_reconnect_p
+
     return [eval default_gdb_init $args];
 }
 
@@ -2891,6 +3140,14 @@ proc setup_xfail_format { format } {
 	setup_xfail "*-*-*"
     }
     return $ret;
+}
+
+# Like setup_kfail, but only call setup_kfail conditionally if
+# istarget[TARGET] returns true.
+proc setup_kfail_for_target { PR target } {
+    if { [istarget $target] } {
+	setup_kfail $PR $target
+    }
 }
 
 proc gdb_step_for_stub { } {
@@ -3313,7 +3570,7 @@ proc help_test_raw { gdb_command expected_lines args } {
     gdb_test "${gdb_command}" "${expected_output}" $message
 }
 
-# Test the output of "help COMMNAD_CLASS". EXPECTED_INITIAL_LINES
+# Test the output of "help COMMAND_CLASS". EXPECTED_INITIAL_LINES
 # are regular expressions that should match the beginning of output,
 # before the list of commands in that class.  The presence of 
 # command list and standard epilogue will be tested automatically.
@@ -3483,6 +3740,33 @@ proc get_sizeof { type default } {
     return [get_integer_valueof "sizeof (${type})" $default]
 }
 
+# Get the current value for remotetimeout and return it.
+proc get_remotetimeout { } {
+    global gdb_prompt
+    global decimal
+
+    gdb_test_multiple "show remotetimeout" "" {
+	-re "Timeout limit to wait for target to respond is ($decimal).*$gdb_prompt $" {
+	    return $expect_out(1,string);
+	}
+    }
+
+    # Pick the default that gdb uses
+    warning "Unable to read remotetimeout"
+    return 300
+}
+
+# Set the remotetimeout to the specified timeout.  Nothing is returned.
+proc set_remotetimeout { timeout } {
+    global gdb_prompt
+
+    gdb_test_multiple "set remotetimeout $timeout" "" {
+	-re "$gdb_prompt $" {
+	    verbose "Set remotetimeout to $timeout\n"
+	}
+    }
+}
+
 # Log gdb command line and script if requested.
 if {[info exists TRANSCRIPT]} {
   rename send_gdb real_send_gdb
@@ -3596,3 +3880,21 @@ proc core_find {binfile {deletefiles {}} {arg ""}} {
     }
     return $destcore
 }
+
+# gdb_target_symbol_prefix_flags returns a string that can be added
+# to gdb_compile options to define SYMBOL_PREFIX macro value
+# symbol_prefix_flags returns a string that can be added
+# for targets that use underscore as symbol prefix.
+# TODO: find out automatically if the target needs this.
+
+proc gdb_target_symbol_prefix_flags {} {
+    if { [istarget "*-*-cygwin*"] || [istarget "i?86-*-mingw*"]
+	 || [istarget "*-*-msdosdjgpp*"] || [istarget "*-*-go32*"] } {
+	return "additional_flags=-DSYMBOL_PREFIX=\"_\""
+    } else {
+	return ""
+    }
+}
+
+# Always load compatibility stuff.
+load_lib future.exp

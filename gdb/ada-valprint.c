@@ -682,7 +682,8 @@ ada_val_print_1 (struct type *type, const gdb_byte *valaddr,
   type = ada_check_typedef (type);
 
   if (ada_is_array_descriptor_type (type)
-      || ada_is_constrained_packed_array_type (type))
+      || (ada_is_constrained_packed_array_type (type)
+	  && TYPE_CODE (type) != TYPE_CODE_PTR))
     {
       int retn;
       struct value *mark = value_mark ();
@@ -897,9 +898,18 @@ ada_val_print_1 (struct type *type, const gdb_byte *valaddr,
       
       if (TYPE_CODE (elttype) != TYPE_CODE_UNDEF)
         {
-          CORE_ADDR deref_val_int
-	    = unpack_pointer (type, valaddr + offset_aligned);
+          CORE_ADDR deref_val_int;
+	  struct value *deref_val;
 
+	  deref_val = coerce_ref_if_computed (original_value);
+	  if (deref_val)
+	    {
+	      common_val_print (deref_val, stream, recurse + 1, options,
+				current_language);
+	      break;
+	    }
+
+          deref_val_int = unpack_pointer (type, valaddr + offset_aligned);
           if (deref_val_int != 0)
             {
               struct value *deref_val =
@@ -956,7 +966,7 @@ ada_value_print (struct value *val0, struct ui_file *stream,
 {
   struct value *val = ada_to_fixed_value (val0);
   CORE_ADDR address = value_address (val);
-  struct type *type = value_type (val);
+  struct type *type = ada_check_typedef (value_type (val));
   struct value_print_options opts;
 
   /* If it is a pointer, indicate what it points to.  */
