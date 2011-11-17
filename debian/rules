@@ -4,6 +4,7 @@ ALL_BUILDDIR := $(shell pwd)/build
 
 DEB_BUILDDIR := $(ALL_BUILDDIR)/objdir
 DEB_DH_INSTALL_SOURCEDIR := $(shell pwd)/debian/tmp
+DEB_DH_STRIP_ARGS := --dbg-package=gdb-dbg
 
 # This implements the .deb package creation using debhelper.
 include /usr/share/cdbs/1/rules/debhelper.mk
@@ -45,6 +46,11 @@ DEB_TARGET_GNU_TYPE := $(shell dpkg-architecture -f \
 			 -a$(DEB_TARGET_ARCH) -qDEB_HOST_GNU_TYPE 2>/dev/null)
 DEB_TARGET_ALIAS ?= $(DEB_TARGET_GNU_TYPE)
 
+ifneq ($(GDB_TARGET),)
+DEB_CONFIGURE_GDB_DATADIR := "\$${prefix}/share/gdb-$(DEB_TARGET_GNU_TYPE)"
+DEB_CONFIGURE_PATH_ARGS += --with-gdb-datadir=$(DEB_CONFIGURE_GDB_DATADIR)
+endif
+
 ifeq ($(DEB_TARGET_ARCH),)
 $(error GDB_TARGET value "$(GDB_TARGET)" is not a valid Debian architecture)
 endif
@@ -78,6 +84,8 @@ ifneq (,$(filter $(DEB_HOST_ARCH),i386 powerpc sparc s390))
   endif
 endif
 endif
+
+BUILDDIRMULTIARCH = $(ALL_BUILDDIR)/objdir-multiarch
 
 run_tests := yes
 
@@ -122,6 +130,40 @@ DEB_CONFIGURE_EXTRA_FLAGS := --host=$(DEB_HOST_GNU_TYPE) $(EXTRA_FLAGS) \
 DEB_CONFIGURE_FLAGS_64 := --host=$(HOST64) $(EXTRA_FLAGS) \
 	--enable-tui
 
+# multiarch targets; this is taken from the binutils-multiarch package but
+# doesn't seem like a terribly nice list; see
+# <20110117211551.GA7216@bee.dooz.org> for discussion -- locally updated
+#MULTIARCH_TARGETS := \
+#	alpha-linux-gnu \
+#	arm-linux-gnu \
+#	arm-linux-gnueabi \
+#	arm-linux-gnueabihf \
+#	hppa-linux-gnu \
+#	i686-linux-gnu \
+#	ia64-linux-gnu \
+#	m68k-linux-gnu \
+#	m68k-rtems \
+#	mips-linux-gnu \
+#	mipsel-linux-gnu \
+#	mips64-linux-gnu \
+#	mips64el-linux-gnu \
+#	powerpc-linux-gnu \
+#	powerpcspe-linux-gnu \
+#	ppc64-linux-gnu \
+#	s390-linux-gnu \
+#	s390x-linux-gnu \
+#	sh-linux-gnu \
+#	sh64-linux-gnu \
+#	sparc-linux-gnu \
+#	sparc64-linux-gnu \
+#	x86_64-linux-gnu \
+#	m32r-linux-gnu \
+#	spu
+MULTIARCH_TARGETS := all
+# multiarch flags
+DEB_CONFIGURE_FLAGS_MULTIARCH := $(DEB_CONFIGURE_EXTRA_FLAGS) \
+	--enable-targets=`set -- $(MULTIARCH_TARGETS); IFS=,; echo "$$*"`
+
 # Minimal flags
 DEB_CONFIGURE_FLAGS_MIN := --host=$(DEB_HOST_GNU_TYPE) $(EXTRA_FLAGS) \
 	--disable-tui --without-expat --without-python
@@ -158,6 +200,14 @@ build64-stamp:
 	cd $(BUILDDIR64) && $(DEB_MAKE_ENVVARS) $(MAKE) $(NJOBS)
 	touch $@
 
+build/gdb-multiarch:: build-multiarch-stamp
+build-multiarch-stamp:
+	mkdir -p $(BUILDDIRMULTIARCH)
+	cd $(BUILDDIRMULTIARCH) && \
+	  $(shell pwd)/configure $(DEB_CONFIGURE_FLAGS_MULTIARCH)
+	cd $(BUILDDIRMULTIARCH) && $(DEB_MAKE_ENVVARS) $(MAKE) $(NJOBS)
+	touch $@
+
 build/gdb-minimal:: build-minimal-stamp
 build-minimal-stamp:
 	mkdir -p $(BUILDDIRMIN)
@@ -174,7 +224,7 @@ endif
 	touch $@
 
 clean::
-	rm -f check-stamp build64-stamp
+	rm -f check-stamp build64-stamp build-multiarch-stamp
 	rm -rf $(ALL_BUILDDIR)
 
 	if test -f gdb/version.in.backup; then \
@@ -222,6 +272,13 @@ binary-post-install/gdb64 ::
 	rm -rf debian/gdb64/usr/share/doc/gdb64
 	ln -s gdb debian/gdb64/usr/share/doc/gdb64
 
+binary-post-install/gdb-multiarch ::
+	install -d debian/gdb-multiarch/usr/bin
+	install -s -m 755 $(BUILDDIRMULTIARCH)/gdb/gdb debian/gdb-multiarch/usr/bin/gdb-multiarch
+	dh_link -pgdb-mutliarch usr/share/man/man1/gdb.1.gz usr/share/man/man1/gdb64.1.gz
+	rm -rf debian/gdb-multiarch/usr/share/doc/gdb-multiarch
+	ln -s gdb debian/gdb-multiarch/usr/share/doc/gdb-multiarch
+
 binary-post-install/gdb-minimal ::
 	install -d debian/gdb-minimal/usr/bin
 	$(INSTALL) -m 755 -o root -g root \
@@ -258,8 +315,8 @@ debian/control:: debian/control.in $(CROSS_FORCE)
 		| sed "s/@TS@/$(TS)/g" \
 		> debian/control
 ifeq ($(DEB_CROSS),yes)
-	sed -i "/Package: gdb64/,\$$ d" debian/control
-	sed "s+/gdb+/$(TP)gdb+g; s+usr/share/$(TP)gdb+usr/share/gdb+g" \
+	sed -i "/Package: gdb64/,\$$ d" -i "/Package: gdb-multiarch/,\$$ d" debian/control
+	sed "s+/gdb+/$(TP)gdb+g; s+usr/share/$(TP)gdb+usr/share/gdb$(TS)+g" \
 		debian/gdb.install > debian/gdb$(TS).install
 endif
 

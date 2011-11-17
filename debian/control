@@ -5,7 +5,7 @@ Section: devel
 Priority: optional
 Standards-Version: 3.9.2
 Build-Depends: autoconf, libtool, texinfo (>= 4.7-2.2), texlive-base,
- libncurses5-dev, libreadline-dev, bison, gettext, debhelper (>= 7),
+ libncurses5-dev, libreadline-dev, bison, gettext, debhelper (>= 7.0.50),
  dejagnu, gcj-jdk | gcj, gobjc, mig [hurd-any], cdbs (>= 0.4.17),
  libkvm-dev [kfreebsd-any], libunwind7-dev [ia64],
  flex | flex-old, libexpat1-dev, g++-multilib [i386 powerpc s390 sparc],
@@ -19,7 +19,7 @@ Package: gdb
 Architecture: any
 Section: devel
 Depends: ${shlibs:Depends}, ${misc:Depends},
- gdbserver [amd64 armel i386 ia64 mips mipsel powerpc s390]
+ gdbserver [amd64 armel armhf i386 ia64 mips mipsel powerpc s390]
 Suggests: gdb-doc
 Description: The GNU Debugger
  GDB is a source-level debugger, capable of breaking programs at
@@ -27,6 +27,20 @@ Description: The GNU Debugger
  where errors occurred. Currently, gdb supports C, C++, D,
  Objective-C, Fortran, Java, OpenCL C, Pascal, assembly, Modula-2,
  and Ada. A must-have for any serious programmer.
+
+Package: gdb-dbg
+Architecture: any
+Section: debug
+Priority: extra
+Depends: gdb (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: debugging symbols for the GNU Debugger
+ GDB is a source-level debugger, capable of breaking programs at
+ any specific line, displaying variable values, and determining
+ where errors occurred. Currently, gdb supports C, C++, D,
+ Objective-C, Fortran, Java, OpenCL C, Pascal, assembly, Modula-2,
+ and Ada. A must-have for any serious programmer.
+ .
+ This package contains the debugging symbols for GDB.
 
 Package: gdb-minimal
 Architecture: any
@@ -46,7 +60,7 @@ Description: The GNU Debugger
 Package: gdb64
 Architecture: i386 powerpc s390 sparc
 Section: devel
-Depends: ${shlibs:Depends}, gdb, ${misc:Depends}
+Depends: ${shlibs:Depends}, gdb(= ${binary:Version}), ${misc:Depends}
 Description: The GNU Debugger (64-bit)
  GDB is a source-level debugger, capable of breaking programs at
  any specific line, displaying variable values, and determining
@@ -54,8 +68,22 @@ Description: The GNU Debugger (64-bit)
  Objective-C, Fortran, Java, OpenCL C, Pascal, assembly, Modula-2,
  and Ada. A must-have for any serious programmer.
 
+Package: gdb-multiarch
+Architecture: any
+Section: devel
+Depends: ${shlibs:Depends}, gdb , ${misc:Depends}
+Description: The GNU Debugger (with support for multiple architectures)
+ GDB is a source-level debugger, capable of breaking programs at
+ any specific line, displaying variable values, and determining
+ where errors occurred. Currently, it works for C, C++, Fortran
+ Modula 2 and Java programs. A must-have for any serious
+ programmer.
+ .
+ This package contains a version of GDB which supports multiple
+ target architectures.
+
 Package: gdbserver
-Architecture: amd64 armel i386 ia64 mips mipsel powerpc s390
+Architecture: amd64 armel armhf i386 ia64 mips mipsel powerpc s390
 Section: devel
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Replaces: gdb (<< 7.0.1-1)

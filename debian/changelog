@@ -1,3 +1,19 @@
+gdb (7.4-1~cvs20111117.1) experimental; urgency=low
+
+  * Add accidentally dropped armhf to architecture list
+  * Add GDB debug package (Closes: #592512, #490049)
+  * Provide GDB multiarch package (Closes: #610519)
+    - Add gdb-multiarch package supporting extra bfd targets similarly to
+      binutils-multiarch; the package is constructed much like gdb64 except that
+      it's build with the gdb configure flags and --enable-targets=all for now.
+    - Thanks Loïc Minier.
+  * Fix conflicts between cross and regular gdb (Closes: #603347)
+    - Pass --gdb-datadir=/usr/share/gdb-$triplet when building a cross-gdb and
+      update gdb.install sed snippet to match; fixes conflict with gdb;
+    - Thanks Loïc Minier.
+
+ -- Hector Oron <zumbi@debian.org>  Thu, 17 Nov 2011 18:37:45 +0000
+
 gdb (7.4-1~cvs20111117) experimental; urgency=low
 
   * CVS snapshot release (20111117)
