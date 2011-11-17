@@ -43,10 +43,7 @@
 #include "arch-utils.h"
 #include <ctype.h>
 #include "cli/cli-utils.h"
-
-/* We share this one with symtab.c, but it is not exported widely.  */
-
-extern char *operator_chars (char *, char **);
+#include "filenames.h"
 
 /* Prototypes for local functions.  */
 
@@ -249,7 +246,7 @@ find_methods (struct type *t, char *name, enum language language,
 
   /* NAME is typed by the user: it needs to be canonicalized before
      passing to lookup_symbol.  */
-  canon = cp_canonicalize_string (name);
+  canon = cp_canonicalize_string_no_typedefs (name);
   if (canon != NULL)
     {
       name = canon;
@@ -339,20 +336,21 @@ add_matching_methods (int method_counter, struct type *t,
        --field_counter)
     {
       struct fn_field *f;
-      char *phys_name;
+      const char *phys_name;
 
       f = TYPE_FN_FIELDLIST1 (t, method_counter);
 
       if (TYPE_FN_FIELD_STUB (f, field_counter))
 	{
-	  char *tmp_name;
+	  char *tmp_name, *tmp2;
 
 	  tmp_name = gdb_mangle_name (t,
 				      method_counter,
 				      field_counter);
-	  phys_name = alloca (strlen (tmp_name) + 1);
-	  strcpy (phys_name, tmp_name);
+	  tmp2 = alloca (strlen (tmp_name) + 1);
+	  strcpy (tmp2, tmp_name);
 	  xfree (tmp_name);
+	  phys_name = tmp2;
 	}
       else
 	phys_name = TYPE_FN_FIELD_PHYSNAME (f, field_counter);
@@ -400,7 +398,7 @@ add_constructors (int method_counter, struct type *t,
        --field_counter)
     {
       struct fn_field *f;
-      char *phys_name;
+      const char *phys_name;
 
       f = TYPE_FN_FIELDLIST1 (t, method_counter);
 
@@ -827,7 +825,7 @@ decode_line_1 (char **argptr, int funfirstline, struct symtab *default_symtab,
   /* This says whether or not something in *ARGPTR is quoted with
      completer_quotes (i.e. with single quotes).  */
   int is_quoted;
-  /* Is *ARGPTR is enclosed in double quotes?  */
+  /* Is *ARGPTR enclosed in double quotes?  */
   int is_quote_enclosed;
   int is_objc_method = 0;
   char *saved_arg = *argptr;
@@ -1197,6 +1195,16 @@ locate_first_half (char **argptr, int *is_quote_enclosed)
 	  ++p;
 	}
     }
+
+
+  /* Check for a drive letter in the filename.  This is done on all hosts
+     to capture cross-compilation environments.  On Unixen, directory
+     separators are illegal in filenames, so if the user enters "e:/foo.c",
+     he is referring to a directory named "e:" and a source file named
+     "foo.c", and we still want to keep these two pieces together.  */
+  if (isalpha (p[0]) && p[1] == ':' && IS_DIR_SEPARATOR (p[2]))
+    p += 3;
+
   for (; *p; p++)
     {
       if (p[0] == '<')
@@ -1368,7 +1376,7 @@ decode_compound (char **argptr, int funfirstline,
 		 char *the_real_saved_arg, char *p)
 {
   struct symtabs_and_lines values;
-  char *p2;
+  char *p2, *name, *canon;
   char *saved_arg2 = *argptr;
   char *temp_end;
   struct symbol *sym;
@@ -1376,6 +1384,7 @@ decode_compound (char **argptr, int funfirstline,
   struct symbol *sym_class;
   struct type *t;
   char *saved_arg;
+  struct cleanup *cleanup;
 
   /* If the user specified any completer quote characters in the input,
      strip them.  They are superfluous.  */
@@ -1600,7 +1609,18 @@ decode_compound (char **argptr, int funfirstline,
   *argptr = (*p == '\'') ? p + 1 : p;
 
   /* Look up entire name.  */
-  sym = lookup_symbol (copy, get_selected_block (0), VAR_DOMAIN, 0);
+  name = copy;
+
+  cleanup = make_cleanup (null_cleanup, NULL);
+  canon = cp_canonicalize_string_no_typedefs (copy);
+  if (canon != NULL)
+    {
+      name = canon;
+      make_cleanup (xfree, name);
+    }
+
+  sym = lookup_symbol (name, get_selected_block (0), VAR_DOMAIN, 0);
+  do_cleanups (cleanup);
   if (sym)
     return symbol_found (funfirstline, canonical, copy, sym, NULL, NULL);
   else
@@ -1746,7 +1766,7 @@ find_method (int funfirstline, struct linespec_result *canonical,
 	  strcpy (name, SYMBOL_NATURAL_NAME (sym_class));
 	  strcat (name, "::");
 	  strcat (name, copy);
-	  canon = cp_canonicalize_string (name);
+	  canon = cp_canonicalize_string_no_typedefs (name);
 	  if (canon != NULL)
 	    {
 	      xfree (name);
@@ -1826,6 +1846,8 @@ symtab_from_filename (char **argptr, char *p, int is_quote_enclosed)
     }
 
   /* Discard the file name from the arg.  */
+  if (*p1 == '\0')
+    return file_symtab;
   p = p1 + 1;
   while (*p == ' ' || *p == '\t')
     p++;
@@ -2088,16 +2110,31 @@ decode_variable (char *copy, int funfirstline,
 		 struct linespec_result *canonical,
 		 struct symtab *file_symtab)
 {
+  char *name, *canon;
   struct symbol *sym;
+  struct cleanup *cleanup;
   struct minimal_symbol *msymbol;
 
-  sym = lookup_symbol (copy, get_search_block (file_symtab),
-		       VAR_DOMAIN, 0);
+  name = copy;
+  cleanup = make_cleanup (null_cleanup, NULL);
+  canon = cp_canonicalize_string_no_typedefs (copy);
+  if (canon != NULL)
+    {
+      name = canon;
+      make_cleanup (xfree, name);
+    }
+
+  sym = lookup_symbol (name, get_search_block (file_symtab), VAR_DOMAIN, 0);
 
   if (sym != NULL)
-    return symbol_found (funfirstline, canonical, copy, sym, file_symtab, NULL);
+    {
+      do_cleanups (cleanup);
+      return symbol_found (funfirstline, canonical, copy, sym,
+			   file_symtab, NULL);
+    }
 
-  msymbol = lookup_minimal_symbol (copy, NULL, NULL);
+  msymbol = lookup_minimal_symbol (name, NULL, NULL);
+  do_cleanups (cleanup);
 
   if (msymbol != NULL)
     return minsym_found (funfirstline, msymbol);

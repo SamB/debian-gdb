@@ -45,13 +45,14 @@ typedef struct
   eventregistry_object *stop;
   eventregistry_object *cont;
   eventregistry_object *exited;
+  eventregistry_object *new_objfile;
 
   PyObject *module;
 
 } events_object;
 
 /* Python events singleton.  */
-events_object gdb_py_events;
+extern events_object gdb_py_events;
 
 extern eventregistry_object *create_eventregistry_object (void);
 extern int evregpy_no_listeners_p (eventregistry_object *registry);

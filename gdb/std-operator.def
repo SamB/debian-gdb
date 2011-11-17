@@ -139,6 +139,12 @@ OP (OP_DOUBLE)
    use the selected frame.  */
 OP (OP_VAR_VALUE)
 
+/* OP_VAR_ENTRY_VALUE takes one struct symbol * in the following element,
+   followed by another OP_VAR_ENTRY_VALUE, making three exp_elements.
+   somename@entry may mean parameter value as present at the entry of the
+   current function.  Implemented via DW_OP_GNU_entry_value.  */
+OP (OP_VAR_ENTRY_VALUE)
+
 /* OP_LAST is followed by an integer in the next exp_element.
    The integer is zero for the last value printed,
    or it is the absolute number of a history element.
@@ -276,11 +282,6 @@ OP (STRUCTOP_PTR)
 /* C++: OP_THIS is just a placeholder for the class instance variable.
    It just comes in a tight (OP_THIS, OP_THIS) pair.  */
 OP (OP_THIS)
-
-/* Objective-C: OP_OBJC_SELF is just a placeholder for the class
-   instance variable.  It just comes in a tight (OP_OBJC_SELF,
-   OP_OBJC_SELF) pair.  */
-OP (OP_OBJC_SELF)
 
 /* Objective C: "@selector" pseudo-operator.  */
 OP (OP_OBJC_SELECTOR)

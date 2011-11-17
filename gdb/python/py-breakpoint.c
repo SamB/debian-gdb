@@ -150,6 +150,7 @@ bppy_set_enabled (PyObject *self, PyObject *newvalue, void *closure)
 {
   breakpoint_object *self_bp = (breakpoint_object *) self;
   int cmp;
+  volatile struct gdb_exception except;
 
   BPPY_SET_REQUIRE_VALID (self_bp);
 
@@ -170,10 +171,16 @@ bppy_set_enabled (PyObject *self, PyObject *newvalue, void *closure)
   cmp = PyObject_IsTrue (newvalue);
   if (cmp < 0)
     return -1;
-  else if (cmp == 1)
-    enable_breakpoint (self_bp->bp);
-  else 
-    disable_breakpoint (self_bp->bp);
+
+  TRY_CATCH (except, RETURN_MASK_ALL)
+    {
+      if (cmp == 1)
+	enable_breakpoint (self_bp->bp);
+      else
+	disable_breakpoint (self_bp->bp);
+    }
+  GDB_PY_SET_HANDLE_EXCEPTION (except);
+
   return 0;
 }
 
@@ -255,6 +262,8 @@ bppy_set_task (PyObject *self, PyObject *newvalue, void *closure)
 {
   breakpoint_object *self_bp = (breakpoint_object *) self;
   long id;
+  int valid_id = 0;
+  volatile struct gdb_exception except;
 
   BPPY_SET_REQUIRE_VALID (self_bp);
 
@@ -269,7 +278,13 @@ bppy_set_task (PyObject *self, PyObject *newvalue, void *closure)
       if (! gdb_py_int_as_long (newvalue, &id))
 	return -1;
 
-      if (! valid_task_id (id))
+      TRY_CATCH (except, RETURN_MASK_ALL)
+	{
+	  valid_id = valid_task_id (id);
+	}
+      GDB_PY_SET_HANDLE_EXCEPTION (except);
+
+      if (! valid_id)
 	{
 	  PyErr_SetString (PyExc_RuntimeError, 
 			   _("Invalid task ID."));
@@ -299,10 +314,15 @@ static PyObject *
 bppy_delete_breakpoint (PyObject *self, PyObject *args)
 {
   breakpoint_object *self_bp = (breakpoint_object *) self;
+  volatile struct gdb_exception except;
 
   BPPY_REQUIRE_VALID (self_bp);
 
-  delete_breakpoint (self_bp->bp);
+  TRY_CATCH (except, RETURN_MASK_ALL)
+    {
+      delete_breakpoint (self_bp->bp);
+    }
+  GDB_PY_HANDLE_EXCEPTION (except);
 
   Py_RETURN_NONE;
 }
@@ -399,16 +419,16 @@ bppy_get_expression (PyObject *self, void *closure)
 {
   char *str;
   breakpoint_object *obj = (breakpoint_object *) self;
+  struct watchpoint *wp;
 
   BPPY_REQUIRE_VALID (obj);
 
-  if (obj->bp->type != bp_watchpoint
-      && obj->bp->type != bp_hardware_watchpoint  
-      && obj->bp->type != bp_read_watchpoint
-      && obj->bp->type != bp_access_watchpoint)
+  if (!is_watchpoint (obj->bp))
     Py_RETURN_NONE;
 
-  str = obj->bp->exp_string;
+  wp = (struct watchpoint *) obj->bp;
+
+  str = wp->exp_string;
   if (! str)
     str = "";
 
@@ -492,12 +512,12 @@ bppy_get_commands (PyObject *self, void *closure)
   string_file = mem_fileopen ();
   chain = make_cleanup_ui_file_delete (string_file);
 
-  ui_out_redirect (uiout, string_file);
+  ui_out_redirect (current_uiout, string_file);
   TRY_CATCH (except, RETURN_MASK_ALL)
     {
-      print_command_lines (uiout, breakpoint_commands (bp), 0);
+      print_command_lines (current_uiout, breakpoint_commands (bp), 0);
     }
-  ui_out_redirect (uiout, NULL);
+  ui_out_redirect (current_uiout, NULL);
   GDB_PY_HANDLE_EXCEPTION (except);
 
   cmdstr = ui_file_xstrdup (string_file, &length);
@@ -599,7 +619,7 @@ static int
 bppy_init (PyObject *self, PyObject *args, PyObject *kwargs)
 {
   static char *keywords[] = { "spec", "type", "wp_class", "internal", NULL };
-  char *spec;
+  const char *spec;
   int type = bp_breakpoint;
   int access_type = hw_write;
   PyObject *internal = NULL;
@@ -623,27 +643,31 @@ bppy_init (PyObject *self, PyObject *args, PyObject *kwargs)
   
   TRY_CATCH (except, RETURN_MASK_ALL)
     {
+      char *copy = xstrdup (spec);
+      struct cleanup *cleanup = make_cleanup (xfree, copy);
+
       switch (type)
 	{
 	case bp_breakpoint:
 	  {
 	    create_breakpoint (python_gdbarch,
-			       spec, NULL, -1,
+			       copy, NULL, -1,
 			       0,
 			       0, bp_breakpoint,
 			       0,
 			       AUTO_BOOLEAN_TRUE,
-			       NULL, 0, 1, internal_bp);
+			       &bkpt_breakpoint_ops,
+			       0, 1, internal_bp);
 	    break;
 	  }
         case bp_watchpoint:
 	  {
 	    if (access_type == hw_write)
-	      watch_command_wrapper (spec, 0, internal_bp);
+	      watch_command_wrapper (copy, 0, internal_bp);
 	    else if (access_type == hw_access)
-	      awatch_command_wrapper (spec, 0, internal_bp);
+	      awatch_command_wrapper (copy, 0, internal_bp);
 	    else if (access_type == hw_read)
-	      rwatch_command_wrapper (spec, 0, internal_bp);
+	      rwatch_command_wrapper (copy, 0, internal_bp);
 	    else
 	      error(_("Cannot understand watchpoint access type."));
 	    break;
@@ -651,6 +675,8 @@ bppy_init (PyObject *self, PyObject *args, PyObject *kwargs)
 	default:
 	  error(_("Do not understand breakpoint type to set."));
 	}
+
+      do_cleanups (cleanup);
     }
   if (except.reason < 0)
     {
@@ -691,7 +717,7 @@ build_bp_list (struct breakpoint *b, void *arg)
 PyObject *
 gdbpy_breakpoints (PyObject *self, PyObject *args)
 {
-  PyObject *list;
+  PyObject *list, *tuple;
 
   if (bppy_live == 0)
     Py_RETURN_NONE;
@@ -709,7 +735,10 @@ gdbpy_breakpoints (PyObject *self, PyObject *args)
       return NULL;
     }
 
-  return PyList_AsTuple (list);
+  tuple = PyList_AsTuple (list);
+  Py_DECREF (list);
+
+  return tuple;
 }
 
 /* Call the "stop" method (if implemented) in the breakpoint
@@ -766,10 +795,9 @@ gdbpy_breakpoint_has_py_cond (struct breakpoint_object *bp_obj)
     get_current_arch ();
   struct cleanup *cleanup = ensure_python_env (garch, current_language);
   
-  if (py_bp == NULL)
-    return 0;
+  if (py_bp != NULL)
+    has_func = PyObject_HasAttrString (py_bp, stop_func);
 
-  has_func = PyObject_HasAttrString (py_bp, stop_func);
   do_cleanups (cleanup);
 
   return has_func;
@@ -782,17 +810,12 @@ gdbpy_breakpoint_has_py_cond (struct breakpoint_object *bp_obj)
 /* Callback that is used when a breakpoint is created.  This function
    will create a new Python breakpoint object.  */
 static void
-gdbpy_breakpoint_created (int num)
+gdbpy_breakpoint_created (struct breakpoint *bp)
 {
   breakpoint_object *newbp;
-  struct breakpoint *bp = NULL;
   PyGILState_STATE state;
 
-  bp = get_breakpoint (num);
-  if (! bp)
-    return;
-
-  if (num < 0 && bppy_pending_object == NULL)
+  if (bp->number < 0 && bppy_pending_object == NULL)
     return;
 
   if (bp->type != bp_breakpoint 
@@ -813,7 +836,7 @@ gdbpy_breakpoint_created (int num)
     newbp = PyObject_New (breakpoint_object, &breakpoint_object_type);
   if (newbp)
     {
-      newbp->number = num;
+      newbp->number = bp->number;
       newbp->bp = bp;
       newbp->bp->py_bp_object = newbp;
       Py_INCREF (newbp);
@@ -832,23 +855,24 @@ gdbpy_breakpoint_created (int num)
 /* Callback that is used when a breakpoint is deleted.  This will
    invalidate the corresponding Python object.  */
 static void
-gdbpy_breakpoint_deleted (int num)
+gdbpy_breakpoint_deleted (struct breakpoint *b)
 {
+  int num = b->number;
   PyGILState_STATE state;
   struct breakpoint *bp = NULL;
   breakpoint_object *bp_obj;
 
   state = PyGILState_Ensure ();
   bp = get_breakpoint (num);
-  if (! bp)
-    return;
-
-  bp_obj = bp->py_bp_object;
-  if (bp_obj)
+  if (bp)
     {
-      bp_obj->bp = NULL;
-      --bppy_live;
-      Py_DECREF (bp_obj);
+      bp_obj = bp->py_bp_object;
+      if (bp_obj)
+	{
+	  bp_obj->bp = NULL;
+	  --bppy_live;
+	  Py_DECREF (bp_obj);
+	}
     }
   PyGILState_Release (state);
 }
@@ -861,6 +885,7 @@ gdbpy_initialize_breakpoints (void)
 {
   int i;
 
+  breakpoint_object_type.tp_new = PyType_GenericNew;
   if (PyType_Ready (&breakpoint_object_type) < 0)
     return;
 
@@ -1015,5 +1040,4 @@ static PyTypeObject breakpoint_object_type =
   0,				  /* tp_dictoffset */
   bppy_init,			  /* tp_init */
   0,				  /* tp_alloc */
-  PyType_GenericNew		  /* tp_new */
 };

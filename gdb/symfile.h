@@ -86,7 +86,7 @@ struct section_addr_info
     CORE_ADDR addr;
     char *name;
 
-    /* SECTINDEX must be valid for associated BFD if ADDR is not zero.  */
+    /* SECTINDEX must be valid for associated BFD or set to -1.  */
     int sectindex;
   } other[1];
 };
@@ -115,6 +115,11 @@ struct symfile_segment_data
      S, or zero if it is not in any segment.  */
   int *segment_info;
 };
+
+/* Callback for quick_symbol_functions->map_symbol_filenames.  */
+
+typedef void (symbol_filename_ftype) (const char *filename,
+				      const char *fullname, void *data);
 
 /* The "quick" symbol functions exist so that symbol readers can
    avoiding an initial read of all the symbols.  For example, symbol
@@ -182,7 +187,8 @@ struct quick_symbol_functions
      doesn't make sense to implement both.)  The arguments are as for
      `lookup_symbol'.  */
   void (*pre_expand_symtabs_matching) (struct objfile *objfile,
-				       int kind, const char *name,
+				       enum block_enum block_kind,
+				       const char *name,
 				       domain_enum domain);
 
   /* Print statistics about any indices loaded for OBJFILE.  The
@@ -216,7 +222,7 @@ struct quick_symbol_functions
   void (*expand_symtabs_with_filename) (struct objfile *objfile,
 					const char *filename);
 
-  /* Return the file name of the file holding the symbol in OBJFILE
+  /* Return the file name of the file holding the global symbol in OBJFILE
      named NAME.  If no such symbol exists in OBJFILE, return NULL.  */
   const char *(*find_symbol_file) (struct objfile *objfile, const char *name);
 
@@ -266,7 +272,7 @@ struct quick_symbol_functions
   void (*expand_symtabs_matching) (struct objfile *objfile,
 				   int (*file_matcher) (const char *, void *),
 				   int (*name_matcher) (const char *, void *),
-				   domain_enum kind,
+				   enum search_domain kind,
 				   void *data);
 
   /* Return the symbol table from OBJFILE that contains PC and
@@ -282,12 +288,12 @@ struct quick_symbol_functions
 					 int warn_if_readin);
 
   /* Call a callback for every file defined in OBJFILE whose symtab is
-     not already read in.  FUN is the callback.  It is passed the file's name,
-     the file's full name, and the DATA passed to this function.  */
+     not already read in.  FUN is the callback.  It is passed the file's
+     FILENAME, the file's FULLNAME (if need_fullname is non-zero), and
+     the DATA passed to this function.  */
   void (*map_symbol_filenames) (struct objfile *objfile,
-				void (*fun) (const char *, const char *,
-					     void *),
-				void *data);
+				symbol_filename_ftype *fun, void *data,
+				int need_fullname);
 };
 
 /* Structure to keep track of symbol reading functions for various
@@ -427,7 +433,7 @@ extern struct objfile *symbol_file_add (char *, int,
 
 extern struct objfile *symbol_file_add_from_bfd (bfd *, int,
                                                  struct section_addr_info *,
-                                                 int);
+                                                 int, struct objfile *parent);
 
 extern void symbol_file_add_separate (bfd *, int, struct objfile *);
 
@@ -552,7 +558,57 @@ extern struct cleanup *increment_reading_symtab (void);
 
 /* From dwarf2read.c */
 
-extern int dwarf2_has_info (struct objfile *);
+/* Names for a dwarf2 debugging section.  The field NORMAL is the normal
+   section name (usually from the DWARF standard), while the field COMPRESSED
+   is the name of compressed sections.  If your object file format doesn't
+   support compressed sections, the field COMPRESSED can be NULL.  Likewise,
+   the debugging section is not supported, the field NORMAL can be NULL too.
+   It doesn't make sense to have a NULL NORMAL field but a non-NULL COMPRESSED
+   field.  */
+
+struct dwarf2_section_names {
+  const char *normal;
+  const char *compressed;
+};
+
+/* List of names for dward2 debugging sections.  Also most object file formats
+   use the standardized (ie ELF) names, some (eg XCOFF) have customized names
+   due to restrictions.
+   The table for the standard names is defined in dwarf2read.c.  Please
+   update all instances of dwarf2_debug_sections if you add a field to this
+   structure.  It is always safe to use { NULL, NULL } in this case.  */
+
+struct dwarf2_debug_sections {
+  struct dwarf2_section_names info;
+  struct dwarf2_section_names abbrev;
+  struct dwarf2_section_names line;
+  struct dwarf2_section_names loc;
+  struct dwarf2_section_names macinfo;
+  struct dwarf2_section_names macro;
+  struct dwarf2_section_names str;
+  struct dwarf2_section_names ranges;
+  struct dwarf2_section_names types;
+  struct dwarf2_section_names frame;
+  struct dwarf2_section_names eh_frame;
+  struct dwarf2_section_names gdb_index;
+  /* This field has no meaning, but exists solely to catch changes to
+     this structure which are not reflected in some instance.  */
+  int sentinel;
+};
+
+extern int dwarf2_has_info (struct objfile *,
+                            const struct dwarf2_debug_sections *);
+
+/* Dwarf2 sections that can be accessed by dwarf2_get_section_info.  */
+enum dwarf2_section_enum {
+  DWARF2_DEBUG_FRAME,
+  DWARF2_EH_FRAME
+};
+
+extern void dwarf2_get_section_info (struct objfile *,
+                                     enum dwarf2_section_enum,
+				     asection **, gdb_byte **,
+				     bfd_size_type *);
 
 extern int dwarf2_initialize_objfile (struct objfile *);
 extern void dwarf2_build_psymtabs (struct objfile *);

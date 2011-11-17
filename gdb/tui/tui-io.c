@@ -133,7 +133,7 @@ static Function *tui_old_rl_getc_function;
 static VFunction *tui_old_rl_redisplay_function;
 static VFunction *tui_old_rl_prep_terminal;
 static VFunction *tui_old_rl_deprep_terminal;
-static int tui_old_readline_echoing_p;
+static int tui_old_rl_echoing_p;
 
 /* Readline output stream.
    Should be removed when readline is clean.  */
@@ -506,8 +506,8 @@ tui_rl_display_match_list (char **matches, int len, int max)
 void
 tui_setup_io (int mode)
 {
-  extern int readline_echoing_p;
- 
+  extern int _rl_echoing_p;
+
   if (mode)
     {
       /* Redirect readline to TUI.  */
@@ -516,12 +516,12 @@ tui_setup_io (int mode)
       tui_old_rl_prep_terminal = rl_prep_term_function;
       tui_old_rl_getc_function = rl_getc_function;
       tui_old_rl_outstream = rl_outstream;
-      tui_old_readline_echoing_p = readline_echoing_p;
+      tui_old_rl_echoing_p = _rl_echoing_p;
       rl_redisplay_function = tui_redisplay_readline;
       rl_deprep_term_function = tui_deprep_terminal;
       rl_prep_term_function = tui_prep_terminal;
       rl_getc_function = tui_getc;
-      readline_echoing_p = 0;
+      _rl_echoing_p = 0;
       rl_outstream = tui_rl_outstream;
       rl_prompt = 0;
       rl_completion_display_matches_hook = tui_rl_display_match_list;
@@ -530,7 +530,7 @@ tui_setup_io (int mode)
       /* Keep track of previous gdb output.  */
       tui_old_stdout = gdb_stdout;
       tui_old_stderr = gdb_stderr;
-      tui_old_uiout = uiout;
+      tui_old_uiout = current_uiout;
 
       /* Reconfigure gdb output.  */
       gdb_stdout = tui_stdout;
@@ -538,7 +538,7 @@ tui_setup_io (int mode)
       gdb_stdlog = gdb_stdout;	/* for moment */
       gdb_stdtarg = gdb_stderr;	/* for moment */
       gdb_stdtargerr = gdb_stderr;	/* for moment */
-      uiout = tui_out;
+      current_uiout = tui_out;
 
       /* Save tty for SIGCONT.  */
       savetty ();
@@ -551,7 +551,7 @@ tui_setup_io (int mode)
       gdb_stdlog = gdb_stdout;	/* for moment */
       gdb_stdtarg = gdb_stderr;	/* for moment */
       gdb_stdtargerr = gdb_stderr;	/* for moment */
-      uiout = tui_old_uiout;
+      current_uiout = tui_old_uiout;
 
       /* Restore readline.  */
       rl_redisplay_function = tui_old_rl_redisplay_function;
@@ -560,7 +560,7 @@ tui_setup_io (int mode)
       rl_getc_function = tui_old_rl_getc_function;
       rl_outstream = tui_old_rl_outstream;
       rl_completion_display_matches_hook = 0;
-      readline_echoing_p = tui_old_readline_echoing_p;
+      _rl_echoing_p = tui_old_rl_echoing_p;
       rl_already_prompted = 0;
 
       /* Save tty for SIGCONT.  */
@@ -607,7 +607,7 @@ tui_initialize_io (void)
 
   /* Create the default UI.  It is not created because we installed a
      deprecated_init_ui_hook.  */
-  tui_old_uiout = uiout = cli_out_new (gdb_stdout);
+  tui_old_uiout = cli_out_new (gdb_stdout);
 
 #ifdef TUI_USE_PIPE_FOR_READLINE
   /* Temporary solution for readline writing to stdout: redirect

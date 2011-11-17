@@ -22,6 +22,20 @@
 
 #include <signal.h>
 
+/* Ways to "resume" a thread.  */
+
+enum resume_kind
+{
+  /* Thread should continue.  */
+  resume_continue,
+
+  /* Thread should single-step.  */
+  resume_step,
+
+  /* Thread should be stopped.  */
+  resume_stop
+};
+
 /* Structure describing an LWP.  This is public only for the purposes
    of ALL_LWPS; target-specific code should generally not access it
    directly.  */
@@ -51,6 +65,9 @@ struct lwp_info
      been processed, but we should not report that wait status if GDB
      didn't try to let the LWP run.  */
   int resumed;
+
+  /* The last resume GDB requested on this thread.  */
+  enum resume_kind last_resume_kind;
 
   /* If non-zero, a pending wait status.  */
   int status;
@@ -101,12 +118,11 @@ struct lwp_info
    native target is active.  */
 extern struct lwp_info *lwp_list;
 
-/* Iterate over the PTID each active thread (light-weight process).  There
-   must be at least one.  */
-#define ALL_LWPS(LP, PTID)						\
-  for ((LP) = lwp_list, (PTID) = (LP)->ptid;				\
+/* Iterate over each active thread (light-weight process).  */
+#define ALL_LWPS(LP)							\
+  for ((LP) = lwp_list;							\
        (LP) != NULL;							\
-       (LP) = (LP)->next, (PTID) = (LP) ? (LP)->ptid : (PTID))
+       (LP) = (LP)->next)
 
 #define GET_LWP(ptid)		ptid_get_lwp (ptid)
 #define GET_PID(ptid)		ptid_get_pid (ptid)
@@ -124,10 +140,6 @@ extern void lin_thread_get_thread_signals (sigset_t *mask);
 /* Find process PID's pending signal set from /proc/pid/status.  */
 void linux_proc_pending_signals (int pid, sigset_t *pending,
 				 sigset_t *blocked, sigset_t *ignored);
-
-/* Return the TGID of LWPID from /proc/pid/status.  Returns -1 if not
-   found.  */
-extern int linux_proc_get_tgid (int lwpid);
 
 /* linux-nat functions for handling fork events.  */
 extern void linux_enable_event_reporting (ptid_t ptid);

@@ -409,7 +409,7 @@ symbol_read_needs_frame (struct symbol *sym)
 /* Given a struct symbol for a variable,
    and a stack frame id, read the value of the variable
    and return a (pointer to a) struct value containing the value.
-   If the variable cannot be found, return a zero pointer.  */
+   If the variable cannot be found, throw error.  */
 
 struct value *
 read_var_value (struct symbol *var, struct frame_info *frame)
@@ -477,7 +477,8 @@ read_var_value (struct symbol *var, struct frame_info *frame)
     case LOC_ARG:
       addr = get_frame_args_address (frame);
       if (!addr)
-	return 0;
+	error (_("Unknown argument list address for `%s'."),
+	       SYMBOL_PRINT_NAME (var));
       addr += SYMBOL_VALUE (var);
       v = allocate_value_lazy (type);
       break;
@@ -489,7 +490,8 @@ read_var_value (struct symbol *var, struct frame_info *frame)
 
 	argref = get_frame_args_address (frame);
 	if (!argref)
-	  return 0;
+	  error (_("Unknown argument list address for `%s'."),
+		 SYMBOL_PRINT_NAME (var));
 	argref += SYMBOL_VALUE (var);
 	ref = value_at (lookup_pointer_type (type), argref);
 	addr = value_as_address (ref);
@@ -504,7 +506,8 @@ read_var_value (struct symbol *var, struct frame_info *frame)
       break;
 
     case LOC_TYPEDEF:
-      error (_("Cannot look up value of a typedef"));
+      error (_("Cannot look up value of a typedef `%s'."),
+	     SYMBOL_PRINT_NAME (var));
       break;
 
     case LOC_BLOCK:
@@ -530,7 +533,8 @@ read_var_value (struct symbol *var, struct frame_info *frame)
 					  frame);
 
 	    if (regval == NULL)
-	      error (_("Value of register variable not available."));
+	      error (_("Value of register variable not available for `%s'."),
+	             SYMBOL_PRINT_NAME (var));
 
 	    addr = value_as_address (regval);
 	    v = allocate_value_lazy (type);
@@ -540,7 +544,8 @@ read_var_value (struct symbol *var, struct frame_info *frame)
 	    regval = value_from_register (type, regno, frame);
 
 	    if (regval == NULL)
-	      error (_("Value of register variable not available."));
+	      error (_("Value of register variable not available for `%s'."),
+	             SYMBOL_PRINT_NAME (var));
 	    return regval;
 	  }
       }
@@ -561,7 +566,7 @@ read_var_value (struct symbol *var, struct frame_info *frame)
 
 	msym = lookup_minimal_symbol (SYMBOL_LINKAGE_NAME (var), NULL, NULL);
 	if (msym == NULL)
-	  return 0;
+	  error (_("No global symbol \"%s\"."), SYMBOL_LINKAGE_NAME (var));
 	if (overlay_debugging)
 	  addr = symbol_overlayed_address (SYMBOL_VALUE_ADDRESS (msym),
 					   SYMBOL_OBJ_SECTION (msym));
@@ -577,13 +582,11 @@ read_var_value (struct symbol *var, struct frame_info *frame)
       break;
 
     case LOC_OPTIMIZED_OUT:
-      v = allocate_value_lazy (type);
-      VALUE_LVAL (v) = not_lval;
-      set_value_optimized_out (v, 1);
-      return v;
+      return allocate_optimized_out_value (type);
 
     default:
-      error (_("Cannot look up value of a botched symbol."));
+      error (_("Cannot look up value of a botched symbol `%s'."),
+	     SYMBOL_PRINT_NAME (var));
       break;
     }
 
@@ -620,6 +623,43 @@ default_value_from_register (struct type *type, int regnum,
   return value;
 }
 
+/* VALUE must be an lval_register value.  If regnum is the value's
+   associated register number, and len the length of the values type,
+   read one or more registers in FRAME, starting with register REGNUM,
+   until we've read LEN bytes.  */
+
+void
+read_frame_register_value (struct value *value, struct frame_info *frame)
+{
+  int offset = 0;
+  int regnum = VALUE_REGNUM (value);
+  const int len = TYPE_LENGTH (check_typedef (value_type (value)));
+
+  gdb_assert (VALUE_LVAL (value) == lval_register);
+
+  while (offset < len)
+    {
+      struct value *regval = get_frame_register_value (frame, regnum);
+      int reg_len = TYPE_LENGTH (value_type (regval));
+      int reg_offset = 0;
+
+      /* If the register length is larger than the number of bytes
+         remaining to copy, then only copy the appropriate bytes.  */
+      if (offset + reg_len > len)
+	{
+	  reg_len = len - offset;
+	  if (gdbarch_byte_order (get_frame_arch (frame)) == BFD_ENDIAN_BIG)
+	    reg_offset = TYPE_LENGTH (value_type (regval)) - reg_len;
+	}
+
+      value_contents_copy (value, offset, regval,
+                           value_offset (regval) + reg_offset, reg_len);
+
+      offset += reg_len;
+      regnum++;
+    }
+}
+
 /* Return a value of type TYPE, stored in register REGNUM, in frame FRAME.  */
 
 struct value *
@@ -628,10 +668,11 @@ value_from_register (struct type *type, int regnum, struct frame_info *frame)
   struct gdbarch *gdbarch = get_frame_arch (frame);
   struct type *type1 = check_typedef (type);
   struct value *v;
-  int optim, unavail, ok;
 
   if (gdbarch_convert_register_p (gdbarch, regnum, type1))
     {
+      int optim, unavail, ok;
+
       /* The ISA/ABI need to something weird when obtaining the
          specified value from this register.  It might need to
          re-order non-adjacent, starting with REGNUM (see MIPS and
@@ -646,26 +687,22 @@ value_from_register (struct type *type, int regnum, struct frame_info *frame)
       ok = gdbarch_register_to_value (gdbarch, frame, regnum, type1,
 				      value_contents_raw (v), &optim,
 				      &unavail);
+
+      if (!ok)
+	{
+	  if (optim)
+	    set_value_optimized_out (v, 1);
+	  if (unavail)
+	    mark_value_bytes_unavailable (v, 0, TYPE_LENGTH (type));
+	}
     }
   else
     {
-      int len = TYPE_LENGTH (type);
-
       /* Construct the value.  */
       v = gdbarch_value_from_register (gdbarch, type, regnum, frame);
 
       /* Get the data.  */
-      ok = get_frame_register_bytes (frame, regnum, value_offset (v), len,
-				     value_contents_raw (v),
-				     &optim, &unavail);
-    }
-
-  if (!ok)
-    {
-      if (optim)
-	set_value_optimized_out (v, 1);
-      if (unavail)
-	mark_value_bytes_unavailable (v, 0, TYPE_LENGTH (type));
+      read_frame_register_value (v, frame);
     }
 
   return v;
@@ -690,3 +727,4 @@ address_from_register (struct type *type, int regnum, struct frame_info *frame)
 
   return result;
 }
+

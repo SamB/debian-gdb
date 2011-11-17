@@ -91,7 +91,7 @@ msymbol_hash_iw (const char *string)
 	++string;
       if (*string && *string != '(')
 	{
-	  hash = hash * 67 + *string - 113;
+	  hash = SYMBOL_HASH_NEXT (hash, *string);
 	  ++string;
 	}
     }
@@ -106,7 +106,7 @@ msymbol_hash (const char *string)
   unsigned int hash = 0;
 
   for (; *string; ++string)
-    hash = hash * 67 + *string - 113;
+    hash = SYMBOL_HASH_NEXT (hash, *string);
   return hash;
 }
 
@@ -239,11 +239,16 @@ lookup_minimal_symbol (const char *name, const char *sfile,
 
 		  if (pass == 1)
 		    {
-		      match = strcmp (SYMBOL_LINKAGE_NAME (msymbol),
-				      modified_name) == 0;
+		      int (*cmp) (const char *, const char *);
+
+		      cmp = (case_sensitivity == case_sensitive_on
+		             ? strcmp : strcasecmp);
+		      match = cmp (SYMBOL_LINKAGE_NAME (msymbol),
+				   modified_name) == 0;
 		    }
 		  else
 		    {
+		      /* The function respects CASE_SENSITIVITY.  */
 		      match = SYMBOL_MATCHES_SEARCH_NAME (msymbol,
 							  modified_name);
 		    }
@@ -578,7 +583,7 @@ lookup_minimal_symbol_by_pc_section_1 (CORE_ADDR pc,
 
 		  /* If we are looking for a trampoline and this is a
 		     text symbol, or the other way around, check the
-		     preceeding symbol too.  If they are otherwise
+		     preceding symbol too.  If they are otherwise
 		     identical prefer that one.  */
 		  if (hi > 0
 		      && MSYMBOL_TYPE (&msymbol[hi]) == other_type

@@ -134,6 +134,7 @@ lookup_partial_symtab (struct objfile *objfile, const char *name,
 		       const char *full_path, const char *real_path)
 {
   struct partial_symtab *pst;
+  const char *name_basename = lbasename (name);
 
   ALL_OBJFILE_PSYMTABS_REQUIRED (objfile, pst)
   {
@@ -141,6 +142,12 @@ lookup_partial_symtab (struct objfile *objfile, const char *name,
       {
 	return (pst);
       }
+
+    /* Before we invoke realpath, which can get expensive when many
+       files are involved, do a quick comparison of the basenames.  */
+    if (! basenames_may_differ
+	&& FILENAME_CMP (name_basename, lbasename (pst->filename)) != 0)
+      continue;
 
     /* If the user gave us an absolute path, try to find the file in
        this symtab and use its absolute path.  */
@@ -172,7 +179,7 @@ lookup_partial_symtab (struct objfile *objfile, const char *name,
 
   /* Now, search for a matching tail (only if name doesn't have any dirs).  */
 
-  if (lbasename (name) == name)
+  if (name_basename == name)
     ALL_OBJFILE_PSYMTABS_REQUIRED (objfile, pst)
     {
       if (FILENAME_CMP (lbasename (pst->filename), name) == 0)
@@ -588,7 +595,8 @@ match_partial_symbol (struct partial_symtab *pst, int global,
 
 static void
 pre_expand_symtabs_matching_psymtabs (struct objfile *objfile,
-				      int kind, const char *name,
+				      enum block_enum block_kind,
+				      const char *name,
 				      domain_enum domain)
 {
   /* Nothing.  */
@@ -690,8 +698,15 @@ lookup_partial_symbol (struct partial_symtab *pst, const char *name,
 	internal_error (__FILE__, __LINE__,
 			_("failed internal consistency check"));
 
-      while (top <= real_top
-	     && SYMBOL_MATCHES_SEARCH_NAME (*top, search_name))
+      /* For `case_sensitivity == case_sensitive_off' strcmp_iw_ordered will
+	 search more exactly than what matches SYMBOL_MATCHES_SEARCH_NAME.  */
+      while (top >= start && SYMBOL_MATCHES_SEARCH_NAME (*top, search_name))
+	top--;
+
+      /* Fixup to have a symbol which matches SYMBOL_MATCHES_SEARCH_NAME.  */
+      top++;
+
+      while (top <= real_top && SYMBOL_MATCHES_SEARCH_NAME (*top, search_name))
 	{
 	  if (symbol_matches_domain (SYMBOL_LANGUAGE (*top),
 				     SYMBOL_DOMAIN (*top), domain))
@@ -1074,9 +1089,8 @@ read_psymtabs_with_filename (struct objfile *objfile, const char *filename)
 
 static void
 map_symbol_filenames_psymtab (struct objfile *objfile,
-			      void (*fun) (const char *, const char *,
-					   void *),
-			      void *data)
+			      symbol_filename_ftype *fun, void *data,
+			      int need_fullname)
 {
   struct partial_symtab *ps;
 
@@ -1087,7 +1101,11 @@ map_symbol_filenames_psymtab (struct objfile *objfile,
       if (ps->readin)
 	continue;
 
-      fullname = psymtab_to_fullname (ps);
+      QUIT;
+      if (need_fullname)
+	fullname = psymtab_to_fullname (ps);
+      else
+	fullname = NULL;
       (*fun) (ps->filename, fullname, data);
     }
 }
@@ -1103,6 +1121,7 @@ int find_and_open_source (const char *filename,
 
    If this function fails to find the file that this partial_symtab represents,
    NULL will be returned and ps->fullname will be set to NULL.  */
+
 static char *
 psymtab_to_fullname (struct partial_symtab *ps)
 {
@@ -1111,8 +1130,12 @@ psymtab_to_fullname (struct partial_symtab *ps)
   if (!ps)
     return NULL;
 
-  /* Don't check ps->fullname here, the file could have been
-     deleted/moved/..., look for it again.  */
+  /* Use cached copy if we have it.
+     We rely on forget_cached_source_info being called appropriately
+     to handle cases like the file being moved.  */
+  if (ps->fullname)
+    return ps->fullname;
+
   r = find_and_open_source (ps->filename, ps->dirname, &ps->fullname);
 
   if (r >= 0)
@@ -1208,7 +1231,7 @@ expand_symtabs_matching_via_partial (struct objfile *objfile,
 							  void *),
 				     int (*name_matcher) (const char *,
 							  void *),
-				     domain_enum kind,
+				     enum search_domain kind,
 				     void *data)
 {
   struct partial_symtab *ps;
@@ -1909,15 +1932,15 @@ expand_partial_symbol_names (int (*fun) (const char *, void *), void *data)
 }
 
 void
-map_partial_symbol_filenames (void (*fun) (const char *, const char *,
-					   void *),
-			      void *data)
+map_partial_symbol_filenames (symbol_filename_ftype *fun, void *data,
+			      int need_fullname)
 {
   struct objfile *objfile;
 
   ALL_OBJFILES (objfile)
   {
     if (objfile->sf)
-      objfile->sf->qf->map_symbol_filenames (objfile, fun, data);
+      objfile->sf->qf->map_symbol_filenames (objfile, fun, data,
+					     need_fullname);
   }
 }
