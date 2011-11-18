@@ -10,7 +10,7 @@ Build-Depends: autoconf, libtool, texinfo (>= 4.7-2.2), texlive-base,
  libkvm-dev [kfreebsd-any], libunwind7-dev [ia64],
  flex | flex-old, libexpat1-dev, g++-multilib [i386 powerpc s390 sparc],
  lib64readline6-dev [i386 powerpc s390 sparc], python-dev, zlib1g-dev,
- procps, lsb-release, bzip2
+ lib64ncurses5-dev [i386 powerpc s390 sparc], procps, lsb-release, bzip2
 Vcs-Git: git://anonscm.debian.org/crosstoolchain/gdb.git
 Vcs-Browser: http://anonscm.debian.org/gitweb/?p=crosstoolchain/gdb.git
 Homepage: http://www.gnu.org/s/gdb/

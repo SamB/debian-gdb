@@ -1,3 +1,11 @@
+gdb (7.4-1~cvs20111117.2) experimental; urgency=low
+
+  * Add Renesas SH (sh4) support (Closes: #576242)
+    - Thanks Nobuhiro Iwamatsu, Takashi Yoshii.
+  * Add build dependency on lib64ncurses5-dev for multilib targets. 
+
+ -- Hector Oron <zumbi@debian.org>  Fri, 18 Nov 2011 19:35:17 +0000
+
 gdb (7.4-1~cvs20111117.1) experimental; urgency=low
 
   * Add accidentally dropped armhf to architecture list
