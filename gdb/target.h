@@ -1,8 +1,6 @@
 /* Interface between GDB and target environments, including files and processes
 
-   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
-   Free Software Foundation, Inc.
+   Copyright (C) 1990-2012 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.  Written by John Gilmore.
 
@@ -255,6 +253,8 @@ enum target_object
   TARGET_OBJECT_AVAILABLE_FEATURES,
   /* Currently loaded libraries, in XML format.  */
   TARGET_OBJECT_LIBRARIES,
+  /* Currently loaded libraries specific for SVR4 systems, in XML format.  */
+  TARGET_OBJECT_LIBRARIES_SVR4,
   /* Get OS specific data.  The ANNEX specifies the type (running
      processes, etc.).  The data being transfered is expected to follow
      the DTD specified in features/osdata.dtd.  */
@@ -713,6 +713,9 @@ struct target_ops
     /* Get the current status of a tracing run.  */
     int (*to_get_trace_status) (struct trace_status *ts);
 
+    void (*to_get_tracepoint_status) (struct breakpoint *tp,
+				      struct uploaded_tp *utp);
+
     /* Stop a trace run.  */
     void (*to_trace_stop) (void);
 
@@ -748,6 +751,10 @@ struct target_ops
        disconnection - set VAL to 1 to keep tracing, 0 to stop.  */
     void (*to_set_disconnected_tracing) (int val);
     void (*to_set_circular_trace_buffer) (int val);
+
+    /* Add/change textual notes about the trace run, returning 1 if
+       successful, 0 otherwise.  */
+    int (*to_set_trace_notes) (char *user, char *notes, char* stopnotes);
 
     /* Return the processor core that thread PTID was last seen on.
        This information is updated only when:
@@ -931,6 +938,9 @@ extern int target_read_stack (CORE_ADDR memaddr, gdb_byte *myaddr, int len);
 
 extern int target_write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr,
 				int len);
+
+extern int target_write_raw_memory (CORE_ADDR memaddr, const gdb_byte *myaddr,
+				    int len);
 
 /* Fetches the target's memory map.  If one is found it is sorted
    and returned, after some consistency checking.  Otherwise, NULL
@@ -1508,6 +1518,9 @@ extern int target_search_memory (CORE_ADDR start_addr,
 #define target_get_trace_status(ts) \
   (*current_target.to_get_trace_status) (ts)
 
+#define target_get_tracepoint_status(tp,utp)		\
+  (*current_target.to_get_tracepoint_status) (tp, utp)
+
 #define target_trace_stop() \
   (*current_target.to_trace_stop) ()
 
@@ -1537,6 +1550,9 @@ extern int target_search_memory (CORE_ADDR start_addr,
 
 #define	target_set_circular_trace_buffer(val)	\
   (*current_target.to_set_circular_trace_buffer) (val)
+
+#define	target_set_trace_notes(user,notes,stopnotes)		\
+  (*current_target.to_set_trace_notes) ((user), (notes), (stopnotes))
 
 #define target_get_tib_address(ptid, addr) \
   (*current_target.to_get_tib_address) ((ptid), (addr))

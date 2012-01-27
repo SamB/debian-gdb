@@ -1,7 +1,5 @@
 /* List lines of source files for GDB, the GNU debugger.
-   Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995,
-   1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008,
-   2009, 2010, 2011 Free Software Foundation, Inc.
+   Copyright (C) 1986-2005, 2007-2012 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -245,7 +243,7 @@ select_source_symtab (struct symtab *s)
      if one exists.  */
   if (lookup_symbol (main_name (), 0, VAR_DOMAIN, 0))
     {
-      sals = decode_line_spec (main_name (), 1);
+      sals = decode_line_spec (main_name (), DECODE_LINE_FUNFIRSTLINE);
       sal = sals.sals[0];
       xfree (sals.sals);
       current_source_pspace = sal.pspace;
@@ -1322,10 +1320,12 @@ print_source_lines_base (struct symtab *s, int line, int stopline, int noerror)
 	  print_sys_errmsg (name, errno);
 	}
       else
-	ui_out_field_int (uiout, "line", line);
-      ui_out_text (uiout, "\tin ");
-      ui_out_field_string (uiout, "file", s->filename);
-      ui_out_text (uiout, "\n");
+	{
+	  ui_out_field_int (uiout, "line", line);
+	  ui_out_text (uiout, "\tin ");
+	  ui_out_field_string (uiout, "file", s->filename);
+	  ui_out_text (uiout, "\n");
+	}
 
       return;
     }
@@ -1413,12 +1413,14 @@ line_info (char *arg, int from_tty)
   struct symtab_and_line sal;
   CORE_ADDR start_pc, end_pc;
   int i;
+  struct cleanup *cleanups;
 
   init_sal (&sal);		/* initialize to zeroes */
 
   if (arg == 0)
     {
       sal.symtab = current_source_symtab;
+      sal.pspace = current_program_space;
       sal.line = last_line_listed;
       sals.nelts = 1;
       sals.sals = (struct symtab_and_line *)
@@ -1427,16 +1429,20 @@ line_info (char *arg, int from_tty)
     }
   else
     {
-      sals = decode_line_spec_1 (arg, 0);
+      sals = decode_line_spec_1 (arg, DECODE_LINE_LIST_MODE);
 
       dont_repeat ();
     }
+
+  cleanups = make_cleanup (xfree, sals.sals);
 
   /* C++  More than one line may have been specified, as when the user
      specifies an overloaded function name.  Print info on them all.  */
   for (i = 0; i < sals.nelts; i++)
     {
       sal = sals.sals[i];
+      if (sal.pspace != current_program_space)
+	continue;
 
       if (sal.symtab == 0)
 	{
@@ -1502,7 +1508,7 @@ line_info (char *arg, int from_tty)
 	printf_filtered (_("Line number %d is out of range for \"%s\".\n"),
 			 sal.line, sal.symtab->filename);
     }
-  xfree (sals.sals);
+  do_cleanups (cleanups);
 }
 
 /* Commands to search the source file for a regexp.  */

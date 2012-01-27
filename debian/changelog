@@ -1,7 +1,19 @@
+gdb (7.4really-1) unstable; urgency=low
+
+  * New upstream release:
+    - Many Python scripting improvements
+    - Better support for ambiguous linespecs
+    - Masked watchpoints
+    - Tracepoint support improvements
+    - Support for Texas Instruments TMS320C6x (tic6x-*-*)
+    - A Renesas RL78 simulator (rl78-*-elf)
+    - Some minor Remote protocol extensions and GDB/MI changes
+  * Temporarily disable gdb-multiarch and gdb-dbg.
+
+ -- Hector Oron <zumbi@debian.org>  Sat, 28 Jan 2012 00:41:20 +0100
+
 gdb (7.4-1~cvs20111117.2) experimental; urgency=low
 
-  * Add Renesas SH (sh4) support (Closes: #576242)
-    - Thanks Nobuhiro Iwamatsu, Takashi Yoshii.
   * Add build dependency on lib64ncurses5-dev for multilib targets. 
 
  -- Hector Oron <zumbi@debian.org>  Fri, 18 Nov 2011 19:35:17 +0000
