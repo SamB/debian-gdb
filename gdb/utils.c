@@ -1,8 +1,6 @@
 /* General utility routines for GDB, the GNU debugger.
 
-   Copyright (C) 1986, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
-   1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
-   2009, 2010, 2011 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1988-2012 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -3649,6 +3647,17 @@ compare_positive_ints (const void *ap, const void *bp)
   /* Because we know we're comparing two ints which are positive,
      there's no danger of overflow here.  */
   return * (int *) ap - * (int *) bp;
+}
+
+/* String compare function for qsort.  */
+
+int
+compare_strings (const void *arg1, const void *arg2)
+{
+  const char **s1 = (const char **) arg1;
+  const char **s2 = (const char **) arg2;
+
+  return strcmp (*s1, *s2);
 }
 
 #define AMBIGUOUS_MESS1	".\nMatching formats:"

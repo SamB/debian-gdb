@@ -1,8 +1,6 @@
 /* Remote target communications for serial-line targets in custom GDB protocol
 
-   Copyright (C) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
-   2010, 2011 Free Software Foundation, Inc.
+   Copyright (C) 1988-2012 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -1243,6 +1241,7 @@ enum {
   PACKET_qXfer_auxv,
   PACKET_qXfer_features,
   PACKET_qXfer_libraries,
+  PACKET_qXfer_libraries_svr4,
   PACKET_qXfer_memory_map,
   PACKET_qXfer_spu_read,
   PACKET_qXfer_spu_write,
@@ -3748,6 +3747,8 @@ static struct protocol_feature remote_protocol_features[] = {
     PACKET_qXfer_features },
   { "qXfer:libraries:read", PACKET_DISABLE, remote_supported_packet,
     PACKET_qXfer_libraries },
+  { "qXfer:libraries-svr4:read", PACKET_DISABLE, remote_supported_packet,
+    PACKET_qXfer_libraries_svr4 },
   { "qXfer:memory-map:read", PACKET_DISABLE, remote_supported_packet,
     PACKET_qXfer_memory_map },
   { "qXfer:spu:read", PACKET_DISABLE, remote_supported_packet,
@@ -7369,12 +7370,20 @@ getpkt_or_notif_sane (char **buf, long *sizeof_buf, int forever)
 }
 
 
+/* A helper function that just calls putpkt; for type correctness.  */
+
+static int
+putpkt_for_catch_errors (void *arg)
+{
+  return putpkt (arg);
+}
+
 static void
 remote_kill (struct target_ops *ops)
 {
   /* Use catch_errors so the user can quit from gdb even when we
      aren't on speaking terms with the remote system.  */
-  catch_errors ((catch_errors_ftype *) putpkt, "k", "", RETURN_MASK_ERROR);
+  catch_errors (putpkt_for_catch_errors, "k", "", RETURN_MASK_ERROR);
 
   /* Don't wait for it to die.  I'm not really sure it matters whether
      we do or not.  For the existing stubs, kill is a noop.  */
@@ -8347,6 +8356,11 @@ remote_xfer_partial (struct target_ops *ops, enum target_object object,
       return remote_read_qxfer
 	(ops, "libraries", annex, readbuf, offset, len,
 	 &remote_protocol_packets[PACKET_qXfer_libraries]);
+
+    case TARGET_OBJECT_LIBRARIES_SVR4:
+      return remote_read_qxfer
+	(ops, "libraries-svr4", annex, readbuf, offset, len,
+	 &remote_protocol_packets[PACKET_qXfer_libraries_svr4]);
 
     case TARGET_OBJECT_MEMORY_MAP:
       gdb_assert (annex == NULL);
@@ -10206,6 +10220,51 @@ remote_get_trace_status (struct trace_status *ts)
   return ts->running;
 }
 
+void
+remote_get_tracepoint_status (struct breakpoint *bp,
+			      struct uploaded_tp *utp)
+{
+  struct remote_state *rs = get_remote_state ();
+  char *reply;
+  struct bp_location *loc;
+  struct tracepoint *tp = (struct tracepoint *) bp;
+
+  if (tp)
+    {
+      tp->base.hit_count = 0;
+      tp->traceframe_usage = 0;
+      for (loc = tp->base.loc; loc; loc = loc->next)
+	{
+	  /* If the tracepoint was never downloaded, don't go asking for
+	     any status.  */
+	  if (tp->number_on_target == 0)
+	    continue;
+	  sprintf (rs->buf, "qTP:%x:%s", tp->number_on_target,
+		   phex_nz (loc->address, 0));
+	  putpkt (rs->buf);
+	  reply = remote_get_noisy_reply (&target_buf, &target_buf_size);
+	  if (reply && *reply)
+	    {
+	      if (*reply == 'V')
+		parse_tracepoint_status (reply + 1, bp, utp);
+	    }
+	}
+    }
+  else if (utp)
+    {
+      utp->hit_count = 0;
+      utp->traceframe_usage = 0;
+      sprintf (rs->buf, "qTP:%x:%s", utp->number, phex_nz (utp->addr, 0));
+      putpkt (rs->buf);
+      reply = remote_get_noisy_reply (&target_buf, &target_buf_size);
+      if (reply && *reply)
+	{
+	  if (*reply == 'V')
+	    parse_tracepoint_status (reply + 1, bp, utp);
+	}
+    }
+}
+
 static void
 remote_trace_stop (void)
 {
@@ -10477,6 +10536,51 @@ remote_get_min_fast_tracepoint_insn_len (void)
     }
 }
 
+static int
+remote_set_trace_notes (char *user, char *notes, char *stop_notes)
+{
+  struct remote_state *rs = get_remote_state ();
+  char *reply;
+  char *buf = rs->buf;
+  char *endbuf = rs->buf + get_remote_packet_size ();
+  int nbytes;
+
+  buf += xsnprintf (buf, endbuf - buf, "QTNotes:");
+  if (user)
+    {
+      buf += xsnprintf (buf, endbuf - buf, "user:");
+      nbytes = bin2hex (user, buf, 0);
+      buf += 2 * nbytes;
+      *buf++ = ';';
+    }
+  if (notes)
+    {
+      buf += xsnprintf (buf, endbuf - buf, "notes:");
+      nbytes = bin2hex (notes, buf, 0);
+      buf += 2 * nbytes;
+      *buf++ = ';';
+    }
+  if (stop_notes)
+    {
+      buf += xsnprintf (buf, endbuf - buf, "tstop:");
+      nbytes = bin2hex (stop_notes, buf, 0);
+      buf += 2 * nbytes;
+      *buf++ = ';';
+    }
+  /* Ensure the buffer is terminated.  */
+  *buf = '\0';
+
+  putpkt (rs->buf);
+  reply = remote_get_noisy_reply (&target_buf, &target_buf_size);
+  if (*reply == '\0')
+    return 0;
+
+  if (strcmp (reply, "OK") != 0)
+    error (_("Bogus reply from target: %s"), reply);
+
+  return 1;
+}
+
 static void
 init_remote_ops (void)
 {
@@ -10557,6 +10661,7 @@ Specify the serial device it is connected to\n\
   remote_ops.to_trace_set_readonly_regions = remote_trace_set_readonly_regions;
   remote_ops.to_trace_start = remote_trace_start;
   remote_ops.to_get_trace_status = remote_get_trace_status;
+  remote_ops.to_get_tracepoint_status = remote_get_tracepoint_status;
   remote_ops.to_trace_stop = remote_trace_stop;
   remote_ops.to_trace_find = remote_trace_find;
   remote_ops.to_get_trace_state_variable_value
@@ -10569,6 +10674,7 @@ Specify the serial device it is connected to\n\
   remote_ops.to_get_min_fast_tracepoint_insn_len = remote_get_min_fast_tracepoint_insn_len;
   remote_ops.to_set_disconnected_tracing = remote_set_disconnected_tracing;
   remote_ops.to_set_circular_trace_buffer = remote_set_circular_trace_buffer;
+  remote_ops.to_set_trace_notes = remote_set_trace_notes;
   remote_ops.to_core_of_thread = remote_core_of_thread;
   remote_ops.to_verify_memory = remote_verify_memory;
   remote_ops.to_get_tib_address = remote_get_tib_address;
@@ -10977,6 +11083,9 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
 
   add_packet_config_cmd (&remote_protocol_packets[PACKET_qXfer_libraries],
 			 "qXfer:libraries:read", "library-info", 0);
+
+  add_packet_config_cmd (&remote_protocol_packets[PACKET_qXfer_libraries_svr4],
+			 "qXfer:libraries-svr4:read", "library-info-svr4", 0);
 
   add_packet_config_cmd (&remote_protocol_packets[PACKET_qXfer_memory_map],
 			 "qXfer:memory-map:read", "memory-map", 0);

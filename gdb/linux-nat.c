@@ -1,7 +1,6 @@
 /* GNU/Linux native-dependent code common to multiple platforms.
 
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
-   2011 Free Software Foundation, Inc.
+   Copyright (C) 2001-2012 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -3921,24 +3920,28 @@ resume_stopped_resumed_lwps (struct lwp_info *lp, void *data)
       && lp->status == 0
       && lp->waitstatus.kind == TARGET_WAITKIND_IGNORE)
     {
+      struct regcache *regcache = get_thread_regcache (lp->ptid);
+      struct gdbarch *gdbarch = get_regcache_arch (regcache);
+      CORE_ADDR pc = regcache_read_pc (regcache);
+
       gdb_assert (is_executing (lp->ptid));
 
       /* Don't bother if there's a breakpoint at PC that we'd hit
 	 immediately, and we're not waiting for this LWP.  */
       if (!ptid_match (lp->ptid, *wait_ptid_p))
 	{
-	  struct regcache *regcache = get_thread_regcache (lp->ptid);
-	  CORE_ADDR pc = regcache_read_pc (regcache);
-
 	  if (breakpoint_inserted_here_p (get_regcache_aspace (regcache), pc))
 	    return 0;
 	}
 
       if (debug_linux_nat)
 	fprintf_unfiltered (gdb_stdlog,
-			    "RSRL: resuming stopped-resumed LWP %s\n",
-			    target_pid_to_str (lp->ptid));
+			    "RSRL: resuming stopped-resumed LWP %s at %s: step=%d\n",
+			    target_pid_to_str (lp->ptid),
+			    paddress (gdbarch, pc),
+			    lp->step);
 
+      registers_changed ();
       linux_ops->to_resume (linux_ops, pid_to_ptid (GET_LWP (lp->ptid)),
 			    lp->step, TARGET_SIGNAL_0);
       lp->stopped = 0;

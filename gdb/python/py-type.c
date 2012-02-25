@@ -1,6 +1,6 @@
 /* Python interface to types.
 
-   Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
+   Copyright (C) 2008-2012 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -395,6 +395,13 @@ static PyObject *
 typy_strip_typedefs (PyObject *self, PyObject *args)
 {
   struct type *type = ((type_object *) self)->type;
+  volatile struct gdb_exception except;
+
+  TRY_CATCH (except, RETURN_MASK_ALL)
+    {
+      type = check_typedef (type);
+    }
+  GDB_PY_HANDLE_EXCEPTION (except);
 
   return type_to_type_object (check_typedef (type));
 }
@@ -768,10 +775,11 @@ typy_legacy_template_argument (struct type *type, const struct block *block,
 {
   int i;
   struct demangle_component *demangled;
-  struct demangle_parse_info *info;
+  struct demangle_parse_info *info = NULL;
   const char *err;
   struct type *argtype;
   struct cleanup *cleanup;
+  volatile struct gdb_exception except;
 
   if (TYPE_NAME (type) == NULL)
     {
@@ -779,8 +787,13 @@ typy_legacy_template_argument (struct type *type, const struct block *block,
       return NULL;
     }
 
-  /* Note -- this is not thread-safe.  */
-  info = cp_demangled_name_to_comp (TYPE_NAME (type), &err);
+  TRY_CATCH (except, RETURN_MASK_ALL)
+    {
+      /* Note -- this is not thread-safe.  */
+      info = cp_demangled_name_to_comp (TYPE_NAME (type), &err);
+    }
+  GDB_PY_HANDLE_EXCEPTION (except);
+
   if (! info)
     {
       PyErr_SetString (PyExc_RuntimeError, err);
@@ -934,7 +947,7 @@ DEF_VEC_O (type_equality_entry_d);
    the same, 0 otherwise.  Handles NULLs properly.  */
 
 static int
-compare_strings (const char *s, const char *t)
+compare_maybe_null_strings (const char *s, const char *t)
 {
   if (s == NULL && t != NULL)
     return 0;
@@ -970,9 +983,10 @@ check_types_equal (struct type *type1, struct type *type2,
       || TYPE_NFIELDS (type1) != TYPE_NFIELDS (type2))
     return Py_NE;
 
-  if (!compare_strings (TYPE_TAG_NAME (type1), TYPE_TAG_NAME (type2)))
+  if (!compare_maybe_null_strings (TYPE_TAG_NAME (type1),
+				   TYPE_TAG_NAME (type2)))
     return Py_NE;
-  if (!compare_strings (TYPE_NAME (type1), TYPE_NAME (type2)))
+  if (!compare_maybe_null_strings (TYPE_NAME (type1), TYPE_NAME (type2)))
     return Py_NE;
 
   if (TYPE_CODE (type1) == TYPE_CODE_RANGE)
@@ -995,7 +1009,8 @@ check_types_equal (struct type *type1, struct type *type2,
 	      || FIELD_BITSIZE (*field1) != FIELD_BITSIZE (*field2)
 	      || FIELD_LOC_KIND (*field1) != FIELD_LOC_KIND (*field2))
 	    return Py_NE;
-	  if (!compare_strings (FIELD_NAME (*field1), FIELD_NAME (*field2)))
+	  if (!compare_maybe_null_strings (FIELD_NAME (*field1),
+					   FIELD_NAME (*field2)))
 	    return Py_NE;
 	  switch (FIELD_LOC_KIND (*field1))
 	    {
@@ -1009,8 +1024,8 @@ check_types_equal (struct type *type1, struct type *type2,
 		return Py_NE;
 	      break;
 	    case FIELD_LOC_KIND_PHYSNAME:
-	      if (!compare_strings (FIELD_STATIC_PHYSNAME (*field1),
-				    FIELD_STATIC_PHYSNAME (*field2)))
+	      if (!compare_maybe_null_strings (FIELD_STATIC_PHYSNAME (*field1),
+					       FIELD_STATIC_PHYSNAME (*field2)))
 		return Py_NE;
 	      break;
 	    case FIELD_LOC_KIND_DWARF_BLOCK:
@@ -1527,8 +1542,10 @@ static PyGetSetDef type_object_getset[] =
 static PyMethodDef type_object_methods[] =
 {
   { "array", typy_array, METH_VARARGS,
-    "array (N) -> Type\n\
-Return a type which represents an array of N objects of this type." },
+    "array ([LOW_BOUND,] HIGH_BOUND) -> Type\n\
+Return a type which represents an array of objects of this type.\n\
+The bounds of the array are [LOW_BOUND, HIGH_BOUND] inclusive.\n\
+If LOW_BOUND is omitted, a value of zero is used." },
    { "__contains__", typy_has_key, METH_VARARGS,
      "T.__contains__(k) -> True if T has a field named k, else False" },
   { "const", typy_const, METH_NOARGS,
