@@ -159,10 +159,12 @@ DEB_CONFIGURE_FLAGS_64 := --host=$(HOST64) $(EXTRA_FLAGS) \
 #	x86_64-linux-gnu \
 #	m32r-linux-gnu \
 #	spu
+#	--enable-targets=`set -- $(MULTIARCH_TARGETS); IFS=,; echo "$$*"`
 MULTIARCH_TARGETS := all
 # multiarch flags
 DEB_CONFIGURE_FLAGS_MULTIARCH := $(DEB_CONFIGURE_EXTRA_FLAGS) \
-	--enable-targets=`set -- $(MULTIARCH_TARGETS); IFS=,; echo "$$*"`
+	--enable-targets=$(MULTIARCH_TARGETS) \
+	--disable-sim
 
 # Minimal flags
 DEB_CONFIGURE_FLAGS_MIN := --host=$(DEB_HOST_GNU_TYPE) $(EXTRA_FLAGS) \

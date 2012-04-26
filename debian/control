@@ -28,20 +28,6 @@ Description: The GNU Debugger
  Objective-C, Fortran, Java, OpenCL C, Pascal, assembly, Modula-2,
  and Ada. A must-have for any serious programmer.
 
-## Package: gdb-dbg
-## Architecture: any
-## Section: debug
-## Priority: extra
-## Depends: gdb (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
-## Description: debugging symbols for the GNU Debugger
-##  GDB is a source-level debugger, capable of breaking programs at
-##  any specific line, displaying variable values, and determining
-##  where errors occurred. Currently, gdb supports C, C++, D,
-##  Objective-C, Fortran, Java, OpenCL C, Pascal, assembly, Modula-2,
-##  and Ada. A must-have for any serious programmer.
-##  .
-##  This package contains the debugging symbols for GDB.
-
 Package: gdb-minimal
 Architecture: any
 Section: devel
@@ -68,19 +54,19 @@ Description: The GNU Debugger (64-bit)
  Objective-C, Fortran, Java, OpenCL C, Pascal, assembly, Modula-2,
  and Ada. A must-have for any serious programmer.
 
-## Package: gdb-multiarch
-## Architecture: any
-## Section: devel
-## Depends: ${shlibs:Depends}, gdb , ${misc:Depends}
-## Description: The GNU Debugger (with support for multiple architectures)
-##  GDB is a source-level debugger, capable of breaking programs at
-##  any specific line, displaying variable values, and determining
-##  where errors occurred. Currently, it works for C, C++, Fortran
-##  Modula 2 and Java programs. A must-have for any serious
-##  programmer.
-##  .
-##  This package contains a version of GDB which supports multiple
-##  target architectures.
+Package: gdb-multiarch
+Architecture: any
+Section: devel
+Depends: ${shlibs:Depends}, gdb , ${misc:Depends}
+Description: The GNU Debugger (with support for multiple architectures)
+ GDB is a source-level debugger, capable of breaking programs at
+ any specific line, displaying variable values, and determining
+ where errors occurred. Currently, it works for C, C++, Fortran
+ Modula 2 and Java programs. A must-have for any serious
+ programmer.
+ .
+ This package contains a version of GDB which supports multiple
+ target architectures.
 
 Package: gdbserver
 Architecture: amd64 armel armhf i386 ia64 mips mipsel powerpc s390

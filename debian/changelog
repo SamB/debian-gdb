@@ -1,3 +1,19 @@
+gdb (7.4.1-1) unstable; urgency=low
+
+  * New upstream release:
+    - [GDB/MI] Error when resuming program execution in all-stop mode
+      ("Cannot execute this command without a live selected thread").
+    - [Pascal] Polluted display of class methods parameters.
+    - [target remote] Errror when connecting to remote target where
+      disconnected tracing is in effect.
+    - [AVX] Float and ymm* register values not available.
+    - [GDB] Crash when using the "finish" command.
+    - [build] makeinfo should not be required to build GDB.
+  * d/control: enable gdb-multiarch packages
+  * d/rules: disable simulator for gdb-multiarch builds.
+
+ -- Hector Oron <zumbi@debian.org>  Thu, 26 Apr 2012 18:26:18 +0200
+
 gdb (7.4really-1) unstable; urgency=low
 
   * New upstream release:
