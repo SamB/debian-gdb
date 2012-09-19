@@ -1,3 +1,13 @@
+gdb (7.4.1-2) unstable; urgency=low
+
+  * Fix empty doc directory when upgrading from squeeze to wheezy.
+    (Closes: #684375)
+  * d/p/m68k-thread-debugging.patch:
+    - Add thread debugging function for m68k. Taken from upstream.
+    Thanks Thorsten Glaser.
+
+ -- Hector Oron <zumbi@debian.org>  Wed, 19 Sep 2012 21:16:17 +0000
+
 gdb (7.4.1-1.1) unstable; urgency=low
 
   * Non-maintainer upload.
