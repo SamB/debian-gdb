@@ -8,11 +8,11 @@ Signed-off-by: Jari Aalto <jari.aalto@cante.net>
  gdb/gdb.1 |  148 +++++++++++++++++++++++++-------------------------------------
  1 file changed, 60 insertions(+), 88 deletions(-)
 
-Index: gdb-7.3.50~cvs20110627/gdb/gdb.1
+Index: gdb/gdb/gdb.1
 ===================================================================
---- gdb-7.3.50~cvs20110627.orig/gdb/gdb.1	2011-06-28 00:16:13.267103856 +0100
-+++ gdb-7.3.50~cvs20110627/gdb/gdb.1	2011-06-28 00:16:17.791104170 +0100
-@@ -220,90 +220,11 @@
+--- gdb.orig/gdb/gdb.1	2013-01-27 16:15:00.000000000 -0500
++++ gdb/gdb/gdb.1	2013-01-27 16:31:17.000000000 -0500
+@@ -223,97 +223,11 @@
  `\|\c
  .B \-x\c
  \&\|' option is used.
@@ -57,7 +57,7 @@ Index: gdb-7.3.50~cvs20110627/gdb/gdb.1
 -
 -.TP
 -.BI "\-core=" "file"\c
--.TP
+ .TP
 -.BI "\-c " "file"\c
 -\&
 -Use file \c
@@ -74,8 +74,15 @@ Index: gdb-7.3.50~cvs20110627/gdb/gdb.1
 -\&.  
 -
 -.TP
+-.BI "\-ex " "command"\c
+-\&
+-Execute given GDB \c
+-.I command\c
+-\&.
+-
+-.TP
 -.BI "\-directory=" "directory"\c
- .TP
+-.TP
 -.BI "\-d " "directory"\c
 +.BI "\-b " "bps"\c
  \&
@@ -106,7 +113,7 @@ Index: gdb-7.3.50~cvs20110627/gdb/gdb.1
  
  .TP
  .B \-batch
-@@ -331,6 +252,12 @@
+@@ -341,6 +255,12 @@
  terminates) is not issued when running in batch mode.
  
  .TP
@@ -119,7 +126,7 @@ Index: gdb-7.3.50~cvs20110627/gdb/gdb.1
  .BI "\-cd=" "directory"\c
  \&
  Run GDB using \c
-@@ -339,9 +266,21 @@
+@@ -349,9 +269,28 @@
  instead of the current directory.
  
  .TP
@@ -139,11 +146,18 @@ Index: gdb-7.3.50~cvs20110627/gdb/gdb.1
 +
  .TP
 -.B \-f
++.BI "\-ex " "command"\c
++\&
++Execute given GDB \c
++.I command\c
++\&.
++
++.TP
 +.B \-f, \-fullname
  Emacs sets this option when it runs GDB as a subprocess.  It tells GDB
  to output the full file name and line number in a standard,
  recognizable fashion each time a stack frame is displayed (which
-@@ -356,10 +295,34 @@
+@@ -366,10 +305,34 @@
  a signal to display the source code for the frame.
  
  .TP
@@ -182,7 +196,7 @@ Index: gdb-7.3.50~cvs20110627/gdb/gdb.1
  
  .TP
  .BI "\-tty=" "device"\c
-@@ -379,6 +342,15 @@
+@@ -389,6 +352,15 @@
  Run GDB using a text (console) user interface.
  .PP
  

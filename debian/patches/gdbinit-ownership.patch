@@ -6,11 +6,11 @@ several problems with the implementation.  It needs to be revisited.
  gdb/main.c         |    4 ++--
  2 files changed, 43 insertions(+), 3 deletions(-)
 
-Index: gdb-7.4/gdb/cli/cli-cmds.c
+Index: gdb/gdb/cli/cli-cmds.c
 ===================================================================
---- gdb-7.4.orig/gdb/cli/cli-cmds.c	2011-11-17 15:58:35.000000000 +0000
-+++ gdb-7.4/gdb/cli/cli-cmds.c	2011-11-17 17:03:20.505359078 +0000
-@@ -55,6 +55,8 @@
+--- gdb.orig/gdb/cli/cli-cmds.c	2013-01-27 16:12:09.000000000 -0500
++++ gdb/gdb/cli/cli-cmds.c	2013-01-27 16:14:59.000000000 -0500
+@@ -54,6 +54,8 @@
  #include "tui/tui.h"	/* For tui_active et.al.  */
  #endif
  
@@ -19,7 +19,7 @@ Index: gdb-7.4/gdb/cli/cli-cmds.c
  #include <fcntl.h>
  
  /* Prototypes for local command functions */
-@@ -585,13 +587,47 @@
+@@ -580,7 +582,9 @@
           If the source command was invoked interactively, throw an
  	 error.  Otherwise (e.g. if it was invoked by a script),
  	 silently ignore the error.  */
@@ -30,9 +30,10 @@ Index: gdb-7.4/gdb/cli/cli-cmds.c
  	perror_with_name (file);
        else
  	return;
-     }
+@@ -588,6 +592,38 @@
  
    old_cleanups = make_cleanup (xfree, full_path);
+   make_cleanup_fclose (stream);
 +
 +  if (stream == NULL)
 +    {
