@@ -19,7 +19,7 @@ Package: gdb@TS@
 Architecture: any
 Section: devel
 Depends: ${shlibs:Depends}, ${misc:Depends},
- gdbserver [amd64 armel armhf i386 ia64 mips mipsel powerpc s390]
+ gdbserver [amd64 armel armhf i386 ia64 m32r m68k mips mipsel powerpc powerpcspe ppc64 s390 s390x x32]
 Suggests: gdb-doc
 Description: The GNU Debugger
  GDB is a source-level debugger, capable of breaking programs at
@@ -69,7 +69,8 @@ Description: The GNU Debugger (with support for multiple architectures)
  target architectures.
 
 Package: gdbserver
-Architecture: amd64 armel armhf i386 ia64 mips mipsel powerpc s390
+Architecture: amd64 armel armhf i386 ia64 m32r m68k mips mipsel powerpc powerpcspe ppc64 s390 s390x x32
+# Also supports mips64, but dpkg doesn't know of any mips64 ABIs yet
 Section: devel
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Replaces: gdb (<< 7.0.1-1)
