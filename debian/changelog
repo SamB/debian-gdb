@@ -1,5 +1,6 @@
-gdb (7.5.1-0.1) UNRELEASED; urgency=low
+gdb (7.5.1-0.1) experimental; urgency=low
 
+  * Non-maintainer upload.
   * New upstream release (Closes: #685388):
     - Go language support.
     - New targets (x32 ABI, microMIPS, Renesas RL78, HP OpenVMS ia64).
@@ -18,8 +19,10 @@ gdb (7.5.1-0.1) UNRELEASED; urgency=low
     - Dropped debian-changes-7.3.50~cvs20110627-1 as it's purpose was
       totally unclear: there was no real patch description, and the
       changelog from the relevant upload made no mention of any of the changes
+  * Drop libgdb-dev, since libgdb.a was dropped upstream.
+  * Update architecture list for gdbserver.
 
- -- Samuel Bronson <naesten@gmail.com>  Sun, 27 Jan 2013 15:53:34 -0500
+ -- Samuel Bronson <naesten@gmail.com>  Mon, 28 Jan 2013 21:47:49 -0500
 
 gdb (7.4.1-1) unstable; urgency=low
 
