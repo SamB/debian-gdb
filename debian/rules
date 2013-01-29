@@ -293,14 +293,6 @@ binary-post-install/gdb-minimal ::
 	install -d debian/gdb-minimal/etc/gdb
 	install -m 644 debian/gdbinit debian/gdb-minimal/etc/gdb/
 
-binary-post-install/libgdb-dev ::
-	install -m 644 $(DEB_BUILDDIR)/gdb/libgdb.a debian/libgdb-dev/usr/lib/
-	if test -e $(DEB_BUILDDIR)/sim/*/libsim.a; then \
-	  install -m 644 $(DEB_BUILDDIR)/sim/*/libsim.a debian/libgdb-dev/usr/lib/; \
-	fi
-	rm -rf debian/libgdb-dev/usr/share/doc/libgdb-dev
-	ln -s gdb debian/libgdb-dev/usr/share/doc/libgdb-dev
-
 binary-post-install/gdb-source ::
 	install -d debian/gdb-source/usr/src
 	mkdir -p $(BUILDDIRSOURCE)
