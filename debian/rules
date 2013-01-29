@@ -270,14 +270,14 @@ endif
 binary-post-install/gdb64 ::
 	install -d debian/gdb64/usr/bin
 	install -s -m 755 $(BUILDDIR64)/gdb/gdb debian/gdb64/usr/bin/gdb64
-	dh_link -pgdb64 usr/share/man/man1/gdb.1 usr/share/man/man1/gdb64.1
+	dh_link -pgdb64 usr/share/man/man1/gdb.1.gz usr/share/man/man1/gdb64.1.gz
 	rm -rf debian/gdb64/usr/share/doc/gdb64
 	ln -s gdb debian/gdb64/usr/share/doc/gdb64
 
 binary-post-install/gdb-multiarch ::
 	install -d debian/gdb-multiarch/usr/bin
 	install -s -m 755 $(BUILDDIRMULTIARCH)/gdb/gdb debian/gdb-multiarch/usr/bin/gdb-multiarch
-	dh_link -pgdb-mutliarch usr/share/man/man1/gdb.1.gz usr/share/man/man1/gdb64.1.gz
+	dh_link -pgdb-multiarch usr/share/man/man1/gdb.1.gz usr/share/man/man1/gdb-multiarch.1.gz
 	rm -rf debian/gdb-multiarch/usr/share/doc/gdb-multiarch
 	ln -s gdb debian/gdb-multiarch/usr/share/doc/gdb-multiarch
 
@@ -301,8 +301,6 @@ binary-post-install/gdb-source ::
 	cd $(dir $(BUILDDIRSOURCE)) \
 	  && tar -cjf $(shell pwd)/debian/gdb-source/usr/src/gdb.tar.bz2 \
 	     $(notdir $(BUILDDIRSOURCE))
-	rm -rf debian/gdb-source/usr/share/doc/gdb-source
-	ln -s gdb debian/gdb-source/usr/share/doc/gdb-source
 
 debian/control:: debian/control.in $(CROSS_FORCE)
 	cat debian/control.in \
@@ -326,7 +324,7 @@ DEB_INSTALL_MANPAGES_gdb$(TS) = debian/gcore.1
 endif
 
 DEB_INSTALL_DOCS_gdbserver = gdb/gdbserver/README
-DEB_INSTALL_CHANGELOGS_gdbserver = -XChangeLog
+DEB_INSTALL_CHANGELOGS_gdbserver = gdb/gdbserver/ChangeLog
 
 DEB_INSTALL_DOCS_gdb-minimal = $(DEB_INSTALL_DOCS_gdb$(TS))
 DEB_INSTALL_CHANGELOGS_gdb-minimal = -XChangeLog

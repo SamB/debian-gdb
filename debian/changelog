@@ -21,6 +21,13 @@ gdb (7.5.1-0.1) experimental; urgency=low
       changelog from the relevant upload made no mention of any of the changes
   * Drop libgdb-dev, since libgdb.a was dropped upstream.
   * Update architecture list for gdbserver.
+  * Fix documentation symlinking stuff:
+    - Fix manpage symlinks.
+    - Add "Depends: gdb (= ${binary:Version})" where needed for symlinked
+      doc directories.
+    - Migrate gdb-source to a real doc-directory, not a symlink, to avoid
+      having an :all package depend on a fixed version of an :any package,
+      which wouldn't survive binNMUs.
 
  -- Samuel Bronson <naesten@gmail.com>  Mon, 28 Jan 2013 21:47:49 -0500
 
