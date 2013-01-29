@@ -28,6 +28,9 @@ gdb (7.5.1-0.1) experimental; urgency=low
     - Migrate gdb-source to a real doc-directory, not a symlink, to avoid
       having an :all package depend on a fixed version of an :any package,
       which wouldn't survive binNMUs.
+  * Adjust lintian overrides:
+    - Use wildcards for dates of unused readline/support/config.{guess,sub}.
+    - gdb64 is *supposed* to be built for another architecture.
 
  -- Samuel Bronson <naesten@gmail.com>  Mon, 28 Jan 2013 21:47:49 -0500
 
