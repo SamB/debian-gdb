@@ -78,13 +78,20 @@ mkdir "$dest2"/readline
 cp -a "$src"/readline/doc "$dest2"/readline/doc
 mkdir "$dest2"/gdb
 cp -a "$src"/gdb/doc "$dest2"/gdb/doc
+cp -a "$src"/config "$dest2"/config
 
 # Supporting files.
+cp -a "$src"/COPYING* "$dest2/"
+cp -a "$src"/ChangeLog "$dest2/"
+cp -a "$src"/MAINTAINERS "$dest2/"
+cp -a "$src"/README* "$dest2/"
 cp -a "$src"/config.guess "$dest2/"
 cp -a "$src"/config.sub "$dest2/"
 cp -a "$src"/install-sh "$dest2/"
 cp -a "$src"/mkinstalldirs "$dest2/"
+cp -a "$src"/gdb/.gitignore "$dest2"/gdb/
 cp -a "$src"/gdb/version.in "$dest2"/gdb/
+cp -a "$src"/readline/[A-Z]* "$dest2"/readline/
 
 tar czf "$dfsg" gdb-$debversion
 tar czf "$doc" gdb-doc-$version
