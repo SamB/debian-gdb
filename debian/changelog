@@ -55,6 +55,7 @@ gdb (7.5.1-0.1) experimental; urgency=low
   * Adjust lintian overrides:
     - Use wildcards for dates of unused readline/support/config.{guess,sub}.
     - gdb64 is *supposed* to be built for another architecture.
+  * debian/control: Drop redundant "Section:" fields.
 
  -- Samuel Bronson <naesten@gmail.com>  Mon, 28 Jan 2013 21:47:49 -0500
 
