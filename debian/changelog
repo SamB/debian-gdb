@@ -38,8 +38,9 @@ gdb (7.5.1-0.1) experimental; urgency=low
     - PR gdb/14494 (a GDB crash difficult to characterize).
     - A build warning in allocate_symtab when building on x86_64-windows.
   * Updated patches:
-    - Tweaked gdbinit-ownership.patch and man-page-order.patch so they
-      apply to new upstream source
+    - Tweaked man-page-order.patch and linuxthreads_signal_handling.patch
+      so they apply to new upstream source.
+    - Dropped m68k-thread-debugging.patch; upstream already had it.
     - Dropped debian-changes-7.3.50~cvs20110627-1 and gdbinit-ownership.patch:
       upstream closed [CVE-2005-1705] with a new option "set auto-load
       safe-path" (Closes: #694256).

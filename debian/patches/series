@@ -9,4 +9,3 @@ man-page-order.patch
 #0002-add-cpu-to-source-release.patch
 #renesas-sh-native-support.patch
 linuxthreads_signal_handling.patch
-m68k-thread-debugging.patch
