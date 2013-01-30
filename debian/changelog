@@ -46,7 +46,7 @@ gdb (7.5.1-0.1) experimental; urgency=low
   * Drop libgdb-dev, since libgdb.a was dropped upstream.
   * Update architecture list for gdbserver.
   * Fix documentation symlinking stuff:
-    - Fix manpage symlinks.
+    - Fix manpage symlinks (Closes: #595179).
     - Add "Depends: gdb (= ${binary:Version})" where needed for symlinked
       doc directories.
     - Migrate gdb-source to a real doc-directory, not a symlink, to avoid
