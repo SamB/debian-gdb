@@ -40,9 +40,9 @@ gdb (7.5.1-0.1) experimental; urgency=low
   * Updated patches:
     - Tweaked gdbinit-ownership.patch and man-page-order.patch so they
       apply to new upstream source
-    - Dropped debian-changes-7.3.50~cvs20110627-1 as it's purpose was
-      totally unclear: there was no real patch description, and the
-      changelog from the relevant upload made no mention of any of the changes
+    - Dropped debian-changes-7.3.50~cvs20110627-1 and gdbinit-ownership.patch:
+      upstream closed [CVE-2005-1705] with a new option "set auto-load
+      safe-path" (Closes: #694256).
   * Drop libgdb-dev, since libgdb.a was dropped upstream.
   * Update architecture list for gdbserver.
   * Fix documentation symlinking stuff:
