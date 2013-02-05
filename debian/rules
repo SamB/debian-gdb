@@ -163,6 +163,7 @@ DEB_CONFIGURE_FLAGS_64 := --host=$(HOST64) $(EXTRA_FLAGS) \
 MULTIARCH_TARGETS := all
 # multiarch flags
 DEB_CONFIGURE_FLAGS_MULTIARCH := $(DEB_CONFIGURE_EXTRA_FLAGS) \
+	--enable-64-bit-bfd \
 	--enable-targets=$(MULTIARCH_TARGETS) \
 	--disable-sim
 
