@@ -57,8 +57,13 @@ gdb (7.5.1-0.1) experimental; urgency=low
     - Use wildcards for dates of unused readline/support/config.{guess,sub}.
     - gdb64 is *supposed* to be built for another architecture.
   * debian/control: Drop redundant "Section:" fields.
+  * Configure gdb-multiarch with --enable-64-bit-bfd so it supports 64-bit
+    targets (Closes: #699582).
+  * Recommend libc-dbg (Closes: #246315, #309460).
+  * Bump Standards-Version in debian/control.in too, so it *stays* bumped.
 
- -- Samuel Bronson <naesten@gmail.com>  Mon, 28 Jan 2013 21:47:49 -0500
+
+ -- Samuel Bronson <naesten@gmail.com>  Tue, 05 Feb 2013 10:01:49 -0500
 
 gdb (7.4.1+dfsg-0.1) unstable; urgency=low
 
