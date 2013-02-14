@@ -15,6 +15,7 @@ gdb (7.5.1-0.1) experimental; urgency=low
     - Reverse debugging on ARM.
     - The binary "gdbtui" has been abandoned and can no longer be built.
       Use "gdb -tui" instead.
+    - Better handling of symlinked libraries, like ld.so (Closes: #680173).
     [7.5.1]
     - Offer some helpful tips when detecting a file/script for which
       auto-loading has been declined.
@@ -61,9 +62,10 @@ gdb (7.5.1-0.1) experimental; urgency=low
     targets (Closes: #699582).
   * Recommend libc-dbg (Closes: #246315, #309460).
   * Bump Standards-Version in debian/control.in too, so it *stays* bumped.
-
-
- -- Samuel Bronson <naesten@gmail.com>  Tue, 05 Feb 2013 10:01:49 -0500
+  * Add support for debug info compressed with bzip2 and lzma/xz:
+    Build-Depend on libbz2-dev and liblzma-dev.
+  
+ -- Samuel Bronson <naesten@gmail.com>  Thu, 14 Feb 2013 00:03:59 -0500
 
 gdb (7.4.1+dfsg-0.1) unstable; urgency=low
 
