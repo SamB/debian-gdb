@@ -1,6 +1,5 @@
-gdb (7.5.1-0.1) experimental; urgency=low
+gdb (7.5.1-1) experimental; urgency=low
 
-  * Non-maintainer upload.
   * New upstream release (Closes: #685388).
   * New upstream features:
     [7.5]
@@ -64,8 +63,9 @@ gdb (7.5.1-0.1) experimental; urgency=low
   * Bump Standards-Version in debian/control.in too, so it *stays* bumped.
   * Add support for debug info compressed with bzip2 and lzma/xz:
     Build-Depend on libbz2-dev and liblzma-dev.
+  * Add myself to Uploaders.
   
- -- Samuel Bronson <naesten@gmail.com>  Thu, 14 Feb 2013 00:03:59 -0500
+ -- Samuel Bronson <naesten@gmail.com>  Wed, 20 Feb 2013 17:22:51 -0500
 
 gdb (7.4.1+dfsg-0.1) unstable; urgency=low
 
